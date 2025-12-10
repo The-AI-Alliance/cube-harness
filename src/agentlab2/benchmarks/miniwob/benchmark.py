@@ -2,6 +2,7 @@ import json
 import logging
 import random
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -46,7 +47,7 @@ class MiniWobBenchmark(Benchmark):
         self._stdout_file = open(tmp_dir / "miniwob_server_stdout.log", "w")
         self._stderr_file = open(tmp_dir / "miniwob_server_stderr.log", "w")
         self._server_process = subprocess.Popen(
-            ["python", "-m", "http.server", str(self.port)],
+            [sys.executable, "-m", "http.server", str(self.port)],
             cwd=self.html_path,
             stdout=self._stdout_file,
             stderr=self._stderr_file,
