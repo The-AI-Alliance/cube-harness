@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+from uuid import uuid4
 
 import ray
 
@@ -52,7 +53,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
 
 
 def _poll_ray(exp: Experiment, ref_to_id: dict[ray.ObjectRef, str], ray_poll_timeout: float) -> ExpResult:
-    results = ExpResult(tasks_num=len(ref_to_id), config=exp.config)
+    results = ExpResult(tasks_num=len(ref_to_id), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     completed = 0
     runs_in_progress = list(ref_to_id.keys())
     while len(runs_in_progress) > 0:
@@ -84,6 +85,8 @@ def run_sequentially(exp: Experiment, debug_limit: int | None = None) -> ExpResu
         results = ExpResult(
             tasks_num=len(runs),
             trajectories={traj.metadata["task_id"]: traj for traj in trajectories},
+            config=exp.config,
+            exp_id=f"{exp.name}_{uuid4().hex}",
         )
         exp.print_stats(results)
         return results

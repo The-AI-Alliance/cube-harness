@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExpResult(BaseModel):
+    exp_id: str
     tasks_num: int
     config: dict = Field(default_factory=dict)
     trajectories: dict[str, Trajectory] = Field(default_factory=dict)
