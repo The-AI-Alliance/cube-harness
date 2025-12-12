@@ -35,6 +35,7 @@ class Experiment(TypedBaseModel):
         episodes = [
             Episode(
                 id=i,
+                exp_name=self.name,
                 output_dir=self.output_dir,
                 agent_config=self.agent_config,
                 env_config=env_config,

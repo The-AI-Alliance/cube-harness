@@ -7,6 +7,7 @@ from termcolor import colored
 from agentlab2.agent import AgentConfig
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory
 from agentlab2.environment import EnvConfig
+from agentlab2.metrics.tracer import get_tracer
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,14 @@ class Episode:
     def __init__(
         self,
         id: int,
+        exp_name: str,
         output_dir: Path,
         agent_config: AgentConfig,
         env_config: EnvConfig,
         max_steps: int = MAX_STEPS,
     ) -> None:
         self.id = id
+        self.exp_name = exp_name
         self.output_dir = output_dir
         self.agent_config = agent_config
         self.task_id = env_config.task.id
@@ -39,33 +42,39 @@ class Episode:
         Returns:
             Trajectory containing the full history of the run.
         """
+        tracer = get_tracer(self.exp_name)
         env = self.env_config.make()
         agent = self.agent_config.make(env.action_set)
         try:
-            env_output = env.setup()
-            logger.info(colored(f"Initial env output: {env_output}", "blue"))
-            trajectory = Trajectory(steps=[env_output], metadata={"task_id": self.task_id})
-            self.save_trajectory(trajectory)
-            turns = 0
-            while not env_output.done and turns < self.max_steps:
-                # Agent step
-                agent_output = agent.step(env_output.obs)
-                logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
-                trajectory.append(agent_output)
-                self.save_step(agent_output)
+            with tracer.episode(self.env_config.task.id, experiment=self.exp_name):
+                env_output = env.setup()
+                logger.info(colored(f"Initial env output: {env_output}", "blue"))
+                trajectory = Trajectory(steps=[env_output], metadata={"task_id": self.task_id})
+                self.save_trajectory(trajectory)
+                turns = 0
+                while not env_output.done and turns < self.max_steps:
+                    with tracer.step(f"turn_{turns}") as span:
+                        # Agent step
+                        agent_output = agent.step(env_output.obs)
+                        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
+                        trajectory.append(agent_output)
+                        self.save_step(agent_output)
 
-                # Environment step
-                env_output = env.step(agent_output.actions)
-                logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
-                trajectory.append(env_output)
-                self.save_step(env_output)
+                        # Environment step
+                        env_output = env.step(agent_output.actions)
+                        logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
+                        trajectory.append(env_output)
+                        self.save_step(env_output)
 
-                turns += 1
+                        turns += 1
+                        span.set_attribute("agent_output", agent_output.model_dump_json())
+                        span.set_attribute("env_output", env_output.model_dump_json())
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
             raise e
         finally:
             env.close()
+            tracer.shutdown()
         return trajectory
 
     def save_trajectory(self, trajectory: Trajectory) -> None:

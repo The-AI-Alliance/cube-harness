@@ -47,6 +47,7 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
         super().__init__()
         self.config = config
         self._pw = sync_playwright().start()
+        self.config.pw_kwargs.pop("chromium_sandbox", None)  # Avoid overriding chromium_sandbox
         self._browser = self._pw.chromium.launch(
             chromium_sandbox=True,
             headless=self.config.headless,

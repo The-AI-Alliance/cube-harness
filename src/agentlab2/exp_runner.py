@@ -10,6 +10,7 @@ import ray
 from agentlab2.core import Trajectory
 from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment, ExpResult
+from agentlab2.metrics.tracer import get_trace_env_vars
 
 LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d %(funcName)s() - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
@@ -36,7 +37,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
             dashboard_host="0.0.0.0",
             include_dashboard=True,
             log_to_driver=True,
-            runtime_env={"working_dir": None},
+            runtime_env={"working_dir": None, "env_vars": get_trace_env_vars()},
         )  # TODO: Ray breaks signal handling, we cannot react to Ctrl+C here, still cannot find a workaround
 
     exp.benchmark.setup()
