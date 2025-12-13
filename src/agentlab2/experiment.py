@@ -38,6 +38,7 @@ class Experiment(TypedBaseModel):
                 output_dir=self.output_dir,
                 agent_config=self.agent_config,
                 env_config=env_config,
+                exp_name=self.name,
             )
             for i, env_config in enumerate(self.benchmark.env_configs())
         ]
