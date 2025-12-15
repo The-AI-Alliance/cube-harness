@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 
 from agentlab2.agents.react import ReactAgentConfig
@@ -8,10 +9,8 @@ from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLM
 
-debug = False
 
-
-def main():
+def main(debug: bool):
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.expanduser(f"~/agentlab_results/al2/miniwob_{current_datetime}")
 
@@ -28,4 +27,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    debug = sys.argv[-1] == "debug"
+    main(debug)

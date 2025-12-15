@@ -8,6 +8,9 @@ help:
 hello:
 	uv run recipes/hello_miniwob.py
 
+debug:
+	uv run recipes/hello_miniwob.py debug
+
 install:
 	uv sync
 	uv pip install -e .
