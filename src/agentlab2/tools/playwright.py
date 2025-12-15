@@ -8,6 +8,7 @@ from playwright.async_api import Page as AsyncPage
 from playwright.async_api import async_playwright
 from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
+from pydantic import BaseModel
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import Content, Observation
@@ -15,6 +16,24 @@ from agentlab2.tool import Tool
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
+
+
+class PWConfig(BaseModel):
+    """Configuration for Playwright tool."""
+
+    max_wait: int = 60
+    use_html: bool = True
+    use_axtree: bool = False
+    use_screenshot: bool = True
+    prune_html: bool = True
+    headless: bool = True
+    pw_kwargs: dict = {}
+
+    def make(self) -> "SyncPlaywrightTool":
+        return SyncPlaywrightTool(self)
+
+    def make_async(self) -> "AsyncPlaywrightTool":
+        return AsyncPlaywrightTool(self)
 
 
 class SyncPlaywrightTool(Tool, BrowserActionSpace):
@@ -25,24 +44,15 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
 
     action_space = BrowserActionSpace
 
-    def __init__(
-        self,
-        max_wait: int = 60,
-        use_html: bool = True,
-        use_axtree: bool = False,
-        use_screenshot: bool = True,
-        prune_html: bool = True,
-        **kwargs,
-    ) -> None:
+    def __init__(self, config: PWConfig) -> None:
         super().__init__()
-        self.max_wait = max_wait
-        self.pw_kwargs = kwargs
-        self.use_html = use_html
-        self.use_axtree = use_axtree
-        self.use_screenshot = use_screenshot
-        self.prune_html = prune_html
+        self.config = config
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(chromium_sandbox=True, **self.pw_kwargs)
+        self._browser = self._pw.chromium.launch(
+            chromium_sandbox=True,
+            headless=self.config.headless,
+            **self.config.pw_kwargs,
+        )
         self._page = self._browser.new_page()
 
     @property
@@ -85,7 +95,7 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
 
     def browser_wait(self, seconds: int):
         """Wait for a given number of seconds, up to max_wait"""
-        time.sleep(min(seconds, self.max_wait))
+        time.sleep(min(seconds, self.config.max_wait))
 
     def browser_back(self):
         """Navigate back in browser history."""
@@ -121,15 +131,15 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
 
     def page_obs(self) -> Observation:
         obs = Observation()
-        if self.use_html:
+        if self.config.use_html:
             html = self.page_html()
-            if self.prune_html:
+            if self.config.prune_html:
                 obs.contents.append(Content(data=prune_html(html), name="pruned_html"))
             else:
                 obs.contents.append(Content(data=html, name="html"))
-        if self.use_axtree:
+        if self.config.use_axtree:
             obs.contents.append(Content(data=self.page_axtree(), name="axtree_txt"))
-        if self.use_screenshot:
+        if self.config.use_screenshot:
             obs.contents.append(Content(data=self.page_screenshot(), name="screenshot"))
         return obs
 
@@ -148,17 +158,16 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
 
     action_space = BrowserActionSpace
 
-    def __init__(self, max_wait: int = 60, **kwargs) -> None:
+    def __init__(self, config: PWConfig) -> None:
         super().__init__()
-        self.max_wait = max_wait
-        self.pw_kwargs = kwargs
+        self.config = config
         self._apw = None
         self._abrowser = None
         self._page: AsyncPage = None  # type: ignore
 
     async def initialize(self):
         self._apw = await async_playwright().start()
-        self._abrowser = await self._apw.chromium.launch(chromium_sandbox=True, **self.pw_kwargs)
+        self._abrowser = await self._apw.chromium.launch(chromium_sandbox=True, **self.config.pw_kwargs)
         self._page = await self._abrowser.new_page()
 
     async def browser_press_key(self, key: str):
@@ -197,7 +206,7 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
 
     async def browser_wait(self, seconds: int):
         """Wait for a given number of seconds, up to max_wait."""
-        await asyncio.sleep(min(seconds, self.max_wait))
+        await asyncio.sleep(min(seconds, self.config.max_wait))
 
     async def browser_back(self):
         """Navigate back in browser history."""
@@ -229,6 +238,20 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
     async def page_axtree(self) -> str:
         axtree = await self._page.accessibility.snapshot()
         return flatten_axtree(axtree)
+
+    async def page_obs(self) -> Observation:
+        obs = Observation()
+        if self.config.use_html:
+            html = await self.page_html()
+            if self.config.prune_html:
+                obs.contents.append(Content(data=prune_html(html), name="pruned_html"))
+            else:
+                obs.contents.append(Content(data=html, name="html"))
+        if self.config.use_axtree:
+            obs.contents.append(Content(data=await self.page_axtree(), name="axtree_txt"))
+        if self.config.use_screenshot:
+            obs.contents.append(Content(data=await self.page_screenshot(), name="screenshot"))
+        return obs
 
     async def close(self):
         await self._page.close()

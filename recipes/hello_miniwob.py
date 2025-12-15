@@ -4,7 +4,7 @@ import time
 
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
-from agentlab2.envs.browser import BrowserEnvConfig
+from agentlab2.envs.browser import BrowserEnvConfig, PWConfig
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
@@ -17,7 +17,7 @@ def main(debug: bool):
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    env_config = BrowserEnvConfig(headless=True, use_screenshot=True)
+    env_config = BrowserEnvConfig(pw_config=PWConfig(use_screenshot=True, headless=True))
     benchmark = MiniWobBenchmark(env_config=env_config)
 
     exp = Experiment(

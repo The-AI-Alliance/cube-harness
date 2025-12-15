@@ -1,25 +1,16 @@
-from agentlab2.benchmark import Task
 from agentlab2.core import Action, EnvironmentOutput
-from agentlab2.environment import EnvironmentConfig, ToolboxEnv
-from agentlab2.tools.playwright import SyncPlaywrightTool
+from agentlab2.environment import EnvironmentConfig, Task, ToolboxEnv
+from agentlab2.tools.playwright import PWConfig, SyncPlaywrightTool
 
 
 class BrowserEnvConfig(EnvironmentConfig):
     """Configuration for BrowserEnv."""
 
-    headless: bool = True
-    timeout: int = 30000  # in milliseconds
-    use_html: bool = True
-    use_axtree: bool = False
-    use_screenshot: bool = True
-    prune_html: bool = True
-    pw_kwargs: dict = {}
+    pw_config: PWConfig
 
     def make(self, task: Task) -> "BrowserEnv":
         """Create a BrowserEnv instance from the configuration for specified task."""
-        tool_config = self.model_dump()
-        tool_config.pop("pw_kwargs", None)
-        browser_tool = SyncPlaywrightTool(**tool_config, **self.pw_kwargs)
+        browser_tool = self.pw_config.make()
         return BrowserEnv(task, browser_tool)
 
 
