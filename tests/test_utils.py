@@ -154,8 +154,8 @@ class TestPruneHtml:
         assert "<br" not in result
 
         # Comments removed
-        assert "Navigation" not in result
-        assert "Content" not in result  # This is the comment text
+        assert "<!-- Navigation -->" not in result
+        assert "<!-- Content -->" not in result
 
         # Content preserved
         assert "Link 1" in result

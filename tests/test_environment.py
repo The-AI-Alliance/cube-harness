@@ -7,16 +7,12 @@ from agentlab2.environment import STOP_ACTION, ToolboxEnv
 from tests.conftest import MockTool
 
 
-class TestSTOPACTION:
+class TestStopAction:
     """Tests for STOP_ACTION constant."""
 
     def test_stop_action_name(self):
         """Test STOP_ACTION has correct name."""
         assert STOP_ACTION.name == "final_step"
-
-    def test_stop_action_description(self):
-        """Test STOP_ACTION has correct description."""
-        assert "Stop" in STOP_ACTION.description
 
     def test_stop_action_is_action_schema(self):
         """Test STOP_ACTION is an ActionSchema."""

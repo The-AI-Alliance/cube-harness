@@ -1,5 +1,6 @@
 """Common fixtures for agentlab2 tests."""
 
+import tempfile
 from typing import Any, Protocol, runtime_checkable
 
 import pytest
@@ -17,10 +18,18 @@ from agentlab2.core import (
     Trajectory,
 )
 from agentlab2.environment import Environment, EnvironmentConfig, Task, ToolboxEnv
+from agentlab2.episode import Episode
 from agentlab2.llm import LLMConfig, Prompt
 from agentlab2.tool import Tool
 
 # --- Core fixtures ---
+
+
+@pytest.fixture
+def tmp_dir():
+    """Temporary directory fixture for tests that need file I/O."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield tmpdir
 
 
 @pytest.fixture
@@ -210,6 +219,14 @@ class MockEnvironmentConfig(EnvironmentConfig):
         return ToolboxEnv(task=self._task, tools=self.tools)
 
 
+class SerializableEnvConfig(EnvironmentConfig):
+    """Environment config without tools for JSON serialization tests."""
+
+    def make(self) -> Environment:
+        assert self._task is not None, "Task must be set in EnvironmentConfig before making the environment."
+        return ToolboxEnv(task=self._task, tools=[])
+
+
 @pytest.fixture
 def mock_env_config(mock_tool, mock_task) -> MockEnvironmentConfig:
     """Mock environment config with mock tool."""
@@ -270,10 +287,10 @@ def mock_agent(mock_agent_config) -> MockAgent:
 class MockBenchmark(Benchmark):
     """Mock benchmark for testing."""
 
-    _setup_called: bool = False
-    _close_called: bool = False
-    _install_called: bool = False
-    _uninstall_called: bool = False
+    setup_called: bool = False
+    close_called: bool = False
+    install_called: bool = False
+    uninstall_called: bool = False
 
     def __init__(
         self, tasks_list: list[Any], env_config: EnvironmentConfig | None = None, metadata: dict | None = None
@@ -281,33 +298,17 @@ class MockBenchmark(Benchmark):
         super().__init__(env_config=env_config or MockEnvironmentConfig(), metadata=metadata or {})
         self._tasks = tasks_list
 
-    @property
-    def setup_called(self) -> bool:
-        return self._setup_called
-
-    @property
-    def close_called(self) -> bool:
-        return self._close_called
-
     def setup(self):
-        self._setup_called = True
+        self.setup_called = True
 
     def close(self):
-        self._close_called = True
-
-    @property
-    def install_called(self) -> bool:
-        return self._install_called
-
-    @property
-    def uninstall_called(self) -> bool:
-        return self._uninstall_called
+        self.close_called = True
 
     def install(self):
-        self._install_called = True
+        self.install_called = True
 
     def uninstall(self):
-        self._uninstall_called = True
+        self.uninstall_called = True
 
     def env_configs(self) -> list[EnvironmentConfig]:
         assert self.env_config is not None, "MockBenchmark requires an EnvironmentConfig to be set"
@@ -318,3 +319,18 @@ class MockBenchmark(Benchmark):
 def mock_benchmark(mock_task, mock_env_config) -> MockBenchmark:
     """Mock benchmark with one task."""
     return MockBenchmark(tasks_list=[mock_task], env_config=mock_env_config)
+
+
+# --- Episode fixtures ---
+
+
+@pytest.fixture
+def sample_episode(tmp_dir, mock_agent_config, mock_env_config) -> Episode:
+    """Sample episode for testing."""
+    return Episode(
+        id=0,
+        exp_name="test_exp",
+        output_dir=tmp_dir,
+        agent_config=mock_agent_config,
+        env_config=mock_env_config,
+    )

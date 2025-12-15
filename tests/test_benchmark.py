@@ -2,8 +2,7 @@
 
 import json
 
-from agentlab2.environment import EnvironmentConfig, ToolboxEnv
-from tests.conftest import MockBenchmark, MockTask
+from tests.conftest import MockBenchmark, MockTask, SerializableEnvConfig
 
 
 class TestBenchmark:
@@ -65,19 +64,23 @@ class TestBenchmark:
         # Should not raise
         mock_benchmark.uninstall()
 
-    def test_benchmark_serialization(self, mock_env_config, mock_task):
+    def test_benchmark_serialization(self, mock_task):
         """Test Benchmark JSON serialization."""
-
-        # Create a benchmark without tools (which aren't serializable)
-        class SerializableEnvConfig(EnvironmentConfig):
-            def make(self):
-                return ToolboxEnv(task=self._task, tools=[])
-
         benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
         json_str = benchmark.model_dump_json(serialize_as_any=True)
         data = json.loads(json_str)
         assert "env_config" in data
         assert "metadata" in data
+
+    def test_benchmark_custom_install_uninstall(self, mock_env_config, mock_task):
+        """Test benchmark with custom install/uninstall."""
+
+        benchmark = MockBenchmark(tasks_list=[mock_task], env_config=mock_env_config)
+        benchmark.install()
+        assert benchmark.install_called
+
+        benchmark.uninstall()
+        assert benchmark.uninstall_called
 
     def test_benchmark_lifecycle(self, mock_benchmark):
         """Test full benchmark lifecycle."""
@@ -91,6 +94,8 @@ class TestBenchmark:
         # Get env_configs
         env_configs = mock_benchmark.env_configs()
         assert len(env_configs) > 0
+        assert env_configs[0] is not None
+        assert env_configs[0]._task is not None
 
         # Close
         mock_benchmark.close()
@@ -106,13 +111,6 @@ class TestBenchmark:
         # Should be able to make environment
         env = env_config.make()
         assert env is not None
-
-    def test_benchmark_custom_install_uninstall(self, mock_env_config, mock_task):
-        """Test benchmark with custom install/uninstall."""
-
-        benchmark = MockBenchmark(tasks_list=mock_task, env_config=mock_env_config)
-        benchmark.install()
-        assert benchmark.install_called
-
-        benchmark.uninstall()
-        assert benchmark.uninstall_called
+        assert env.task is not None
+        assert env.task.id == mock_benchmark.env_config._task.id
+        assert env.task.id == "mock_task_1"
