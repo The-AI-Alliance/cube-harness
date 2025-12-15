@@ -62,7 +62,7 @@ class Experiment(BaseModel):
 
         rewards = []
         for traj in results.trajectories.values():
-            rewards.append(traj.final_reward())
+            rewards.append(traj.last_env_step().reward)
 
         accuracy = sum(rewards) / len(rewards) if rewards else 0.0
 

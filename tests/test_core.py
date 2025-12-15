@@ -317,8 +317,11 @@ class TestTrajectory:
         """Test getting final reward from trajectory."""
         traj = Trajectory()
         obs = Observation.from_text("done")
+        traj.append(EnvironmentOutput(obs=obs, reward=0.5))
+        traj.append(AgentOutput(actions=[]))
         traj.append(EnvironmentOutput(obs=obs, reward=1.0, done=True))
-        assert traj.final_reward() == 1.0
+        traj.append(AgentOutput(actions=[]))
+        assert traj.last_env_step().reward == 1.0
 
     def test_trajectory_serialization(self, sample_trajectory):
         """Test Trajectory JSON serialization."""

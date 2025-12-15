@@ -167,9 +167,6 @@ class Trajectory(BaseModel):
                 return step
         raise ValueError("No EnvironmentOutput found in the trajectory.")
 
-    def final_reward(self) -> float | None:
-        return self.last_env_step().reward
-
 
 class ActionSpace(Protocol):
     """Base class for action spaces."""
