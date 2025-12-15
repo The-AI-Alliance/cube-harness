@@ -6,7 +6,7 @@ from termcolor import colored
 
 from agentlab2.agent import AgentConfig
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory
-from agentlab2.environment import EnvironmentConfig, Task
+from agentlab2.environment import EnvironmentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,16 +22,15 @@ class Episode:
         exp_name: str,
         output_dir: str,
         agent_config: AgentConfig,
-        task: Task,
         env_config: EnvironmentConfig,
         max_steps: int = MAX_STEPS,
     ) -> None:
+        assert env_config._task is not None, "EnvironmentConfig must have a Task assigned"
         self.id = id
         self.exp_name = exp_name
         self.output_dir = output_dir
         self.agent_config = agent_config
-        self.task_id = task.id
-        env_config._task = task
+        self.task_id = env_config._task.id
         self.env_config = env_config
         self.max_steps = max_steps
         self._output_name = ""

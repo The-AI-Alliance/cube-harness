@@ -12,6 +12,7 @@ from typing import TextIO
 
 from agentlab2.benchmark import Benchmark
 from agentlab2.benchmarks.miniwob.task import MiniWobTask
+from agentlab2.environment import EnvironmentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class MiniWobBenchmark(Benchmark):
             self.close()
             raise RuntimeError(f"MiniWob server failed to respond: {e}")
 
-    def tasks(self) -> list[MiniWobTask]:
+    def env_configs(self) -> list[EnvironmentConfig]:
         tasks = [
             MiniWobTask(
                 id=task["subdomain"],
@@ -76,7 +77,8 @@ class MiniWobBenchmark(Benchmark):
         if self.shuffle:
             random.seed(self.shuffle_seed)
             shuffle(tasks)
-        return tasks
+        configs = [self.env_config.model_copy(update=dict(_task=task)) for task in tasks]
+        return configs
 
     def close(self):
         """Shutdown the MiniWob server and close file handles."""

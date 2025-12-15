@@ -36,10 +36,9 @@ class Experiment(BaseModel):
                 exp_name=self.name,
                 output_dir=self.output_dir,
                 agent_config=self.agent_config,
-                task=task,
-                env_config=self.benchmark.env_config,
+                env_config=env_config,
             )
-            for i, task in enumerate(self.benchmark.tasks())
+            for i, env_config in enumerate(self.benchmark.env_configs())
         ]
         logger.info(f"Prepared {len(episodes)} episodes for experiment '{self.name}'")
         return episodes

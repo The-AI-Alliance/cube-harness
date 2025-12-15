@@ -3,7 +3,7 @@ from typing import Sequence
 
 from pydantic import BaseModel, Field
 
-from agentlab2.environment import EnvironmentConfig, Task
+from agentlab2.environment import EnvironmentConfig
 
 
 class Benchmark(BaseModel, ABC):
@@ -28,8 +28,8 @@ class Benchmark(BaseModel, ABC):
         pass
 
     @abstractmethod
-    def tasks(self) -> Sequence[Task]:
-        """Return the list of tasks in this benchmark."""
+    def env_configs(self) -> Sequence[EnvironmentConfig]:
+        """Return the list of environment configurations for each task in the benchmark."""
         pass
 
     def install(self):

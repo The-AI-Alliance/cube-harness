@@ -33,27 +33,27 @@ class TestBenchmark:
         mock_benchmark.close()
         assert mock_benchmark.close_called
 
-    def test_benchmark_tasks(self, mock_benchmark, mock_task):
-        """Test getting tasks from benchmark."""
-        tasks = mock_benchmark.tasks()
-        assert len(tasks) == 1
-        assert tasks[0] == mock_task
+    def test_benchmark_env_configs(self, mock_benchmark, mock_task):
+        """Test getting env_configs from benchmark."""
+        env_configs = mock_benchmark.env_configs()
+        assert len(env_configs) == 1
+        assert env_configs[0]._task == mock_task
 
     def test_benchmark_multiple_tasks(self, mock_env_config):
         """Test benchmark with multiple tasks."""
 
         tasks = [MockTask(goal=f"Task {i}") for i in range(5)]
-        benchmark = MockBenchmark(tasks_list=tasks, env_config=mock_env_config)
+        benchmark = MockBenchmark(tasks_list=tasks, env_config=mock_env_config)  # type: ignore
 
-        assert len(benchmark.tasks()) == 5
-        for i, task in enumerate(benchmark.tasks()):
-            assert task.goal == f"Task {i}"
+        assert len(benchmark.env_configs()) == 5
+        for i, env_config in enumerate(benchmark.env_configs()):
+            assert env_config._task.goal == f"Task {i}"  # type: ignore
 
     def test_benchmark_empty_tasks(self, mock_env_config):
         """Test benchmark with no tasks."""
 
         benchmark = MockBenchmark(tasks_list=[], env_config=mock_env_config)
-        assert len(benchmark.tasks()) == 0
+        assert len(benchmark.env_configs()) == 0
 
     def test_benchmark_install_default(self, mock_benchmark):
         """Test default install does nothing."""
@@ -88,9 +88,9 @@ class TestBenchmark:
         mock_benchmark.setup()
         assert mock_benchmark.setup_called
 
-        # Get tasks
-        tasks = mock_benchmark.tasks()
-        assert len(tasks) > 0
+        # Get env_configs
+        env_configs = mock_benchmark.env_configs()
+        assert len(env_configs) > 0
 
         # Close
         mock_benchmark.close()
@@ -101,11 +101,9 @@ class TestBenchmark:
 
     def test_benchmark_env_config_access(self, mock_benchmark):
         """Test accessing env_config from benchmark."""
-        env_config = mock_benchmark.env_config
+        env_config = mock_benchmark.env_configs()[0]
         assert env_config is not None
         # Should be able to make environment
-        task = mock_benchmark.tasks()[0]
-        env_config._task = task
         env = env_config.make()
         assert env is not None
 

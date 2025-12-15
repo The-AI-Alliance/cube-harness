@@ -22,7 +22,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -39,7 +38,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
                 max_steps=10,
             )
@@ -54,7 +52,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -73,7 +70,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -96,7 +92,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -118,7 +113,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -162,7 +156,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=config,
-                task=mock_task,
                 env_config=mock_env_config,
                 max_steps=3,
             )
@@ -183,7 +176,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
                 max_steps=100,  # High limit
             )
@@ -202,7 +194,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -220,7 +211,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -238,7 +228,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -267,7 +256,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -295,7 +283,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 
@@ -313,7 +300,6 @@ class TestEpisode:
                 exp_name="test_exp",
                 output_dir=tmpdir,
                 agent_config=mock_agent_config,
-                task=mock_task,
                 env_config=mock_env_config,
             )
 

@@ -14,6 +14,7 @@ from tests.conftest import MockBenchmark, MockTask
 # Use a serializable env config (without tools)
 class SerializableEnvConfig(EnvironmentConfig):
     def make(self):
+        assert self._task is not None, "Task must be set in EnvironmentConfig before making the environment."
         return ToolboxEnv(task=self._task, tools=[])
 
 
@@ -116,18 +117,19 @@ class TestExperiment:
 
             episodes = exp.create_episodes()
 
-            assert len(episodes) == len(mock_benchmark.tasks())
+            assert len(episodes) == len(mock_benchmark.env_configs())
             for i, episode in enumerate(episodes):
                 assert isinstance(episode, Episode)
                 assert episode.id == i
                 assert episode.exp_name == "test_experiment"
                 assert episode.output_dir == tmpdir
+                assert episode.env_config._task is not None
 
     def test_experiment_create_episodes_multiple_tasks(self, mock_agent_config, mock_env_config):
         """Test Experiment create_episodes with multiple tasks."""
 
         tasks = [MockTask(goal=f"Goal {i}") for i in range(5)]
-        benchmark = MockBenchmark(tasks_list=tasks, env_config=mock_env_config)
+        benchmark = MockBenchmark(tasks_list=tasks, env_config=mock_env_config)  # type: ignore
 
         with tempfile.TemporaryDirectory() as tmpdir:
             exp = Experiment(
@@ -139,6 +141,8 @@ class TestExperiment:
 
             episodes = exp.create_episodes()
             assert len(episodes) == 5
+            for i, episode in enumerate(episodes):
+                assert episode.env_config._task == tasks[i]
 
     def test_experiment_save_config(self, mock_agent_config, mock_task):
         """Test Experiment save_config."""
@@ -292,7 +296,7 @@ class TestExperiment:
             )
 
             episodes = exp.create_episodes()
-            tasks = mock_benchmark.tasks()
+            env_configs = mock_benchmark.env_configs()
 
-            for episode, task in zip(episodes, tasks):
-                assert episode.task_id == task.id
+            for episode, env_config in zip(episodes, env_configs):
+                assert episode.task_id == env_config._task.id

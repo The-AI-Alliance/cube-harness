@@ -1,6 +1,6 @@
 """Common fixtures for agentlab2 tests."""
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import pytest
 from PIL import Image
@@ -206,13 +206,16 @@ class MockEnvironmentConfig(EnvironmentConfig):
     tools: list = []
 
     def make(self) -> Environment:
+        assert self._task is not None, "MockEnvironmentConfig requires a Task to be assigned"
         return ToolboxEnv(task=self._task, tools=self.tools)
 
 
 @pytest.fixture
-def mock_env_config(mock_tool) -> MockEnvironmentConfig:
+def mock_env_config(mock_tool, mock_task) -> MockEnvironmentConfig:
     """Mock environment config with mock tool."""
-    return MockEnvironmentConfig(tools=[mock_tool])
+    config = MockEnvironmentConfig(tools=[mock_tool])
+    config._task = mock_task
+    return config
 
 
 # --- Agent fixtures ---
@@ -267,15 +270,15 @@ def mock_agent(mock_agent_config) -> MockAgent:
 class MockBenchmark(Benchmark):
     """Mock benchmark for testing."""
 
-    # Pydantic fields to track state
-    _tasks: list = []
     _setup_called: bool = False
     _close_called: bool = False
     _install_called: bool = False
     _uninstall_called: bool = False
 
-    def __init__(self, tasks_list: list[Task], **kwargs):
-        super().__init__(**kwargs)
+    def __init__(
+        self, tasks_list: list[Any], env_config: EnvironmentConfig | None = None, metadata: dict | None = None
+    ):
+        super().__init__(env_config=env_config or MockEnvironmentConfig(), metadata=metadata or {})
         self._tasks = tasks_list
 
     @property
@@ -306,8 +309,9 @@ class MockBenchmark(Benchmark):
     def uninstall(self):
         self._uninstall_called = True
 
-    def tasks(self) -> list[Task]:
-        return self._tasks
+    def env_configs(self) -> list[EnvironmentConfig]:
+        assert self.env_config is not None, "MockBenchmark requires an EnvironmentConfig to be set"
+        return [self.env_config.model_copy(update=dict(_task=task)) for task in self._tasks]
 
 
 @pytest.fixture
