@@ -5,7 +5,7 @@ from litellm import Message
 from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import Action, AgentOutput, Observation, ActionSchema
+from agentlab2.core import Action, ActionSchema, AgentOutput, Observation
 from agentlab2.environment import STOP_ACTION
 from agentlab2.llm import LLM, Prompt
 

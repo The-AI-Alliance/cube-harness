@@ -5,7 +5,7 @@ from typing import Any, List
 
 from pydantic import BaseModel
 
-from agentlab2.core import Action, Content, EnvironmentOutput, Observation, ActionSchema
+from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 
 STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
 
