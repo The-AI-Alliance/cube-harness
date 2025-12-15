@@ -16,6 +16,11 @@ class AgentConfig(BaseModel, ABC):
 
 
 class Agent(ABC):
+    name: str
+    description: str
+    input_content_types: list[str]
+    output_content_types: list[str]
+
     def __init__(self, config: AgentConfig):
         self.config = config
 

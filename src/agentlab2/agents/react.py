@@ -46,12 +46,10 @@ Provide a concise summary that preserves all information needed to continue the 
 
 
 class ReactAgent(Agent):
-    metadata = {
-        "name": "react_agent",
-        "description": "An agent implementing the ReAct framework for web tasks.",
-        "input_content_types": ["image/png", "image/jpeg", "text/plain", "application/json"],
-        "output_content_types": ["application/json"],
-    }
+    name: str = "react_agent"
+    description: str = "An agent implementing the ReAct framework for web tasks."
+    input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
+    output_content_types: list[str] = ["application/json"]
 
     def __init__(self, config: ReactAgentConfig, tools: list[ActionSchema]):
         self.config = config
