@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, ClassVar
+from typing import Callable
 
 from PIL import Image
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class MiniWobTask(Task):
     validate_per_step: bool = True
-    supported_actions: ClassVar[tuple[Callable, ...]] = (
+    supported_actions: tuple[Callable, ...] = (
         BrowserActionSpace.browser_press_key,
         BrowserActionSpace.browser_type,
         BrowserActionSpace.browser_click,
@@ -36,14 +36,10 @@ class MiniWobTask(Task):
         self.id = id
         self.desc = desc
         self.subdomain = subdomain
-        self.base_url = base_url
+        self.base_url = base_url[:-1] if base_url.endswith("/") else base_url
         self.remove_human_display = remove_human_display
         self.episode_max_time = episode_max_time
         self.max_turns = max_turns
-
-    def model_post_init(self, __context: Any):
-        if self.base_url.endswith("/"):
-            self.base_url = self.base_url[:-1]
 
     @property
     def url(self) -> str:
