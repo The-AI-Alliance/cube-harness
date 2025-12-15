@@ -35,7 +35,7 @@ class TestToolboxEnv:
     def test_toolbox_env_actions(self, mock_task, mock_tool):
         """Test getting actions from ToolboxEnv."""
         env = ToolboxEnv(task=mock_task, tools=[mock_tool])
-        actions = env.actions()
+        actions = env.action_set()
 
         # Should have actions from mock_tool, filtered by task
         assert len(actions) == 2
@@ -172,7 +172,7 @@ class TestToolboxEnv:
         tool2 = MockTool()
 
         env = ToolboxEnv(task=mock_task, tools=[tool1, tool2])
-        actions = env.actions()
+        actions = env.action_set()
 
         # Both tools have same actions, so we should see them (from first match)
         action_names = {a.name for a in actions}

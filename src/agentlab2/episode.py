@@ -43,7 +43,7 @@ class Episode:
             Trajectory containing the full history of the run.
         """
         env = self.env_config.make(self.task)
-        agent = self.agent_config.make(actions=env.actions())
+        agent = self.agent_config.make(actions=env.action_set())
         try:
             env_output = env.setup()
             logger.info(colored(f"Initial env output: {env_output}", "blue"))

@@ -31,7 +31,7 @@ class Environment(ABC):
         """Set up the environment before starting a task."""
         pass
 
-    def actions(self) -> List[ActionSchema]:
+    def action_set(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""
         return []
 
@@ -97,11 +97,11 @@ class ToolboxEnv(Environment):
     def __init__(self, task: Task, tools: list[AbstractTool]):
         self.task = task
         self.tools = tools
-        self._action_name_to_tool = {action.name: tool for tool in tools for action in tool.actions()}
+        self._action_name_to_tool = {action.name: tool for tool in tools for action in tool.action_set()}
 
-    def actions(self) -> list[ActionSchema]:
+    def action_set(self) -> list[ActionSchema]:
         """Returns list of actions supported by that environment, union of all tool actions, filtered by the task."""
-        actions_union = [action for tool in self.tools for action in tool.actions()]
+        actions_union = [action for tool in self.tools for action in tool.action_set()]
         return self.task.filter_actions(actions_union)
 
     def setup(self) -> EnvironmentOutput:

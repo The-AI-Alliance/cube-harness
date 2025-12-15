@@ -20,7 +20,7 @@ class AbstractTool(ABC):
         pass
 
     @abstractmethod
-    def actions(self) -> List[ActionSchema]:
+    def action_set(self) -> List[ActionSchema]:
         """Returns list of actions supported by that tool."""
         pass
 
@@ -54,7 +54,7 @@ class Tool(AbstractTool):
             logger.exception(action_result)
         return action_result
 
-    def actions(self) -> List[ActionSchema]:
+    def action_set(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""
         action_names = get_protocol_members(self.action_space)
         return [ActionSchema.from_function(getattr(self, name)) for name in action_names]
