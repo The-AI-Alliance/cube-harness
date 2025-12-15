@@ -24,11 +24,22 @@ class Benchmark(BaseModel, ABC):
     def close(self):
         """
         Clean up resources after all tasks are done.
-        Called automatically by Experiment
         """
         pass
 
     @abstractmethod
     def tasks(self) -> Sequence[Task]:
         """Return the list of tasks in this benchmark."""
+        pass
+
+    def install(self):
+        """
+        Optional method to download and prepare any resources required by the benchmark.
+        """
+        pass
+
+    def uninstall(self):
+        """
+        Optional method to remove any resources used by the benchmark.
+        """
         pass
