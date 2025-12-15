@@ -15,10 +15,17 @@ def main(debug: bool):
     output_dir = os.path.expanduser(f"~/agentlab_results/al2/miniwob_{current_datetime}")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
-    env_config = BrowserEnvConfig(headless=True, use_screenshot=True)
     agent_config = ReactAgentConfig(llm_config=llm_config)
+
+    env_config = BrowserEnvConfig(headless=True, use_screenshot=True)
     benchmark = MiniWobBenchmark(env_config=env_config)
-    exp = Experiment(name="miniwob", output_dir=output_dir, agent_config=agent_config, benchmark=benchmark)
+
+    exp = Experiment(
+        name="miniwob",
+        output_dir=output_dir,
+        agent_config=agent_config,
+        benchmark=benchmark,
+    )
 
     if debug:
         run_sequentially(exp, debug_limit=2)
