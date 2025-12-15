@@ -7,14 +7,14 @@ from termcolor import colored
 from agentlab2.agent import Agent, AgentConfig
 from agentlab2.core import Action, ActionSchema, AgentOutput, Observation
 from agentlab2.environment import STOP_ACTION
-from agentlab2.llm import LLM, Prompt
+from agentlab2.llm import LLMCall, LLMConfig, Prompt
 
 logger = logging.getLogger(__name__)
 
 
 class ReactAgentConfig(AgentConfig):
-    llm: LLM
-    llm_can_finish: bool = True
+    llm_config: LLMConfig
+    can_finish: bool = True
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
     max_history_tokens: int = 120000  # compact history if it exceeds N tokens
@@ -53,9 +53,10 @@ class ReactAgent(Agent):
 
     def __init__(self, config: ReactAgentConfig, tools: list[ActionSchema]):
         self.config = config
-        self.llm = config.llm
+        self.llm = config.llm_config.make()
+        self.token_counter = config.llm_config.make_counter()
         self.tools: list[dict] = [tool.as_dict() for tool in tools]
-        if config.llm_can_finish:
+        if config.can_finish:
             self.tools.append(STOP_ACTION.as_dict())
 
         self.history: list[dict | Message] = []
@@ -77,12 +78,10 @@ class ReactAgent(Agent):
             logger.exception(colored(f"Error getting LLM response: {e}. Prompt: {prompt}", "red"))
             raise e
         self.history.append(llm_output)
-        return AgentOutput(
-            actions=self._actions_from_output(llm_output),
-            llm_output=llm_output,
-        )
+        llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output)
+        return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
 
-    def _actions_from_output(self, llm_output: Message) -> list[Action]:
+    def _parse_actions(self, llm_output: Message) -> list[Action]:
         actions = []
         if hasattr(llm_output, "tool_calls") and llm_output.tool_calls:
             for tc in llm_output.tool_calls:
@@ -102,11 +101,11 @@ class ReactAgent(Agent):
         return len(prev_actions) >= self.config.max_actions
 
     def maybe_compact_history(self):
-        tokens = self.llm.counter(messages=self.history)
+        tokens = self.token_counter(messages=self.history)
         if tokens > self.config.max_history_tokens:
             logger.info("Compacting history due to length.")
             self.compact_history()
-            short_tokens = self.llm.counter(messages=self.history)
+            short_tokens = self.token_counter(messages=self.history)
             logger.info(f"Compacted history from {tokens} to {short_tokens} tokens.")
 
     def compact_history(self):

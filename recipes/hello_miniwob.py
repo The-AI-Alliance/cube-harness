@@ -7,16 +7,16 @@ from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.envs.browser import BrowserEnvConfig
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
-from agentlab2.llm import LLM
+from agentlab2.llm import LLMConfig
 
 
 def main(debug: bool):
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.expanduser(f"~/agentlab_results/al2/miniwob_{current_datetime}")
 
-    llm = LLM(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     env_config = BrowserEnvConfig(headless=True, use_screenshot=True)
-    agent_config = ReactAgentConfig(llm=llm)
+    agent_config = ReactAgentConfig(llm_config=llm_config)
     benchmark = MiniWobBenchmark(env_config=env_config)
     exp = Experiment(name="miniwob", output_dir=output_dir, agent_config=agent_config, benchmark=benchmark)
 

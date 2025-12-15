@@ -4,9 +4,10 @@ import json
 from typing import Any, Callable, Dict, List, Protocol, Self
 
 import litellm.utils
-from litellm import Message
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
+
+from agentlab2.llm import LLMCall
 
 
 class ActionSchema(BaseModel):
@@ -61,7 +62,7 @@ class Action(BaseModel):
 
 class AgentOutput(BaseModel):
     actions: list[Action] = Field(default_factory=list)
-    llm_output: Message | None = None
+    llm_calls: list[LLMCall] = Field(default_factory=list)
 
 
 _image_prefix = "data:image/png;base64,"

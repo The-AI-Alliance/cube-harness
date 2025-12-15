@@ -1,8 +1,10 @@
 """LLM interaction abstractions, LiteLLM based."""
 
 import pprint
+from datetime import datetime
 from functools import partial
 from typing import Callable, List, Literal
+from uuid import uuid4
 
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
@@ -22,7 +24,7 @@ class Prompt(BaseModel):
         return f"Tools:\n{tools}\nMessages[{len(self.messages)}]:\n{messages}"
 
 
-class LLM(BaseModel):
+class LLMConfig(BaseModel):
     """Thin LLM wrapper around LiteLLM completion API."""
 
     model_name: str
@@ -35,23 +37,41 @@ class LLM(BaseModel):
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
 
+    def make(self) -> "LLM":
+        """Create LLM instance from config."""
+        return LLM(config=self)
+
+    def make_counter(self) -> Callable[..., int]:
+        """Get a token counter function for the LLM model."""
+        return partial(token_counter, model=self.model_name)
+
+
+class LLM:
+    def __init__(self, config: LLMConfig):
+        self.config = config
+
     def __call__(self, prompt: Prompt) -> Message:
         response = completion_with_retries(
-            model=self.model_name,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-            max_completion_tokens=self.max_completion_tokens,
-            reasoning_effort=self.reasoning_effort,
-            num_retries=self.num_retries,
-            retry_strategy=self.retry_strategy,
-            tool_choice=self.tool_choice,
-            parallel_tool_calls=self.parallel_tool_calls,
+            model=self.config.model_name,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            max_completion_tokens=self.config.max_completion_tokens,
+            reasoning_effort=self.config.reasoning_effort,
+            num_retries=self.config.num_retries,
+            retry_strategy=self.config.retry_strategy,
+            tool_choice=self.config.tool_choice,
+            parallel_tool_calls=self.config.parallel_tool_calls,
             tools=prompt.tools,
             messages=prompt.messages,
         )
         return response.choices[0].message  # type: ignore
 
-    @property
-    def counter(self) -> Callable[..., int]:
-        """Get a token counter function for the LLM model."""
-        return partial(token_counter, model=self.model_name)
+
+class LLMCall(BaseModel):
+    """Represents a call to an LLM model."""
+
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    llm_config: LLMConfig
+    prompt: Prompt
+    output: Message
