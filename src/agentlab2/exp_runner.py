@@ -8,8 +8,8 @@ from uuid import uuid4
 import ray
 
 from agentlab2.core import Trajectory
+from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment, ExpResult
-from agentlab2.run import AgentRun
 
 LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d %(funcName)s() - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
@@ -21,7 +21,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
     ray_log_dir = os.path.join(exp.output_dir, "ray_logs")
 
     @ray.remote
-    def run_single(agent_run: AgentRun) -> Trajectory:
+    def run_single(agent_run: Episode) -> Trajectory:
         log_file = os.path.join(ray_log_dir, f"run_{agent_run.id}_task_{agent_run.task.id}.log")
         sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
         sys.stderr = sys.stdout

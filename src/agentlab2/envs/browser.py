@@ -1,5 +1,6 @@
+from agentlab2.benchmark import Task
 from agentlab2.core import Action, EnvironmentOutput
-from agentlab2.environment import EnvironmentConfig, Task, ToolboxEnv
+from agentlab2.environment import EnvironmentConfig, ToolboxEnv
 from agentlab2.tools.playwright import SyncPlaywrightTool
 
 

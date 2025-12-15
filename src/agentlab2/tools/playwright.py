@@ -2,7 +2,6 @@ import asyncio
 import logging
 import time
 from io import BytesIO
-from typing import Any
 
 from PIL import Image
 from playwright.async_api import Page as AsyncPage
@@ -11,8 +10,8 @@ from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import Action, Content, Observation
-from agentlab2.environment import Tool
+from agentlab2.core import Content, Observation
+from agentlab2.tool import Tool
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
@@ -138,18 +137,6 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
         self._page.close()
         self._page = self._browser.new_page()
 
-    def execute_action(self, action: Action) -> Any:
-        if not getattr(BrowserActionSpace, action.name, None):
-            raise ValueError(f"Action {action.name} is not a part of BrowserActionSpace.")
-        if not (fn := getattr(self, action.name, None)):
-            raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
-        try:
-            action_result = fn(**action.arguments) or "Success"
-        except Exception as e:
-            action_result = f"Error executing action {action.name}: {e}"
-            logger.exception(action_result)
-        return action_result
-
     def close(self):
         self._page.close()
         self._browser.close()
@@ -242,18 +229,6 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
     async def page_axtree(self) -> str:
         axtree = await self._page.accessibility.snapshot()
         return flatten_axtree(axtree)
-
-    async def execute_action(self, action: Action) -> Any:
-        if not getattr(BrowserActionSpace, action.name, None):
-            raise ValueError(f"Action {action.name} is not a part of BrowserActionSpace.")
-        if not (fn := getattr(self, action.name, None)):
-            raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
-        try:
-            action_result = await fn(**action.arguments)
-        except Exception as e:
-            action_result = f"Error executing action {action.name}: {e}"
-            logger.exception(action_result)
-        return action_result
 
     async def close(self):
         await self._page.close()

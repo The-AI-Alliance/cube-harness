@@ -2,7 +2,6 @@ import json
 import logging
 import os
 
-from pydantic import BaseModel
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
@@ -11,18 +10,30 @@ from agentlab2.environment import EnvironmentConfig, Task
 
 logger = logging.getLogger(__name__)
 
+MAX_STEPS = 1000  # System-wide upper limit on steps
 
-class AgentRun(BaseModel):
+
+class Episode:
     """Manages the execution of an agent on a specific task in an environment."""
 
-    id: int
-    exp_name: str
-    output_dir: str
-    agent_config: AgentConfig
-    env_config: EnvironmentConfig
-    task: Task
-    max_steps: int = 1000  # system-wide upper limit on steps
-    _output_name: str = ""
+    def __init__(
+        self,
+        id: int,
+        exp_name: str,
+        output_dir: str,
+        agent_config: AgentConfig,
+        task: Task,
+        env_config: EnvironmentConfig,
+        max_steps: int = MAX_STEPS,
+    ) -> None:
+        self.id = id
+        self.exp_name = exp_name
+        self.output_dir = output_dir
+        self.agent_config = agent_config
+        self.task = task
+        self.env_config = env_config
+        self.max_steps = max_steps
+        self._output_name = ""
 
     def run(self) -> Trajectory:
         """

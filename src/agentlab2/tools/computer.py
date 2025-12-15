@@ -2,7 +2,7 @@ import logging
 
 from PIL import Image
 
-from agentlab2.environment import Tool
+from agentlab2.tool import Tool
 
 logger = logging.getLogger(__name__)
 

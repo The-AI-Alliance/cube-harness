@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
 from agentlab2.core import Trajectory
-from agentlab2.run import AgentRun
+from agentlab2.episode import Episode
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class Experiment(BaseModel):
 
     def create_runs(self):
         runs = [
-            AgentRun(
+            Episode(
                 id=i,
                 exp_name=self.name,
                 output_dir=self.output_dir,

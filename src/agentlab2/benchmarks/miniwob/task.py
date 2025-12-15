@@ -12,12 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class MiniWobTask(Task[BrowserEnv]):
-    desc: str
-    subdomain: str
-    base_url: str
-    remove_human_display: bool = True
-    episode_max_time: int = 1000000
-    max_turns: int = 10
     validate_per_step: bool = True
     supported_actions: ClassVar[tuple[Callable, ...]] = (
         BrowserActionSpace.browser_press_key,
@@ -28,6 +22,24 @@ class MiniWobTask(Task[BrowserEnv]):
         BrowserActionSpace.browser_select_option,
         BrowserActionSpace.browser_mouse_click_xy,
     )
+
+    def __init__(
+        self,
+        id: str,
+        desc: str,
+        subdomain: str,
+        base_url: str,
+        remove_human_display: bool = True,
+        episode_max_time: int = 1000000,
+        max_turns: int = 10,
+    ) -> None:
+        self.id = id
+        self.desc = desc
+        self.subdomain = subdomain
+        self.base_url = base_url
+        self.remove_human_display = remove_human_display
+        self.episode_max_time = episode_max_time
+        self.max_turns = max_turns
 
     def model_post_init(self, __context: Any):
         if self.base_url.endswith("/"):

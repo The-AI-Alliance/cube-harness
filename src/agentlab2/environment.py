@@ -1,37 +1,14 @@
 """Environment, Benchmark and Task abstractions."""
 
 from abc import ABC, abstractmethod
-from typing import Any, List, get_protocol_members
+from typing import Callable, ClassVar, List
 
 from pydantic import BaseModel
 
 from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from agentlab2.tool import AbstractTool
 
 STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
-
-
-class Tool:
-    """Base class for objects that can react on some actions"""
-
-    action_space: Any
-
-    def reset(self) -> None:
-        """Reset the environment to its initial state."""
-        pass
-
-    @property
-    def actions(self) -> List[ActionSchema]:
-        """Returns list of actions supported by that environment."""
-        action_names = get_protocol_members(self.action_space)
-        return [ActionSchema.from_function(getattr(self, name)) for name in action_names]
-
-    def execute_action(self, action: Action) -> Any:
-        """Execute a single action and return the result."""
-        raise NotImplementedError
-
-    def close(self) -> None:
-        """Clean up environment resources."""
-        pass
 
 
 class EnvironmentConfig(BaseModel, ABC):
@@ -68,11 +45,12 @@ class Environment(ABC):
         pass
 
 
-class Task[E: Environment](BaseModel, ABC):
+class Task[E: Environment](ABC):
     """Represents a task that an agent must complete in an environment."""
 
     id: str
     validate_per_step: bool = False
+    supported_actions: ClassVar[tuple[Callable, ...]]
 
     @abstractmethod
     def setup(self, env: E) -> tuple[str, dict]:
@@ -116,14 +94,14 @@ class Task[E: Environment](BaseModel, ABC):
 class ToolboxEnv(Environment):
     """Environment that uses a collection of tools for interaction."""
 
-    def __init__(self, task: Task, tools: list[Tool]):
+    def __init__(self, task: Task, tools: list[AbstractTool]):
         self.task = task
         self.tools = tools
-        self._action_name_to_tool = {action.name: tool for tool in tools for action in tool.actions}
+        self._action_name_to_tool = {action.name: tool for tool in tools for action in tool.actions()}
 
     def actions(self) -> list[ActionSchema]:
         """Returns list of actions supported by that environment, union of all tool actions, filtered by the task."""
-        actions_union = [action for tool in self.tools for action in tool.actions]
+        actions_union = [action for tool in self.tools for action in tool.actions()]
         return self.task.filter_actions(actions_union)
 
     def setup(self) -> EnvironmentOutput:
