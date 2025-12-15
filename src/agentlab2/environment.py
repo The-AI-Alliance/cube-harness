@@ -120,7 +120,7 @@ class ToolboxEnv(Environment):
         contents = []
         for action in actions:
             if self.is_stop_action(action):
-                obs = Observation.from_text("Task finished by agent.")
+                contents.append(Content(data="Task finished by agent.", tool_call_id=action.id))
                 done = True
                 break
             if action.name not in self._action_name_to_tool:
