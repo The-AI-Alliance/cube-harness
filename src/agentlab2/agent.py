@@ -4,11 +4,13 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
 
-from agentlab2.core import AgentOutput, Observation
+from agentlab2.core import ActionSchema, AgentOutput, Observation
 
 
 class AgentConfig(BaseModel, ABC):
     """Configuration for creating an Agent."""
+
+    _action_set: list[ActionSchema] | None = None
 
     @abstractmethod
     def make(self, **kwargs) -> "Agent":

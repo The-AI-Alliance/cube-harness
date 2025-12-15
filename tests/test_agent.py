@@ -97,7 +97,7 @@ class TestAgent:
             custom_param: str = "default"
             another_param: int = 42
 
-            def make(self, **kwargs) -> "ExtendedAgent":
+            def make(self) -> "ExtendedAgent":
                 return ExtendedAgent(config=self)
 
         class ExtendedAgent(Agent):

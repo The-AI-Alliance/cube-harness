@@ -30,7 +30,8 @@ class Episode:
         self.exp_name = exp_name
         self.output_dir = output_dir
         self.agent_config = agent_config
-        self.task = task
+        self.task_id = task.id
+        env_config._task = task
         self.env_config = env_config
         self.max_steps = max_steps
         self._output_name = ""
@@ -42,12 +43,13 @@ class Episode:
         Returns:
             Trajectory containing the full history of the run.
         """
-        env = self.env_config.make(self.task)
-        agent = self.agent_config.make(actions=env.action_set())
+        env = self.env_config.make()
+        self.agent_config._action_set = env.action_set()
+        agent = self.agent_config.make()
         try:
             env_output = env.setup()
             logger.info(colored(f"Initial env output: {env_output}", "blue"))
-            trajectory = Trajectory(steps=[env_output], metadata={"task_id": self.task.id})
+            trajectory = Trajectory(steps=[env_output], metadata={"task_id": self.task_id})
             self.save_trajectory(trajectory)
             turns = 0
             while not env_output.done and turns < self.max_steps:
@@ -76,12 +78,12 @@ class Episode:
         # TODO: Replace with tracing implementation
         traj_dir = f"{self.output_dir}/trajectories"
         os.makedirs(traj_dir, exist_ok=True)
-        self._output_name = f"{traj_dir}/run{self.id}_task_{self.task.id}"
+        self._output_name = f"{traj_dir}/run{self.id}_task_{self.task_id}"
         with open(f"{self._output_name}.metadata.json", "w") as f:
             f.write(json.dumps(trajectory.metadata, indent=2))
         with open(f"{self._output_name}.jsonl", "a") as f:
             pass  # Create empty file for appending steps later
-        logger.info(f"Saved trajectory for task {self.task.id} to {self._output_name}")
+        logger.info(f"Saved trajectory for task {self.task_id} to {self._output_name}")
 
     def save_step(self, step: AgentOutput | EnvironmentOutput) -> None:
         """Append a single step to the trajectory JSONL file."""

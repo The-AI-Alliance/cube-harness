@@ -70,8 +70,8 @@ class TestBenchmark:
 
         # Create a benchmark without tools (which aren't serializable)
         class SerializableEnvConfig(EnvironmentConfig):
-            def make(self, task):
-                return ToolboxEnv(task=task, tools=[])
+            def make(self):
+                return ToolboxEnv(task=self._task, tools=[])
 
         benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
         json_str = benchmark.model_dump_json(serialize_as_any=True)
@@ -105,7 +105,8 @@ class TestBenchmark:
         assert env_config is not None
         # Should be able to make environment
         task = mock_benchmark.tasks()[0]
-        env = env_config.make(task)
+        env_config._task = task
+        env = env_config.make()
         assert env is not None
 
     def test_benchmark_custom_install_uninstall(self, mock_env_config, mock_task):

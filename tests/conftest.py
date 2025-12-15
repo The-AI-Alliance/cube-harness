@@ -205,8 +205,8 @@ class MockEnvironmentConfig(EnvironmentConfig):
 
     tools: list = []
 
-    def make(self, task: Task) -> Environment:
-        return ToolboxEnv(task=task, tools=self.tools)
+    def make(self) -> Environment:
+        return ToolboxEnv(task=self._task, tools=self.tools)
 
 
 @pytest.fixture
@@ -223,7 +223,7 @@ class MockAgentConfig(AgentConfig):
 
     name: str = "mock_agent"
 
-    def make(self, **kwargs) -> "MockAgent":
+    def make(self) -> "MockAgent":
         return MockAgent(config=self)
 
 

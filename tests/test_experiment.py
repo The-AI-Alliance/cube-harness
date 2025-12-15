@@ -11,6 +11,12 @@ from agentlab2.experiment import Experiment, ExpResult
 from tests.conftest import MockBenchmark, MockTask
 
 
+# Use a serializable env config (without tools)
+class SerializableEnvConfig(EnvironmentConfig):
+    def make(self):
+        return ToolboxEnv(task=self._task, tools=[])
+
+
 class TestExpResult:
     """Tests for ExpResult class."""
 
@@ -136,12 +142,6 @@ class TestExperiment:
 
     def test_experiment_save_config(self, mock_agent_config, mock_task):
         """Test Experiment save_config."""
-
-        # Use a serializable env config (without tools)
-        class SerializableEnvConfig(EnvironmentConfig):
-            def make(self, task):
-                return ToolboxEnv(task=task, tools=[])
-
         benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -164,11 +164,6 @@ class TestExperiment:
 
     def test_experiment_save_config_creates_directory(self, mock_agent_config, mock_task):
         """Test Experiment save_config creates output directory."""
-
-        # Use a serializable env config (without tools)
-        class SerializableEnvConfig(EnvironmentConfig):
-            def make(self, task):
-                return ToolboxEnv(task=task, tools=[])
 
         benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
@@ -254,12 +249,6 @@ class TestExperiment:
 
     def test_experiment_serialization(self, mock_agent_config, mock_task):
         """Test Experiment JSON serialization."""
-
-        # Use a serializable env config (without tools)
-        class SerializableEnvConfig(EnvironmentConfig):
-            def make(self, task):
-                return ToolboxEnv(task=task, tools=[])
-
         benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -306,4 +295,4 @@ class TestExperiment:
             tasks = mock_benchmark.tasks()
 
             for episode, task in zip(episodes, tasks):
-                assert episode.task == task
+                assert episode.task_id == task.id

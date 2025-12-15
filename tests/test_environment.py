@@ -274,6 +274,7 @@ class TestEnvironmentConfig:
 
     def test_env_config_make(self, mock_env_config, mock_task):
         """Test creating environment from config."""
-        env = mock_env_config.make(mock_task)
+        mock_env_config._task = mock_task
+        env = mock_env_config.make()
         assert isinstance(env, ToolboxEnv)
         assert env.task == mock_task

@@ -1,7 +1,7 @@
 """Environment, Benchmark and Task abstractions."""
 
 from abc import ABC, abstractmethod
-from typing import Callable, ClassVar, List
+from typing import Callable, List
 
 from pydantic import BaseModel
 
@@ -14,8 +14,10 @@ STOP_ACTION = ActionSchema(name="final_step", description="Stop the task executi
 class EnvironmentConfig(BaseModel, ABC):
     """Configuration for Environment."""
 
+    _task: "Task | None" = None
+
     @abstractmethod
-    def make(self, task: "Task") -> "Environment":
+    def make(self) -> "Environment":
         pass
 
 
@@ -50,7 +52,7 @@ class Task(ABC):
 
     id: str
     validate_per_step: bool = False
-    supported_actions: ClassVar[tuple[Callable, ...]]
+    supported_actions: tuple[Callable, ...]
 
     @abstractmethod
     def setup(self, env: Environment) -> tuple[str, dict]:

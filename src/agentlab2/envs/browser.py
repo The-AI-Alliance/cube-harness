@@ -8,10 +8,11 @@ class BrowserEnvConfig(EnvironmentConfig):
 
     pw_config: PWConfig
 
-    def make(self, task: Task) -> "BrowserEnv":
+    def make(self) -> "BrowserEnv":
         """Create a BrowserEnv instance from the configuration for specified task."""
         browser_tool = self.pw_config.make()
-        return BrowserEnv(task, browser_tool)
+        assert self._task is not None, "Task must be set in EnvironmentConfig before making the environment."
+        return BrowserEnv(self._task, browser_tool)
 
 
 class BrowserEnv(ToolboxEnv):
