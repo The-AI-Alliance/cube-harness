@@ -1,9 +1,12 @@
-.PHONY: help install format lint hello
+.PHONY: help install format lint test hello debug
 
 help:
 	@echo "make install    - Install dependencies in editable mode"
 	@echo "make format     - Format code"
 	@echo "make lint       - Lint and auto-fix"
+	@echo "make test       - Run unit tests"
+	@echo "make hello      - Run hello_miniwob recipe"
+	@echo "make debug      - Run hello_miniwob recipe in debug mode"
 
 hello:
 	uv run recipes/hello_miniwob.py
@@ -20,3 +23,6 @@ format:
 
 lint:
 	uv run ruff check --fix .
+
+test:
+	uv run pytest tests/ -v

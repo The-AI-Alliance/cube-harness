@@ -1,0 +1,316 @@
+"""Common fixtures for agentlab2 tests."""
+
+from typing import Protocol, runtime_checkable
+
+import pytest
+from PIL import Image
+
+from agentlab2.agent import Agent, AgentConfig
+from agentlab2.benchmark import Benchmark
+from agentlab2.core import (
+    Action,
+    ActionSchema,
+    AgentOutput,
+    Content,
+    EnvironmentOutput,
+    Observation,
+    Trajectory,
+)
+from agentlab2.environment import Environment, EnvironmentConfig, Task, ToolboxEnv
+from agentlab2.llm import LLMConfig, Prompt
+from agentlab2.tool import Tool
+
+# --- Core fixtures ---
+
+
+@pytest.fixture
+def sample_action_schema() -> ActionSchema:
+    """Sample action schema for testing."""
+    return ActionSchema(
+        name="click",
+        description="Click on an element",
+        parameters={
+            "type": "object",
+            "properties": {"element_id": {"type": "string", "description": "The element to click"}},
+            "required": ["element_id"],
+        },
+    )
+
+
+@pytest.fixture
+def sample_action() -> Action:
+    """Sample action for testing."""
+    return Action(id="action_1", name="click", arguments={"element_id": "button_1"})
+
+
+@pytest.fixture
+def sample_content() -> Content:
+    """Sample text content."""
+    return Content(data="Hello, world!", name="greeting")
+
+
+@pytest.fixture
+def sample_image_content() -> Content:
+    """Sample image content."""
+    img = Image.new("RGB", (100, 100), color="red")
+    return Content(data=img, name="screenshot")
+
+
+@pytest.fixture
+def sample_observation() -> Observation:
+    """Sample observation with text content."""
+    return Observation(contents=[Content(data="Task: Click the button")])
+
+
+@pytest.fixture
+def sample_env_output(sample_observation) -> EnvironmentOutput:
+    """Sample environment output."""
+    return EnvironmentOutput(obs=sample_observation, reward=0.5, done=False, info={"step": 1})
+
+
+@pytest.fixture
+def sample_agent_output(sample_action) -> AgentOutput:
+    """Sample agent output."""
+    return AgentOutput(actions=[sample_action])
+
+
+@pytest.fixture
+def sample_trajectory(sample_env_output, sample_agent_output) -> Trajectory:
+    """Sample trajectory with steps."""
+    traj = Trajectory(metadata={"task_id": "test_task"})
+    traj.append(sample_env_output)
+    traj.append(sample_agent_output)
+    return traj
+
+
+# --- LLM fixtures ---
+
+
+@pytest.fixture
+def sample_llm_config() -> LLMConfig:
+    """Sample LLM configuration."""
+    return LLMConfig(model_name="gpt-5-nano", temperature=0.7, max_tokens=4096)
+
+
+@pytest.fixture
+def sample_prompt() -> Prompt:
+    """Sample prompt for LLM."""
+    return Prompt(
+        messages=[{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "Hello!"}],
+        tools=[],
+    )
+
+
+# --- Tool fixtures ---
+
+
+@runtime_checkable
+class MockActionSpace(Protocol):
+    """Mock action space protocol for testing."""
+
+    def click(self, element_id: str) -> str:
+        """Click on an element."""
+        ...
+
+    def type_text(self, element_id: str, text: str) -> str:
+        """Type text into an element."""
+        ...
+
+
+class MockTool(Tool):
+    """Mock tool implementation for testing."""
+
+    action_space = MockActionSpace
+
+    def __init__(self):
+        self.click_count = 0
+        self.typed_texts = []
+
+    def click(self, element_id: str) -> str:
+        """Click on an element.
+
+        Args:
+            element_id: The element to click.
+
+        Returns:
+            Click confirmation message.
+        """
+        self.click_count += 1
+        return f"Clicked on {element_id}"
+
+    def type_text(self, element_id: str, text: str) -> str:
+        """Type text into an element.
+
+        Args:
+            element_id: The element to type into.
+            text: The text to type.
+
+        Returns:
+            Type confirmation message.
+        """
+        self.typed_texts.append((element_id, text))
+        return f"Typed '{text}' into {element_id}"
+
+    def reset(self):
+        self.click_count = 0
+        self.typed_texts = []
+
+
+@pytest.fixture
+def mock_tool() -> MockTool:
+    """Mock tool for testing."""
+    return MockTool()
+
+
+# --- Task fixtures ---
+
+
+class MockTask(Task):
+    """Mock task implementation for testing."""
+
+    id = "mock_task_1"
+
+    def __init__(self, goal: str = "Complete the test task"):
+        self.goal = goal
+        self.setup_called = False
+        self.teardown_called = False
+        self.validate_called = False
+
+    def setup(self, env) -> tuple[str, dict]:
+        self.setup_called = True
+        return self.goal, {"task_type": "mock"}
+
+    def teardown(self, env) -> None:
+        self.teardown_called = True
+
+    def validate_task(self, env, obs: Observation) -> tuple[float, dict]:
+        self.validate_called = True
+        return 1.0, {"success": True}
+
+    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
+        return actions
+
+
+@pytest.fixture
+def mock_task() -> MockTask:
+    """Mock task for testing."""
+    return MockTask()
+
+
+# --- Environment fixtures ---
+
+
+class MockEnvironmentConfig(EnvironmentConfig):
+    """Mock environment configuration."""
+
+    tools: list = []
+
+    def make(self, task: Task) -> Environment:
+        return ToolboxEnv(task=task, tools=self.tools)
+
+
+@pytest.fixture
+def mock_env_config(mock_tool) -> MockEnvironmentConfig:
+    """Mock environment config with mock tool."""
+    return MockEnvironmentConfig(tools=[mock_tool])
+
+
+# --- Agent fixtures ---
+
+
+class MockAgentConfig(AgentConfig):
+    """Mock agent configuration."""
+
+    name: str = "mock_agent"
+
+    def make(self, **kwargs) -> "MockAgent":
+        return MockAgent(config=self)
+
+
+class MockAgent(Agent):
+    """Mock agent implementation for testing."""
+
+    name = "MockAgent"
+    description = "A mock agent for testing"
+    input_content_types = ["text"]
+    output_content_types = ["action"]
+
+    def __init__(self, config: MockAgentConfig):
+        super().__init__(config)
+        self.step_count = 0
+        self.actions_to_return: list[Action] = []
+
+    def step(self, obs: Observation) -> AgentOutput:
+        self.step_count += 1
+        if self.actions_to_return:
+            actions = self.actions_to_return
+        else:
+            actions = [Action(name="final_step", arguments={})]
+        return AgentOutput(actions=actions)
+
+
+@pytest.fixture
+def mock_agent_config() -> MockAgentConfig:
+    """Mock agent config for testing."""
+    return MockAgentConfig()
+
+
+@pytest.fixture
+def mock_agent(mock_agent_config) -> MockAgent:
+    """Mock agent for testing."""
+    return MockAgent(config=mock_agent_config)
+
+
+# --- Benchmark fixtures ---
+
+
+class MockBenchmark(Benchmark):
+    """Mock benchmark for testing."""
+
+    # Pydantic fields to track state
+    _tasks: list = []
+    _setup_called: bool = False
+    _close_called: bool = False
+    _install_called: bool = False
+    _uninstall_called: bool = False
+
+    def __init__(self, tasks_list: list[Task], **kwargs):
+        super().__init__(**kwargs)
+        self._tasks = tasks_list
+
+    @property
+    def setup_called(self) -> bool:
+        return self._setup_called
+
+    @property
+    def close_called(self) -> bool:
+        return self._close_called
+
+    def setup(self):
+        self._setup_called = True
+
+    def close(self):
+        self._close_called = True
+
+    @property
+    def install_called(self) -> bool:
+        return self._install_called
+
+    @property
+    def uninstall_called(self) -> bool:
+        return self._uninstall_called
+
+    def install(self):
+        self._install_called = True
+
+    def uninstall(self):
+        self._uninstall_called = True
+
+    def tasks(self) -> list[Task]:
+        return self._tasks
+
+
+@pytest.fixture
+def mock_benchmark(mock_task, mock_env_config) -> MockBenchmark:
+    """Mock benchmark with one task."""
+    return MockBenchmark(tasks_list=[mock_task], env_config=mock_env_config)
