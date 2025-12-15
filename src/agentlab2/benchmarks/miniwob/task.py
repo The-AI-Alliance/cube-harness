@@ -1,8 +1,9 @@
 import logging
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar
 
 from PIL import Image
 
+from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import ActionSchema, Content, Observation
 from agentlab2.environment import Task
 from agentlab2.envs.browser import BrowserEnv
@@ -18,15 +19,15 @@ class MiniWobTask(Task[BrowserEnv]):
     episode_max_time: int = 1000000
     max_turns: int = 10
     validate_per_step: bool = True
-    actions_whitelist: ClassVar[list[str]] = [
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-    ]
+    supported_actions: ClassVar[tuple[Callable, ...]] = (
+        BrowserActionSpace.browser_press_key,
+        BrowserActionSpace.browser_type,
+        BrowserActionSpace.browser_click,
+        BrowserActionSpace.browser_drag,
+        BrowserActionSpace.browser_hover,
+        BrowserActionSpace.browser_select_option,
+        BrowserActionSpace.browser_mouse_click_xy,
+    )
 
     def model_post_init(self, __context: Any):
         if self.base_url.endswith("/"):
@@ -176,7 +177,8 @@ return core.getUtterance();
         return obs
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        filtered = [a for a in actions if a.name in self.actions_whitelist]
+        supported_action_names = {action.__name__ for action in self.supported_actions}
+        filtered = [a for a in actions if a.name in supported_action_names]
         logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
         return filtered
 
