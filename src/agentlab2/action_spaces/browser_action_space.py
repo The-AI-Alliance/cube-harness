@@ -1,7 +1,9 @@
 from typing import Protocol
 
+from agentlab2.core import ActionSpace
 
-class BrowserActionSpace(Protocol):
+
+class BrowserActionSpace(ActionSpace, Protocol):
     def browser_press_key(self, key: str):
         """Press a key on the keyboard."""
         ...

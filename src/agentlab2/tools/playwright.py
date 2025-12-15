@@ -11,7 +11,7 @@ from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import Action, ActionSchema, Content, Observation
+from agentlab2.core import Action, Content, Observation
 from agentlab2.environment import Tool
 from agentlab2.utils import prune_html
 
@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 class SyncPlaywrightTool(Tool, BrowserActionSpace):
-    """Fully synchronous Playwright tool using playwright.sync_api."""
+    """
+    Fully synchronous Playwright tool using playwright.sync_api.
+    Implements BrowserActionSpace protocol.
+    """
+
+    action_space = BrowserActionSpace
 
     def __init__(
         self,
@@ -32,19 +37,6 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
     ) -> None:
         super().__init__()
         self.max_wait = max_wait
-        self._actions = {
-            "browser_press_key": self.browser_press_key,
-            "browser_type": self.browser_type,
-            "browser_click": self.browser_click,
-            "browser_drag": self.browser_drag,
-            "browser_hover": self.browser_hover,
-            "browser_select_option": self.browser_select_option,
-            "browser_mouse_click_xy": self.browser_mouse_click_xy,
-            "browser_wait": self.browser_wait,
-            "browser_back": self.browser_back,
-            "browser_forward": self.browser_forward,
-            "noop": self.noop,
-        }
         self.pw_kwargs = kwargs
         self.use_html = use_html
         self.use_axtree = use_axtree
@@ -147,7 +139,10 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
         self._page = self._browser.new_page()
 
     def execute_action(self, action: Action) -> Any:
-        fn = self._actions[action.name]
+        if not getattr(BrowserActionSpace, action.name, None):
+            raise ValueError(f"Action {action.name} is not a part of BrowserActionSpace.")
+        if not (fn := getattr(self, action.name, None)):
+            raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
         try:
             action_result = fn(**action.arguments) or "Success"
         except Exception as e:
@@ -155,35 +150,20 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
             logger.exception(action_result)
         return action_result
 
-    @property
-    def actions(self) -> list[ActionSchema]:
-        return [ActionSchema.from_function(fn) for fn in self._actions.values()]
-
     def close(self):
         self._page.close()
         self._browser.close()
         self._pw.stop()
 
 
-class AsyncPlaywrightTool(Tool):
+class AsyncPlaywrightTool(Tool, BrowserActionSpace):
     """Fully asynchronous Playwright tool using playwright.async_api."""
+
+    action_space = BrowserActionSpace
 
     def __init__(self, max_wait: int = 60, **kwargs) -> None:
         super().__init__()
         self.max_wait = max_wait
-        self._actions = {
-            "browser_press_key": self.browser_press_key,
-            "browser_type": self.browser_type,
-            "browser_click": self.browser_click,
-            "browser_drag": self.browser_drag,
-            "browser_hover": self.browser_hover,
-            "browser_select_option": self.browser_select_option,
-            "browser_mouse_click_xy": self.browser_mouse_click_xy,
-            "browser_wait": self.browser_wait,
-            "browser_back": self.browser_back,
-            "browser_forward": self.browser_forward,
-            "noop": self.noop,
-        }
         self.pw_kwargs = kwargs
         self._apw = None
         self._abrowser = None
@@ -264,17 +244,16 @@ class AsyncPlaywrightTool(Tool):
         return flatten_axtree(axtree)
 
     async def execute_action(self, action: Action) -> Any:
-        fn = self._actions[action.name]
+        if not getattr(BrowserActionSpace, action.name, None):
+            raise ValueError(f"Action {action.name} is not a part of BrowserActionSpace.")
+        if not (fn := getattr(self, action.name, None)):
+            raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
         try:
             action_result = await fn(**action.arguments)
         except Exception as e:
             action_result = f"Error executing action {action.name}: {e}"
             logger.exception(action_result)
         return action_result
-
-    @property
-    def actions(self) -> list[ActionSchema]:
-        return [ActionSchema.from_function(fn) for fn in self._actions.values()]
 
     async def close(self):
         await self._page.close()

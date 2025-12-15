@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 class BrowsergymTool(Tool, BrowserActionSpace):
-    """TODO: Browsergym tool implementation."""
+    """
+    TODO: Browsergym tool implementation.
+    Implements BrowserActionSpace protocol.
+    """
 
     def __init__(
         self,

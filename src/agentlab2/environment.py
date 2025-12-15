@@ -1,17 +1,19 @@
 """Environment, Benchmark and Task abstractions."""
 
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, List, get_protocol_members
 
 from pydantic import BaseModel
 
-from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from agentlab2.core import Action, ActionSchema, ActionSpace, Content, EnvironmentOutput, Observation
 
 STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
 
 
 class Tool:
     """Base class for objects that can react on some actions"""
+
+    action_space: type[ActionSpace]
 
     def reset(self) -> None:
         """Reset the environment to its initial state."""
@@ -20,7 +22,8 @@ class Tool:
     @property
     def actions(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""
-        return []
+        action_names = get_protocol_members(self.action_space)
+        return [ActionSchema.from_function(getattr(self, name)) for name in action_names]
 
     def execute_action(self, action: Action) -> Any:
         """Execute a single action and return the result."""

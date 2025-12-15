@@ -1,7 +1,7 @@
 import base64
 import io
 import json
-from typing import Any, Callable, Dict, List, Self
+from typing import Any, Callable, Dict, List, Protocol, Self
 
 import litellm.utils
 from litellm import Message
@@ -168,3 +168,9 @@ class Trajectory(BaseModel):
 
     def final_reward(self) -> float | None:
         return self.last_env_step().reward
+
+
+class ActionSpace(Protocol):
+    """Base class for action spaces."""
+
+    pass
