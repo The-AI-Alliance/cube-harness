@@ -5,7 +5,7 @@ from litellm import Message
 from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import Action, AgentOutput, Observation, ToolSchema
+from agentlab2.core import Action, AgentOutput, Observation, ActionSchema
 from agentlab2.environment import STOP_ACTION
 from agentlab2.llm import LLM, Prompt
 
@@ -41,7 +41,7 @@ Focus on:
 - Current progress toward the goal
 Provide a concise summary that preserves all information needed to continue the task."""
 
-    def make(self, actions: list[ToolSchema]) -> "ReactAgent":
+    def make(self, actions: list[ActionSchema]) -> "ReactAgent":
         return ReactAgent(config=self, tools=actions)
 
 
@@ -53,7 +53,7 @@ class ReactAgent(Agent):
         "output_content_types": ["application/json"],
     }
 
-    def __init__(self, config: ReactAgentConfig, tools: list[ToolSchema]):
+    def __init__(self, config: ReactAgentConfig, tools: list[ActionSchema]):
         self.config = config
         self.llm = config.llm
         self.tools: list[dict] = [tool.as_dict() for tool in tools]

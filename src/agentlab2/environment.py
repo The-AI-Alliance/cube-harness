@@ -5,9 +5,9 @@ from typing import Any, List
 
 from pydantic import BaseModel
 
-from agentlab2.core import Action, Content, EnvironmentOutput, Observation, ToolSchema
+from agentlab2.core import Action, Content, EnvironmentOutput, Observation, ActionSchema
 
-STOP_ACTION = ToolSchema(name="final_step", description="Stop the task execution.")
+STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
 
 
 class Tool:
@@ -18,7 +18,7 @@ class Tool:
         pass
 
     @property
-    def actions(self) -> List[ToolSchema]:
+    def actions(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""
         return []
 
@@ -51,7 +51,7 @@ class Environment(ABC):
         """Set up the environment before starting a task."""
         pass
 
-    def actions(self) -> List[ToolSchema]:
+    def actions(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""
         return []
 
@@ -91,7 +91,7 @@ class Task[E: Environment](BaseModel, ABC):
         pass
 
     @abstractmethod
-    def filter_actions(self, actions: list[ToolSchema]) -> list[ToolSchema]:
+    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
         """Allows the task to whitelist subset of all the actions provided by the environment."""
         pass
 
@@ -118,17 +118,20 @@ class ToolboxEnv(Environment):
         self.tools = tools
         self._action_name_to_tool = {action.name: tool for tool in tools for action in tool.actions}
 
-    def actions(self) -> list[ToolSchema]:
+    def actions(self) -> list[ActionSchema]:
+        """Returns list of actions supported by that environment, union of all tool actions, filtered by the task."""
         actions_union = [action for tool in self.tools for action in tool.actions]
         return self.task.filter_actions(actions_union)
 
     def setup(self) -> EnvironmentOutput:
+        """Prepare all tools and set up the task."""
         for tool in self.tools:
             tool.reset()
         goal, info = self.task.setup(self)
         return EnvironmentOutput(obs=Observation.from_text(goal), info=info)
 
     def step(self, action: Action | list[Action]) -> EnvironmentOutput:
+        """Execute a single or multiple actions using the appropriate tools."""
         actions = [action] if isinstance(action, Action) else action
         done = False
         reward = 0.0
@@ -150,13 +153,15 @@ class ToolboxEnv(Environment):
         done = done or self.task.finished(self)
         if self.task.validate_per_step or done:
             reward, info = self.task.validate_task(self, obs)
-
+        obs = self.task.obs_postprocess(obs)
         return EnvironmentOutput(obs=obs, reward=reward, info=info, done=done)
 
     def is_stop_action(self, action: Action) -> bool:
+        """Check if the action is the stop action."""
         return action.name == STOP_ACTION.name
 
     def close(self):
+        """Clean up resources used by all tools and the task in the right order."""
         self.task.teardown(self)
         for tool in self.tools:
             tool.close()

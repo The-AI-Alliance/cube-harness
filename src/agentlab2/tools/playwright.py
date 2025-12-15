@@ -10,14 +10,15 @@ from playwright.async_api import async_playwright
 from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
 
-from agentlab2.core import Action, Content, Observation, ToolSchema
+from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
+from agentlab2.core import Action, ActionSchema, Content, Observation
 from agentlab2.environment import Tool
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
 
 
-class SyncPlaywrightTool(Tool):
+class SyncPlaywrightTool(Tool, BrowserActionSpace):
     """Fully synchronous Playwright tool using playwright.sync_api."""
 
     def __init__(
@@ -155,8 +156,8 @@ class SyncPlaywrightTool(Tool):
         return action_result
 
     @property
-    def actions(self) -> list[ToolSchema]:
-        return [ToolSchema.from_function(fn) for fn in self._actions.values()]
+    def actions(self) -> list[ActionSchema]:
+        return [ActionSchema.from_function(fn) for fn in self._actions.values()]
 
     def close(self):
         self._page.close()
@@ -272,8 +273,8 @@ class AsyncPlaywrightTool(Tool):
         return action_result
 
     @property
-    def actions(self) -> list[ToolSchema]:
-        return [ToolSchema.from_function(fn) for fn in self._actions.values()]
+    def actions(self) -> list[ActionSchema]:
+        return [ActionSchema.from_function(fn) for fn in self._actions.values()]
 
     async def close(self):
         await self._page.close()

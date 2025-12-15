@@ -3,7 +3,7 @@ from typing import Any, ClassVar
 
 from PIL import Image
 
-from agentlab2.core import Content, Observation, ToolSchema
+from agentlab2.core import ActionSchema, Content, Observation
 from agentlab2.environment import Task
 from agentlab2.envs.browser import BrowserEnv
 
@@ -175,7 +175,7 @@ return core.getUtterance();
         obs.contents = contents
         return obs
 
-    def filter_actions(self, actions: list[ToolSchema]) -> list[ToolSchema]:
+    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
         filtered = [a for a in actions if a.name in self.actions_whitelist]
         logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
         return filtered

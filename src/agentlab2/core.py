@@ -9,7 +9,7 @@ from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
-class ToolSchema(BaseModel):
+class ActionSchema(BaseModel):
     """
     Represents a function specification with a type, name, description and arguments.
     Compatible with OAI, Anthropic and VLLM definitions.

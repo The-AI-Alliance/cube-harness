@@ -36,9 +36,13 @@ class BrowserEnv(ToolboxEnv):
         return output
 
     def step(self, action: Action) -> EnvironmentOutput:
+        """Action result of the browser tool does not contain page data, so:
+        - append page observation after the step
+        - postprocess page observation via task's obs_postprocess method
+        """
         output = super().step(action)
-        page_obs = self.browser_tool.page_obs()
-        output.obs.contents += self.task.obs_postprocess(page_obs).contents
+        page_obs = self.task.obs_postprocess(self.browser_tool.page_obs())
+        output.obs.contents += page_obs.contents
         return output
 
     def goto(self, url: str):
