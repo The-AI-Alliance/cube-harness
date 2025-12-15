@@ -5,7 +5,7 @@ from typing import Any, List, get_protocol_members
 
 from pydantic import BaseModel
 
-from agentlab2.core import Action, ActionSchema, ActionSpace, Content, EnvironmentOutput, Observation
+from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 
 STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
 
@@ -13,7 +13,7 @@ STOP_ACTION = ActionSchema(name="final_step", description="Stop the task executi
 class Tool:
     """Base class for objects that can react on some actions"""
 
-    action_space: type[ActionSpace]
+    action_space: Any
 
     def reset(self) -> None:
         """Reset the environment to its initial state."""
