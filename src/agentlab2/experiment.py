@@ -29,8 +29,8 @@ class Experiment(BaseModel):
     def config(self) -> dict:
         return self.model_dump(serialize_as_any=True)
 
-    def create_runs(self):
-        runs = [
+    def create_episodes(self):
+        episodes = [
             Episode(
                 id=i,
                 exp_name=self.name,
@@ -41,8 +41,8 @@ class Experiment(BaseModel):
             )
             for i, task in enumerate(self.benchmark.tasks())
         ]
-        logger.info(f"Prepared {len(runs)} runs for experiment '{self.name}'")
-        return runs
+        logger.info(f"Prepared {len(episodes)} episodes for experiment '{self.name}'")
+        return episodes
 
     def save_config(self) -> None:
         os.makedirs(self.output_dir, exist_ok=True)
