@@ -24,7 +24,7 @@ def main():
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=6)
+        run_with_ray(exp, n_cpus=4)
 
 
 if __name__ == "__main__":
