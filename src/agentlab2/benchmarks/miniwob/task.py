@@ -11,7 +11,7 @@ from agentlab2.envs.browser import BrowserEnv
 logger = logging.getLogger(__name__)
 
 
-class MiniWobTask(Task[BrowserEnv]):
+class MiniWobTask(Task):
     validate_per_step: bool = True
     supported_actions: ClassVar[tuple[Callable, ...]] = (
         BrowserActionSpace.browser_press_key,

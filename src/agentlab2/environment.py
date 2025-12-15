@@ -45,7 +45,7 @@ class Environment(ABC):
         pass
 
 
-class Task[E: Environment](ABC):
+class Task(ABC):
     """Represents a task that an agent must complete in an environment."""
 
     id: str
@@ -53,7 +53,7 @@ class Task[E: Environment](ABC):
     supported_actions: ClassVar[tuple[Callable, ...]]
 
     @abstractmethod
-    def setup(self, env: E) -> tuple[str, dict]:
+    def setup(self, env: Environment) -> tuple[str, dict]:
         """
         Set up the task in the given environment.
 
@@ -62,12 +62,12 @@ class Task[E: Environment](ABC):
         """
         pass
 
-    def teardown(self, env: E) -> None:
+    def teardown(self, env: Environment) -> None:
         """Optional clean up after task completion."""
         pass
 
     @abstractmethod
-    def validate_task(self, env: E, obs: Observation) -> tuple[float, dict]:
+    def validate_task(self, env: Environment, obs: Observation) -> tuple[float, dict]:
         """Validate the whole trajectory and state of the env at the end of the run."""
         pass
 
@@ -86,7 +86,7 @@ class Task[E: Environment](ABC):
         """Optional post-processing of observation before returning it to the agent."""
         return obs
 
-    def finished(self, env: E) -> bool:
+    def finished(self, env: Environment) -> bool:
         """Check if the task is finished."""
         return False
 
