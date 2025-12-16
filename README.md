@@ -50,6 +50,25 @@ You can customize the experiment by editing recipe [`recipes/hello_miniwob.py`](
 - `ReactAgentConfig` - agent behavior
 - `MiniWobBenchmark` - bencmark selection
 
+## Experiment Viewer
+
+AgentLab2 includes a Gradio-based UI for exploring experiment results and trajectories:
+
+```bash
+make viewer
+# or: uv run al2-viewer
+```
+
+The viewer displays:
+- **Trajectory list** - all runs with task ID, steps, reward, and duration
+- **Visual timeline** - color-coded steps (blue=environment, green=agent) with duration-based widths
+- **Screenshots** - browser state at each environment step
+- **Step details** - observations, agent actions, and LLM reasoning
+- **Debug data** - raw JSON, LLM calls, and tool configurations
+
+![AgentLab2 Viewer Screenshot](docs/assets/images/al2_viewer.png)
+
+
 ## Architecture Overview
 
 AgentLab2 is designed as a **universal evaluation platform** for multiple agentic benchmarks and serves as the foundation for **RL data generation** pipelines.
