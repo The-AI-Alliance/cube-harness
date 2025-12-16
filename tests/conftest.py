@@ -18,6 +18,7 @@ from agentlab2.core import (
     Observation,
     Task,
     Trajectory,
+    TrajectoryStep,
 )
 from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
@@ -89,8 +90,8 @@ def sample_agent_output(sample_action) -> AgentOutput:
 def sample_trajectory(sample_env_output, sample_agent_output) -> Trajectory:
     """Sample trajectory with steps."""
     traj = Trajectory(metadata={"task_id": "test_task"})
-    traj.append(sample_env_output)
-    traj.append(sample_agent_output)
+    traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.0, end_time=0.1))
+    traj.steps.append(TrajectoryStep(output=sample_agent_output, start_time=0.1, end_time=0.2))
     return traj
 
 

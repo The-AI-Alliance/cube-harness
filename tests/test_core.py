@@ -13,6 +13,7 @@ from agentlab2.core import (
     EnvironmentOutput,
     Observation,
     Trajectory,
+    TrajectoryStep,
 )
 
 
@@ -285,9 +286,9 @@ class TestTrajectory:
         traj = Trajectory()
         obs = Observation.from_text("test")
         env_out = EnvironmentOutput(obs=obs, reward=0.5)
-        traj.append(env_out)
+        traj.steps.append(TrajectoryStep(output=env_out))
         assert len(traj.steps) == 1
-        assert traj.steps[0] == env_out
+        assert traj.steps[0].output == env_out
 
     def test_trajectory_last_env_step(self, sample_trajectory, sample_env_output):
         """Test getting last environment step."""
@@ -300,16 +301,16 @@ class TestTrajectory:
         traj = Trajectory()
         obs1 = Observation.from_text("first")
         obs2 = Observation.from_text("second")
-        traj.append(EnvironmentOutput(obs=obs1, reward=0.1))
-        traj.append(AgentOutput(actions=[]))
-        traj.append(EnvironmentOutput(obs=obs2, reward=0.9))
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs1, reward=0.1)))
+        traj.steps.append(TrajectoryStep(output=AgentOutput(actions=[])))
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs2, reward=0.9)))
         last_env = traj.last_env_step()
         assert last_env.reward == 0.9
 
     def test_trajectory_last_env_step_no_env_output(self):
         """Test last_env_step raises error when no EnvironmentOutput exists."""
         traj = Trajectory()
-        traj.append(AgentOutput(actions=[]))
+        traj.steps.append(TrajectoryStep(output=AgentOutput(actions=[])))
         with pytest.raises(ValueError, match="No EnvironmentOutput found"):
             traj.last_env_step()
 
@@ -317,10 +318,10 @@ class TestTrajectory:
         """Test getting final reward from trajectory."""
         traj = Trajectory()
         obs = Observation.from_text("done")
-        traj.append(EnvironmentOutput(obs=obs, reward=0.5))
-        traj.append(AgentOutput(actions=[]))
-        traj.append(EnvironmentOutput(obs=obs, reward=1.0, done=True))
-        traj.append(AgentOutput(actions=[]))
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=0.5)))
+        traj.steps.append(TrajectoryStep(output=AgentOutput(actions=[])))
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=1.0, done=True)))
+        traj.steps.append(TrajectoryStep(output=AgentOutput(actions=[])))
         assert traj.last_env_step().reward == 1.0
 
     def test_trajectory_serialization(self, sample_trajectory):

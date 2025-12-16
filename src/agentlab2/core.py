@@ -153,6 +153,12 @@ class EnvironmentOutput(TypedBaseModel):
     info: dict = Field(default_factory=dict)
 
 
+class TrajectoryStep(TypedBaseModel):
+    output: EnvironmentOutput | AgentOutput
+    start_time: float | None = None
+    end_time: float | None = None
+
+
 class Trajectory(TypedBaseModel):
     """
     Stores history of the previous interaction.
@@ -161,16 +167,16 @@ class Trajectory(TypedBaseModel):
     reward_info represents episode level reward data.
     """
 
-    steps: List[EnvironmentOutput | AgentOutput] = Field(default_factory=list)
+    steps: List[TrajectoryStep] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
-
-    def append(self, item: EnvironmentOutput | AgentOutput) -> None:
-        self.steps.append(item)
+    start_time: float | None = None
+    end_time: float | None = None
+    reward_info: dict = Field(default_factory=dict)
 
     def last_env_step(self) -> EnvironmentOutput:
         for step in reversed(self.steps):
-            if isinstance(step, EnvironmentOutput):
-                return step
+            if isinstance(step.output, EnvironmentOutput):
+                return step.output
         raise ValueError("No EnvironmentOutput found in the trajectory.")
 
 
