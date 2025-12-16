@@ -340,3 +340,7 @@ uv run pytest tests/test_core.py -v
 # Run with coverage (if configured)
 uv run pytest tests/ --cov=agentlab2
 ```
+
+
+## Development Notes
+- do not use imports inside the function or class, all imports should be at the top of the module!
