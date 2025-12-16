@@ -42,7 +42,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
     exp.benchmark.setup()
     try:
         episodes = exp.create_episodes()
-        ref_to_id = {run_episode.remote(episode): episode.task.id for episode in episodes}
+        ref_to_id = {run_episode.remote(episode): episode.task_id for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
         results = _poll_ray(exp, ref_to_id, ray_poll_timeout)
         exp.print_stats(results)
