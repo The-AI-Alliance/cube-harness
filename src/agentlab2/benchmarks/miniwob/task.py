@@ -5,8 +5,8 @@ from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import ActionSchema, Content, Observation
-from agentlab2.environment import Task
-from agentlab2.envs.browser import BrowserEnv
+from agentlab2.environment import Task, ToolboxEnv
+from agentlab2.tools.playwright import SyncPlaywrightTool
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class MiniWobTask(Task):
     def url(self) -> str:
         return f"{self.base_url}/{self.subdomain}.html"
 
-    def setup(self, env: BrowserEnv) -> tuple[str, dict]:  # This needs
+    def setup(self, env: ToolboxEnv) -> tuple[Observation, dict]:  # This needs
         """
         Set up everything needed to execute the task.
 
@@ -57,13 +57,17 @@ class MiniWobTask(Task):
             info: dict, custom information from the task.
         """
         logger.info(f"Setting up MiniWob task {self.id} at {self.url}")
-        env.goto(self.url)
+        browser_tool = env.find_tool(SyncPlaywrightTool)
+        assert browser_tool is not None, "Tool that implements BrowserActionSpace not found in the environment."
+        browser_tool.goto(self.url)
         setup_js = self._get_setup_js()
-        setup_result = env.evaluate_js(setup_js)
+        setup_result = browser_tool.evaluate_js(setup_js)
         goal, info = self._parse_setup_result(setup_result)
-        return goal, info
+        obs = Observation.from_text(goal)
+        obs += self.obs_postprocess(browser_tool.page_obs())
+        return obs, {**info, "task_id": self.id, "task_url": self.url, "task_desc": self.desc}
 
-    def validate_task(self, env: BrowserEnv, *args, **kwargs) -> tuple[float, dict]:
+    def validate_task(self, env: ToolboxEnv, *args, **kwargs) -> tuple[float, dict]:
         """
         Validate the task, either per step or at the end.
 
@@ -71,7 +75,9 @@ class MiniWobTask(Task):
             reward: float, the reward obtained.
             info: dict, custom information from the validation.
         """
-        validate_result = env.evaluate_js("""() => {
+        browser_tool = env.find_tool(SyncPlaywrightTool)
+        assert browser_tool is not None, "Tool that implements BrowserActionSpace not found in the environment."
+        validate_result = browser_tool.evaluate_js("""() => {
 return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GLOBAL, WOB_EPISODE_ID, WOB_TASK_READY];
 }""")
         reward, info = self._parse_validation_result(validate_result)
@@ -190,5 +196,7 @@ return core.getUtterance();
         logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
         return filtered
 
-    def finished(self, env: BrowserEnv) -> bool:
-        return env.evaluate_js("() => {return WOB_DONE_GLOBAL;}")
+    def finished(self, env: ToolboxEnv) -> bool:
+        browser_tool = env.find_tool(SyncPlaywrightTool)
+        assert browser_tool is not None, "Tool that implements BrowserActionSpace not found in the environment."
+        return browser_tool.evaluate_js("() => {return WOB_DONE_GLOBAL;}")
