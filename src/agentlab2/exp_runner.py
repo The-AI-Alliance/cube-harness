@@ -22,7 +22,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        log_file = os.path.join(ray_log_dir, f"run_{episode.id}_task_{episode.task.id}.log")
+        log_file = os.path.join(ray_log_dir, f"run_{episode.id}_task_{episode.task_id}.log")
         sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
         sys.stderr = sys.stdout
         logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stdout, force=True)
