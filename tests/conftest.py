@@ -1,6 +1,7 @@
 """Common fixtures for agentlab2 tests."""
 
 import tempfile
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 import pytest
@@ -29,7 +30,7 @@ from agentlab2.tool import Tool
 def tmp_dir():
     """Temporary directory fixture for tests that need file I/O."""
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield tmpdir
+        yield Path(tmpdir)
 
 
 @pytest.fixture

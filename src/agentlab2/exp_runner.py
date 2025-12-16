@@ -1,8 +1,8 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
-import os
 import sys
+from pathlib import Path
 from uuid import uuid4
 
 import ray
@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0) -> ExpResult:
     exp.save_config()
-    ray_log_dir = os.path.join(exp.output_dir, "ray_logs")
+    ray_log_dir = Path(exp.output_dir) / "ray_logs"
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        log_file = os.path.join(ray_log_dir, f"run_{episode.id}_task_{episode.task_id}.log")
+        log_file = ray_log_dir / f"run_{episode.id}_task_{episode.task_id}.log"
         sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
         sys.stderr = sys.stdout
         logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stdout, force=True)
@@ -30,7 +30,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
         return trajectory
 
     if not ray.is_initialized():
-        os.makedirs(ray_log_dir, exist_ok=True)
+        ray_log_dir.mkdir(parents=True, exist_ok=True)
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",

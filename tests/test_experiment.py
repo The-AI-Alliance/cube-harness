@@ -1,7 +1,6 @@
 """Tests for agentlab2.experiment module."""
 
 import json
-import os
 
 from agentlab2.core import EnvironmentOutput, Observation, Trajectory
 from agentlab2.episode import Episode
@@ -143,8 +142,8 @@ class TestExperiment:
 
         exp.save_config()
 
-        config_path = os.path.join(tmp_dir, "experiment_config.json")
-        assert os.path.exists(config_path)
+        config_path = tmp_dir / "experiment_config.json"
+        assert config_path.exists()
 
         with open(config_path) as f:
             saved_config = json.load(f)
@@ -155,7 +154,7 @@ class TestExperiment:
         """Test Experiment save_config creates output directory."""
         benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
-        nested_dir = os.path.join(tmp_dir, "nested", "output")
+        nested_dir = tmp_dir / "nested" / "output"
         exp = Experiment(
             name="test_experiment",
             output_dir=nested_dir,
@@ -165,8 +164,8 @@ class TestExperiment:
 
         exp.save_config()
 
-        assert os.path.exists(nested_dir)
-        assert os.path.exists(os.path.join(nested_dir, "experiment_config.json"))
+        assert nested_dir.exists()
+        assert (nested_dir / "experiment_config.json").exists()
 
     def test_experiment_serialization(self, tmp_dir, mock_agent_config, mock_task):
         """Test Experiment JSON serialization."""

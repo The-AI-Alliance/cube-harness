@@ -1,6 +1,6 @@
 import json
 import logging
-import os
+from pathlib import Path
 
 from termcolor import colored
 
@@ -20,7 +20,7 @@ class Episode:
         self,
         id: int,
         exp_name: str,
-        output_dir: str,
+        output_dir: Path,
         agent_config: AgentConfig,
         env_config: EnvironmentConfig,
         max_steps: int = MAX_STEPS,
@@ -75,9 +75,9 @@ class Episode:
     def save_trajectory(self, trajectory: Trajectory) -> None:
         """Save the trajectory to the output directory."""
         # TODO: Replace with tracing implementation
-        traj_dir = f"{self.output_dir}/trajectories"
-        os.makedirs(traj_dir, exist_ok=True)
-        self._output_name = f"{traj_dir}/run{self.id}_task_{self.task_id}"
+        traj_dir = self.output_dir / "trajectories"
+        traj_dir.mkdir(parents=True, exist_ok=True)
+        self._output_name = traj_dir / f"run{self.id}_task_{self.task_id}"
         with open(f"{self._output_name}.metadata.json", "w") as f:
             f.write(json.dumps(trajectory.metadata, indent=2))
         with open(f"{self._output_name}.jsonl", "a") as f:

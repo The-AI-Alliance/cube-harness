@@ -1,6 +1,6 @@
-import os
 import sys
 import time
+from pathlib import Path
 
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
@@ -12,7 +12,7 @@ from agentlab2.llm import LLMConfig
 
 def main(debug: bool):
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.expanduser(f"~/agentlab_results/al2/miniwob_{current_datetime}")
+    output_dir = Path.home() / "agentlab_results" / "al2" / f"miniwob_{current_datetime}"
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)

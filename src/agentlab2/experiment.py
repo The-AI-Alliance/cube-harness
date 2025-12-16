@@ -1,6 +1,6 @@
 import json
 import logging
-import os
+from pathlib import Path
 from typing import Self
 
 from pydantic import Field
@@ -23,7 +23,7 @@ class ExpResult(AL2BaseModel):
 
 class Experiment(AL2BaseModel):
     name: str
-    output_dir: str
+    output_dir: Path
     agent_config: AgentConfig
     benchmark: Benchmark
 
@@ -46,10 +46,11 @@ class Experiment(AL2BaseModel):
         return episodes
 
     def save_config(self) -> None:
-        os.makedirs(self.output_dir, exist_ok=True)
-        config_path = os.path.join(self.output_dir, "experiment_config.json")
+        output_path = Path(self.output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        config_path = output_path / "experiment_config.json"
         with open(config_path, "w") as f:
-            f.write(json.dumps(self.config, indent=2))
+            f.write(self.model_dump_json(indent=2))
         logger.info(f"Saved experiment config to {config_path}")
 
     @classmethod

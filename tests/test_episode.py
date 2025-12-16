@@ -1,7 +1,6 @@
 """Tests for agentlab2.episode module."""
 
 import json
-import os
 
 import pytest
 
@@ -47,24 +46,24 @@ class TestEpisode:
         sample_episode.run()
 
         # Check trajectory files exist
-        traj_dir = os.path.join(tmp_dir, "trajectories")
-        assert os.path.exists(traj_dir)
+        traj_dir = tmp_dir / "trajectories"
+        assert traj_dir.exists()
 
         # Should have metadata and jsonl files
-        files = os.listdir(traj_dir)
-        assert any(".metadata.json" in f for f in files)
-        assert any(".jsonl" in f for f in files)
+        files = list(traj_dir.iterdir())
+        assert any(".metadata.json" in f.name for f in files)
+        assert any(".jsonl" in f.name for f in files)
 
     def test_episode_run_metadata_file_content(self, sample_episode, tmp_dir):
         """Test Episode run creates correct metadata file."""
         sample_episode.run()
 
         # Read metadata file
-        traj_dir = os.path.join(tmp_dir, "trajectories")
-        metadata_files = [f for f in os.listdir(traj_dir) if ".metadata.json" in f]
+        traj_dir = tmp_dir / "trajectories"
+        metadata_files = [f for f in traj_dir.iterdir() if ".metadata.json" in f.name]
         assert len(metadata_files) > 0, "No metadata file found"
 
-        with open(os.path.join(traj_dir, metadata_files[0])) as f:
+        with open(metadata_files[0]) as f:
             metadata = json.load(f)
 
         assert "task_id" in metadata
@@ -74,11 +73,11 @@ class TestEpisode:
         sample_episode.run()
 
         # Read JSONL file
-        traj_dir = os.path.join(tmp_dir, "trajectories")
-        jsonl_files = [f for f in os.listdir(traj_dir) if ".jsonl" in f]
+        traj_dir = tmp_dir / "trajectories"
+        jsonl_files = [f for f in traj_dir.iterdir() if ".jsonl" in f.name]
         assert len(jsonl_files) > 0, "No JSONL file found"
 
-        with open(os.path.join(traj_dir, jsonl_files[0])) as f:
+        with open(jsonl_files[0]) as f:
             lines = f.readlines()
 
         # Should have at least one step saved
@@ -146,8 +145,8 @@ class TestEpisode:
         trajectory = Trajectory(metadata={"task_id": "test"})
         sample_episode.save_trajectory(trajectory)
 
-        traj_dir = os.path.join(tmp_dir, "trajectories")
-        assert os.path.exists(traj_dir)
+        traj_dir = tmp_dir / "trajectories"
+        assert traj_dir.exists()
 
     def test_episode_save_step_without_trajectory(self, sample_episode):
         """Test save_step raises error if called before save_trajectory."""
@@ -169,11 +168,11 @@ class TestEpisode:
             sample_episode.save_step(step)
 
         # Read JSONL file
-        traj_dir = os.path.join(tmp_dir, "trajectories")
-        jsonl_files = [f for f in os.listdir(traj_dir) if ".jsonl" in f]
+        traj_dir = tmp_dir / "trajectories"
+        jsonl_files = [f for f in traj_dir.iterdir() if ".jsonl" in f.name]
         assert len(jsonl_files) > 0, "No JSONL file found"
 
-        with open(os.path.join(traj_dir, jsonl_files[0])) as f:
+        with open(jsonl_files[0]) as f:
             lines = f.readlines()
 
         assert len(lines) == 3
@@ -224,8 +223,8 @@ class TestEpisode:
 
         episode.run()
 
-        traj_dir = os.path.join(tmp_dir, "trajectories")
-        files = os.listdir(traj_dir)
+        traj_dir = tmp_dir / "trajectories"
+        files = [f.name for f in traj_dir.iterdir()]
 
         # Should contain run id
         assert any("run42" in f for f in files)

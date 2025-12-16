@@ -1,12 +1,12 @@
 import json
 import logging
-import os
 import random
 import subprocess
 import tempfile
 import time
 import urllib.request
 from importlib.resources import files
+from pathlib import Path
 from random import shuffle
 from typing import TextIO
 
@@ -33,8 +33,7 @@ class MiniWobBenchmark(Benchmark):
     model_config = {"arbitrary_types_allowed": True}
 
     def load_task_infos(self) -> list[dict]:
-        _module_dir = os.path.dirname(os.path.abspath(__file__))
-        _tasks_file = os.path.join(_module_dir, "miniwob_tasks.json")
+        _tasks_file = Path(__file__).parent / "miniwob_tasks.json"
         with open(_tasks_file) as f:
             task_infos = json.load(f)
         return task_infos
@@ -44,9 +43,9 @@ class MiniWobBenchmark(Benchmark):
         return f"http://localhost:{self.port}/miniwob"
 
     def setup(self):
-        tmp_dir = tempfile.gettempdir()
-        self._stdout_file = open(os.path.join(tmp_dir, "miniwob_server_stdout.log"), "w")
-        self._stderr_file = open(os.path.join(tmp_dir, "miniwob_server_stderr.log"), "w")
+        tmp_dir = Path(tempfile.gettempdir())
+        self._stdout_file = open(tmp_dir / "miniwob_server_stdout.log", "w")
+        self._stderr_file = open(tmp_dir / "miniwob_server_stderr.log", "w")
         self._server_process = subprocess.Popen(
             ["python", "-m", "http.server", str(self.port)],
             cwd=self.html_path,
@@ -56,7 +55,7 @@ class MiniWobBenchmark(Benchmark):
         time.sleep(1)
         # Check if the server is running by attempting to connect
         try:
-            urllib.request.urlopen(f"{self.base_url}/", timeout=5)
+            urllib.request.urlopen(self.base_url, timeout=5)
             logger.info(f"MiniWob server responding at {self.base_url}")
         except Exception as e:
             self.close()
