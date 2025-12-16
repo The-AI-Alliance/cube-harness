@@ -1,10 +1,11 @@
-.PHONY: help install format lint test hello debug
+.PHONY: help install format lint test coverage hello debug
 
 help:
 	@echo "make install    - Install dependencies in editable mode"
 	@echo "make format     - Format code"
 	@echo "make lint       - Lint and auto-fix"
 	@echo "make test       - Run unit tests"
+	@echo "make coverage   - Run tests with coverage report"
 	@echo "make hello      - Run hello_miniwob recipe"
 	@echo "make debug      - Run hello_miniwob recipe in debug mode"
 
@@ -26,3 +27,6 @@ lint:
 
 test:
 	uv run pytest tests/ -v
+
+coverage:
+	uv run pytest tests/ --cov=agentlab2 --cov-report=term-missing

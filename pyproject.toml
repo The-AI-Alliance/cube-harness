@@ -45,6 +45,7 @@ extend-select = ["I"] # sort imports
 dev = [
     "ruff>=0.14.7",
     "pytest>=8.0",
+    "pytest-cov>=6.0",
 ]
 
 [tool.setuptools.packages.find]
