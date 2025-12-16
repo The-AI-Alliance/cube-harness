@@ -12,7 +12,6 @@ from agentlab2.core import (
     Content,
     EnvironmentOutput,
     Observation,
-    Trajectory,
     TrajectoryStep,
 )
 
@@ -275,15 +274,14 @@ class TestTrajectory:
         assert sample_trajectory.metadata == {"task_id": "test_task"}
         assert len(sample_trajectory.steps) == 2
 
-    def test_trajectory_empty(self):
+    def test_trajectory_empty(self, empty_trajectory):
         """Test empty Trajectory."""
-        traj = Trajectory()
-        assert traj.steps == []
-        assert traj.metadata == {}
+        assert empty_trajectory.steps == []
+        assert empty_trajectory.metadata == {}
 
-    def test_trajectory_append(self):
+    def test_trajectory_append(self, empty_trajectory):
         """Test appending steps to Trajectory."""
-        traj = Trajectory()
+        traj = empty_trajectory
         obs = Observation.from_text("test")
         env_out = EnvironmentOutput(obs=obs, reward=0.5)
         traj.steps.append(TrajectoryStep(output=env_out))
@@ -296,9 +294,9 @@ class TestTrajectory:
         assert isinstance(last_env, EnvironmentOutput)
         assert last_env.reward == sample_env_output.reward
 
-    def test_trajectory_last_env_step_multiple(self):
+    def test_trajectory_last_env_step_multiple(self, empty_trajectory):
         """Test last_env_step with multiple env outputs."""
-        traj = Trajectory()
+        traj = empty_trajectory
         obs1 = Observation.from_text("first")
         obs2 = Observation.from_text("second")
         traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs1, reward=0.1)))
@@ -307,16 +305,16 @@ class TestTrajectory:
         last_env = traj.last_env_step()
         assert last_env.reward == 0.9
 
-    def test_trajectory_last_env_step_no_env_output(self):
+    def test_trajectory_last_env_step_no_env_output(self, empty_trajectory):
         """Test last_env_step raises error when no EnvironmentOutput exists."""
-        traj = Trajectory()
+        traj = empty_trajectory
         traj.steps.append(TrajectoryStep(output=AgentOutput(actions=[])))
         with pytest.raises(ValueError, match="No EnvironmentOutput found"):
             traj.last_env_step()
 
-    def test_trajectory_final_reward(self):
+    def test_trajectory_final_reward(self, empty_trajectory):
         """Test getting final reward from trajectory."""
-        traj = Trajectory()
+        traj = empty_trajectory
         obs = Observation.from_text("done")
         traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=0.5)))
         traj.steps.append(TrajectoryStep(output=AgentOutput(actions=[])))

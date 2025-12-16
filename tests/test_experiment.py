@@ -25,7 +25,7 @@ class TestExpResult:
         """Test ExpResult with trajectories."""
         obs = Observation.from_text("done")
         step = TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=1.0, done=True))
-        traj = Trajectory(metadata={"task_id": "task_1"}, steps=[step])
+        traj = Trajectory(id="test_traj", metadata={"task_id": "task_1"}, steps=[step])
 
         result = ExpResult(exp_id="test_exp", tasks_num=1, trajectories={"task_1": traj})
 

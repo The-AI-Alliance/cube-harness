@@ -2,7 +2,7 @@ import base64
 import io
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Protocol, Self, TypeAlias
+from typing import Any, Callable, Dict, Protocol, Self, TypeAlias
 
 import litellm.utils
 from PIL import Image
@@ -66,6 +66,9 @@ class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)
 
+    def __str__(self) -> str:
+        return self.model_dump_json(exclude={"llm_calls"})
+
 
 _image_prefix = "data:image/png;base64,"
 
@@ -98,8 +101,10 @@ class Content(TypedBaseModel):
             v = v[len(_image_prefix) :]
             # Decode base64 string to bytes
             decoded_image = base64.b64decode(v)
-            # Open bytes as PIL Image
-            return Image.open(io.BytesIO(decoded_image))
+            # Open bytes as PIL Image and load immediately to avoid lazy loading issues
+            img = Image.open(io.BytesIO(decoded_image))
+            img.load()  # Force load to prevent BytesIO buffer from being garbage collected
+            return img
         return v  # Return original value if not a string (e.g., already an Image object)
 
     def to_message(self) -> dict:
@@ -167,7 +172,8 @@ class Trajectory(TypedBaseModel):
     reward_info represents episode level reward data.
     """
 
-    steps: List[TrajectoryStep] = Field(default_factory=list)
+    id: str
+    steps: list[TrajectoryStep] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
     start_time: float | None = None
     end_time: float | None = None
