@@ -138,6 +138,10 @@ class Observation(AL2BaseModel):
         """Convert observation to a list of messages suitable for sending to LLM."""
         return [content.to_message() for content in self.contents]
 
+    def __add__(self, other: Self) -> Self:
+        self.contents += other.contents
+        return self
+
 
 class EnvironmentOutput(AL2BaseModel):
     """Represents the result of an environment step."""

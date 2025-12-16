@@ -186,9 +186,9 @@ class MockTask(Task):
         self.teardown_called = False
         self.validate_called = False
 
-    def setup(self, env) -> tuple[str, dict]:
+    def setup(self, env) -> tuple[Observation, dict]:
         self.setup_called = True
-        return self.goal, {"task_type": "mock"}
+        return Observation.from_text(self.goal), {"task_type": "mock"}
 
     def teardown(self, env) -> None:
         self.teardown_called = True

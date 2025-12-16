@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, List, get_protocol_members
 
-from agentlab2.core import Action, ActionSchema
+from agentlab2.core import Action, ActionSchema, AL2BaseModel, Content, Observation
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,14 @@ class AbstractTool(ABC):
         pass
 
 
+class AbstractToolConfig(AL2BaseModel, ABC):
+    """Configuration for Tool."""
+
+    @abstractmethod
+    def make(self) -> AbstractTool:
+        pass
+
+
 class Tool(AbstractTool):
     """
     Base class for tool that implements an action space protocol.
@@ -45,14 +53,14 @@ class Tool(AbstractTool):
             raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
         return fn
 
-    def execute_action(self, action: Action) -> Any:
+    def execute_action(self, action: Action) -> Observation:
         fn = self.get_action_method(action)
         try:
             action_result = fn(**action.arguments) or "Success"
         except Exception as e:
             action_result = f"Error executing action {action.name}: {e}"
             logger.exception(action_result)
-        return action_result
+        return Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
 
     def action_set(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""

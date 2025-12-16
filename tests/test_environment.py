@@ -219,9 +219,9 @@ class TestTask:
     def test_task_setup(self, mock_task, mock_tool):
         """Test task setup."""
         env = ToolboxEnv(task=mock_task, tools=[mock_tool])
-        goal, info = mock_task.setup(env)
+        obs, info = mock_task.setup(env)
 
-        assert goal == "Complete the test task"
+        assert obs.contents[0].data == "Complete the test task"
         assert info == {"task_type": "mock"}
 
     def test_task_teardown(self, mock_task, mock_tool):

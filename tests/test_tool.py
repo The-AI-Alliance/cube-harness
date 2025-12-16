@@ -46,7 +46,7 @@ class TestTool:
         action = Action(name="click", arguments={"element_id": "button_1"})
         result = mock_tool.execute_action(action)
 
-        assert result == "Clicked on button_1"
+        assert result.contents[0].data == "Clicked on button_1"
         assert mock_tool.click_count == 1
 
     def test_tool_execute_action_type_text(self, mock_tool):
@@ -54,7 +54,7 @@ class TestTool:
         action = Action(name="type_text", arguments={"element_id": "input_1", "text": "Hello"})
         result = mock_tool.execute_action(action)
 
-        assert result == "Typed 'Hello' into input_1"
+        assert result.contents[0].data == "Typed 'Hello' into input_1"
         assert mock_tool.typed_texts == [("input_1", "Hello")]
 
     def test_tool_execute_action_returns_success_on_none(self, mock_tool):
@@ -104,7 +104,7 @@ class TestTool:
         tool = ExtendedTool()
         action = Action(name="noop", arguments={})
         result = tool.execute_action(action)
-        assert result == "Success"
+        assert result.contents[0].data == "Success"
 
     def test_tool_execute_action_error_handling(self, mock_tool):
         """Test that execute_action handles errors gracefully."""
@@ -117,7 +117,7 @@ class TestTool:
         mock_tool.click = raise_error
 
         action = Action(name="click", arguments={"element_id": "nonexistent"})
-        result = mock_tool.execute_action(action)
+        result = mock_tool.execute_action(action).contents[0].data
 
         assert "Error executing action click" in result
         assert "Element not found" in result
@@ -184,7 +184,7 @@ class TestTool:
             Action(name="type_text", arguments={"element_id": "input", "text": "test"}),
         ]
 
-        results = [mock_tool.execute_action(a) for a in actions]
+        results = [mock_tool.execute_action(a).contents[0].data for a in actions]
 
         assert mock_tool.click_count == 2
         assert len(mock_tool.typed_texts) == 1

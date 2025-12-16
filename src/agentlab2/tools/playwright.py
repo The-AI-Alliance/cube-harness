@@ -10,14 +10,14 @@ from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import AL2BaseModel, Content, Observation
-from agentlab2.tool import Tool
+from agentlab2.core import Action, AL2BaseModel, Content, Observation
+from agentlab2.tool import AbstractToolConfig, Tool
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
 
 
-class PWConfig(AL2BaseModel):
+class PWConfig(AbstractToolConfig):
     """Configuration for Playwright tool."""
 
     max_wait: int = 60
@@ -53,6 +53,11 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
             **self.config.pw_kwargs,
         )
         self._page = self._browser.new_page()
+
+    def execute_action(self, action: Action) -> Observation:
+        action_obs = super().execute_action(action)
+        action_obs += self.page_obs()
+        return action_obs
 
     @property
     def page(self) -> SyncPage:
@@ -168,6 +173,17 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
         self._apw = await async_playwright().start()
         self._abrowser = await self._apw.chromium.launch(chromium_sandbox=True, **self.config.pw_kwargs)
         self._page = await self._abrowser.new_page()
+
+    async def execute_action(self, action: Action) -> Observation:
+        fn = self.get_action_method(action)
+        try:
+            action_result = (await fn(**action.arguments)) or "Success"
+        except Exception as e:
+            action_result = f"Error executing action {action.name}: {e}"
+            logger.exception(action_result)
+        action_obs = Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
+        action_obs += await self.page_obs()
+        return action_obs
 
     async def browser_press_key(self, key: str):
         """Press a key on the keyboard."""
