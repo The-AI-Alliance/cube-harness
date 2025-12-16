@@ -6,7 +6,6 @@ Mimics the UI of the original agentlab viewer but works with the new data struct
 """
 
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -681,8 +680,15 @@ def handle_timeline_click(clicked_step: int, traj_id: TrajectoryId):
     return StepId(trajectory_id=traj_id, step=0)
 
 
-def run_viewer(results_dir: Path, debug: bool = False):
-    """Run the Gradio viewer application."""
+def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, share: bool = False):
+    """Run the Gradio viewer application.
+
+    Args:
+        results_dir: Path to results directory containing experiments.
+        debug: Enable debug mode with hot reloading.
+        port: Server port number. If None, Gradio picks an available port.
+        share: Enable Gradio share link for remote access.
+    """
     global state
 
     if isinstance(results_dir, str):
@@ -690,7 +696,7 @@ def run_viewer(results_dir: Path, debug: bool = False):
 
     state = ViewerState(results_dir=results_dir)
 
-    with gr.Blocks(theme=gr.themes.Soft(), css=css, head=shortcut_js) as demo:
+    with gr.Blocks(theme=gr.themes.Soft(), css=css, head=shortcut_js) as demo:  # type: ignore
         traj_id = gr.State(value=TrajectoryId())
         step_id = gr.State(value=StepId())
 
@@ -829,12 +835,6 @@ def run_viewer(results_dir: Path, debug: bool = False):
         demo.load(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
 
     demo.queue()
-
-    port = os.getenv("AGENTLAB_VIEWER_PORT", None)
-    if isinstance(port, str):
-        port = int(port)
-
-    share = os.getenv("AGENTLAB_VIEWER_SHARE", "false").lower() == "true"
     demo.launch(server_port=port, share=share, debug=debug)
 
 
@@ -855,9 +855,20 @@ def main():
         action="store_true",
         help="Enable debug mode with hot reloading on source changes",
     )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="Server port number (default: auto-select available port)",
+    )
+    parser.add_argument(
+        "--share",
+        action="store_true",
+        help="Enable Gradio share link for remote access",
+    )
     args = parser.parse_args()
 
-    run_viewer(Path(args.results_dir), debug=args.debug)
+    run_viewer(Path(args.results_dir), debug=args.debug, port=args.port, share=args.share)
 
 
 if __name__ == "__main__":
