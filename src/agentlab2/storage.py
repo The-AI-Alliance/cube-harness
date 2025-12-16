@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class LLMCallRef(BaseModel):
     """Reference to an LLM call stored in a separate file."""
 
-    id: str
+    llm_call_id: str
 
 
 class Storage(Protocol):
@@ -91,7 +91,7 @@ class FileStorage:
             with open(call_path, "w") as f:
                 f.write(llm_call.model_dump_json(indent=2))
             # Create a reference with just the id
-            llm_call_refs.append(LLMCallRef(id=llm_call.id))
+            llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id))
 
         # Create a copy of the step with llm_calls replaced by references
         output_with_refs = step.output.model_copy(update={"llm_calls": llm_call_refs})
@@ -140,16 +140,14 @@ class FileStorage:
         resolved_calls = []
         for ref in llm_calls:
             # Check if this is a reference (only has 'id' key)
-            if set(ref.keys()) == {"id"}:
-                call_path = llm_calls_dir / f"{step_id}_{ref['id']}.json"
-                if call_path.exists():
-                    with open(call_path) as f:
-                        resolved_calls.append(json.load(f))
-                else:
-                    logger.warning(f"LLM call file not found: {call_path}")
-                    resolved_calls.append(ref)
+            if llm_call_id := ref.get("llm_call_id", None):
+                call_path = llm_calls_dir / f"{step_id}_{llm_call_id}.json"
+                if not call_path.exists():
+                    raise FileNotFoundError(f"LLM call file not found: {call_path}")
+                with open(call_path) as f:
+                    resolved_calls.append(json.load(f))
             else:
-                resolved_calls.append(ref)
+                raise ValueError(f"Invalid LLM call reference format {ref}")
 
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data

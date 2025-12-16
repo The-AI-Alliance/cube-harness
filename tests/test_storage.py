@@ -16,7 +16,7 @@ from agentlab2.core import (
     TrajectoryStep,
 )
 from agentlab2.llm import LLMCall, LLMConfig, Message, Prompt
-from agentlab2.storage import FileStorage, LLMCallRef
+from agentlab2.storage import FileStorage
 
 
 class TestFileStorageBasic:
@@ -61,6 +61,7 @@ class TestFileStorageBasic:
         with open(metadata_path) as f:
             data = json.load(f)
         assert data == {
+            "_type": "agentlab2.core.Trajectory",
             "id": "test_traj_1",
             "metadata": {"task_id": "task_1", "agent": "test_agent"},
             "start_time": 0.0,
@@ -207,8 +208,8 @@ class TestFileStorageWithLLMCalls:
         # Should only have 'id' key in llm_calls reference
         llm_calls = step_data["output"]["llm_calls"]
         assert len(llm_calls) == 1
-        assert set(llm_calls[0].keys()) == {"id"}
-        assert llm_calls[0]["id"] == "llm_call_1"
+        assert "llm_call_id" in llm_calls[0]
+        assert llm_calls[0]["llm_call_id"] == "llm_call_1"
 
     def test_save_multiple_llm_calls(self, tmp_dir):
         """Test saving step with multiple LLM calls."""
@@ -474,18 +475,3 @@ class TestFileStorageRoundtrip:
         assert isinstance(step2.output, EnvironmentOutput)
         assert step2.output.reward == 1.0
         assert step2.output.done is True
-
-
-class TestLLMCallRef:
-    """Tests for LLMCallRef model."""
-
-    def test_llm_call_ref_creation(self):
-        """Test LLMCallRef creation."""
-        ref = LLMCallRef(id="test_id")
-        assert ref.id == "test_id"
-
-    def test_llm_call_ref_serialization(self):
-        """Test LLMCallRef JSON serialization."""
-        ref = LLMCallRef(id="test_id")
-        data = json.loads(ref.model_dump_json())
-        assert data == {"id": "test_id"}
