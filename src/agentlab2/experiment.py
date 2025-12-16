@@ -1,17 +1,19 @@
+import json
 import logging
 import os
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
-from agentlab2.core import Trajectory
+from agentlab2.core import AL2BaseModel, Trajectory
 from agentlab2.episode import Episode
 
 logger = logging.getLogger(__name__)
 
 
-class ExpResult(BaseModel):
+class ExpResult(AL2BaseModel):
     exp_id: str
     tasks_num: int
     config: dict = Field(default_factory=dict)
@@ -19,7 +21,7 @@ class ExpResult(BaseModel):
     failures: dict[str, str] = Field(default_factory=dict)
 
 
-class Experiment(BaseModel):
+class Experiment(AL2BaseModel):
     name: str
     output_dir: str
     agent_config: AgentConfig
@@ -46,10 +48,16 @@ class Experiment(BaseModel):
     def save_config(self) -> None:
         os.makedirs(self.output_dir, exist_ok=True)
         config_path = os.path.join(self.output_dir, "experiment_config.json")
-        config_json = self.model_dump_json(indent=2, serialize_as_any=True)
         with open(config_path, "w") as f:
-            f.write(config_json)
+            f.write(json.dumps(self.config, indent=2))
         logger.info(f"Saved experiment config to {config_path}")
+
+    @classmethod
+    def load_config(cls, path: str) -> Self:
+        """Load experiment from a JSON config file."""
+        with open(path) as f:
+            data = json.load(f)
+        return cls.model_validate(data)
 
     def print_stats(self, results: ExpResult) -> None:
         if not results.trajectories:

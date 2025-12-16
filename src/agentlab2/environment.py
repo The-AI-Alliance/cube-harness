@@ -3,15 +3,13 @@
 from abc import ABC, abstractmethod
 from typing import Callable, List
 
-from pydantic import BaseModel
-
-from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from agentlab2.core import Action, ActionSchema, AL2BaseModel, Content, EnvironmentOutput, Observation
 from agentlab2.tool import AbstractTool
 
 STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
 
 
-class EnvironmentConfig(BaseModel, ABC):
+class EnvironmentConfig(AL2BaseModel, ABC):
     """Configuration for Environment."""
 
     _task: "Task | None" = None

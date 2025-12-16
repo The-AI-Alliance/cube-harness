@@ -227,6 +227,19 @@ class SerializableEnvConfig(EnvironmentConfig):
         return ToolboxEnv(task=self._task, tools=[])
 
 
+class SerializableBenchmark(Benchmark):
+    """Simple benchmark without custom __init__ for JSON serialization tests."""
+
+    def setup(self):
+        pass
+
+    def close(self):
+        pass
+
+    def env_configs(self) -> list[EnvironmentConfig]:
+        return []
+
+
 @pytest.fixture
 def mock_env_config(mock_tool, mock_task) -> MockEnvironmentConfig:
     """Mock environment config with mock tool."""

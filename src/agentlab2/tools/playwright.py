@@ -8,17 +8,16 @@ from playwright.async_api import Page as AsyncPage
 from playwright.async_api import async_playwright
 from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
-from pydantic import BaseModel
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import Content, Observation
+from agentlab2.core import AL2BaseModel, Content, Observation
 from agentlab2.tool import Tool
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
 
 
-class PWConfig(BaseModel):
+class PWConfig(AL2BaseModel):
     """Configuration for Playwright tool."""
 
     max_wait: int = 60

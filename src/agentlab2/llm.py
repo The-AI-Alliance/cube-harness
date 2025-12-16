@@ -8,10 +8,12 @@ from uuid import uuid4
 
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from agentlab2.base import AL2BaseModel
 
 
-class Prompt(BaseModel):
+class Prompt(AL2BaseModel):
     """Represents the input prompt to chat completion api of LLM."""
 
     messages: List[dict | Message]
@@ -24,7 +26,7 @@ class Prompt(BaseModel):
         return f"Tools:\n{tools}\nMessages[{len(self.messages)}]:\n{messages}"
 
 
-class LLMConfig(BaseModel):
+class LLMConfig(AL2BaseModel):
     """Thin LLM wrapper around LiteLLM completion API."""
 
     model_name: str
@@ -67,7 +69,7 @@ class LLM:
         return response.choices[0].message  # type: ignore
 
 
-class LLMCall(BaseModel):
+class LLMCall(AL2BaseModel):
     """Represents a call to an LLM model."""
 
     id: str = Field(default_factory=lambda: uuid4().hex)

@@ -7,10 +7,11 @@ import litellm.utils
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from agentlab2.base import AL2BaseModel
 from agentlab2.llm import LLMCall
 
 
-class ActionSchema(BaseModel):
+class ActionSchema(AL2BaseModel):
     """
     Represents a function specification with a type, name, description and arguments.
     Compatible with OAI, Anthropic and VLLM definitions.
@@ -45,7 +46,7 @@ class ActionSchema(BaseModel):
         }
 
 
-class Action(BaseModel):
+class Action(AL2BaseModel):
     """
     A class representing a function call.
 
@@ -60,7 +61,7 @@ class Action(BaseModel):
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
 
-class AgentOutput(BaseModel):
+class AgentOutput(AL2BaseModel):
     actions: list[Action] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)
 
@@ -68,7 +69,7 @@ class AgentOutput(BaseModel):
 _image_prefix = "data:image/png;base64,"
 
 
-class Content(BaseModel):
+class Content(AL2BaseModel):
     """Represents a piece of content in an observation."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -124,7 +125,7 @@ class Content(BaseModel):
         return message
 
 
-class Observation(BaseModel):
+class Observation(AL2BaseModel):
     """Represents an observation from the environment."""
 
     contents: list[Content] = Field(default_factory=list)
@@ -138,7 +139,7 @@ class Observation(BaseModel):
         return [content.to_message() for content in self.contents]
 
 
-class EnvironmentOutput(BaseModel):
+class EnvironmentOutput(AL2BaseModel):
     """Represents the result of an environment step."""
 
     obs: Observation
@@ -147,7 +148,7 @@ class EnvironmentOutput(BaseModel):
     info: dict = Field(default_factory=dict)
 
 
-class Trajectory(BaseModel):
+class Trajectory(AL2BaseModel):
     """
     Stores history of the previous interaction.
 

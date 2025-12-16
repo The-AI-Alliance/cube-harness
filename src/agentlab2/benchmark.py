@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from agentlab2.core import AL2BaseModel
 from agentlab2.environment import EnvironmentConfig
 
 
-class Benchmark(BaseModel, ABC):
+class Benchmark(AL2BaseModel, ABC):
     """Represents a benchmark consisting of multiple tasks and an environment."""
 
     metadata: dict = Field(default_factory=dict)

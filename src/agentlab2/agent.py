@@ -2,12 +2,10 @@
 
 from abc import ABC, abstractmethod
 
-from pydantic import BaseModel
-
-from agentlab2.core import ActionSchema, AgentOutput, Observation
+from agentlab2.core import ActionSchema, AgentOutput, AL2BaseModel, Observation
 
 
-class AgentConfig(BaseModel, ABC):
+class AgentConfig(AL2BaseModel, ABC):
     """Configuration for creating an Agent."""
 
     _action_set: list[ActionSchema] | None = None
