@@ -7,13 +7,13 @@ from pydantic import Field
 
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
-from agentlab2.core import AL2BaseModel, Trajectory
+from agentlab2.core import Trajectory, TypedBaseModel
 from agentlab2.episode import Episode
 
 logger = logging.getLogger(__name__)
 
 
-class ExpResult(AL2BaseModel):
+class ExpResult(TypedBaseModel):
     exp_id: str
     tasks_num: int
     config: dict = Field(default_factory=dict)
@@ -21,7 +21,7 @@ class ExpResult(AL2BaseModel):
     failures: dict[str, str] = Field(default_factory=dict)
 
 
-class Experiment(AL2BaseModel):
+class Experiment(TypedBaseModel):
     name: str
     output_dir: Path
     agent_config: AgentConfig

@@ -11,13 +11,13 @@ from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import Action, Content, Observation
-from agentlab2.tool import AbstractToolConfig, Tool
+from agentlab2.tool import Tool, ToolConfig
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
 
 
-class PWConfig(AbstractToolConfig):
+class PlaywrightConfig(ToolConfig):
     """Configuration for Playwright tool."""
 
     max_wait: int = 60
@@ -43,7 +43,7 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
 
     action_space = BrowserActionSpace
 
-    def __init__(self, config: PWConfig) -> None:
+    def __init__(self, config: PlaywrightConfig) -> None:
         super().__init__()
         self.config = config
         self._pw = sync_playwright().start()
@@ -162,7 +162,7 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
 
     action_space = BrowserActionSpace
 
-    def __init__(self, config: PWConfig) -> None:
+    def __init__(self, config: PlaywrightConfig) -> None:
         super().__init__()
         self.config = config
         self._apw = None

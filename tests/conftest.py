@@ -16,12 +16,13 @@ from agentlab2.core import (
     Content,
     EnvironmentOutput,
     Observation,
+    Task,
     Trajectory,
 )
-from agentlab2.environment import Environment, EnvironmentConfig, Task, ToolboxEnv
+from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
 from agentlab2.llm import LLMConfig, Prompt
-from agentlab2.tool import Tool
+from agentlab2.tool import Tool, ToolConfig
 
 # --- Core fixtures ---
 
@@ -172,6 +173,19 @@ def mock_tool() -> MockTool:
     return MockTool()
 
 
+class MockToolConfig(ToolConfig):
+    """Mock tool configuration for testing."""
+
+    def make(self) -> MockTool:
+        return MockTool()
+
+
+@pytest.fixture
+def mock_tool_config() -> MockToolConfig:
+    """Mock tool config for testing."""
+    return MockToolConfig()
+
+
 # --- Task fixtures ---
 
 
@@ -186,14 +200,14 @@ class MockTask(Task):
         self.teardown_called = False
         self.validate_called = False
 
-    def setup(self, env) -> tuple[Observation, dict]:
+    def setup(self, tool) -> tuple[Observation, dict]:
         self.setup_called = True
         return Observation.from_text(self.goal), {"task_type": "mock"}
 
-    def teardown(self, env) -> None:
+    def teardown(self) -> None:
         self.teardown_called = True
 
-    def validate_task(self, env, obs: Observation) -> tuple[float, dict]:
+    def validate_task(self, *args) -> tuple[float, dict]:
         self.validate_called = True
         return 1.0, {"success": True}
 
@@ -207,25 +221,7 @@ def mock_task() -> MockTask:
     return MockTask()
 
 
-# --- Environment fixtures ---
-
-
-class MockEnvironmentConfig(EnvironmentConfig):
-    """Mock environment configuration."""
-
-    tools: list = []
-
-    def make(self) -> Environment:
-        assert self._task is not None, "MockEnvironmentConfig requires a Task to be assigned"
-        return ToolboxEnv(task=self._task, tools=self.tools)
-
-
-class SerializableEnvConfig(EnvironmentConfig):
-    """Environment config without tools for JSON serialization tests."""
-
-    def make(self) -> Environment:
-        assert self._task is not None, "Task must be set in EnvironmentConfig before making the environment."
-        return ToolboxEnv(task=self._task, tools=[])
+# --- Benchmark fixtures ---
 
 
 class SerializableBenchmark(Benchmark):
@@ -237,16 +233,20 @@ class SerializableBenchmark(Benchmark):
     def close(self):
         pass
 
-    def env_configs(self) -> list[EnvironmentConfig]:
+    def load_tasks(self) -> list[Task]:
         return []
 
 
 @pytest.fixture
-def mock_env_config(mock_tool, mock_task) -> MockEnvironmentConfig:
+def mock_env_config(mock_tool_config, mock_task) -> EnvConfig:
     """Mock environment config with mock tool."""
-    config = MockEnvironmentConfig(tools=[mock_tool])
-    config._task = mock_task
-    return config
+    return EnvConfig(task=mock_task, tool_config=mock_tool_config)
+
+
+@pytest.fixture
+def mock_tool_env(mock_task, mock_tool) -> Environment:
+    """Mock ToolEnv for testing."""
+    return Environment(task=mock_task, tool=mock_tool)
 
 
 # --- Agent fixtures ---
@@ -257,7 +257,7 @@ class MockAgentConfig(AgentConfig):
 
     name: str = "mock_agent"
 
-    def make(self) -> "MockAgent":
+    def make(self, *args) -> "MockAgent":
         return MockAgent(config=self)
 
 
@@ -306,10 +306,8 @@ class MockBenchmark(Benchmark):
     install_called: bool = False
     uninstall_called: bool = False
 
-    def __init__(
-        self, tasks_list: list[Any], env_config: EnvironmentConfig | None = None, metadata: dict | None = None
-    ):
-        super().__init__(env_config=env_config or MockEnvironmentConfig(), metadata=metadata or {})
+    def __init__(self, tasks_list: list[Any], tool_config: ToolConfig, metadata: dict | None = None):
+        super().__init__(tool_config=tool_config, metadata=metadata or {})
         self._tasks = tasks_list
 
     def setup(self):
@@ -324,15 +322,14 @@ class MockBenchmark(Benchmark):
     def uninstall(self):
         self.uninstall_called = True
 
-    def env_configs(self) -> list[EnvironmentConfig]:
-        assert self.env_config is not None, "MockBenchmark requires an EnvironmentConfig to be set"
-        return [self.env_config.model_copy(update=dict(_task=task)) for task in self._tasks]
+    def load_tasks(self) -> list[Task]:
+        return self._tasks
 
 
 @pytest.fixture
-def mock_benchmark(mock_task, mock_env_config) -> MockBenchmark:
+def mock_benchmark(mock_task, mock_tool_config) -> MockBenchmark:
     """Mock benchmark with one task."""
-    return MockBenchmark(tasks_list=[mock_task], env_config=mock_env_config)
+    return MockBenchmark(tasks_list=[mock_task], tool_config=mock_tool_config)
 
 
 # --- Episode fixtures ---

@@ -5,7 +5,7 @@ import json
 from agentlab2.core import EnvironmentOutput, Observation, Trajectory
 from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment, ExpResult
-from tests.conftest import MockBenchmark, MockTask, SerializableEnvConfig
+from tests.conftest import MockBenchmark, MockTask
 
 
 class TestExpResult:
@@ -110,12 +110,12 @@ class TestExperiment:
             assert episode.id == i
             assert episode.exp_name == "test_experiment"
             assert episode.output_dir == tmp_dir
-            assert episode.env_config._task is not None
+            assert episode.env_config.task is not None
 
-    def test_experiment_create_episodes_multiple_tasks(self, tmp_dir, mock_agent_config, mock_env_config):
+    def test_experiment_create_episodes_multiple_tasks(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test Experiment create_episodes with multiple tasks."""
         tasks = [MockTask(goal=f"Goal {i}") for i in range(5)]
-        benchmark = MockBenchmark(tasks_list=tasks, env_config=mock_env_config)
+        benchmark = MockBenchmark(tasks_list=tasks, tool_config=mock_tool_config)
 
         exp = Experiment(
             name="multi_task_exp",
@@ -127,17 +127,16 @@ class TestExperiment:
         episodes = exp.create_episodes()
         assert len(episodes) == 5
         for i, episode in enumerate(episodes):
-            assert episode.env_config._task == tasks[i]
+            assert episode.env_config.task == tasks[i]
 
-    def test_experiment_save_config(self, tmp_dir, mock_agent_config, mock_task):
+    def test_experiment_save_config(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test Experiment save_config."""
-        benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
         exp = Experiment(
             name="test_experiment",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark=benchmark,
+            benchmark=mock_benchmark,
         )
 
         exp.save_config()
@@ -150,16 +149,15 @@ class TestExperiment:
 
         assert saved_config["name"] == "test_experiment"
 
-    def test_experiment_save_config_creates_directory(self, tmp_dir, mock_agent_config, mock_task):
+    def test_experiment_save_config_creates_directory(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test Experiment save_config creates output directory."""
-        benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
         nested_dir = tmp_dir / "nested" / "output"
         exp = Experiment(
             name="test_experiment",
             output_dir=nested_dir,
             agent_config=mock_agent_config,
-            benchmark=benchmark,
+            benchmark=mock_benchmark,
         )
 
         exp.save_config()
@@ -167,15 +165,14 @@ class TestExperiment:
         assert nested_dir.exists()
         assert (nested_dir / "experiment_config.json").exists()
 
-    def test_experiment_serialization(self, tmp_dir, mock_agent_config, mock_task):
+    def test_experiment_serialization(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test Experiment JSON serialization."""
-        benchmark = MockBenchmark(tasks_list=[mock_task], env_config=SerializableEnvConfig())
 
         exp = Experiment(
             name="test_experiment",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark=benchmark,
+            benchmark=mock_benchmark,
         )
 
         json_str = exp.model_dump_json(serialize_as_any=True)
@@ -185,7 +182,7 @@ class TestExperiment:
         assert "agent_config" in data
         assert "benchmark" in data
 
-    def test_experiment_episodes_have_correct_env_config(self, tmp_dir, mock_agent_config, mock_benchmark):
+    def test_experiment_episodes_have_correct_config(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test that created episodes have correct env_config."""
         exp = Experiment(
             name="test_experiment",
@@ -197,7 +194,7 @@ class TestExperiment:
         episodes = exp.create_episodes()
 
         for episode in episodes:
-            assert episode.env_config == mock_benchmark.env_config
+            assert episode.env_config.tool_config == mock_benchmark.tool_config
 
     def test_experiment_episodes_have_tasks_from_benchmark(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test that created episodes have tasks from benchmark."""
@@ -212,4 +209,4 @@ class TestExperiment:
         env_configs = mock_benchmark.env_configs()
 
         for episode, env_config in zip(episodes, env_configs):
-            assert episode.task_id == env_config._task.id
+            assert episode.task_id == env_config.task.id

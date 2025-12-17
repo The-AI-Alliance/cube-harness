@@ -2,16 +2,14 @@
 
 from abc import ABC, abstractmethod
 
-from agentlab2.core import ActionSchema, AgentOutput, AL2BaseModel, Observation
+from agentlab2.core import ActionSchema, AgentOutput, Observation, TypedBaseModel
 
 
-class AgentConfig(AL2BaseModel, ABC):
+class AgentConfig(TypedBaseModel, ABC):
     """Configuration for creating an Agent."""
 
-    _action_set: list[ActionSchema] | None = None
-
     @abstractmethod
-    def make(self, **kwargs) -> "Agent":
+    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Agent":
         pass
 
 

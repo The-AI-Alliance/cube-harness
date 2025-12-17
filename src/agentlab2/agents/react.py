@@ -41,9 +41,8 @@ Focus on:
 - Current progress toward the goal
 Provide a concise summary that preserves all information needed to continue the task."""
 
-    def make(self) -> "ReactAgent":
-        assert self._action_set is not None, "Action set must be provided to create ReactAgent."
-        return ReactAgent(config=self, tools=self._action_set)
+    def make(self, action_set: list[ActionSchema]) -> "ReactAgent":
+        return ReactAgent(config=self, tools=action_set)
 
 
 class ReactAgent(Agent):

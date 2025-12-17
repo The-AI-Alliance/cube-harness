@@ -6,7 +6,7 @@ from termcolor import colored
 
 from agentlab2.agent import AgentConfig
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory
-from agentlab2.environment import EnvironmentConfig
+from agentlab2.environment import EnvConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +22,14 @@ class Episode:
         exp_name: str,
         output_dir: Path,
         agent_config: AgentConfig,
-        env_config: EnvironmentConfig,
+        env_config: EnvConfig,
         max_steps: int = MAX_STEPS,
     ) -> None:
-        assert env_config._task is not None, "EnvironmentConfig must have a Task assigned"
         self.id = id
         self.exp_name = exp_name
         self.output_dir = output_dir
         self.agent_config = agent_config
-        self.task_id = env_config._task.id
+        self.task_id = env_config.task.id
         self.env_config = env_config
         self.max_steps = max_steps
         self._output_name = ""
@@ -43,8 +42,7 @@ class Episode:
             Trajectory containing the full history of the run.
         """
         env = self.env_config.make()
-        self.agent_config._action_set = env.action_set()
-        agent = self.agent_config.make()
+        agent = self.agent_config.make(env.action_set)
         try:
             env_output = env.setup()
             logger.info(colored(f"Initial env output: {env_output}", "blue"))

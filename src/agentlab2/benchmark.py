@@ -1,17 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import Sequence
 
 from pydantic import Field
 
-from agentlab2.core import AL2BaseModel
-from agentlab2.environment import EnvironmentConfig
+from agentlab2.core import Task, TypedBaseModel
+from agentlab2.environment import EnvConfig
+from agentlab2.tool import ToolConfig
 
 
-class Benchmark(AL2BaseModel, ABC):
+class Benchmark(TypedBaseModel, ABC):
     """Represents a benchmark consisting of multiple tasks and an environment."""
 
     metadata: dict = Field(default_factory=dict)
-    env_config: EnvironmentConfig
+    tool_config: ToolConfig
 
     @abstractmethod
     def setup(self):
@@ -29,9 +29,17 @@ class Benchmark(AL2BaseModel, ABC):
         pass
 
     @abstractmethod
-    def env_configs(self) -> Sequence[EnvironmentConfig]:
-        """Return the list of environment configurations for each task in the benchmark."""
+    def load_tasks(self) -> list[Task]:
+        """
+        Load and return the list of tasks for this benchmark.
+        """
         pass
+
+    def env_configs(self) -> list[EnvConfig]:
+        """Generate environment configurations for all tasks in the benchmark."""
+        tasks = self.load_tasks()
+        configs = [EnvConfig(task=task, tool_config=self.tool_config) for task in tasks]
+        return configs
 
     def install(self):
         """

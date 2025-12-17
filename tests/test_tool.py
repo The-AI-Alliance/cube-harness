@@ -26,7 +26,7 @@ class TestTool:
 
     def test_tool_actions(self, mock_tool):
         """Test getting actions from tool."""
-        actions = mock_tool.action_set()
+        actions = mock_tool.action_set
         assert len(actions) == 2
         action_names = {a.name for a in actions}
         assert "click" in action_names
@@ -34,7 +34,7 @@ class TestTool:
 
     def test_tool_action_schema_format(self, mock_tool):
         """Test that action schemas have correct format."""
-        actions = mock_tool.action_set()
+        actions = mock_tool.action_set
         click_action = next(a for a in actions if a.name == "click")
 
         assert isinstance(click_action, ActionSchema)

@@ -1,17 +1,18 @@
 import base64
 import io
 import json
-from typing import Any, Callable, Dict, List, Protocol, Self
+from abc import ABC, abstractmethod
+from typing import Any, Callable, Dict, List, Protocol, Self, TypeAlias
 
 import litellm.utils
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-from agentlab2.base import AL2BaseModel
+from agentlab2.base import TypedBaseModel
 from agentlab2.llm import LLMCall
 
 
-class ActionSchema(AL2BaseModel):
+class ActionSchema(TypedBaseModel):
     """
     Represents a function specification with a type, name, description and arguments.
     Compatible with OAI, Anthropic and VLLM definitions.
@@ -46,7 +47,7 @@ class ActionSchema(AL2BaseModel):
         }
 
 
-class Action(AL2BaseModel):
+class Action(TypedBaseModel):
     """
     A class representing a function call.
 
@@ -61,7 +62,7 @@ class Action(AL2BaseModel):
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
 
-class AgentOutput(AL2BaseModel):
+class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)
 
@@ -69,7 +70,7 @@ class AgentOutput(AL2BaseModel):
 _image_prefix = "data:image/png;base64,"
 
 
-class Content(AL2BaseModel):
+class Content(TypedBaseModel):
     """Represents a piece of content in an observation."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -125,7 +126,7 @@ class Content(AL2BaseModel):
         return message
 
 
-class Observation(AL2BaseModel):
+class Observation(TypedBaseModel):
     """Represents an observation from the environment."""
 
     contents: list[Content] = Field(default_factory=list)
@@ -143,7 +144,7 @@ class Observation(AL2BaseModel):
         return self
 
 
-class EnvironmentOutput(AL2BaseModel):
+class EnvironmentOutput(TypedBaseModel):
     """Represents the result of an environment step."""
 
     obs: Observation
@@ -152,7 +153,7 @@ class EnvironmentOutput(AL2BaseModel):
     info: dict = Field(default_factory=dict)
 
 
-class Trajectory(AL2BaseModel):
+class Trajectory(TypedBaseModel):
     """
     Stores history of the previous interaction.
 
@@ -177,3 +178,56 @@ class ActionSpace(Protocol):
     """Base class for action spaces."""
 
     pass
+
+
+ActionSubset: TypeAlias = tuple[Callable, ...]
+
+
+class Task(ABC):
+    """Represents a task that an agent must complete in an environment."""
+
+    id: str
+    validate_per_step: bool = False
+    _tool: Any  # access to the environment tool, initialized in setup()
+
+    @abstractmethod
+    def setup(self, tool: Any) -> tuple[Observation, dict]:
+        """
+        Set up the task in the given environment.
+
+        Returns:
+            Tuple of (Observation, dict with additional task info)
+        """
+        self._tool = tool
+
+    def teardown(self) -> None:
+        """Optional clean up after task completion."""
+        pass
+
+    @abstractmethod
+    def validate_task(self, obs: Observation) -> tuple[float, dict]:
+        """Validate the current state of the task and return (reward, info)."""
+        pass
+
+    @abstractmethod
+    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
+        """Allows the task to whitelist subset of all the actions provided by the environment."""
+        pass
+
+    def cheat(self):
+        """
+        Solve the task using a pre-defined solution (optional).
+        """
+        raise NotImplementedError
+
+    def obs_postprocess(self, obs: Observation) -> Observation:
+        """Optional post-processing of observation before returning it to the agent."""
+        return obs
+
+    def finished(self) -> bool:
+        """Check if the task is finished."""
+        return False
+
+    def accept_agent_stop(self) -> bool:
+        """Optional, whether the task accepts the agent stopping the task right now. Default is True."""
+        return True

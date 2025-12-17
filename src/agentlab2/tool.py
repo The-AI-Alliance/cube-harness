@@ -2,13 +2,16 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, List, get_protocol_members
 
-from agentlab2.core import Action, ActionSchema, AL2BaseModel, Content, Observation
+from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
 
 logger = logging.getLogger(__name__)
 
 
 class AbstractTool(ABC):
-    """Base class for objects that can react on some actions"""
+    """
+    Abstract interface for objects that can react on a list of actions.
+    List defined by the ActionSpace that tool inherits.
+    """
 
     def reset(self) -> None:
         """Optional reset the environment to its initial state."""
@@ -19,6 +22,7 @@ class AbstractTool(ABC):
         """Execute a single action and return the result."""
         pass
 
+    @property
     @abstractmethod
     def action_set(self) -> List[ActionSchema]:
         """Returns list of actions supported by that tool."""
@@ -29,8 +33,8 @@ class AbstractTool(ABC):
         pass
 
 
-class AbstractToolConfig(AL2BaseModel, ABC):
-    """Configuration for Tool."""
+class ToolConfig(TypedBaseModel, ABC):
+    """Base class for tool configurations."""
 
     @abstractmethod
     def make(self) -> AbstractTool:
@@ -62,6 +66,7 @@ class Tool(AbstractTool):
             logger.exception(action_result)
         return Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
 
+    @property
     def action_set(self) -> List[ActionSchema]:
         """Returns list of actions supported by that environment."""
         action_names = get_protocol_members(self.action_space)

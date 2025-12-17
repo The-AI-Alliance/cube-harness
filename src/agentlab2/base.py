@@ -5,7 +5,7 @@ import importlib
 from pydantic import BaseModel, model_serializer, model_validator
 
 
-class AL2BaseModel(BaseModel):
+class TypedBaseModel(BaseModel):
     """
     Base class for Pydantic models that can save and load their type information.
 

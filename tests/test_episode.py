@@ -100,7 +100,7 @@ class TestEpisode:
                 return AgentOutput(actions=[Action(name="click", arguments={"element_id": "btn"})])
 
         class NeverStopsConfig(type(mock_agent_config)):
-            def make(self):
+            def make(self, *args):
                 agent = NeverStopsAgent(config=self)
                 return agent
 
@@ -192,7 +192,7 @@ class TestEpisode:
                 raise RuntimeError("Test error")
 
         class ErrorConfig(type(mock_agent_config)):
-            def make(self):
+            def make(self, *args) -> "ErrorAgent":
                 return ErrorAgent(config=self)
 
         config = ErrorConfig()
