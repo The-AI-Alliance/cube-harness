@@ -59,15 +59,15 @@ AgentLab2 is designed as a **universal evaluation platform** for multiple agenti
 ![AgentLab2 Overview](docs/assets/images/al2_overview.png)
 
 - **Agent** - LLM-powered decision maker that receives observations and produces actions
-- **Environment** - Executes actions, provides observations and rewards. Environment created through composition of the tool and the task.
-- **Tool** - Modular action provider, exposes some action space, could be reused in the different benchmarks (e.g., web browser, OS container)
-- **ActionSpace** - Defines the set of possible actions that the tool can execute.
-- **Task** - Defines goals, validation logic, and actions subset. Sets up the tool for a specific scenario.
-- **Benchmark** - Collection of tasks with methods for common setup/teardown, produces env configs for episodes.
-- **Episode** - Single agent-environment execution loop with trajectory recording.
-- **Trajectory** - Stores interaction history (observations, actions, rewards).
-- **Experiment** - Coordinates execution of multiple episodes across a benchmark, collects results.
-- **ExpRunner** - Execution runtime (sequential or parallel via Ray).
+- **Environment** - Executes actions, provides observations and rewards. Created through composition of the tool and the task
+- **Tool** - Modular action provider that exposes an action space and can be reused across different benchmarks (e.g., web browser, OS container)
+- **ActionSpace** - Defines the set of possible actions that a tool can execute
+- **Task** - Defines goals, validation logic, and action subsets. Sets up the tool for a specific scenario
+- **Benchmark** - Collection of tasks with methods for common setup/teardown; produces env configs for episodes
+- **Episode** - Single agent-environment execution loop for one task, records trajectory
+- **Trajectory** - Stores interaction history (observations, actions, rewards)
+- **Experiment** - Coordinates execution of multiple episodes across a benchmark and collects results
+- **ExpRunner** - Execution runtime (sequential or parallel via Ray)
 
 
 ### Design Goals
@@ -84,6 +84,8 @@ AgentLab2 is designed as a **universal evaluation platform** for multiple agenti
 make format    # Format code
 make lint      # Lint and auto-fix
 make help      # Show all commands
+make test      # Run tests
+make coverage  # Run tests with coverage report
 ```
 
 ## Project Structure
