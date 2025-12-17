@@ -108,7 +108,6 @@ class TestExperiment:
         for i, episode in enumerate(episodes):
             assert isinstance(episode, Episode)
             assert episode.id == i
-            assert episode.exp_name == "test_experiment"
             assert episode.output_dir == tmp_dir
             assert episode.env_config.task is not None
 

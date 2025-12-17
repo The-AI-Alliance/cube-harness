@@ -19,14 +19,12 @@ class Episode:
     def __init__(
         self,
         id: int,
-        exp_name: str,
         output_dir: Path,
         agent_config: AgentConfig,
         env_config: EnvConfig,
         max_steps: int = MAX_STEPS,
     ) -> None:
         self.id = id
-        self.exp_name = exp_name
         self.output_dir = output_dir
         self.agent_config = agent_config
         self.task_id = env_config.task.id

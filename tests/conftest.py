@@ -336,11 +336,10 @@ def mock_benchmark(mock_task, mock_tool_config) -> MockBenchmark:
 
 
 @pytest.fixture
-def sample_episode(tmp_dir, mock_agent_config, mock_env_config) -> Episode:
+def mock_episode(tmp_dir, mock_agent_config, mock_env_config) -> Episode:
     """Sample episode for testing."""
     return Episode(
         id=0,
-        exp_name="test_exp",
         output_dir=tmp_dir,
         agent_config=mock_agent_config,
         env_config=mock_env_config,

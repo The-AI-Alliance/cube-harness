@@ -12,18 +12,16 @@ from tests.conftest import MockAgent
 class TestEpisode:
     """Tests for Episode class."""
 
-    def test_episode_creation(self, sample_episode, tmp_dir):
+    def test_episode_creation(self, mock_episode, tmp_dir):
         """Test Episode creation."""
-        assert sample_episode.id == 0
-        assert sample_episode.exp_name == "test_exp"
-        assert sample_episode.output_dir == tmp_dir
-        assert sample_episode.max_steps == MAX_STEPS
+        assert mock_episode.id == 0
+        assert mock_episode.output_dir == tmp_dir
+        assert mock_episode.max_steps == MAX_STEPS
 
     def test_episode_custom_max_steps(self, tmp_dir, mock_agent_config, mock_env_config):
         """Test Episode with custom max_steps."""
         episode = Episode(
             id=0,
-            exp_name="test_exp",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             env_config=mock_env_config,
@@ -32,18 +30,18 @@ class TestEpisode:
 
         assert episode.max_steps == 10
 
-    def test_episode_run_completes(self, sample_episode):
+    def test_episode_run_completes(self, mock_episode):
         """Test Episode run completes successfully."""
-        trajectory = sample_episode.run()
+        trajectory = mock_episode.run()
 
         assert isinstance(trajectory, Trajectory)
         assert "task_id" in trajectory.metadata
         # Should have initial env output + agent output + final env output
         assert len(trajectory.steps) >= 2
 
-    def test_episode_run_saves_trajectory(self, sample_episode, tmp_dir):
+    def test_episode_run_saves_trajectory(self, mock_episode, tmp_dir):
         """Test Episode run saves trajectory files."""
-        sample_episode.run()
+        mock_episode.run()
 
         # Check trajectory files exist
         traj_dir = tmp_dir / "trajectories"
@@ -54,9 +52,9 @@ class TestEpisode:
         assert any(".metadata.json" in f.name for f in files)
         assert any(".jsonl" in f.name for f in files)
 
-    def test_episode_run_metadata_file_content(self, sample_episode, tmp_dir):
+    def test_episode_run_metadata_file_content(self, mock_episode, tmp_dir):
         """Test Episode run creates correct metadata file."""
-        sample_episode.run()
+        mock_episode.run()
 
         # Read metadata file
         traj_dir = tmp_dir / "trajectories"
@@ -68,9 +66,9 @@ class TestEpisode:
 
         assert "task_id" in metadata
 
-    def test_episode_run_jsonl_content(self, sample_episode, tmp_dir):
+    def test_episode_run_jsonl_content(self, mock_episode, tmp_dir):
         """Test Episode run creates correct JSONL file."""
-        sample_episode.run()
+        mock_episode.run()
 
         # Read JSONL file
         traj_dir = tmp_dir / "trajectories"
@@ -108,7 +106,6 @@ class TestEpisode:
 
         episode = Episode(
             id=0,
-            exp_name="test_exp",
             output_dir=tmp_dir,
             agent_config=config,
             env_config=mock_env_config,
@@ -127,7 +124,6 @@ class TestEpisode:
         """Test Episode run stops when done=True."""
         episode = Episode(
             id=0,
-            exp_name="test_exp",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             env_config=mock_env_config,
@@ -140,32 +136,32 @@ class TestEpisode:
         last_env_step = trajectory.last_env_step()
         assert last_env_step.done is True
 
-    def test_episode_save_trajectory_creates_directory(self, sample_episode, tmp_dir):
+    def test_episode_save_trajectory_creates_directory(self, mock_episode, tmp_dir):
         """Test save_trajectory creates trajectory directory."""
         trajectory = Trajectory(metadata={"task_id": "test"})
-        sample_episode.save_trajectory(trajectory)
+        mock_episode.save_trajectory(trajectory)
 
         traj_dir = tmp_dir / "trajectories"
         assert traj_dir.exists()
 
-    def test_episode_save_step_without_trajectory(self, sample_episode):
+    def test_episode_save_step_without_trajectory(self, mock_episode):
         """Test save_step raises error if called before save_trajectory."""
         obs = Observation.from_text("test")
         step = EnvironmentOutput(obs=obs)
 
         with pytest.raises(ValueError, match="Trajectory path not set"):
-            sample_episode.save_step(step)
+            mock_episode.save_step(step)
 
-    def test_episode_save_step_appends(self, sample_episode, tmp_dir):
+    def test_episode_save_step_appends(self, mock_episode, tmp_dir):
         """Test save_step appends to JSONL file."""
         trajectory = Trajectory(metadata={"task_id": "test"})
-        sample_episode.save_trajectory(trajectory)
+        mock_episode.save_trajectory(trajectory)
 
         # Save multiple steps
         for i in range(3):
             obs = Observation.from_text(f"step {i}")
             step = EnvironmentOutput(obs=obs)
-            sample_episode.save_step(step)
+            mock_episode.save_step(step)
 
         # Read JSONL file
         traj_dir = tmp_dir / "trajectories"
@@ -177,9 +173,9 @@ class TestEpisode:
 
         assert len(lines) == 3
 
-    def test_episode_closes_env_on_completion(self, sample_episode, mock_task):
+    def test_episode_closes_env_on_completion(self, mock_episode, mock_task):
         """Test Episode closes environment after run."""
-        sample_episode.run()
+        mock_episode.run()
 
         # Task teardown should have been called
         assert mock_task.teardown_called
@@ -199,7 +195,6 @@ class TestEpisode:
 
         episode = Episode(
             id=0,
-            exp_name="test_exp",
             output_dir=tmp_dir,
             agent_config=config,
             env_config=mock_env_config,
@@ -215,7 +210,6 @@ class TestEpisode:
         """Test Episode generates correct output filename."""
         episode = Episode(
             id=42,
-            exp_name="test_exp",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             env_config=mock_env_config,
