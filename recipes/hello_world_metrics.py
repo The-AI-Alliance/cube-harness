@@ -1,13 +1,15 @@
 import logging
-import os
+import time
 import uuid
+from pathlib import Path
 
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
-from agentlab2.envs.browser import BrowserEnvConfig
+from agentlab2.exp_runner import run_with_ray
 from agentlab2.experiment import Experiment
-from agentlab2.llm import LLM
+from agentlab2.llm import LLMConfig
 from agentlab2.metrics.tracer import AgentTracer
+from agentlab2.tools.playwright import PlaywrightConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,14 +18,18 @@ logging.basicConfig(
 
 
 def main() -> None:
-    miniwob_dir = os.path.expanduser("~/projects/miniwob-plusplus")
-    llm = LLM(model_name="gpt-5-mini", temperature=1.0)
-    env_config = BrowserEnvConfig(headless=True, timeout=30000, pw_kwargs={"chromium_sandbox": False})
-    agent_config = ReactAgentConfig(llm=llm, use_html=True, use_screenshot=True)
-    benchmark = MiniWobBenchmark(dataset_dir=miniwob_dir, env_config=env_config)
+    current_datetime = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = Path.home() / "agentlab_results" / "al2" / f"miniwob_{current_datetime}"
+
+    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    agent_config = ReactAgentConfig(llm_config=llm_config)
+
+    tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
+    benchmark = MiniWobBenchmark(tool_config=tool_config)
+
     exp = Experiment(
-        name="hello_world_study",
-        output_dir="./hello_world_1",
+        name="miniwob",
+        output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
     )
@@ -38,9 +44,9 @@ def main() -> None:
 
     try:
         with tracer.benchmark(exp.name):
-            trajectories = exp.run_ray(n_cpus=4)
+            run_with_ray(exp, n_cpus=4)
 
-        logging.info(f"Completed {len(trajectories)} trajectories")
+        logging.info("Done")
     finally:
         tracer.shutdown()
 
