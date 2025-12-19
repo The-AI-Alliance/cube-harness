@@ -41,6 +41,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  
           aws-region: ${{ secrets.AWS_REGION }} # e.g., us-east-1  
   
+      # --- Check .github Directory ---  
+      - name: Check .github Directory  
+        id: check_github_dir # Give the step an id to potentially reference output later if needed  
+        run: find .github
+
       # --- Run Python Script to Generate Parquet ---  
       - name: Run metrics collection script  
         id: collect_metrics # Give the step an id to potentially reference output later if needed  
