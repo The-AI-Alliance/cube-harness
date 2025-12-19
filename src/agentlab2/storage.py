@@ -120,6 +120,13 @@ class FileStorage:
                     if line.strip():
                         step_data = json.loads(line)
                         step_data = self._resolve_llm_call_refs(step_data, trajectory_id, i)
+                        if "output" not in step_data:
+                            if "obs" in step_data:
+                                # Legacy format where step is just EnvironmentOutput
+                                step_data = {"output": step_data}
+                            elif "actions" in step_data:
+                                # Legacy format where step is just AgentOutput
+                                step_data = {"output": step_data}
                         step = TrajectoryStep.model_validate(step_data)
                         steps.append(step)
 
