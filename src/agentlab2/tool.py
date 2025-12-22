@@ -1,6 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, get_protocol_members
+from typing import Any, Callable, List
+
+from typing_extensions import get_protocol_members
 
 from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
 

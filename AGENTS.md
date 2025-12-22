@@ -352,6 +352,7 @@ The project includes `.vscode/settings.json` with:
 ### Running Commands
 Always use `uv run` to execute Python scripts:
 ```bash
+uv sync --all-extras                   # install all optional dependencies
 uv run recipes/hello_miniwob.py        # Run a recipe
 uv run pytest tests/ -v                 # Run tests
 uv run python -c "import agentlab2"    # Quick import test

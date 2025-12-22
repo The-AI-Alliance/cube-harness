@@ -7,11 +7,11 @@ authors = [
     { name = "Aman Jaiswal", email = "amanjaiswal73892@gmail.com" },
     { name = "Oleh Shliazhko", email = "oleh.shliazhko@servicenow.com" },
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "pydantic~=2.0",
     "litellm~=1.80.8",
-    "playwright~=1.56",
+    "playwright==1.44",
     "Pillow~=12.0",
     "beautifulsoup4~=4.14",
     "numpy~=2.3.5",
@@ -21,6 +21,15 @@ dependencies = [
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
     "miniwob>=1.0",
+]
+
+[project.optional-dependencies]
+# BrowserGym core dependencies (for bgym_core module)
+browsergym = [
+    "gymnasium>=0.27",
+    "lxml>=4.9,<6.0.0",
+    "pyparsing>=3",
+    "playwright==1.44",
 ]
 
 [build-system]
@@ -46,6 +55,13 @@ dev = [
     "ruff>=0.14.7",
     "pytest>=8.0",
     "pytest-cov>=6.0",
+    "pytest-xdist>=3.8.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')"
 ]
 
 [tool.setuptools.packages.find]
