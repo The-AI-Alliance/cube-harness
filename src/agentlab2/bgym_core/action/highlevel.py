@@ -1,0 +1,573 @@
+"""High-level action set for BrowserGym."""
+
+import inspect
+import random
+import typing
+from dataclasses import dataclass
+
+from . import utils
+from .base import AbstractActionSet
+from .functions import (
+    clear,
+    click,
+    dblclick,
+    drag_and_drop,
+    fill,
+    focus,
+    go_back,
+    go_forward,
+    goto,
+    hover,
+    keyboard_down,
+    keyboard_insert_text,
+    keyboard_press,
+    keyboard_type,
+    keyboard_up,
+    mouse_click,
+    mouse_dblclick,
+    mouse_down,
+    mouse_drag_and_drop,
+    mouse_move,
+    mouse_up,
+    mouse_upload_file,
+    new_tab,
+    noop,
+    press,
+    report_infeasible,
+    scroll,
+    scroll_at,
+    select_option,
+    send_msg_to_user,
+    tab_close,
+    tab_focus,
+    upload_file,
+)
+from .parsers import action_docstring_parser, highlevel_action_parser
+
+ACTION_SUBSETS = {
+    "chat": [send_msg_to_user],
+    "infeas": [report_infeasible],
+    "bid": [
+        scroll,
+        fill,
+        # These are not really needed and might pollute the action space, doing more harm than good
+        # check,
+        # uncheck,
+        select_option,
+        click,
+        dblclick,
+        hover,
+        press,
+        focus,
+        clear,
+        drag_and_drop,
+        upload_file,
+    ],
+    "coord": [
+        scroll_at,
+        mouse_move,
+        mouse_up,
+        mouse_down,
+        mouse_click,
+        mouse_dblclick,
+        mouse_drag_and_drop,
+        mouse_upload_file,
+        keyboard_down,
+        keyboard_up,
+        keyboard_press,
+        keyboard_type,
+        keyboard_insert_text,
+    ],
+    "nav": [go_back, go_forward, goto],
+    "tab": [
+        tab_close,
+        tab_focus,
+        new_tab,
+    ],
+    # adapted from MiniWoB repo
+    # https://github.com/Farama-Foundation/miniwob-plusplus/blob/1bab0dffe34e92cc1049fe9443542029bf7e44a9/miniwob/action.py#L122
+    "miniwob_all": [
+        mouse_move,  #     MOVE_COORDS
+        mouse_click,  #    CLICK_COORDS
+        mouse_dblclick,  # DBLCLICK_COORDS
+        mouse_down,  #     MOUSEDOWN_COORDS
+        mouse_up,  #       MOUSEUP_COORDS
+        scroll,  #         SCROLL_UP_COORDS, SCROLL_DOWN_COORDS
+        click,  #          CLICK_ELEMENT
+        keyboard_press,  # PRESS_KEY
+        keyboard_type,  #  TYPE_TEX (and substitute for TYPE_FIELD()
+        fill,  #           FOCUS_ELEMENT_AND_TYPE_TEXT (and substitute for FOCUS_ELEMENT_AND_TYPE_FIELD)
+    ],
+    # adapted from MiniWoB repo
+    # https://github.com/Farama-Foundation/miniwob-plusplus/blob/1bab0dffe34e92cc1049fe9443542029bf7e44a9/miniwob/action.py#L142
+    "miniwob_shi17": [
+        mouse_click,  #    CLICK_COORDS
+        mouse_dblclick,  # DBLCLICK_COORDS
+        mouse_down,  #     MOUSEDOWN_COORDS
+        mouse_up,  #       MOUSEUP_COORDS
+        scroll,  #         SCROLL_UP_COORDS, SCROLL_DOWN_COORDS
+        keyboard_press,  # PRESS_KEY
+    ],
+    # adapted from MiniWoB repo
+    # https://github.com/Farama-Foundation/miniwob-plusplus/blob/1bab0dffe34e92cc1049fe9443542029bf7e44a9/miniwob/action.py#L160
+    "miniwob_liu18": [
+        click,  # CLICK_ELEMENT
+        fill,  #  substitute for FOCUS_ELEMENT_AND_TYPE_FIELD
+    ],
+    # adapted from MiniWoB repo
+    # https://github.com/Farama-Foundation/miniwob-plusplus/blob/1bab0dffe34e92cc1049fe9443542029bf7e44a9/miniwob/action.py#L173
+    "miniwob_humphreys22": [
+        mouse_move,  #     MOVE_COORDS
+        mouse_click,  #    CLICK_COORDS
+        mouse_dblclick,  # DBLCLICK_COORDS
+        mouse_down,  #     MOUSEDOWN_COORDS
+        mouse_up,  #       MOUSEUP_COORDS
+        scroll,  #         SCROLL_UP_COORDS, SCROLL_DOWN_COORDS
+        keyboard_press,  # PRESS_KEY
+        keyboard_type,  #  substitute for TYPE_FIELD
+    ],
+    # from the webarena paper
+    # https://arxiv.org/abs/2307.13854
+    # from the webarena source code
+    # https://github.com/web-arena-x/webarena/blob/e31c190c9b43f63e5724322b847e00249300df40/browser_env/actions.py#L240
+    # from the webarena default prompt
+    # https://github.com/web-arena-x/webarena/blob/e31c190c9b43f63e5724322b847e00249300df40/agent/prompts/raw/p_cot_id_actree_2s.py#L13
+    "webarena": [
+        #                   #     code      |      paper       |      prompt
+        scroll,  #            SCROLL        | scroll(dir)      | scroll [down|up]
+        keyboard_press,  #    KEY_PRESS     | press(key_comb)  | press [key_comb]
+        #                     MOUSE_CLICK   |                  |
+        #                     KEYBOARD_TYPE |                  |
+        #                     MOUSE_HOVER   |                  |
+        click,  #             CLICK         | click(elem)      | click [id]
+        fill,  #              TYPE          | type(elem, text) | type [id] [content]
+        hover,  #             HOVER         | hover(elem)      | hover [id]
+        tab_focus,  #         PAGE_FOCUS    | tab_focus(index) | tab_focus [tab_index]
+        new_tab,  #           NEW_TAB       | new_tab()        | new_tab
+        go_back,  #           GO_BACK       | go_back()        | go_back
+        go_forward,  #        GO_FORWARD    | go_forward()     | go_forward
+        goto,  #              GOTO_URL      | goto(url)        | goto [url]
+        tab_close,  #         PAGE_CLOSE    | tab_close()      | close_tab
+        #                     CHECK         |                  |
+        select_option,  #     SELECT_OPTION |                  |
+        send_msg_to_user,  #  STOP          | stop(answer)     | stop [answer]
+        report_infeasible,  ## explicit unachievable action, equivalent STOP "N/A"
+    ],
+    # from the visualwebarena paper
+    # https://arxiv.org/abs/2401.13649
+    # from the visualwebarena source code
+    # https://github.com/web-arena-x/visualwebarena/blob/15890922c97a8694e366fde2d7de8dbd1ff63fb5/browser_env/actions.py#L311-L343
+    # from the visualwebarena default prompt
+    # https://github.com/web-arena-x/visualwebarena/blob/15890922c97a8694e366fde2d7de8dbd1ff63fb5/agent/prompts/jsons/p_cot_id_actree_3s.json#L2
+    "visualwebarena": [
+        #                   #     code      |      paper       |      prompt
+        scroll,  #            SCROLL        | scroll(dir)      | scroll [down|up]
+        keyboard_press,  #    KEY_PRESS     | press(key_comb)  | press [key_comb]
+        #                     MOUSE_CLICK   |                  |
+        #                     KEYBOARD_TYPE |                  |
+        #                     MOUSE_HOVER   |                  |
+        click,  #             CLICK         | click(elem)      | click [id]
+        fill,  #              TYPE          | type(elem, text) | type [id] [content]
+        hover,  #             HOVER         | hover(elem)      | hover [id]
+        tab_focus,  #         PAGE_FOCUS    | tab_focus(index) | tab_focus [tab_index]
+        new_tab,  #           NEW_TAB       | new_tab()        | new_tab
+        go_back,  #           GO_BACK       | go_back()        | go_back
+        go_forward,  #        GO_FORWARD    | go_forward()     | go_forward
+        goto,  #              GOTO_URL      | goto(url)        | goto [url]
+        tab_close,  #         PAGE_CLOSE    | tab_close()      | close_tab
+        #                     CHECK         |                  |
+        select_option,  #     SELECT_OPTION |                  |
+        send_msg_to_user,  #  STOP          | stop(answer)     | stop [answer]
+        #                     CLEAR         |                  |
+        upload_file,  #       UPLOAD        |                  |
+        report_infeasible,  ## explicit unachievable action, equivalent STOP "N/A"
+    ],
+    # from workarena paper
+    # https://arxiv.org/abs/2403.07718
+    "workarena": [
+        scroll,
+        fill,
+        select_option,
+        click,
+        dblclick,
+        hover,
+        press,
+        focus,
+        clear,
+        drag_and_drop,
+        send_msg_to_user,
+    ],
+    # from workarena++ paper
+    # https://arxiv.org/abs/2407.05291
+    "workarena++": [
+        scroll,
+        fill,
+        select_option,
+        click,
+        dblclick,
+        hover,
+        press,
+        focus,
+        clear,
+        drag_and_drop,
+        tab_focus,
+        new_tab,
+        tab_close,
+        go_back,
+        go_forward,
+        goto,
+        send_msg_to_user,
+        report_infeasible,
+    ],
+    # from weblinx_browsergym
+    # https://github.com/McGill-NLP/agentlab-weblinx-mvp/blob/a91b6d19870c5187d252e70a2e2013511cc6f1d2/weblinx_browsergym/__init__.py#L274-L286
+    "weblinx": [
+        send_msg_to_user,  # say(speaker="assistant", utterance=[str]) -> send_msg_to_user(text=[str])
+        click,  # click(uid=[element id]) -> click(bid=[element id])
+        hover,  # hover(uid=[element id]) -> hover(bid=[element id])
+        fill,  # textinput(uid=[element id], value=[str]) -> fill(bid=[element id], value=[str])
+        # change(uid=[element], value=[str]) -> ❌
+        goto,  # load(url=[link]) -> goto(url=[link])
+        # submit(uid=[element]) -> click(bid=[element id])
+        scroll,  # scroll(x=[int x],y=[int y]) -> scroll(delta_x=[int x], delta_y=[int y])
+        # copy(uid=[element],text=[str]) -> ❌
+        # paste(uid=[element],text=[str]) -> ❌
+        new_tab,  # tabcreate() -> new_tab()
+        tab_close,  # tabremove(target=[tabId]) -> tab_close()
+        tab_focus,  # tabswitch(origin=[origin tabId],target=[target tabId]) -> tab_focus(index=[target tabid])
+    ],
+    # from assistantbench paper
+    # https://arxiv.org/abs/2407.15711
+    "assistantbench": [
+        scroll,  # SCROLL
+        fill,  # TYPE
+        select_option,  # SELECT
+        click,  # CLICK
+        press,  # PRESS ENTER
+        go_back,  # GOBACK
+        goto,  # GOTO, SEARCH
+        send_msg_to_user,  # TERMINATE
+    ],
+}
+
+
+@dataclass
+class HighLevelAction:
+    # entrypoint: callable
+    signature: str
+    description: str
+    examples: list[str]
+
+
+class HighLevelActionSet(AbstractActionSet):
+    # static class variables
+    ActionSubset = typing.Literal[
+        "chat",
+        "infeas",
+        "bid",
+        "coord",
+        "nav",
+        "tab",
+        "miniwob_all",
+        "miniwob_shi17",
+        "miniwob_liu18",
+        "miniwob_humphreys22",
+        "webarena",
+        "visualwebarena",
+        "workarena",
+        "workarena++",
+        "weblinx",
+        "assistantbench",
+        "custom",
+    ]
+    DemoMode = typing.Literal["off", "default", "all_blue", "only_visible_elements"]
+
+    def __init__(
+        self,
+        subsets: typing.Optional[ActionSubset | list[ActionSubset]] = [
+            "chat",
+            "infeas",
+            "bid",
+            "nav",
+            "tab",
+        ],
+        custom_actions: typing.Optional[list[callable]] = None,
+        multiaction: bool = True,
+        demo_mode: typing.Optional[DemoMode] = None,
+        strict: bool = False,
+        retry_with_force: bool = False,
+    ) -> None:
+        super().__init__(strict)
+        self.multiaction = multiaction
+        self.demo_mode = demo_mode
+        self.retry_with_force = retry_with_force
+
+        if not subsets:
+            raise ValueError("'action_subsets' is empty.")
+
+        if isinstance(subsets, str):
+            subsets = [subsets]
+
+        allowed_actions = [noop]  # the noop action is always allowed
+
+        # add actions from specified action sets
+        if subsets:
+            for subset in subsets:
+                if subset in ACTION_SUBSETS:
+                    allowed_actions.extend(ACTION_SUBSETS[subset])
+                elif subset == "custom":
+                    if not custom_actions:
+                        raise ValueError("'custom' is in 'action_subsets' but 'custom_actions' is empty.")
+                    allowed_actions.extend(custom_actions)
+                else:
+                    raise ValueError(f"Unknown high-level action subspace: {subset}")
+
+        # like set() but preserves order
+        # https://stackoverflow.com/questions/1653970/does-python-have-an-ordered-set
+        allowed_actions = list(dict.fromkeys(allowed_actions).keys())
+
+        # parse the actions and build the action space
+        self.action_set: dict[str, HighLevelAction] = {}
+        self.python_includes = ""
+
+        # include playwright imports
+        self.python_includes += """\
+import playwright.sync_api
+from typing import Literal
+
+
+"""
+        # set demo_mode and retry_with_force flags
+        self.python_includes += f"""\
+demo_mode={repr(demo_mode)}
+retry_with_force={repr(retry_with_force)}
+
+if demo_mode is None:
+    demo_mode = "default" if DEMO_MODE else "off"
+
+"""
+
+        # include utility functions
+        for _, func in inspect.getmembers(utils, inspect.isfunction):
+            self.python_includes += f"""\
+{inspect.getsource(func)}
+
+
+"""
+
+        # parse and include action functions
+        for func in allowed_actions:
+            # include action function definition in the code
+            self.python_includes += f"""\
+{inspect.getsource(func)}
+
+
+"""
+
+            # extract action signature
+            signature = f"{func.__name__}{inspect.signature(func)}"
+
+            # parse docstring
+            description, examples = action_docstring_parser.parse_string(func.__doc__)
+
+            # reconstruct action description
+            description = " ".join(description)
+
+            # reconstruct action examples
+            examples = [
+                function_name + "(" + ", ".join([repr(arg) for arg in function_args]) + ")"
+                for function_name, function_args in examples
+            ]
+
+            if func.__name__ in self.action_set:
+                raise ValueError(f"Duplicated action '{func.__name__}'")
+
+            self.action_set[func.__name__] = HighLevelAction(
+                # entrypoint=func,
+                signature=signature,
+                description=description,
+                examples=examples,
+            )
+
+    def example_action(self, abstract: bool, max_examples: int = 3) -> str:
+        """
+        Returns an example action as a string.
+        """
+        if abstract:
+            if self.multiaction:
+                return """\
+One or several actions, separated by new lines."""
+            else:
+                return """\
+One single action to be executed. You can only use one action at a time."""
+        else:
+            picked_examples = []
+
+            # use fill and click examples if action is present
+            for action_name in ["fill", "click", "mouse_click", "keyboard_type"]:
+                if action_name in self.action_set:
+                    picked_examples.extend(self.action_set[action_name].examples)
+
+            # last resort, use all action examples
+            if not picked_examples:
+                for _, action in self.action_set.items():
+                    picked_examples += action.examples
+
+            # shuffle examples
+            rng = random.Random(1)
+            rng.shuffle(picked_examples)
+
+            if self.multiaction:
+                return "\n".join(picked_examples[:max_examples])
+            else:
+                return picked_examples[0]
+
+    def describe(self, with_long_description: bool = True, with_examples: bool = True) -> str:
+        """
+        Returns a textual description of this action space.
+        """
+        description = f"""
+{len(self.action_set)} different types of actions are available.
+
+"""
+        for _, action in self.action_set.items():
+            description += f"""\
+{action.signature}
+"""
+
+            if with_long_description:
+                description += f"""\
+    Description: {action.description}
+"""
+            if with_examples and action.examples:
+                description += """\
+    Examples:
+"""
+                for example in action.examples:
+                    description += f"""\
+        {example}
+
+"""
+
+        if self.multiaction:
+            description += """\
+Multiple actions can be provided at once, but will be executed sequentially without any feedback from the page.
+More than 2-3 actions usually leads to failure or unexpected behavior."""
+        else:
+            description += """\
+Only a single action can be provided at once."""
+
+        example_action = self.example_action(abstract=False)
+        if example_action:
+            description += f""" Example:
+{example_action}
+"""
+        else:
+            description += """
+"""
+
+        return description
+
+    def to_python_code(self, action: str) -> str:
+        """
+        Converts the given high-level action string to browsergym-compatible python code.
+
+        Args:
+            action: the high-level action to parse.
+
+        Returns:
+            Executable python code that performs the action in a browsergym environment.
+        """
+        highlevel_code = action
+
+        # do the actual parsing and convert each high-level action to
+        # the corresponding python function call
+        if self.strict:
+            function_calls = highlevel_action_parser.parse_string(highlevel_code, parse_all=True)
+            function_calls = function_calls.as_list()
+        else:
+            function_calls = highlevel_action_parser.search_string(
+                highlevel_code
+            )  # allow for multiple matches, skip anything in-between
+            function_calls = sum(function_calls.as_list(), [])  # unpack multiple matches
+
+        if not function_calls:
+            raise ValueError("Received an empty action.")
+        elif len(function_calls) > 1 and not self.multiaction:
+            raise ValueError("Received a multi-action, only single-actions are allowed.")
+
+        python_code = ""
+
+        # function definitions
+        python_code += self.python_includes
+
+        # function calls
+        for function_name, function_args in function_calls:
+            if function_name not in self.action_set:
+                raise NameError(f"Invalid action type '{function_name}'.")
+            python_code += function_name + "(" + ", ".join([repr(arg) for arg in function_args]) + ")\n"
+
+        # return the constructed python code
+        return python_code
+
+    def to_tool_description(self, api: str = "openai", add_examples: bool = True) -> list[dict]:
+        """
+        Translates actions to tool descriptions following the OpenAI API format.
+
+        Returns:
+            A list of tool descriptors.
+        """
+        schema_keys = {
+            "openai": "parameters",
+            "anthropic": "input_schema",
+        }
+        schema = schema_keys.get(api, "parameters")
+        tools = []
+        for tool_name, action in self.action_set.items():
+            # Parse the signature to extract parameter names and types
+            parameters = {"type": "object", "properties": {}, "required": []}
+            signature = inspect.signature(globals()[tool_name])
+            for param_name, param in signature.parameters.items():
+                param_type = "string"  # Default to string if type is not specified
+                if param.annotation != inspect.Parameter.empty:
+                    type_map = {
+                        str: "string",
+                        float: "number",
+                        int: "number",
+                        bool: "boolean",
+                        dict: "object",
+                        list: "array",
+                    }
+                    param_type = type_map.get(param.annotation, "string")
+
+                parameters["properties"][param_name] = {
+                    "type": param_type,
+                    # "description": f"Parameter {param_name} of type {param_type}",
+                }
+                if param.default == inspect.Parameter.empty:
+                    parameters["required"].append(param_name)
+                else:
+                    parameters["properties"][param_name]["default"] = param.default
+
+            # Construct the tool descriptor
+            description = action.description
+            if add_examples and action.examples:
+                description += "\n\nExamples:\n"
+                for example in action.examples:
+                    description += f"- {example}\n"
+
+            tool = {
+                "name": tool_name,
+                "description": description,
+                schema: parameters,
+            }
+            if api == "openai":
+                tool["type"] = "function"
+            tools.append(tool)
+
+        return tools
+
+
+# consistency checks
+assert "custom" not in ACTION_SUBSETS
+assert set(typing.get_args(HighLevelActionSet.ActionSubset)) == set(list(ACTION_SUBSETS.keys()) + ["custom"])
