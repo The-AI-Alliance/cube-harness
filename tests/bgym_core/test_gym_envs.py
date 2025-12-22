@@ -41,7 +41,7 @@ def test_gym_env() -> None:
     assert not obs["last_action_error"]
 
     obs, reward, term, trunc, info = env.step(
-        f"""\
+        """\
 page.get_by_label("Name:").click()
 page.get_by_label("Name:").fill("Janice")
 page.get_by_label("Name:").press("Tab")
@@ -58,7 +58,7 @@ page.get_by_label("Age:", exact=True).press("Tab")
     assert trunc == False
 
     obs, reward, term, trunc, info = env.step(
-        f"""\
+        """\
 page.get_by_label("Message:").fill("Hello")
 page.get_by_label("Message:").press("Tab")
 page.get_by_label("Subscribe to newsletter").check()
@@ -73,7 +73,7 @@ page.get_by_role("button", name="Submit").press("Enter")
     assert trunc == False
 
     obs, reward, term, trunc, info = env.step(
-        f"""\
+        """\
 page.get_by_label("LABEL DOES NOT EXIST:").fill("Hello")
 page.get_by_role("button", name="Submit").press("Enter")
 """
@@ -227,9 +227,7 @@ def test_demo_mode(global_demo_mode: bool, demo_mode: str) -> None:
     action_set = HighLevelActionSet(demo_mode=demo_mode)
     agentlab2.bgym_core.action.set_global_demo_mode(global_demo_mode)
 
-    demo_mode_active = (global_demo_mode and demo_mode is None) or (
-        demo_mode is not None and demo_mode != "off"
-    )
+    demo_mode_active = (global_demo_mode and demo_mode is None) or (demo_mode is not None and demo_mode != "off")
 
     env = gym.make(
         "browsergym/openended",

@@ -3,7 +3,6 @@
 from typing import Tuple
 
 import playwright
-import pytest
 
 from agentlab2.bgym_core.env import BrowserEnv
 from agentlab2.bgym_core.task import AbstractBrowserTask
@@ -39,9 +38,7 @@ class MockImageGoalTask(AbstractBrowserTask):
     def teardown(self) -> None:
         pass
 
-    def validate(
-        self, page: playwright.sync_api.Page, chat_messages: list[str]
-    ) -> Tuple[float, bool, str, dict]:
+    def validate(self, page: playwright.sync_api.Page, chat_messages: list[str]) -> Tuple[float, bool, str, dict]:
         reward, done, msg, info = 0, False, "", {}
 
         for message in chat_messages:

@@ -8,10 +8,8 @@ import bs4
 import gymnasium as gym
 import numpy as np
 import pytest
-import regex as re
 
 # register gym environments
-import agentlab2.bgym_core
 from agentlab2.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
 from agentlab2.bgym_core.observation import (
     _post_extract,
@@ -348,7 +346,7 @@ def test_dom_to_text() -> None:
     assert "Janice" not in dom
 
     obs, reward, term, trunc, info = env.step(
-        f"""\
+        """\
 page.get_by_label("Name:").click()
 page.get_by_label("Name:").fill("Janice")
 page.get_by_label("Name:").press("Tab")
@@ -380,9 +378,7 @@ page.get_by_label("Age:", exact=True).press("Tab")
     assert "Text within a non-html tag" in dom
     assert "Text that should not be visible" in dom
 
-    dom = flatten_dom_to_str(
-        obs["dom_object"], extra_properties=obs["extra_element_properties"], filter_som_only=True
-    )
+    dom = flatten_dom_to_str(obs["dom_object"], extra_properties=obs["extra_element_properties"], filter_som_only=True)
     assert 'for="email"' not in dom
     assert 'type="submit" value="Submit"' in dom
     assert "Text within a non-html tag" not in dom
@@ -439,7 +435,7 @@ def test_axtree_to_text() -> None:
     assert "Janice" not in axtree
 
     obs, reward, term, trunc, info = env.step(
-        f"""\
+        """\
 page.get_by_label("Name:").click()
 page.get_by_label("Name:").fill("Janice")
 page.get_by_label("Name:").press("Tab")
@@ -558,9 +554,7 @@ def test_simple_webpage() -> None:
     assert not element.is_checked()
 
     soup = bs4.BeautifulSoup(
-        flatten_dom_to_str(
-            obs["dom_object"], obs["extra_element_properties"], with_center_coords=True
-        ),
+        flatten_dom_to_str(obs["dom_object"], obs["extra_element_properties"], with_center_coords=True),
         "lxml",
     )
     input_elem = soup.find("input", attrs={"type": "checkbox"})
@@ -600,9 +594,7 @@ def test_basic_iframe_webpage() -> None:
 
     bid = element.get_attribute("bid")
     soup = bs4.BeautifulSoup(
-        flatten_dom_to_str(
-            obs["dom_object"], obs["extra_element_properties"], with_center_coords=True
-        ),
+        flatten_dom_to_str(obs["dom_object"], obs["extra_element_properties"], with_center_coords=True),
         "lxml",
     )
     input_elem = soup.find("input", attrs={"bid": bid})
@@ -619,9 +611,7 @@ def test_basic_iframe_webpage() -> None:
 
     bid = element.get_attribute("bid")
     soup = bs4.BeautifulSoup(
-        flatten_dom_to_str(
-            obs["dom_object"], obs["extra_element_properties"], with_center_coords=True
-        ),
+        flatten_dom_to_str(obs["dom_object"], obs["extra_element_properties"], with_center_coords=True),
         "lxml",
     )
     input_elem = soup.find("input", attrs={"bid": bid})
@@ -639,9 +629,7 @@ def test_basic_iframe_webpage() -> None:
 
     bid = element.get_attribute("bid")
     soup = bs4.BeautifulSoup(
-        flatten_dom_to_str(
-            obs["dom_object"], obs["extra_element_properties"], with_center_coords=True
-        ),
+        flatten_dom_to_str(obs["dom_object"], obs["extra_element_properties"], with_center_coords=True),
         "lxml",
     )
     input_elem = soup.find("input", attrs={"bid": bid})
@@ -670,9 +658,7 @@ def test_filter_visible_only() -> None:
     assert "textbox" not in axtree_txt
 
     # scroll on the main frame, then scroll inside a frame to find that hidden textbox element
-    env.unwrapped.page.evaluate(
-        "window.scrollTo(document.body.scrollWidth / 3, document.body.scrollHeight / 3);"
-    )
+    env.unwrapped.page.evaluate("window.scrollTo(document.body.scrollWidth / 3, document.body.scrollHeight / 3);")
     iframe = env.unwrapped.page.frames[1]
     iframe.evaluate("window.scrollTo(0, document.body.scrollHeight / 3.5);")
 
@@ -748,7 +734,6 @@ def test_extract_focused_element_bid_through_shadowdom() -> None:
 
 
 def test_tags_to_mark() -> None:
-
     # default value
     env = gym.make(
         "browsergym/openended",

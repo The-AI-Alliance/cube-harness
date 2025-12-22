@@ -4,7 +4,6 @@ import pytest
 
 from agentlab2.bgym_core.action.python import PythonActionSet
 
-
 ACTIONS_TO_TEST = [
     (
         """\

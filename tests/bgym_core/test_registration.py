@@ -40,7 +40,6 @@ register_task(
 
 
 def test_registration() -> None:
-
     with pytest.raises(ValueError):
         register_task(
             "test_task_forbidden",

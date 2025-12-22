@@ -12,7 +12,6 @@ import pytest
 from pyparsing.exceptions import ParseException
 
 # register openended gym environments
-import agentlab2.bgym_core
 from agentlab2.bgym_core.action.highlevel import HighLevelActionSet
 from agentlab2.bgym_core.action.parsers import NamedArgument, highlevel_action_parser
 from agentlab2.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
@@ -331,7 +330,7 @@ def test_invalid_action() -> None:
     obs, info = env.reset()
 
     # click inexistant bid
-    action = f"""\
+    action = """\
 click("INVALID_BID")
 """
 
@@ -341,7 +340,7 @@ click("INVALID_BID")
     assert "ValueError" in obs["last_action_error"]
 
     # invalid bid value type
-    action = f"""\
+    action = """\
 click(None)
 """
 
@@ -351,7 +350,7 @@ click(None)
     assert obs["last_action_error"] == "ValueError: expected a string, got None"
 
     # invalid bid value type
-    action = f"""\
+    action = """\
 click(42.7)
 """
 
@@ -361,7 +360,7 @@ click(42.7)
     assert obs["last_action_error"] == "ValueError: expected a string, got 42.7"
 
     # invalid bid value type
-    action = f"""\
+    action = """\
 click([])
 """
 
@@ -371,7 +370,7 @@ click([])
     assert obs["last_action_error"] == "ValueError: expected a string, got []"
 
     # invalid bid value type
-    action = f"""\
+    action = """\
 click([42, "a", True, None])
 """
 
@@ -381,8 +380,8 @@ click([42, "a", True, None])
     assert obs["last_action_error"] == "ValueError: expected a string, got [42, 'a', True, None]"
 
     # invalid bid value type
-    action = f"""\
-click({{}})
+    action = """\
+click({})
 """
 
     obs, reward, term, trunc, info = env.step(action)
@@ -391,8 +390,8 @@ click({{}})
     assert obs["last_action_error"] == "ValueError: expected a string, got {}"
 
     # invalid bid value type
-    action = f"""\
-click({{"k": "aaa"}})
+    action = """\
+click({"k": "aaa"})
 """
 
     obs, reward, term, trunc, info = env.step(action)
@@ -401,7 +400,7 @@ click({{"k": "aaa"}})
     assert obs["last_action_error"] == "ValueError: expected a string, got {'k': 'aaa'}"
 
     # invalid action args (too many)
-    action = f"""\
+    action = """\
 click("4", "aa", "bb")
 """
 
@@ -411,35 +410,29 @@ click("4", "aa", "bb")
     assert obs["last_action_error"] == "Error: Locator.click: modifiers: expected array, got string"
 
     # invalid action args (not enough)
-    action = f"""\
+    action = """\
 click()
 """
 
     obs, reward, term, trunc, info = env.step(action)
 
     # error
-    assert (
-        obs["last_action_error"]
-        == "TypeError: click() missing 1 required positional argument: 'bid'"
-    )
+    assert obs["last_action_error"] == "TypeError: click() missing 1 required positional argument: 'bid'"
 
     # invalid action args (not enough)
-    action = f"""\
+    action = """\
 click()
 """
 
     obs, reward, term, trunc, info = env.step(action)
 
     # error
-    assert (
-        obs["last_action_error"]
-        == "TypeError: click() missing 1 required positional argument: 'bid'"
-    )
+    assert obs["last_action_error"] == "TypeError: click() missing 1 required positional argument: 'bid'"
 
     # invalid action name
     with pytest.raises(NameError):
         action_set.to_python_code(
-            f"""\
+            """\
 not_a_valid_action()
 """
         )
@@ -447,7 +440,7 @@ not_a_valid_action()
     # forbidden fill action
     with pytest.raises(NameError):
         HighLevelActionSet(subsets=["coord"]).to_python_code(
-            f"""\
+            """\
 fill("INVALID_BID", "some text")
 """
         )
@@ -455,7 +448,7 @@ fill("INVALID_BID", "some text")
     # forbidden import
     with pytest.raises(ValueError):
         action_set.to_python_code(
-            f"""\
+            """\
 import numpy as np
 """
         )
@@ -463,7 +456,7 @@ import numpy as np
     # invalid expression, results in empty action
     with pytest.raises(ValueError):
         action_set.to_python_code(
-            f"""\
+            """\
 [
 """
         )
@@ -471,7 +464,7 @@ import numpy as np
     # invalid expression, results in empty action
     with pytest.raises(ValueError):
         action_set.to_python_code(
-            f"""\
+            """\
 click
 """
         )
@@ -534,9 +527,7 @@ def test_fill_through_iframe() -> None:
     obs, info = env.reset()
 
     soup = bs4.BeautifulSoup(flatten_dom_to_str(obs["dom_object"]), "lxml")
-    text_input = soup.find(
-        "input", attrs={"type": "text", "placeholder": "Enter text here in iframe"}
-    )
+    text_input = soup.find("input", attrs={"type": "text", "placeholder": "Enter text here in iframe"})
 
     # empty input
     assert text_input.get("value") == ""
@@ -553,9 +544,7 @@ fill({repr(text_input.get(BID_ATTR))}, "This is a test value.")
     assert not obs["last_action_error"]
 
     soup = bs4.BeautifulSoup(flatten_dom_to_str(obs["dom_object"]), "lxml")
-    text_input = soup.find(
-        "input", attrs={"type": "text", "placeholder": "Enter text here in iframe"}
-    )
+    text_input = soup.find("input", attrs={"type": "text", "placeholder": "Enter text here in iframe"})
 
     # input filled to desired value
     assert text_input.get("value") == "This is a test value."
@@ -668,7 +657,7 @@ hover({repr(button.get(BID_ATTR))})
     assert not obs["last_action_error"]
     assert button.get("value") == "Hello world!"
 
-    action = f"""
+    action = """
 mouse_move(0, 0)
 """
 
@@ -794,7 +783,7 @@ fill({repr(fname.get(BID_ATTR))}, '')
     assert lname.get("value") == "Jugnot"
 
     # type in currently focused element
-    action = f"""
+    action = """
 keyboard_type('Jean')
 """
 
@@ -806,7 +795,7 @@ keyboard_type('Jean')
     assert lname.get("value") == "Jugnot"
 
     # de-focus (click 0, 0), then type text
-    action = f"""
+    action = """
 mouse_click(0, 0)
 """
     obs, reward, terminated, truncated, info = env.step(action)
@@ -816,7 +805,7 @@ mouse_click(0, 0)
     assert fname.get("value") == "Jean"
     assert lname.get("value") == "Jugnot"
 
-    action = f"""
+    action = """
 keyboard_type('Reno')
 """
     obs, reward, terminated, truncated, info = env.step(action)
@@ -1044,9 +1033,7 @@ def test_scroll() -> None:
 
     def get_top_bottom_elems(obs):
         soup = bs4.BeautifulSoup(
-            flatten_dom_to_str(
-                obs["dom_object"], obs["extra_element_properties"], with_center_coords=True
-            ),
+            flatten_dom_to_str(obs["dom_object"], obs["extra_element_properties"], with_center_coords=True),
             "lxml",
         )
         top = soup.find("input", attrs={"type": "checkbox", "id": "top"})
@@ -1100,7 +1087,7 @@ def test_scroll() -> None:
     assert not bottom.has_attr("checked")
 
     # scroll up
-    action = f"scroll(0, -500)"
+    action = "scroll(0, -500)"
 
     obs, reward, terminated, truncated, info = env.step(action)
 
@@ -1118,7 +1105,7 @@ def test_scroll() -> None:
     assert prev_bottom_x == bottom_x and prev_bottom_y == bottom_y
 
     # scroll down
-    action = f"scroll(0, 500)"
+    action = "scroll(0, 500)"
 
     obs, reward, terminated, truncated, info = env.step(action)
 
@@ -1201,9 +1188,7 @@ def test_mouse_down_up() -> None:
 
     def get_checkbox_elem(obs):
         soup = bs4.BeautifulSoup(
-            flatten_dom_to_str(
-                obs["dom_object"], obs["extra_element_properties"], with_center_coords=True
-            ),
+            flatten_dom_to_str(obs["dom_object"], obs["extra_element_properties"], with_center_coords=True),
             "lxml",
         )
         checkbox = soup.find("input", attrs={"type": "checkbox", "id": "vehicle1"})
@@ -1339,7 +1324,6 @@ def test_iframe_bid() -> None:
         (29, "aD"),
     ]
     for id, iframe_bid in checkboxes:
-
         # try to click on checkbox
         checkbox = get_checkbox(obs, id)
         bid = checkbox.get(BID_ATTR)

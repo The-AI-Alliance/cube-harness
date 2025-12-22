@@ -27,10 +27,11 @@ def _get_global_playwright() -> playwright.sync_api.Playwright:
         pw = playwright.sync_api.sync_playwright().start()
         _set_global_playwright(pw)
 
-    return _PLAYWRIGHT 
+    return _PLAYWRIGHT
+
 
 # register the open-ended task
-from .registration import register_task #noqa
-from .task import OpenEndedTask #noqa #
+from .registration import register_task  # noqa
+from .task import OpenEndedTask  # noqa #
 
 register_task(OpenEndedTask.get_task_id(), OpenEndedTask)

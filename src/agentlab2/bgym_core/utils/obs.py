@@ -66,7 +66,6 @@ def flatten_dom_to_str(
                 node_children[parent_idx].append(node_idx)
 
         def dfs(node_idx: int, parent_node_skipped: bool) -> str:
-
             # https://developer.mozilla.org/en-US/docs/Web/API/Node/nodeType
             # https://developer.mozilla.org/en-US/docs/Web/API/Node/nodeName
             # https://developer.mozilla.org/en-US/docs/Web/API/Node/nodeValue
@@ -142,10 +141,7 @@ def flatten_dom_to_str(
                 if not (
                     hide_all_bids
                     or bid is None
-                    or (
-                        hide_bid_if_invisible
-                        and extra_properties.get(bid, {}).get("visibility", 0) < 0.5
-                    )
+                    or (hide_bid_if_invisible and extra_properties.get(bid, {}).get("visibility", 0) < 0.5)
                 ):
                     attributes.insert(0, f'bid="{bid}"')
 
@@ -263,11 +259,11 @@ def _process_bid(
                 skip_element = True
             # print extra attributes if requested (with new names)
             if with_som and node_in_som:
-                attributes_to_print.insert(0, f"som")
+                attributes_to_print.insert(0, "som")
             if with_visible and node_is_visible:
-                attributes_to_print.insert(0, f"visible")
+                attributes_to_print.insert(0, "visible")
             if with_clickable and node_is_clickable:
-                attributes_to_print.insert(0, f"clickable")
+                attributes_to_print.insert(0, "clickable")
             if with_center_coords and node_bbox is not None:
                 x, y, width, height = node_bbox
                 center = (x + width / 2, y + height / 2)
@@ -333,9 +329,9 @@ def flatten_axtree_to_str(
             # extract node attributes
             attributes = []
             for property in node.get("properties", []):
-                if not "value" in property:
+                if "value" not in property:
                     continue
-                if not "value" in property["value"]:
+                if "value" not in property["value"]:
                     continue
 
                 prop_name = property["name"]
@@ -391,15 +387,12 @@ def flatten_axtree_to_str(
                 if not (
                     hide_all_bids
                     or bid is None
-                    or (
-                        hide_bid_if_invisible
-                        and extra_properties.get(bid, {}).get("visibility", 0) < 0.5
-                    )
+                    or (hide_bid_if_invisible and extra_properties.get(bid, {}).get("visibility", 0) < 0.5)
                 ):
                     node_str = f"[{bid}] " + node_str
 
                 if node_value is not None:
-                    node_str += f' value={repr(node["value"]["value"])}'
+                    node_str += f" value={repr(node['value']['value'])}"
 
                 if attributes:
                     node_str += ", ".join([""] + attributes)
@@ -442,9 +435,7 @@ def overlay_som(
     font = PIL.ImageFont.load_default(size=fontsize)
 
     # Adapted from https://stackoverflow.com/questions/51908563/dotted-or-dashed-line-with-python-pillow/58885306#58885306
-    def linedashed(
-        draw: PIL.ImageDraw.Draw, x0, y0, x1, y1, fill, width, dash_length=4, nodash_length=8
-    ):
+    def linedashed(draw: PIL.ImageDraw.Draw, x0, y0, x1, y1, fill, width, dash_length=4, nodash_length=8):
         line_dx = x1 - x0  # delta x (can be negative)
         line_dy = y1 - y0  # delta y (can be negative)
         line_length = math.hypot(line_dx, line_dy)  # line length (positive)
@@ -478,9 +469,7 @@ def overlay_som(
             # skip small boxes
             area = (x1 - x0) * (y1 - y0)
             if area < 20:
-                logger.warning(
-                    f'som overlay: skipping bid "{bid}" due to bbox too small (area={area})'
-                )
+                logger.warning(f'som overlay: skipping bid "{bid}" due to bbox too small (area={area})')
                 continue
 
             # draw bounding box with dashed lines
