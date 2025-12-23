@@ -43,11 +43,13 @@ class ViewerState:
     exp_dirs: list[Path] = field(default_factory=list)
     trajectories: dict[str, Trajectory] = field(default_factory=dict)
     current_trajectory: Trajectory | None = None
+    current_exp_dir: Path | None = None
     step: int = 0
 
     def load_experiment(self, exp_dir: Path) -> dict[str, Any]:
         """Load all trajectories from an experiment directory."""
         self.exp_dirs = [exp_dir]
+        self.current_exp_dir = exp_dir
         self.trajectories = {}
 
         traj_dir = exp_dir / "trajectories"
@@ -203,19 +205,25 @@ def get_directory_contents(results_dir: Path) -> list[str]:
         return ["Select experiment directory"]
 
     exp_descriptions = []
-    for dir_path in results_dir.iterdir():
+
+    try:
+        subdirs = list(results_dir.iterdir())
+    except PermissionError:
+        return ["Select experiment directory"]
+
+    for dir_path in subdirs:
         if not dir_path.is_dir():
             continue
 
-        # Check if it has trajectories
         traj_dir = dir_path / "trajectories"
-        if not traj_dir.exists():
+        try:
+            if not traj_dir.is_dir():
+                continue
+            n_trajs = sum(1 for _ in traj_dir.glob("*.jsonl"))
+        except PermissionError:
             continue
 
-        exp_desc = dir_path.name
-        n_trajs = len(list(traj_dir.glob("*.jsonl")))
-        exp_desc += f" ({n_trajs} trajectories)"
-        exp_descriptions.append(exp_desc)
+        exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return ["Select experiment directory"] + sorted(exp_descriptions, reverse=True)
 
@@ -350,6 +358,21 @@ def update_raw_json():
     if step:
         return step.model_dump_json(indent=2)
     return "No step selected"
+
+
+def update_logs():
+    global state
+    if not state.current_trajectory or not state.current_exp_dir:
+        return "No trajectory selected"
+
+    storage = FileStorage(state.current_exp_dir)
+    trajectory_id = state.current_trajectory.id
+
+    if not storage.has_logs(trajectory_id):
+        return f"No logs found for trajectory: {trajectory_id}\n\nLogs are stored in: {storage.get_log_path(trajectory_id)}"
+
+    logs = storage.load_logs(trajectory_id)
+    return logs if logs else "Log file is empty"
 
 
 def update_llm_calls():
@@ -790,6 +813,13 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                     llm_calls = gr.Code(language="json", show_label=False)
                 with gr.Tab("LLM Tools"):
                     llm_tools = gr.Code(language="json", show_label=False)
+                with gr.Tab("Episode Logs"):
+                    episode_logs = gr.Textbox(
+                        show_label=False,
+                        lines=25,
+                        max_lines=50,
+                        interactive=False,
+                    )
 
         # Event handlers
         refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
@@ -807,6 +837,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         )
 
         traj_id.change(fn=new_trajectory, inputs=traj_id, outputs=step_id)
+        traj_id.change(fn=update_logs, outputs=episode_logs)
 
         # Timeline click handler
         timeline_click_input.change(

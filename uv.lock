@@ -30,6 +30,11 @@ dependencies = [
     { name = "termcolor" },
 ]
 
+[package.optional-dependencies]
+viewer = [
+    { name = "gradio" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -41,6 +46,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "gradio", specifier = "~=5.49" },
+    { name = "gradio", marker = "extra == 'viewer'", specifier = ">=5.0" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "miniwob", specifier = ">=1.0" },
@@ -57,6 +63,7 @@ requires-dist = [
     { name = "tenacity", specifier = "~=8.5.0" },
     { name = "termcolor", specifier = "~=3.2" },
 ]
+provides-extras = ["viewer"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -14,10 +14,10 @@ def main(debug: bool):
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"miniwob_{current_datetime}"
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="gpt-4.1-nano", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
+    tool_config = PlaywrightConfig(use_screenshot=True, headless=True, chromium_sandbox=False)
     benchmark = MiniWobBenchmark(tool_config=tool_config)
 
     exp = Experiment(
@@ -27,10 +27,11 @@ def main(debug: bool):
         benchmark=benchmark,
     )
 
+    trace_output = f"{exp.output_dir}/traces"
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp, debug_limit=2, trace_output=trace_output)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_with_ray(exp, n_cpus=4, trace_output=trace_output)
 
 
 if __name__ == "__main__":

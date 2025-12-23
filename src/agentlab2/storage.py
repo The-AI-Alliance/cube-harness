@@ -29,7 +29,7 @@ class Storage(Protocol):
 
 
 class FileStorage:
-    """File-based storage for trajectories."""
+    """File-based storage for trajectories and logs."""
 
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
@@ -187,3 +187,15 @@ class FileStorage:
                 logger.error(f"Failed to load trajectory {trajectory_id}: {e}")
 
         return trajectories
+
+    def get_log_path(self, trajectory_id: str) -> Path:
+        return self.output_dir / "logs" / f"{trajectory_id}.log"
+
+    def load_logs(self, trajectory_id: str) -> str:
+        log_path = self.get_log_path(trajectory_id)
+        if not log_path.exists():
+            return ""
+        return log_path.read_text()
+
+    def has_logs(self, trajectory_id: str) -> bool:
+        return self.get_log_path(trajectory_id).exists()

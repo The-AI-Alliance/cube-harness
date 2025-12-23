@@ -179,6 +179,9 @@ class Trajectory(TypedBaseModel):
     end_time: float | None = None
     reward_info: dict = Field(default_factory=dict)
 
+    def append(self, item: EnvironmentOutput | AgentOutput) -> None:
+        self.steps.append(TrajectoryStep(output=item))
+
     def last_env_step(self) -> EnvironmentOutput:
         for step in reversed(self.steps):
             if isinstance(step.output, EnvironmentOutput):
