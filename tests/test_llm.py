@@ -59,7 +59,7 @@ class TestLLMConfig:
         assert config.temperature == 1.0
         assert config.max_tokens == 128000
         assert config.max_completion_tokens == 8192
-        assert config.reasoning_effort == "low"
+        assert config.reasoning_effort is None
         assert config.tool_choice == "auto"
         assert config.parallel_tool_calls is False
         assert config.num_retries == 5
