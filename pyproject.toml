@@ -44,6 +44,10 @@ line-ending = "auto"
 [tool.ruff.lint]
 extend-select = ["I"] # sort imports
 
+[project.scripts]
+al2-viewer = "agentlab2.viewer:main"
+agentlab = "agentlab2.radar.cli:main"
+
 [dependency-groups]
 dev = [
     "ruff>=0.14.7",
