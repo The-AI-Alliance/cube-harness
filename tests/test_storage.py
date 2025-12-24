@@ -356,22 +356,6 @@ class TestFileStorageLoadAll:
         ids = {t.id for t in result}
         assert ids == {"traj_0", "traj_1", "traj_2"}
 
-    def test_load_all_with_exp_dir_parameter(self, tmp_dir, sample_env_output):
-        """Test load_all_trajectories with explicit exp_dir parameter."""
-        # Save to one directory
-        storage1 = FileStorage(tmp_dir)
-        traj = Trajectory(id="traj_1")
-        traj.steps.append(TrajectoryStep(output=sample_env_output))
-        storage1.save_trajectory(traj)
-
-        # Load using different storage instance with exp_dir parameter
-        storage2 = FileStorage("/some/other/path")
-        result = storage2.load_all_trajectories(exp_dir=tmp_dir)
-
-        assert len(result) == 1
-        assert result[0].id == "traj_1"
-
-
 class TestFileStorageWithImages:
     """Tests for FileStorage with image content."""
 

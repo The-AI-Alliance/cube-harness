@@ -41,14 +41,13 @@ class FileStorage:
         traj_dir.mkdir(parents=True, exist_ok=True)
         cur_path = traj_dir / trajectory.id
         self._current_traj_paths[trajectory.id] = cur_path
-        with open(f"{cur_path}.metadata.json", "w") as f:
-            # Serialize entire trajectory excluding steps
+        metadata_path = Path(f"{cur_path}.metadata.json")
+        with metadata_path.open("w") as f:
             trajectory_data = trajectory.model_dump(exclude={"steps"})
             f.write(json.dumps(trajectory_data, indent=2))
 
-        # Create empty file for appending steps later
-        with open(f"{cur_path}.jsonl", "w") as f:
-            pass
+        jsonl_path = Path(f"{cur_path}.jsonl")
+        jsonl_path.touch()
 
         # Save initial steps
         for i, step in enumerate(trajectory.steps):
@@ -62,9 +61,9 @@ class FileStorage:
             raise ValueError("Trajectory path not set. Call save_trajectory first.")
         try:
             self._append_step(step, trajectory_id, step_num)
-        except Exception as e:
-            logger.exception(f"Error saving step to trajectory {self._current_traj_paths[trajectory_id]}: {e}")
-            raise e
+        except Exception:
+            logger.exception(f"Error saving step to trajectory {self._current_traj_paths[trajectory_id]}")
+            raise
 
     def _append_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
         """Internal method to append a step to the JSONL file."""
@@ -73,9 +72,9 @@ class FileStorage:
         if isinstance(step.output, AgentOutput) and step.output.llm_calls:
             step_to_save = self._extract_llm_calls(step, f"{trajectory_id}_step{step_num:03d}")
 
-        with open(f"{cur_path}.jsonl", "a") as f:
-            line = step_to_save.model_dump_json(serialize_as_any=True)
-            f.write(f"{line}\n")
+        jsonl_path = Path(f"{cur_path}.jsonl")
+        with jsonl_path.open("a") as f:
+            f.write(f"{step_to_save.model_dump_json(serialize_as_any=True)}\n")
 
     def _extract_llm_calls(self, step: TrajectoryStep, step_id: str) -> TrajectoryStep:
         """Extract LLM calls to separate files and return step with references only."""
@@ -88,7 +87,7 @@ class FileStorage:
         llm_call_refs = []
         for llm_call in step.output.llm_calls:
             call_path = llm_calls_dir / f"{step_id}_{llm_call.id}.json"
-            with open(call_path, "w") as f:
+            with call_path.open("w") as f:
                 f.write(llm_call.model_dump_json(indent=2))
             # Create a reference with just the id
             llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id))
@@ -106,7 +105,7 @@ class FileStorage:
         if not metadata_path.exists():
             raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
 
-        with open(metadata_path) as f:
+        with metadata_path.open() as f:
             trajectory_data = json.load(f)
 
         # TODO: remove legacy format support
@@ -115,7 +114,7 @@ class FileStorage:
 
         steps: list[TrajectoryStep] = []
         if steps_path.exists():
-            with open(steps_path) as f:
+            with steps_path.open() as f:
                 for i, line in enumerate(f):
                     if line.strip():
                         step_data = json.loads(line)
@@ -147,11 +146,11 @@ class FileStorage:
         resolved_calls = []
         for ref in llm_calls:
             # Check if this is a reference (only has 'id' key)
-            if llm_call_id := ref.get("llm_call_id", None):
+            if llm_call_id := ref.get("llm_call_id"):
                 call_path = llm_calls_dir / f"{step_id}_{llm_call_id}.json"
                 if not call_path.exists():
                     raise FileNotFoundError(f"LLM call file not found: {call_path}")
-                with open(call_path) as f:
+                with call_path.open() as f:
                     resolved_calls.append(json.load(f))
             else:
                 raise ValueError(f"Invalid LLM call reference format {ref}")
@@ -159,19 +158,8 @@ class FileStorage:
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
 
-    def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
-        """Load all trajectories from an experiment directory.
-
-        Args:
-            exp_dir: The experiment directory to load from. If None, uses self.output_dir.
-
-        Returns:
-            List of all trajectories found in the directory.
-        """
-        if exp_dir is not None:
-            storage = FileStorage(exp_dir)
-            return storage.load_all_trajectories()
-
+    def load_all_trajectories(self) -> list[Trajectory]:
+        """Load all trajectories from the output directory."""
         traj_dir = self.output_dir / "trajectories"
         if not traj_dir.exists():
             return []
