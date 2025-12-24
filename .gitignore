@@ -2,6 +2,15 @@
 # entries we added plus Python and Ruby .gitignore files
 # generated at https://www.toptal.com/developers/gitignore/
 
+# AgentLab2 experiment outputs
+runs/
+demo_output/
+test_metrics_output/
+hello_world_1/
+
+# Playwright MCP screenshots
+.playwright-mcp/
+
 # A "temporary" place to put stuff...
 tmp/
 temp/
