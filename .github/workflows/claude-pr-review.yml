@@ -29,13 +29,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 5"
           use_bedrock: false
           use_vertex: false
-          prompt: |
-            Run /code-review --comment
-
-            Review this PR against the AgentLab2 constitution defined in:
-            - .claude/rules/constitution.md (the full constitution with pillars and directives)
-            - .claude/rules/review-rules.md (enforceable rules with severity levels and examples)
-
-            Post the review as a comment on the PR.
+          prompt: "/review"
