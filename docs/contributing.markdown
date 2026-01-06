@@ -13,23 +13,23 @@ We welcome your contributions!
 TODO: more specific ways to contribute.
 
 Ways to suggest ideas:
-* Post a [pull request](https://github.com/The-AI-Alliance/AgentLab2/pulls)!
-* Post a [discussion topic](https://github.com/The-AI-Alliance/AgentLab2/discussions)
-* Post an [issue](https://github.com/The-AI-Alliance/AgentLab2/issues)
+* Post a [pull request](https://github.com/The-AI-Alliance/AgentLab2/pulls){:target="repo"}!
+* Post a [discussion topic](https://github.com/The-AI-Alliance/AgentLab2/discussions){:target="repo"}
+* Post an [issue](https://github.com/The-AI-Alliance/AgentLab2/issues){:target="repo"}
 * Send us [email](mailto:contact@thealliance.ai?subject=Suggestions for Agent Lab 2). This is a general email address, so be sure to mention this particular project.
 
-For general information about contributing to AI Alliance projects, visit [this `community` repo](https://github.com/The-AI-Alliance/community/), specifically the [`CONTRIBUTING` page](https://github.com/The-AI-Alliance/community/blob/main/CONTRIBUTING.md) for general information about contributing. 
+For general information about contributing to AI Alliance projects, visit [this `community` repo](https://github.com/The-AI-Alliance/community/){:target="community"}, specifically the [`CONTRIBUTING` page](https://github.com/The-AI-Alliance/community/blob/main/CONTRIBUTING.md){:target="community"} for general information about contributing. 
 
-See also the full list of projects [here](https://the-ai-alliance.github.io/) to find other projects that might interest you.
+See also the full list of projects [here](https://the-ai-alliance.github.io/){:target="gh-aia"} to find other projects that might interest you.
 ## Join this Project Work Group
 
 Want to help us drive the evolution of this project? Please join our work group. 
 
-Use the form on the Alliance's [Become a collaborator](https://thealliance.ai/become-a-collaborator) page to let us know your interests. 
+Use the form on the Alliance's [Become a collaborator](https://thealliance.ai/become-a-collaborator){:target="aia"} page to let us know your interests. 
 
 In the "Message" box mention this project, **Agent Lab 2**, and add anything else you would like us to know.
 
-If your organization would like to join the AI Alliance, go [here](https://thealliance.ai/membership).
+If your organization would like to join the AI Alliance, go [here](https://thealliance.ai/membership){:target="aia"}.
 
 ## Other Notes on Contributing
 
