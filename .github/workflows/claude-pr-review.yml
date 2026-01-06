@@ -8,9 +8,11 @@ jobs:
   review-with-tracking:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
+      contents: read       # Read repository files
+      pull-requests: write # Post PR comments, create reviews
+      issues: write        # Comment on issues (PRs are issues internally)
+      id-token: write      # OIDC authentication
+      actions: read        # github_ci MCP server
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -36,5 +38,5 @@ jobs:
             - .claude/rules/review-rules.md (enforceable rules with severity levels and examples)
           # Tools for comprehensive PR review
           claude_args: |
-            --max-turns 5 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            "--max-turns 5 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
     
