@@ -1,0 +1,41 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    # Only run on PR comments (not issue comments)
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review_comment' || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_bedrock: false
+          use_vertex: false
+          prompt: |
+            Run /code-review --comment
+
+            Review this PR against the AgentLab2 constitution defined in:
+            - .claude/rules/constitution.md (the full constitution with pillars and directives)
+            - .claude/rules/review-rules.md (enforceable rules with severity levels and examples)
+
+            Post the review as a comment on the PR.
