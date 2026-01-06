@@ -41,6 +41,17 @@ Confirm that the following have been completed:
 * [ ] Code follows the existing style and convention
 * [ ] API keys or sensitive information have been removed
 
+## Constitution Compliance
+
+Confirm adherence to the [AgentLab2 Constitution](/.claude/rules/constitution.md):
+
+* [ ] No imports inside functions/classes (Pillar II: Explicitness)
+* [ ] No global mutable state (Pillar II: Explicitness)
+* [ ] All functions have type hints (Pillar V: Code Craft)
+* [ ] Breaking API changes have RFC reference (Pillar I: Team Contract)
+* [ ] Uses standard integrations - LiteLLM, MCP, ADP (Pillar IV: Protocol Strategy)
+* [ ] New features work in single-process mode (Pillar III: Scalable Research)
+
 ## Additional Context
 Any additional context or information that might be helpful for reviewers:
 
