@@ -381,3 +381,11 @@ uv run pytest tests/ --cov=agentlab2
 ## Development Notes
 - do not use imports inside the function or class, all imports should be at the top of the module!
 - always add type hints for function parameters and return types, including for test functions.
+
+---
+
+## Constitution: Code Review Rules
+
+All PRs are reviewed against the [AgentLab2 Constitution](/.claude/rules/constitution.md).
+
+See `.claude/rules/` for the full constitution and detailed review rules with examples.

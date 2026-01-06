@@ -33,7 +33,7 @@ class LLMConfig(TypedBaseModel):
     temperature: float = 1.0
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
-    reasoning_effort: Literal["minimal", "low", "medium", "high"] = "low"
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     tool_choice: Literal["auto", "none", "required"] = "auto"
     parallel_tool_calls: bool = False
     num_retries: int = 5
@@ -53,19 +53,20 @@ class LLM:
         self.config = config
 
     def __call__(self, prompt: Prompt) -> Message:
-        response = completion_with_retries(
-            model=self.config.model_name,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
-            max_completion_tokens=self.config.max_completion_tokens,
-            reasoning_effort=self.config.reasoning_effort,
-            num_retries=self.config.num_retries,
-            retry_strategy=self.config.retry_strategy,
-            tool_choice=self.config.tool_choice,
-            parallel_tool_calls=self.config.parallel_tool_calls,
-            tools=prompt.tools,
-            messages=prompt.messages,
-        )
+        kwargs = {
+            "model": self.config.model_name,
+            "temperature": self.config.temperature,
+            "max_completion_tokens": self.config.max_completion_tokens,
+            "num_retries": self.config.num_retries,
+            "retry_strategy": self.config.retry_strategy,
+            "tool_choice": self.config.tool_choice,
+            "parallel_tool_calls": self.config.parallel_tool_calls,
+            "tools": prompt.tools,
+            "messages": prompt.messages,
+        }
+        if self.config.reasoning_effort is not None:
+            kwargs["reasoning_effort"] = self.config.reasoning_effort
+        response = completion_with_retries(**kwargs)
         return response.choices[0].message  # type: ignore
 
 
