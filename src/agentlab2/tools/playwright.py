@@ -26,6 +26,7 @@ class PlaywrightConfig(ToolConfig):
     use_screenshot: bool = True
     prune_html: bool = True
     headless: bool = True
+    chromium_sandbox: bool = True
     pw_kwargs: dict = {}
 
     def make(self) -> "SyncPlaywrightTool":
@@ -48,7 +49,7 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
         self.config = config
         self._pw = sync_playwright().start()
         self._browser = self._pw.chromium.launch(
-            chromium_sandbox=True,
+            chromium_sandbox=self.config.chromium_sandbox,
             headless=self.config.headless,
             **self.config.pw_kwargs,
         )

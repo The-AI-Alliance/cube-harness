@@ -1,0 +1,39 @@
+name: Claude Commit Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      analysis_type:
+        description: "Type of analysis to perform"
+        required: true
+        type: choice
+        options:
+          - security-review
+        default: "security-review"
+
+jobs:
+  analyze-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Full commit history available if needed.
+
+      - name: Run Claude Analysis
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            BRANCH: ${{ github.ref_name }}
+
+            Review the CURRENT STATE of the repository as a whole
+
+            ${{ github.event.inputs.analysis_type == 'security-review' && 'Task: Review the current state of the repository for potential security vulnerabilities. Check for exposed secrets, insecure coding patterns, dependency vulnerabilities, or any other security concerns. Provide specific recommendations if issues are found.' || '' }}

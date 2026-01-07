@@ -10,13 +10,30 @@ import ray
 from agentlab2.core import Trajectory
 from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment, ExpResult
+from agentlab2.metrics.tracer import get_trace_env_vars, get_tracer
 
 LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d %(funcName)s() - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 
-def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0) -> ExpResult:
+def run_with_ray(
+    exp: Experiment,
+    n_cpus: int = 4,
+    ray_poll_timeout: float = 2.0,
+    trace_output: str | Path | None = None,
+    otlp_endpoint: str | None = None,
+) -> ExpResult:
+    tracer = get_tracer(exp.name, output_dir=trace_output, otlp_endpoint=otlp_endpoint)
+
+    try:
+        with tracer.benchmark(exp.name):
+            return _run_with_ray_impl(exp, n_cpus, ray_poll_timeout)
+    finally:
+        tracer.shutdown()
+
+
+def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) -> ExpResult:
     exp.save_config()
     ray_log_dir = Path(exp.output_dir) / "ray_logs"
 
@@ -36,7 +53,7 @@ def run_with_ray(exp: Experiment, n_cpus: int = 4, ray_poll_timeout: float = 2.0
             dashboard_host="0.0.0.0",
             include_dashboard=True,
             log_to_driver=True,
-            runtime_env={"working_dir": None},
+            runtime_env={"working_dir": None, "env_vars": get_trace_env_vars()},
         )  # TODO: Ray breaks signal handling, we cannot react to Ctrl+C here, still cannot find a workaround
 
     exp.benchmark.setup()
@@ -77,7 +94,22 @@ def _poll_ray(exp: Experiment, ref_to_id: dict[ray.ObjectRef, str], ray_poll_tim
     return results
 
 
-def run_sequentially(exp: Experiment, debug_limit: int | None = None) -> ExpResult:
+def run_sequentially(
+    exp: Experiment,
+    debug_limit: int | None = None,
+    trace_output: str | Path | None = None,
+    otlp_endpoint: str | None = None,
+) -> ExpResult:
+    tracer = get_tracer(exp.name, output_dir=trace_output, otlp_endpoint=otlp_endpoint)
+
+    try:
+        with tracer.benchmark(exp.name):
+            return _run_sequentially_impl(exp, debug_limit)
+    finally:
+        tracer.shutdown()
+
+
+def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResult:
     exp.save_config()
     exp.benchmark.setup()
     try:
