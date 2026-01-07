@@ -21,6 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.issue.pull_request.head.sha }}
           fetch-depth: 0  # Full history for git blame/log
 
       - name: PR Review with Progress Tracking
