@@ -2,7 +2,7 @@ name: I Have a Question
 description: You aren't reporting a bug, etc., just asking a question.
 title: "[Question] "  
 labels: question  
-assignees: [deanwampler,hughesthe1st,jolson-ibm]
+assignees: [recursix,deanwampler,adampingel]
 projects: [The-AI-Alliance/47]
 body:
 - type: checkboxes
