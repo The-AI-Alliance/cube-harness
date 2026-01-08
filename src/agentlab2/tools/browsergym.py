@@ -1,9 +1,10 @@
 import logging
-from typing import Any, Callable, List
+from typing import Any, Callable
 
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
+from agentlab2.bgym_core.env import BrowserEnv
 from agentlab2.core import Action, ActionSchema, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
 from agentlab2.utils import prune_html
@@ -73,15 +74,10 @@ class BrowsergymTool(Tool, BrowserActionSpace):
         self._env: Any = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
-        self._action_schemas: List[ActionSchema] | None = None
+        self._action_schemas: list[ActionSchema] | None = None
 
-    def _create_env(self) -> Any:
+    def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
-        try:
-            from browsergym.env import BrowserEnv
-        except ImportError as e:
-            raise ImportError("BrowserGym is not installed. Install it with: pip install browsergym-core") from e
-
         env_kwargs = {
             "headless": self.config.headless,
             "tags_to_mark": self.config.tags_to_mark,
