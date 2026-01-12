@@ -12,9 +12,9 @@ import PIL.ImageDraw
 import PIL.ImageFont
 from bs4 import BeautifulSoup
 
-from agentlab2.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
-from agentlab2.bgym_core.constants import BROWSERGYM_SETOFMARKS_ATTRIBUTE as SOM_ATTR
-from agentlab2.bgym_core.constants import BROWSERGYM_VISIBILITY_ATTRIBUTE as VIS_ATTR
+from agentlab2.tools.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
+from agentlab2.tools.bgym_core.constants import BROWSERGYM_SETOFMARKS_ATTRIBUTE as SOM_ATTR
+from agentlab2.tools.bgym_core.constants import BROWSERGYM_VISIBILITY_ATTRIBUTE as VIS_ATTR
 
 logger = logging.getLogger(__name__)
 

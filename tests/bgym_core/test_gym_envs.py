@@ -9,12 +9,12 @@ import gymnasium as gym
 import pytest
 
 # register openended gym environments
-import agentlab2.bgym_core
-import agentlab2.bgym_core.action
-from agentlab2.bgym_core.action.highlevel import HighLevelActionSet
-from agentlab2.bgym_core.action.python import PythonActionSet
-from agentlab2.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
-from agentlab2.bgym_core.utils.obs import flatten_dom_to_str
+import agentlab2.tools.bgym_core
+import agentlab2.tools.bgym_core.action
+from agentlab2.tools.bgym_core.action.highlevel import HighLevelActionSet
+from agentlab2.tools.bgym_core.action.python import PythonActionSet
+from agentlab2.tools.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
+from agentlab2.tools.bgym_core.utils.obs import flatten_dom_to_str
 
 __SLOW_MO = 1000 if "DISPLAY_BROWSER" in os.environ else None
 __HEADLESS = False if "DISPLAY_BROWSER" in os.environ else True
@@ -225,7 +225,7 @@ click({repr(inner_checkbox.get(BID_ATTR))})
 @pytest.mark.parametrize("demo_mode", [None, "off", "default", "only_visible_elements", "all_blue"])
 def test_demo_mode(global_demo_mode: bool, demo_mode: str) -> None:
     action_set = HighLevelActionSet(demo_mode=demo_mode)
-    agentlab2.bgym_core.action.set_global_demo_mode(global_demo_mode)
+    agentlab2.tools.bgym_core.action.set_global_demo_mode(global_demo_mode)
 
     demo_mode_active = (global_demo_mode and demo_mode is None) or (demo_mode is not None and demo_mode != "off")
 

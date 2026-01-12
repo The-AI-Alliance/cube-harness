@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 
 # register gym environments
-from agentlab2.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
-from agentlab2.bgym_core.observation import (
+from agentlab2.tools.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
+from agentlab2.tools.bgym_core.observation import (
     _post_extract,
     _pre_extract,
     extract_all_frame_axtrees,
@@ -19,7 +19,7 @@ from agentlab2.bgym_core.observation import (
     extract_merged_axtree,
     extract_screenshot,
 )
-from agentlab2.bgym_core.utils.obs import flatten_axtree_to_str, flatten_dom_to_str
+from agentlab2.tools.bgym_core.utils.obs import flatten_axtree_to_str, flatten_dom_to_str
 
 __SLOW_MO = 1000 if "DISPLAY_BROWSER" in os.environ else None
 __HEADLESS = False if "DISPLAY_BROWSER" in os.environ else True

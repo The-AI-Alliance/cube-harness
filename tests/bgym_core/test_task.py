@@ -4,8 +4,8 @@ from typing import Tuple
 
 import playwright
 
-from agentlab2.bgym_core.env import BrowserEnv
-from agentlab2.bgym_core.task import AbstractBrowserTask
+from agentlab2.tools.bgym_core.env import BrowserEnv
+from agentlab2.tools.bgym_core.task import AbstractBrowserTask
 
 
 class MockImageGoalTask(AbstractBrowserTask):

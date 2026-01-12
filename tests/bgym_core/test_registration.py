@@ -5,8 +5,8 @@ import re
 import gymnasium as gym
 import pytest
 
-from agentlab2.bgym_core.registration import register_task
-from agentlab2.bgym_core.task import AbstractBrowserTask
+from agentlab2.tools.bgym_core.registration import register_task
+from agentlab2.tools.bgym_core.task import AbstractBrowserTask
 
 
 class RegistrationTestTask(AbstractBrowserTask):

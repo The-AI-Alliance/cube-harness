@@ -12,10 +12,10 @@ import pytest
 from pyparsing.exceptions import ParseException
 
 # register openended gym environments
-from agentlab2.bgym_core.action.highlevel import HighLevelActionSet
-from agentlab2.bgym_core.action.parsers import NamedArgument, highlevel_action_parser
-from agentlab2.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
-from agentlab2.bgym_core.utils.obs import flatten_dom_to_str
+from agentlab2.tools.bgym_core.action.highlevel import HighLevelActionSet
+from agentlab2.tools.bgym_core.action.parsers import NamedArgument, highlevel_action_parser
+from agentlab2.tools.bgym_core.constants import BROWSERGYM_ID_ATTRIBUTE as BID_ATTR
+from agentlab2.tools.bgym_core.utils.obs import flatten_dom_to_str
 
 _IS_MAC_OS = platform.system() == "Darwin"
 

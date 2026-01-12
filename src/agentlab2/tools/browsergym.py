@@ -4,7 +4,7 @@ from typing import Any, Callable
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.bgym_core.env import BrowserEnv
+from agentlab2.tools.bgym_core.env import BrowserEnv
 from agentlab2.core import Action, ActionSchema, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
 from agentlab2.utils import prune_html
