@@ -16,7 +16,7 @@ debug:
 	uv run recipes/hello_miniwob.py debug
 
 install:
-	uv sync
+	uv sync --all-extras
 	uv pip install -e .
 
 format:
@@ -25,8 +25,8 @@ format:
 lint:
 	uv run ruff check --fix .
 
-test:
-	uv run pytest tests/ -v
+test: install
+	uv run pytest -n 10 tests/ -v
 
 coverage:
 	uv run pytest tests/ --cov=agentlab2 --cov-report=term-missing
