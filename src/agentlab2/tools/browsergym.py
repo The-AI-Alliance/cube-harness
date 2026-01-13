@@ -4,9 +4,10 @@ from typing import Any, Callable
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.tools.bgym_core.env import BrowserEnv
 from agentlab2.core import Action, ActionSchema, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
+from agentlab2.tools.bgym_core.env import BrowserEnv
+from agentlab2.tools.bgym_core.utils import flatten_axtree_to_str
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
@@ -308,7 +309,7 @@ class BrowsergymTool(Tool, BrowserActionSpace):
             if "axtree_txt" in browsergym_obs and browsergym_obs["axtree_txt"]:
                 obs.contents.append(Content(data=browsergym_obs["axtree_txt"], name="axtree_txt"))
             elif "axtree_object" in browsergym_obs and browsergym_obs["axtree_object"]:
-                axtree_str = _flatten_axtree(browsergym_obs["axtree_object"])
+                axtree_str = flatten_axtree_to_str(browsergym_obs["axtree_object"])
                 obs.contents.append(Content(data=axtree_str, name="axtree_txt"))
 
         # Extract screenshot
@@ -351,8 +352,3 @@ class BrowsergymTool(Tool, BrowserActionSpace):
                 self._env = None
                 self._last_obs = None
                 self._last_info = None
-
-
-def _flatten_axtree(axtree: dict, depth: int = 0) -> str:
-    # TODO: import from browsergym if available
-    raise NotImplementedError
