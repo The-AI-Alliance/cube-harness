@@ -41,7 +41,6 @@ CUSTOM_PAGE_URL = f"file://{__DATA_DIR}/custom_page/basic_iframe.html"
 MULTI_IFRAME_URL = f"file://{__DATA_DIR}/basic_iframe_site/basic_iframe_2.html"
 
 
-@pytest.mark.skip(reason="TODO: how to get the final viewport size right?")
 def test_extract_screenshot() -> None:
     env = gym.make(
         "browsergym/openended",
@@ -638,33 +637,6 @@ def test_basic_iframe_webpage() -> None:
 
     assert element.is_checked()
     env.close()
-
-
-@pytest.mark.skip(reason="HTML file seems missing. Deactivating for now.")
-def test_filter_visible_only() -> None:
-    env = gym.make(
-        "browsergym/openended",
-        task_kwargs={"start_url": CUSTOM_PAGE_URL},
-        headless=__HEADLESS,
-        slow_mo=__SLOW_MO,
-        viewport=__VIEWPORT,
-        timeout=__TIMEOUT,
-        goal="dummy goal",
-    )
-
-    # click on the checkbox in the main frame
-    obs, info = env.reset()
-    axtree_txt = flatten_axtree_to_str(obs["axtree_object"], filter_visible_only=True)
-    assert "textbox" not in axtree_txt
-
-    # scroll on the main frame, then scroll inside a frame to find that hidden textbox element
-    env.unwrapped.page.evaluate("window.scrollTo(document.body.scrollWidth / 3, document.body.scrollHeight / 3);")
-    iframe = env.unwrapped.page.frames[1]
-    iframe.evaluate("window.scrollTo(0, document.body.scrollHeight / 3.5);")
-
-    obs, _, _, _, _ = env.step("")
-    axtree_txt = flatten_axtree_to_str(obs["axtree_object"])
-    assert "textbox" in obs["axtree_txt"]
 
 
 def test_extract_focused_element_bid_through_iframes() -> None:
