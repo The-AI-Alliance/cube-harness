@@ -1,7 +1,8 @@
-.PHONY: help install format lint test coverage hello debug
+.PHONY: help install update format lint test coverage hello debug
 
 help:
 	@echo "make install    - Install dependencies in editable mode"
+	@echo "make update     - Update dependencies"
 	@echo "make format     - Format code"
 	@echo "make lint       - Lint and auto-fix"
 	@echo "make test       - Run unit tests"
@@ -18,6 +19,11 @@ debug:
 install:
 	uv sync --all-extras
 	uv pip install -e .
+	uv run playwright install chromium --with-deps
+
+update:
+	uv sync --all-extras --update
+	uv pip install -e . --upgrade
 	uv run playwright install chromium --with-deps
 
 format:
