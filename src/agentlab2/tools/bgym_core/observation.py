@@ -282,7 +282,9 @@ def pop_bids_from_attribute(dom_snapshot: dict, attr: str) -> None:
                         break
 
 
-def extract_dom_extra_properties(dom_snapshot: dict, scale_factor: float) -> dict:
+def extract_dom_extra_properties(
+    dom_snapshot: dict, scale_factor: float, device_pixel_ratio: float = 1.0
+) -> dict:
     def to_string(idx: int) -> str | None:
         if idx == -1:
             return None
@@ -430,7 +432,8 @@ def extract_dom_extra_properties(dom_snapshot: dict, scale_factor: float) -> dic
 
                 scaled_bbox = None
                 if node["bbox"]:
-                    scaled_bbox = [coord * scale_factor for coord in node["bbox"]]
+                    # Convert from device pixels to CSS pixels, then apply scale_factor for VLM
+                    scaled_bbox = [coord * scale_factor / device_pixel_ratio for coord in node["bbox"]]
 
                 extra_properties[bid] = {
                     "visibility": node["visibility"],

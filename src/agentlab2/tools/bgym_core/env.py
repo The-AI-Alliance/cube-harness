@@ -599,6 +599,50 @@ document.addEventListener("visibilitychange", () => {
         if self.page.is_closed():
             raise RuntimeError(f"Unexpected: active page has been closed ({self.page}).")
 
+    def _calculate_device_pixel_ratio(self, dom_snapshot: dict) -> float:
+        """Calculate the actual device pixel ratio by comparing DOM snapshot bounds with CSS viewport.
+
+        The DOM snapshot from CDP returns coordinates in device pixels, but Playwright uses CSS pixels.
+        This method calculates the ratio by comparing the viewport dimensions in both coordinate systems.
+
+        Args:
+            dom_snapshot: The DOM snapshot returned by DOMSnapshot.captureSnapshot
+
+        Returns:
+            The device pixel ratio (e.g., 2.0 for Retina displays)
+        """
+        device_pixel_ratio = 1.0
+
+        cdp = self.page.context.new_cdp_session(self.page)
+        try:
+            layout_metrics = cdp.send("Page.getLayoutMetrics")
+        finally:
+            cdp.detach()
+
+        # Get CSS viewport dimensions from layout metrics
+        css_viewport = layout_metrics.get("cssLayoutViewport", {})
+        css_width = css_viewport.get("clientWidth", 1)
+
+        # Get the document's first frame bounds from DOM snapshot
+        # The HTML element's bounds should match the viewport in device pixels
+        if dom_snapshot.get("documents") and len(dom_snapshot["documents"]) > 0:
+            first_doc = dom_snapshot["documents"][0]
+            if first_doc.get("layout", {}).get("bounds"):
+                layout_bounds = first_doc["layout"]["bounds"]
+                if len(layout_bounds) > 1:
+                    # The viewport bounds in device pixels (usually HTML element at index 1)
+                    viewport_bounds = layout_bounds[1]
+                    if len(viewport_bounds) >= 4:
+                        device_width = viewport_bounds[2]  # width in device pixels
+                        # Calculate actual DPR from the ratio
+                        device_pixel_ratio = device_width / css_width if css_width > 0 else 1.0
+
+        # Fallback to JS if we couldn't calculate it
+        if device_pixel_ratio == 1.0:
+            device_pixel_ratio = self.page.evaluate("() => window.devicePixelRatio")
+
+        return device_pixel_ratio
+
     def _get_obs(self) -> dict:
         if self.use_raw_page_output:
             obs = {
@@ -624,7 +668,14 @@ document.addEventListener("visibilitychange", () => {
                 axtree = extract_merged_axtree(self.page)
                 focused_element_bid = extract_focused_element_bid(self.page)
                 scale_factor = getattr(self.page, "_bgym_scale_factor", 1.0)
-                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor)
+
+                # Calculate actual device pixel ratio by comparing DOM snapshot viewport with CSS viewport
+                # DOM snapshot returns coordinates in device pixels, we need CSS pixels for Playwright
+                device_pixel_ratio = self._calculate_device_pixel_ratio(dom)
+
+                extra_properties = extract_dom_extra_properties(
+                    dom, scale_factor=scale_factor, device_pixel_ratio=device_pixel_ratio
+                )
             except (playwright.sync_api.Error, MarkingError) as e:
                 err_msg = str(e)
                 # try to add robustness to async events (detached / deleted frames)
