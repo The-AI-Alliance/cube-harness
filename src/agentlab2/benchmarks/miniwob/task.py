@@ -4,7 +4,7 @@ from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSubset, Content, Observation, Task
-from agentlab2.tools.playwright import SyncPlaywrightTool
+from agentlab2.tools.base import BrowserTaskTool
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class MiniWobTask(Task):
         BrowserActionSpace.browser_select_option,
         BrowserActionSpace.browser_mouse_click_xy,
     )
-    _tool: SyncPlaywrightTool
+    _tool: BrowserTaskTool
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class MiniWobTask(Task):
     def url(self) -> str:
         return f"{self.base_url}/{self.subdomain}.html"
 
-    def setup(self, tool: SyncPlaywrightTool) -> tuple[Observation, dict]:  # This needs
+    def setup(self, tool: BrowserTaskTool) -> tuple[Observation, dict]:
         """
         Set up everything needed to execute the task.
 
@@ -187,6 +187,10 @@ return core.getUtterance();
         return obs
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
+        # TODO: This method is currently not called anywhere in the codebase.
+        # It was intended to filter actions based on BrowserActionSpace, but with multiple tools
+        # (SyncPlaywrightTool, BrowsergymTool) having different action spaces, we need a proper
+        # abstraction for tool-agnostic action filtering.
         supported_action_names = {action.__name__ for action in self.supported_actions}
         filtered = [a for a in actions if a.name in supported_action_names]
         logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
