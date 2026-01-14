@@ -169,9 +169,7 @@ class BrowsergymTool(AbstractTool):
         action_str = self._action_to_string(action)
 
         try:
-            # Use HighLevelActionSet to convert to executable Python code
-            python_code = self._highlevel_action_set.to_python_code(action_str)
-            obs, reward, terminated, truncated, info = self._env.step(python_code)  # type: ignore
+            obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
 
             # Store last observation for utility methods
             self._last_obs = obs
