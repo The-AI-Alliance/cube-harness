@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class Mind2WebTask(Task):
     validate_per_step: bool = True
     supported_actions: ActionSubset = (
-        BrowserActionSpace.browser_press_key,
+        BrowserActionSpace.browser_press_key,  # TODO: map enter to this
         BrowserActionSpace.browser_type,
         BrowserActionSpace.browser_click,
         BrowserActionSpace.browser_select_option,
@@ -46,6 +46,7 @@ class Mind2WebTask(Task):
         for action in self.actions_data:
             op_data = action["operation"]
             op_type = op_data["op"]
+            # TODO: this is probably not correct? is not mapped to our action space?
 
             if op_type in ("HOVER", "ENTER"):
                 op_type = "CLICK"
@@ -54,7 +55,7 @@ class Mind2WebTask(Task):
                 {
                     "type": op_type,
                     "value": op_data.get("value", ""),
-                    "target_element": action.get("pos_candidates", []),
+                    "pos_candidates": action.get("pos_candidates", []),
                 }
             )
         return parsed
@@ -89,6 +90,7 @@ class Mind2WebTask(Task):
         next_html_file = f"{self.id}_{self.current_step + 1}.html"
         next_url = f"{self.base_url}/{next_html_file}"
 
+        breakpoint()
         try:
             self._tool.goto(next_url)
             self.current_step += 1

@@ -35,7 +35,7 @@ class Mind2WebBenchmark(Benchmark):
 
     @property
     def base_url(self) -> str:
-        return f"http://localhost:{self.port}"
+        return f"http://localhost:{self.port}/mind2web"
 
     def setup(self) -> None:
         self._download_data()
@@ -70,15 +70,19 @@ class Mind2WebBenchmark(Benchmark):
         tmp_dir.mkdir(exist_ok=True)
         self._html_dir = tmp_dir
 
+        # Create mind2web subdirectory to match base_url path
+        mind2web_dir = tmp_dir / "mind2web"
+        mind2web_dir.mkdir(exist_ok=True)
+
         tasks_data = self.load_task_infos()
         for task_info in tasks_data:
             for action_idx, action in enumerate(task_info["actions"]):
-                html_file = self._html_dir / f"{task_info['annotation_id']}_{action_idx}.html"
+                html_file = mind2web_dir / f"{task_info['annotation_id']}_{action_idx}.html"
                 if not html_file.exists():
                     html_content = action.get("cleaned_html", action.get("raw_html", ""))
                     html_file.write_text(html_content, encoding="utf-8")
 
-        logger.info(f"Prepared HTML files in {self._html_dir}")
+        logger.info(f"Prepared HTML files in {mind2web_dir}")
 
     def _start_server(self) -> None:
         tmp_dir = Path(tempfile.gettempdir())
@@ -93,7 +97,9 @@ class Mind2WebBenchmark(Benchmark):
         time.sleep(1)
 
         try:
-            urllib.request.urlopen(self.base_url, timeout=5)
+            # Check root URL for server health (base_url points to subdirectory)
+            root_url = f"http://localhost:{self.port}/"
+            urllib.request.urlopen(root_url, timeout=5)
             logger.info(f"Mind2Web server responding at {self.base_url}")
         except Exception as e:
             self.close()

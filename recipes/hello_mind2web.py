@@ -14,14 +14,14 @@ def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"mind2web_{current_datetime}"
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="openai/gpt-5-nano", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    tool_config = PlaywrightConfig(use_screenshot=True, use_html=True, headless=True)
+    tool_config = PlaywrightConfig(use_screenshot=False, use_html=True, headless=True)
     benchmark = Mind2WebBenchmark(
         tool_config=tool_config,
         split="train",
-        max_tasks=2 if debug else None,
+        max_tasks=1 if debug else None,
         shuffle=True,
     )
 
