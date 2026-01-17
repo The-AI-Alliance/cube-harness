@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from typing import Any, cast
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
@@ -127,9 +126,7 @@ class Mind2WebTask(Task):
 
         return attributes
 
-    def _match_element(
-        self, agent_attributes: dict[str, Any], pos_candidates: list[dict[str, Any]]
-    ) -> bool:
+    def _match_element(self, agent_attributes: dict[str, Any], pos_candidates: list[dict[str, Any]]) -> bool:
         """Check if agent action targets match any positive candidate element."""
         if not pos_candidates:
             return False
@@ -165,22 +162,16 @@ class Mind2WebTask(Task):
 
         # Check if action types match
         if agent_op_type != gt_op_type:
-            logger.debug(
-                f"Action type mismatch: agent={agent_op_type}, expected={gt_op_type}"
-            )
+            logger.debug(f"Action type mismatch: agent={agent_op_type}, expected={gt_op_type}")
             return False
 
         # For TYPE and SELECT actions, check if value matches
         if gt_op_type in ("TYPE", "SELECT"):
-            agent_value = agent_action.arguments.get("text") or agent_action.arguments.get(
-                "value", ""
-            )
+            agent_value = agent_action.arguments.get("text") or agent_action.arguments.get("value", "")
             gt_value = gt_action.get("value", "")
 
             if agent_value.lower().strip() != gt_value.lower().strip():
-                logger.debug(
-                    f"Value mismatch: agent={agent_value}, expected={gt_value}"
-                )
+                logger.debug(f"Value mismatch: agent={agent_value}, expected={gt_value}")
                 return False
 
         # Check if target element matches
@@ -201,9 +192,7 @@ class Mind2WebTask(Task):
                 reward = 1.0 if self.steps_correct == len(self.ground_truth_actions) else 0.0
             else:
                 reward = (
-                    self.steps_correct / len(self.ground_truth_actions)
-                    if len(self.ground_truth_actions) > 0
-                    else 0.0
+                    self.steps_correct / len(self.ground_truth_actions) if len(self.ground_truth_actions) > 0 else 0.0
                 )
 
             return reward, {
@@ -224,9 +213,7 @@ class Mind2WebTask(Task):
             action_correct = self._evaluate_action(agent_action, gt_action)
             if action_correct:
                 self.steps_correct += 1
-                logger.info(
-                    f"Step {self.current_step} CORRECT: {agent_action.name} matched ground truth"
-                )
+                logger.info(f"Step {self.current_step} CORRECT: {agent_action.name} matched ground truth")
             else:
                 logger.info(
                     f"Step {self.current_step} INCORRECT: {agent_action.name} did not match ground truth {gt_action['type']}"
