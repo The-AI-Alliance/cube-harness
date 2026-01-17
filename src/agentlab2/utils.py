@@ -10,6 +10,9 @@ def prune_html(html):
 
     soup = BeautifulSoup(html, "html.parser")
     for tag in reversed(soup.find_all()):
+        # remove backend_node_id attributes (Mind2Web metadata, not real DOM attributes)
+        if tag.has_attr("backend_node_id"):
+            del tag["backend_node_id"]
         # remove body and html tags (not their content)
         if tag.name in ("html", "body"):
             tag.unwrap()
