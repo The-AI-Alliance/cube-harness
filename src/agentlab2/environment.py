@@ -82,7 +82,7 @@ class Environment(AbstractEnvironment):
         obs = Observation(contents=[c for o in tool_results for c in o.contents])
         done = done or self.task.finished()
         if self.task.validate_per_step or done:
-            reward, info = self.task.validate_task(obs)
+            reward, info = self.task.validate_task(obs, actions)
         obs = self.task.obs_postprocess(obs)
         return EnvironmentOutput(obs=obs, reward=reward, info=info, done=done)
 
