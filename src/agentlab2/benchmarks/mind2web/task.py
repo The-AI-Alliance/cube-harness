@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class Mind2WebTask(Task):
     validate_per_step: bool = True
     supported_actions: ActionSubset = (
-        BrowserActionSpace.browser_press_key,  # TODO: map enter to this
+        BrowserActionSpace.browser_press_key,
         BrowserActionSpace.browser_type,
         BrowserActionSpace.browser_click,
         BrowserActionSpace.browser_select_option,
@@ -43,6 +43,7 @@ class Mind2WebTask(Task):
 
     def _parse_ground_truth(self) -> list[dict[str, Any]]:
         parsed = []
+        # TODO: when having a deterministic evaluation, we should provide a standard of how to map DSL's
         for action in self.actions_data:
             op_data = action["operation"]
             op_type = op_data["op"]
@@ -92,13 +93,13 @@ class Mind2WebTask(Task):
 
         breakpoint()
         try:
-            self._tool.goto(next_url)
             self.current_step += 1
 
             if self.current_step >= len(self.ground_truth_actions):
                 return 1.0, {"done": True, "step": self.current_step, "reason": "Task completed"}
-            else:
-                return 0.0, {"done": False, "step": self.current_step, "reason": "Step completed, continuing"}
+
+            self._tool.goto(next_url)
+            return 0.0, {"done": False, "step": self.current_step, "reason": "Step completed, continuing"}
         except Exception as e:
             logger.warning(f"Failed to load next step HTML: {e}")
             return 0.0, {"done": True, "step": self.current_step, "reason": f"Failed: {e}"}
