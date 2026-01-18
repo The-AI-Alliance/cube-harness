@@ -18,10 +18,11 @@ def main(debug: bool) -> None:
     agent_config = ReactAgentConfig(llm_config=llm_config, stateless=True)
 
     tool_config = PlaywrightConfig(use_screenshot=False, use_html=True, headless=True)
+    max_tasks = 10 if debug else None
     benchmark = Mind2WebBenchmark(
         tool_config=tool_config,
         split="train",
-        max_tasks=1 if debug else None,
+        max_tasks=max_tasks,
         shuffle=True,
     )
 
@@ -33,7 +34,7 @@ def main(debug: bool) -> None:
     )
 
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp, debug_limit=max_tasks)
     else:
         run_with_ray(exp, n_cpus=4)
 
