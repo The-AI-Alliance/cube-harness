@@ -197,18 +197,23 @@ class Mind2WebTask(Task):
             return 1.0 if self.steps_correct == len(self.ground_truth_actions) else 0.0
         return self.steps_correct / len(self.ground_truth_actions) if self.ground_truth_actions else 0.0
 
+    def _build_validation_info(self, done: bool, reason: str, **extra: Any) -> dict[str, Any]:
+        """Build validation info dict with common fields."""
+        return {
+            "done": done,
+            "step": self.current_step,
+            "steps_correct": self.steps_correct,
+            "total_steps": len(self.ground_truth_actions),
+            "reason": reason,
+            **extra,
+        }
+
     def validate_task(self, obs: Observation, actions: list[Action] | None = None) -> tuple[float, dict]:
         actions = actions or []
 
         # Check if we've completed all steps
         if self.current_step >= len(self.ground_truth_actions):
-            return self._calculate_reward(), {
-                "done": True,
-                "step": self.current_step,
-                "steps_correct": self.steps_correct,
-                "total_steps": len(self.ground_truth_actions),
-                "reason": "All steps completed",
-            }
+            return self._calculate_reward(), self._build_validation_info(done=True, reason="All steps completed")
 
         # Get ground truth for current step
         gt_action = self.ground_truth_actions[self.current_step]
@@ -237,34 +242,16 @@ class Mind2WebTask(Task):
             self._tool.goto(next_url)
         except Exception as e:
             logger.warning(f"Failed to load next step HTML: {e}")
-            # Task ends early due to missing HTML
-            return self._calculate_reward(), {
-                "done": True,
-                "step": self.current_step,
-                "steps_correct": self.steps_correct,
-                "total_steps": len(self.ground_truth_actions),
-                "reason": f"Failed to load HTML: {e}",
-            }
+            return self._calculate_reward(), self._build_validation_info(done=True, reason=f"Failed to load HTML: {e}")
 
         # Check if we've completed all steps after advancing
         if self.current_step >= len(self.ground_truth_actions):
-            return self._calculate_reward(), {
-                "done": True,
-                "step": self.current_step,
-                "steps_correct": self.steps_correct,
-                "total_steps": len(self.ground_truth_actions),
-                "reason": "Task completed",
-            }
+            return self._calculate_reward(), self._build_validation_info(done=True, reason="Task completed")
 
         # Continue to next step
-        return 0.0, {
-            "done": False,
-            "step": self.current_step,
-            "steps_correct": self.steps_correct,
-            "total_steps": len(self.ground_truth_actions),
-            "action_correct": action_correct,
-            "reason": "Step completed, continuing",
-        }
+        return 0.0, self._build_validation_info(
+            done=False, reason="Step completed, continuing", action_correct=action_correct
+        )
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
         supported_action_names = {action.__name__ for action in self.supported_actions}
