@@ -15,7 +15,7 @@ def main(debug: bool) -> None:
     output_dir = Path.home() / "agentlab_results" / "al2" / f"mind2web_{current_datetime}"
 
     llm_config = LLMConfig(model_name="openai/gpt-5-nano", temperature=1.0)
-    agent_config = ReactAgentConfig(llm_config=llm_config)
+    agent_config = ReactAgentConfig(llm_config=llm_config, stateless=True)
 
     tool_config = PlaywrightConfig(use_screenshot=False, use_html=True, headless=True)
     benchmark = Mind2WebBenchmark(

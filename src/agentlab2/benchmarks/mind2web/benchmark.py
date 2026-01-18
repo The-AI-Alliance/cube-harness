@@ -129,6 +129,7 @@ class Mind2WebBenchmark(Benchmark):
                 domain=task_data["domain"],
                 actions_data=task_data["actions"],
                 base_url=self.base_url,
+                action_reprs=task_data.get("action_reprs", []),
                 episode_max_time=self.episode_max_time,
             )
             for task_data in tasks_data

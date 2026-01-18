@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Any, cast
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
@@ -20,6 +21,18 @@ class Mind2WebTask(Task):
     )
     _tool: SyncPlaywrightTool
 
+    # Action type mappings between agent actions and Mind2Web operations
+    # Mind2Web uses: CLICK, TYPE, SELECT, HOVER, PRESS
+    # Agent uses: browser_click, browser_type, browser_select_option, browser_hover, browser_press_key
+    AGENT_TO_MIND2WEB: dict[str, str] = {
+        "browser_click": "CLICK",
+        "browser_type": "TYPE",
+        "browser_select_option": "SELECT",
+        "browser_hover": "HOVER",
+        "browser_press_key": "PRESS",
+    }
+    MIND2WEB_TO_AGENT: dict[str, str] = {v: k for k, v in AGENT_TO_MIND2WEB.items()}
+
     def __init__(
         self,
         id: str,
@@ -28,6 +41,7 @@ class Mind2WebTask(Task):
         domain: str,
         actions_data: list[dict[str, Any]],
         base_url: str,
+        action_reprs: list[str] | None = None,
         episode_max_time: int = 1000000,
         max_turns: int = 20,
         binary_scoring: bool = True,
@@ -37,6 +51,7 @@ class Mind2WebTask(Task):
         self.website = website
         self.domain = domain
         self.actions_data = actions_data
+        self.action_reprs = action_reprs or []  # Human-readable GT action strings from dataset
         self.base_url = base_url
         self.episode_max_time = episode_max_time
         self.max_turns = max_turns
@@ -76,8 +91,8 @@ class Mind2WebTask(Task):
 
         self._tool.goto(self.initial_url)
 
-        obs = Observation.from_text(self.task_desc)
-        obs += self._tool.page_obs()
+        obs = self._tool.page_obs()
+        obs += Observation.from_text(self._build_task_context())
 
         return obs, {
             "task_id": self.id,
@@ -90,18 +105,15 @@ class Mind2WebTask(Task):
 
     def _map_action_type(self, agent_action: Action) -> str | None:
         """Map agent action name to Mind2Web operation type."""
-        action_mapping = {
-            "browser_click": "CLICK",
-            "browser_type": "TYPE",
-            "browser_select_option": "SELECT",
-            "browser_hover": "HOVER",
-            "browser_press_key": "PRESS",
-        }
-        return action_mapping.get(agent_action.name)
+        return self.AGENT_TO_MIND2WEB.get(agent_action.name)
+
+    def _map_mind2web_action_type(self, mind2web_action_type: str) -> str | None:
+        """Map Mind2Web operation type to agent action name."""
+        return self.MIND2WEB_TO_AGENT.get(mind2web_action_type)
 
     def _extract_element_attributes(self, agent_action: Action) -> dict[str, Any]:
         """Extract element attributes from agent action arguments."""
-        breakpoint()
+        # breakpoint()
         args = agent_action.arguments
         attributes = {}
 
@@ -111,18 +123,12 @@ class Mind2WebTask(Task):
 
             # Parse common selector patterns to extract attributes
             if "name=" in selector:
-                import re
-
-                match = re.search(r'name=["\']?([^"\'>\]]+)', selector)
-                if match:
-                    attributes["name"] = match.group(1)
+                if name_match := re.search(r'name=["\']?([^"\'>\]]+)', selector):
+                    attributes["name"] = name_match.group(1)
 
             if "id=" in selector:
-                import re
-
-                match = re.search(r'id=["\']?([^"\'>\]]+)', selector)
-                if match:
-                    attributes["id"] = match.group(1)
+                if id_match := re.search(r'id=["\']?([^"\'>\]]+)', selector):
+                    attributes["id"] = id_match.group(1)
 
         return attributes
 
@@ -158,7 +164,6 @@ class Mind2WebTask(Task):
         # Map agent action to Mind2Web operation type
         agent_op_type = self._map_action_type(agent_action)
         gt_op_type = gt_action["type"]
-        breakpoint()
 
         # Check if action types match
         if agent_op_type != gt_op_type:
@@ -175,7 +180,6 @@ class Mind2WebTask(Task):
                 return False
 
         # Check if target element matches
-        breakpoint()
         agent_attrs = self._extract_element_attributes(agent_action)
         if not self._match_element(agent_attrs, gt_action["pos_candidates"]):
             logger.debug(f"Element mismatch: agent_attrs={agent_attrs}")
@@ -205,6 +209,7 @@ class Mind2WebTask(Task):
 
         # Get ground truth for current step
         gt_action = self.ground_truth_actions[self.current_step]
+        # breakpoint()
 
         # Evaluate the agent's last action if available
         action_correct = False
@@ -277,3 +282,35 @@ class Mind2WebTask(Task):
 
     def finished(self) -> bool:
         return self.current_step >= len(self.ground_truth_actions)
+
+    def obs_postprocess(self, obs: Observation) -> Observation:
+        """Build observation with fresh page content (validate_task navigates to new HTML snapshot)."""
+        # Fetch fresh page content since validate_task() already navigated to the next HTML
+        # I dislike this logic so much
+        fresh_obs = self._tool.page_obs()
+        return fresh_obs + Observation.from_text(self._build_task_context())
+
+    def _format_previous_actions(self) -> str:
+        """Format GT previous actions in our tool format for inclusion in observation."""
+        if self.current_step == 0 or not self.action_reprs:
+            return "Previous actions: None"
+
+        lines = ["Previous actions:"]
+        for i in range(min(self.current_step, len(self.action_reprs))):
+            action_repr = self.action_reprs[i]
+            # Convert Mind2Web format (e.g., "-> CLICK", "-> TYPE:") to agent format
+            for mind2web_op, agent_op in self.MIND2WEB_TO_AGENT.items():
+                # Handle actions with values (TYPE:, SELECT:) and without (CLICK, HOVER, PRESS)
+                action_repr = action_repr.replace(f"-> {mind2web_op}:", f"-> {agent_op}:")
+                action_repr = action_repr.replace(f"-> {mind2web_op}", f"-> {agent_op}")
+            lines.append(f"  Step {i + 1}: {action_repr}")
+        return "\n".join(lines)
+
+    def _build_task_context(self) -> str:
+        """Build the task context prompt for the agent."""
+        previous_actions_text = self._format_previous_actions()
+        return f"""
+Based on the webpage above, try to complete the following task:
+Task: {self.task_desc}
+{previous_actions_text}
+What should be the next action?"""
