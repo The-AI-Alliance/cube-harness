@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import Any, cast
+from typing import Any
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import Action, ActionSchema, ActionSubset, Observation, Task
@@ -103,6 +103,11 @@ class Mind2WebTask(Task):
             "total_steps": len(self.ground_truth_actions),
         }
 
+    def teardown(self) -> None:
+        """Reset task state after completion."""
+        self.current_step = 0
+        self.steps_correct = 0
+
     def _map_action_type(self, agent_action: Action) -> str | None:
         """Map agent action name to Mind2Web operation type."""
         return self.AGENT_TO_MIND2WEB.get(agent_action.name)
@@ -113,7 +118,6 @@ class Mind2WebTask(Task):
 
     def _extract_element_attributes(self, agent_action: Action) -> dict[str, Any]:
         """Extract element attributes from agent action arguments."""
-        # breakpoint()
         args = agent_action.arguments
         attributes = {}
 
@@ -187,19 +191,18 @@ class Mind2WebTask(Task):
 
         return True
 
-    def validate_task(self, *args: Any) -> tuple[float, dict]:
-        _, actions = cast(Observation, args[0]), cast(list[Action], args[1])
+    def _calculate_reward(self) -> float:
+        """Calculate reward based on scoring mode and steps completed."""
+        if self.binary_scoring:
+            return 1.0 if self.steps_correct == len(self.ground_truth_actions) else 0.0
+        return self.steps_correct / len(self.ground_truth_actions) if self.ground_truth_actions else 0.0
+
+    def validate_task(self, obs: Observation, actions: list[Action] | None = None) -> tuple[float, dict]:
+        actions = actions or []
 
         # Check if we've completed all steps
         if self.current_step >= len(self.ground_truth_actions):
-            if self.binary_scoring:
-                reward = 1.0 if self.steps_correct == len(self.ground_truth_actions) else 0.0
-            else:
-                reward = (
-                    self.steps_correct / len(self.ground_truth_actions) if len(self.ground_truth_actions) > 0 else 0.0
-                )
-
-            return reward, {
+            return self._calculate_reward(), {
                 "done": True,
                 "step": self.current_step,
                 "steps_correct": self.steps_correct,
@@ -209,7 +212,6 @@ class Mind2WebTask(Task):
 
         # Get ground truth for current step
         gt_action = self.ground_truth_actions[self.current_step]
-        # breakpoint()
 
         # Evaluate the agent's last action if available
         action_correct = False
@@ -236,12 +238,7 @@ class Mind2WebTask(Task):
         except Exception as e:
             logger.warning(f"Failed to load next step HTML: {e}")
             # Task ends early due to missing HTML
-            if self.binary_scoring:
-                reward = 1.0 if self.steps_correct == len(self.ground_truth_actions) else 0.0
-            else:
-                reward = self.steps_correct / len(self.ground_truth_actions)
-
-            return reward, {
+            return self._calculate_reward(), {
                 "done": True,
                 "step": self.current_step,
                 "steps_correct": self.steps_correct,
@@ -251,12 +248,7 @@ class Mind2WebTask(Task):
 
         # Check if we've completed all steps after advancing
         if self.current_step >= len(self.ground_truth_actions):
-            if self.binary_scoring:
-                reward = 1.0 if self.steps_correct == len(self.ground_truth_actions) else 0.0
-            else:
-                reward = self.steps_correct / len(self.ground_truth_actions)
-
-            return reward, {
+            return self._calculate_reward(), {
                 "done": True,
                 "step": self.current_step,
                 "steps_correct": self.steps_correct,

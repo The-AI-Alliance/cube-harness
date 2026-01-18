@@ -3,7 +3,7 @@ import logging
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import ActionSchema, ActionSubset, Content, Observation, Task
+from agentlab2.core import Action, ActionSchema, ActionSubset, Content, Observation, Task
 from agentlab2.tools.playwright import SyncPlaywrightTool
 
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class MiniWobTask(Task):
         obs += self.obs_postprocess(self._tool.page_obs())
         return obs, {**info, "task_id": self.id, "task_url": self.url, "task_desc": self.desc}
 
-    def validate_task(self, *args) -> tuple[float, dict]:
+    def validate_task(self, obs: Observation, actions: list[Action] | None = None) -> tuple[float, dict]:
         """
         Validate the task, either per step or at the end.
 
