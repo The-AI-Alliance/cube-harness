@@ -186,7 +186,9 @@ class Mind2WebTask(Task):
         # Check if target element matches
         agent_attrs = self._extract_element_attributes(agent_action)
         if not self._match_element(agent_attrs, gt_action["pos_candidates"]):
-            logger.debug(f"Element mismatch: agent_attrs={agent_attrs}")
+            logger.info(
+                f"Element mismatch: agent_attrs={agent_attrs}, selector={agent_action.arguments.get('selector')}"
+            )
             return False
 
         return True

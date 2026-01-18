@@ -13,6 +13,7 @@ from agentlab2.tools.playwright import PlaywrightConfig
 def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"mind2web_{current_datetime}"
+    output_dir = f"./traces/mind2web_{current_datetime}"
 
     llm_config = LLMConfig(model_name="openai/gpt-5-nano", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config, stateless=True)
