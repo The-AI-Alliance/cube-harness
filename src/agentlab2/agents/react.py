@@ -65,7 +65,7 @@ class ReactAgent(Agent):
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.stateless:
             self.history = []  # Clear history for teacher-forced evaluation (e.g., Mind2Web)
-            messages = obs.to_llm_messages() 
+            messages = obs.to_llm_messages()
             # this is not triggering anymore, but gotta discuss it
             messages = [msg for msg in messages if msg.get("role") != "tool"]
             self.history += messages
