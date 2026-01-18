@@ -14,6 +14,10 @@ def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"mind2web_{current_datetime}"
     output_dir = f"./traces/mind2web_{current_datetime}"
+    # TODO: next steps
+    # - print_stats should consider more details, such as binary/partial scorings
+    # - is gpt-5-nano too bad? or why is it calling selector's that do not exist
+    # - element matching is ignore backend_node_id and our matching is too simplistic comparing to theirs.
 
     llm_config = LLMConfig(model_name="openai/gpt-5-nano", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config, stateless=True)
