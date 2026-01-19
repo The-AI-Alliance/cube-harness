@@ -5,7 +5,61 @@ from unittest.mock import MagicMock, patch
 
 from litellm import Message
 
-from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt
+from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt, UNKNOWN_PROVIDER, _extract_provider_and_model, _trace_llm_call
+
+
+class TestProviderExtraction:
+    """Tests for provider and model name extraction via LiteLLM."""
+
+    def test_extract_openai_explicit(self) -> None:
+        provider, model = _extract_provider_and_model("openai/gpt-4")
+        assert provider == "openai"
+        assert model == "gpt-4"
+
+    def test_extract_openai_implicit(self) -> None:
+        provider, model = _extract_provider_and_model("gpt-4")
+        assert provider == "openai"
+        assert model == "gpt-4"
+
+    def test_extract_anthropic_explicit(self) -> None:
+        provider, model = _extract_provider_and_model("anthropic/claude-3-opus-20240229")
+        assert provider == "anthropic"
+        assert model == "claude-3-opus-20240229"
+
+    def test_extract_anthropic_implicit_full_name(self) -> None:
+        provider, model = _extract_provider_and_model("claude-3-opus-20240229")
+        assert provider == "anthropic"
+        assert model == "claude-3-opus-20240229"
+
+    def test_extract_azure(self) -> None:
+        provider, model = _extract_provider_and_model("azure/my-deployment")
+        assert provider == "azure"
+        assert model == "my-deployment"
+
+    def test_extract_bedrock(self) -> None:
+        provider, model = _extract_provider_and_model("bedrock/anthropic.claude-v2")
+        assert provider == "bedrock"
+        assert model == "anthropic.claude-v2"
+
+    def test_extract_vertex(self) -> None:
+        provider, model = _extract_provider_and_model("vertex_ai/gemini-pro")
+        assert provider == "vertex_ai"
+        assert model == "gemini-pro"
+
+    def test_extract_cohere(self) -> None:
+        provider, model = _extract_provider_and_model("command-r-plus")
+        assert provider == "cohere_chat"
+        assert model == "command-r-plus"
+
+    def test_extract_unknown_returns_litellm_hint(self) -> None:
+        provider, model = _extract_provider_and_model("some-unknown-model")
+        assert provider == UNKNOWN_PROVIDER
+        assert model == "some-unknown-model"
+
+    def test_extract_short_claude_name_unknown(self) -> None:
+        provider, model = _extract_provider_and_model("claude-3-opus")
+        assert provider == UNKNOWN_PROVIDER
+        assert model == "claude-3-opus"
 
 
 class TestPrompt:
@@ -128,7 +182,7 @@ class TestLLM:
         assert result.content == "Hello! How can I help?"
 
     @patch("agentlab2.llm.completion_with_retries")
-    def test_llm_call_with_tools(self, mock_completion, sample_llm_config):
+    def test_llm_call_with_tools(self, mock_completion, sample_llm_config) -> None:
         """Test LLM call with tools."""
         mock_message = MagicMock()
         mock_message.tool_calls = [MagicMock(function=MagicMock(name="search", arguments='{"query": "test"}'))]
@@ -147,6 +201,50 @@ class TestLLM:
         assert call_kwargs["tools"] == tools
         assert result.tool_calls is not None
         assert result.content == "Tool call made."
+
+    @patch("agentlab2.llm.completion_with_retries")
+    def test_llm_call_sets_genai_span_attributes(self, mock_completion, sample_prompt) -> None:
+        """Test adherence to OpenTelemetry GenAI Semantic Conventions.
+
+        Reference: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+        """
+        mock_message = MagicMock()
+        mock_message.content = "Response"
+        mock_response = MagicMock()
+        mock_response.id = "chatcmpl-123"
+        mock_response.model = "gpt-4-0125-preview"
+        mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+        mock_completion.return_value = mock_response
+
+        config = LLMConfig(model_name="openai/gpt-4", temperature=0.5, max_completion_tokens=1000)
+        llm = LLM(config=config)
+
+        with patch("agentlab2.llm.trace") as mock_trace:
+            mock_span = MagicMock()
+            mock_tracer = MagicMock()
+            mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+            mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+            mock_trace.get_tracer.return_value = mock_tracer
+            mock_trace.get_current_span.return_value = mock_span
+
+            llm._tracer = mock_tracer
+            llm(sample_prompt)
+
+            mock_tracer.start_as_current_span.assert_called_once()
+            call_args = mock_tracer.start_as_current_span.call_args
+            assert call_args[0][0] == "chat gpt-4"
+
+            set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+            assert set_attr_calls["gen_ai.operation.name"] == "chat"
+            assert set_attr_calls["gen_ai.provider.name"] == "openai"
+            assert set_attr_calls["gen_ai.request.model"] == "gpt-4"
+            assert set_attr_calls["gen_ai.request.temperature"] == 0.5
+            assert set_attr_calls["gen_ai.request.max_tokens"] == 1000
+            assert set_attr_calls["gen_ai.response.id"] == "chatcmpl-123"
+            assert set_attr_calls["gen_ai.response.model"] == "gpt-4-0125-preview"
+            assert set_attr_calls["gen_ai.usage.input_tokens"] == 100
+            assert set_attr_calls["gen_ai.usage.output_tokens"] == 50
 
 
 class TestLLMCall:
