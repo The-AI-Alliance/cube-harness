@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class ReactAgentConfig(AgentConfig):
     llm_config: LLMConfig
     can_finish: bool = True
+    stateless: bool = False  # If True, clear history each step (for teacher-forced evaluation like Mind2Web)
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
     max_history_tokens: int = 120000  # compact history if it exceeds N tokens
@@ -62,7 +63,14 @@ class ReactAgent(Agent):
         self.history: list[dict | Message] = []
 
     def step(self, obs: Observation) -> AgentOutput:
-        self.history += obs.to_llm_messages()
+        if self.config.stateless:
+            self.history = []  # Clear history for teacher-forced evaluation (e.g., Mind2Web)
+            messages = obs.to_llm_messages()
+            # this is not triggering anymore, but gotta discuss it
+            messages = [msg for msg in messages if msg.get("role") != "tool"]
+            self.history += messages
+        else:
+            self.history += obs.to_llm_messages()
         self.maybe_compact_history()
         messages = [
             dict(role="system", content=self.config.system_prompt),

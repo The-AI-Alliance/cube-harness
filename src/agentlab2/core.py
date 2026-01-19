@@ -205,7 +205,7 @@ class Task(ABC):
         pass
 
     @abstractmethod
-    def validate_task(self, obs: Observation) -> tuple[float, dict]:
+    def validate_task(self, obs: Observation, actions: list[Action] | None = None) -> tuple[float, dict]:
         """Validate the current state of the task and return (reward, info)."""
         pass
 
