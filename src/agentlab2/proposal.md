@@ -1,5 +1,24 @@
 # SWE Sandbox Proposal
 
+## Background
+
+SWE benchmarks need sandboxed execution for safety, scalability, and reproducibility.
+
+**Why Daytona?**
+- Most flexible sandbox platform (ephemeral VMs, snapshots, network isolation, resource controls)
+- Recommended by Harbor - the leading SWE eval framework uses it as primary backend
+- Growing adoption in open source and AI startups for agent infrastructure
+- Well-maintained SDK with async support, retry logic, file operations
+
+**Harbor** ([laude-institute/harbor](https://github.com/laude-institute/harbor)) uses Daytona:
+```
+harbor run --dataset X --agent Y --env daytona --n-concurrent 32
+```
+
+---
+
+## Architecture Options
+
 ## Option A: Direct Tool (like PlaywrightTool)
 
 ```
