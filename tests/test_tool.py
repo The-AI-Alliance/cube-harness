@@ -1,6 +1,7 @@
 """Tests for agentlab2.tool module."""
 
 from typing import Protocol, runtime_checkable
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -191,3 +192,89 @@ class TestTool:
         assert "btn1" in results[0]
         assert "btn2" in results[1]
         assert "test" in results[2]
+
+
+class TestToolExecutionSpans:
+    """Tests for tool execution OpenTelemetry spans following GenAI conventions.
+
+    Reference: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+    """
+
+    @patch("agentlab2.tool._tracer")
+    def test_execute_action_creates_span(self, mock_tracer, mock_tool) -> None:
+        """Test that execute_action creates a span with correct name and kind."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        action = Action(name="click", arguments={"element_id": "btn1"})
+        mock_tool.execute_action(action)
+
+        mock_tracer.start_as_current_span.assert_called_once()
+        call_args = mock_tracer.start_as_current_span.call_args
+        assert call_args[0][0] == "execute_tool click"
+        from opentelemetry.trace import SpanKind
+        assert call_args[1]["kind"] == SpanKind.INTERNAL
+
+    @patch("agentlab2.tool._tracer")
+    def test_execute_action_sets_required_attributes(self, mock_tracer, mock_tool) -> None:
+        """Test that execute_action sets required GenAI tool attributes."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        action = Action(id="call_123", name="click", arguments={"element_id": "btn1"})
+        mock_tool.execute_action(action)
+
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        assert set_attr_calls["gen_ai.tool.name"] == "click"
+        assert set_attr_calls["gen_ai.tool.call.id"] == "call_123"
+
+    @patch("agentlab2.tool._tracer")
+    def test_execute_action_no_io_by_default(self, mock_tracer, mock_tool) -> None:
+        """Test that arguments and results are NOT traced by default (sensitive data)."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        action = Action(name="click", arguments={"element_id": "btn1"})
+        mock_tool.execute_action(action)
+
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        assert "gen_ai.tool.call.arguments" not in set_attr_calls
+        assert "gen_ai.tool.call.result" not in set_attr_calls
+
+    @patch("agentlab2.tool._tracer")
+    def test_execute_action_traces_io_when_enabled(self, mock_tracer, mock_tool) -> None:
+        """Test that arguments and results are traced when trace_tool_io is True."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        mock_tool.trace_tool_io = True
+        action = Action(name="click", arguments={"element_id": "btn1"})
+        mock_tool.execute_action(action)
+
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        assert set_attr_calls["gen_ai.tool.call.arguments"] == '{"element_id": "btn1"}'
+        assert set_attr_calls["gen_ai.tool.call.result"] == "Clicked on btn1"
+
+    @patch("agentlab2.tool._tracer")
+    def test_execute_action_traces_error_result(self, mock_tracer, mock_tool) -> None:
+        """Test that error results are traced when trace_tool_io is True."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        def raise_error(element_id: str) -> str:
+            raise ValueError("Element not found")
+
+        mock_tool.trace_tool_io = True
+        mock_tool.click = raise_error
+
+        action = Action(name="click", arguments={"element_id": "nonexistent"})
+        mock_tool.execute_action(action)
+
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        assert "Error executing action click" in set_attr_calls["gen_ai.tool.call.result"]
+        assert "Element not found" in set_attr_calls["gen_ai.tool.call.result"]

@@ -1,10 +1,15 @@
+import json
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, List, get_protocol_members
 
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind
+
 from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 
 class AbstractTool(ABC):
@@ -45,10 +50,12 @@ class Tool(AbstractTool):
     """
     Base class for tool that implements an action space protocol.
 
-    :var Returns: Description
+    :var action_space: Protocol defining the actions this tool supports
+    :var trace_tool_io: If True, include arguments and results in trace spans (may contain sensitive data)
     """
 
     action_space: Any
+    trace_tool_io: bool = False
 
     def get_action_method(self, action) -> Callable:
         if not getattr(self.action_space, action.name, None):
@@ -59,11 +66,23 @@ class Tool(AbstractTool):
 
     def execute_action(self, action: Action) -> Observation:
         fn = self.get_action_method(action)
-        try:
-            action_result = fn(**action.arguments) or "Success"
-        except Exception as e:
-            action_result = f"Error executing action {action.name}: {e}"
-            logger.exception(action_result)
+        span_name = f"execute_tool {action.name}"
+
+        with _tracer.start_as_current_span(span_name, kind=SpanKind.INTERNAL) as span:
+            span.set_attribute("gen_ai.tool.name", action.name)
+            span.set_attribute("gen_ai.tool.call.id", action.id)
+            if self.trace_tool_io:
+                span.set_attribute("gen_ai.tool.call.arguments", json.dumps(action.arguments))
+
+            try:
+                action_result = fn(**action.arguments) or "Success"
+            except Exception as e:
+                action_result = f"Error executing action {action.name}: {e}"
+                logger.exception(action_result)
+
+            if self.trace_tool_io:
+                span.set_attribute("gen_ai.tool.call.result", str(action_result))
+
         return Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
 
     @property
