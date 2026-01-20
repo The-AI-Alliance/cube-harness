@@ -1,8 +1,6 @@
-"""Run LiveCodeBench evaluation with ReactAgent and DaytonaSWETool."""
-
-import logging
 import os
-from pathlib import Path
+import sys
+import time
 
 from dotenv import load_dotenv
 
@@ -10,15 +8,12 @@ load_dotenv()
 
 from agentlab2.agents.react import ReactAgentConfig  # noqa: E402
 from agentlab2.benchmarks.livecodebench import LiveCodeBenchBenchmark  # noqa: E402
-from agentlab2.exp_runner import run_sequentially  # noqa: E402
+from agentlab2.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from agentlab2.experiment import Experiment  # noqa: E402
 from agentlab2.llm import LLMConfig  # noqa: E402
 from agentlab2.tools.daytona import DaytonaSWEToolConfig  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
-system_prompt = """You are an expert competitive programmer solving coding problems.
+SYSTEM_PROMPT = """You are an expert competitive programmer solving coding problems.
 You have access to a Linux sandbox with Python installed.
 
 Strategy:
@@ -28,31 +23,33 @@ Strategy:
 4. Debug and fix any issues"""
 
 
-def main() -> None:
+def main(debug: bool) -> None:
+    current_datetime = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = "outputs/livecodebench" / f"livecodebench_{current_datetime}"
+
     llm_config = LLMConfig(model_name="openai/gpt-5-nano")
-    agent_config = ReactAgentConfig(llm_config=llm_config, system_prompt=system_prompt)
+    agent_config = ReactAgentConfig(llm_config=llm_config, system_prompt=SYSTEM_PROMPT)
     tool_config = DaytonaSWEToolConfig(api_key=os.getenv("DAYTONA_API_KEY"))
+
     benchmark = LiveCodeBenchBenchmark(
         tool_config=tool_config,
-        max_tasks=1,
         shuffle=True,
         shuffle_seed=42,
     )
 
-    output_dir = Path(__file__).parent.parent / "outputs" / "livecodebench"
-    experiment = Experiment(
+    exp = Experiment(
         name="livecodebench",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
     )
 
-    logger.info(f"Running LiveCodeBench experiment: {experiment.name}")
-    logger.info(f"Output directory: {output_dir}")
-
-    # Run sequentially for debugging
-    run_sequentially(experiment, debug_limit=3)
+    if debug:
+        run_sequentially(exp, debug_limit=2)
+    else:
+        run_with_ray(exp, n_cpus=4)
 
 
 if __name__ == "__main__":
-    main()
+    debug = sys.argv[-1] == "debug"
+    main(debug)
