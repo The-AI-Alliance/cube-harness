@@ -1,5 +1,3 @@
-"""Daytona-backed SWE tool for sandboxed code execution."""
-
 import logging
 import shlex
 from uuid import uuid4

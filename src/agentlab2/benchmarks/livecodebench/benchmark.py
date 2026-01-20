@@ -1,10 +1,3 @@
-"""LiveCodeBench benchmark implementation.
-
-LiveCodeBench is a temporally updating benchmark for code generation.
-Homepage: https://livecodebench.github.io/
-Dataset: https://huggingface.co/datasets/livecodebench/code_generation_lite
-"""
-
 import json
 import logging
 from random import Random
