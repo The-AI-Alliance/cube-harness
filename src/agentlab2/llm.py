@@ -8,9 +8,18 @@ from uuid import uuid4
 
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
-from pydantic import Field
+from pydantic import Field, field_serializer
 
 from agentlab2.base import TypedBaseModel
+
+
+def _message_to_dict(msg: dict | Message) -> dict:
+    """Convert a Message object to dict for serialization."""
+    if isinstance(msg, dict):
+        return msg
+    if hasattr(msg, "model_dump"):
+        return msg.model_dump(exclude_none=True)
+    return dict(msg)
 
 
 class Prompt(TypedBaseModel):
@@ -18,6 +27,11 @@ class Prompt(TypedBaseModel):
 
     messages: List[dict | Message]
     tools: List[dict] = Field(default_factory=list)
+
+    @field_serializer("messages")
+    def serialize_messages(self, messages: List[dict | Message]) -> List[dict]:
+        """Convert Message objects to dicts for JSON serialization."""
+        return [_message_to_dict(m) for m in messages]
 
     def __str__(self) -> str:
         """Debug view of the prompt."""
@@ -77,4 +91,9 @@ class LLMCall(TypedBaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     llm_config: LLMConfig
     prompt: Prompt
-    output: Message
+    output: dict | Message
+
+    @field_serializer("output")
+    def serialize_output(self, output: dict | Message) -> dict:
+        """Convert Message to dict for JSON serialization."""
+        return _message_to_dict(output)
