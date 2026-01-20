@@ -5,13 +5,13 @@ from pathlib import Path
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory
-from agentlab2.environment import EnvConfig
+from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Trajectory
+from agentlab2.environment import STOP_ACTION, EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 
 logger = logging.getLogger(__name__)
 
-MAX_STEPS = 1000  # System-wide upper limit on steps
+MAX_STEPS = 50  # System-wide fallback limit (agent's max_actions takes priority)
 
 
 class Episode:
@@ -48,11 +48,22 @@ class Episode:
         try:
             with tracer.episode(self.task_id, experiment=self.exp_name):
                 env_output = env.setup()
-                logger.info(colored(f"Initial env output: {env_output}", "blue"))
+                # logger.info(colored(f"Initial env output: {env_output}", "blue"))
                 trajectory = Trajectory(steps=[env_output], metadata={"task_id": self.task_id})
                 self.save_trajectory(trajectory)
                 turns = 0
                 while not env_output.done and turns < self.max_steps:
+                    # Check if agent has reached its max_actions limit
+                    if hasattr(agent, "max_actions_reached") and agent.max_actions_reached():
+                        logger.info(f"Agent reached max_actions limit at turn {turns}, forcing stop")
+                        agent_output = AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
+                        trajectory.append(agent_output)
+                        self.save_step(agent_output)
+                        env_output = env.step(agent_output.actions)
+                        trajectory.append(env_output)
+                        self.save_step(env_output)
+                        break
+
                     with tracer.step(f"turn_{turns}") as span:
                         # Agent step
                         agent_output = agent.step(env_output.obs)
