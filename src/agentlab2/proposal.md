@@ -6,13 +6,26 @@ SWE benchmarks need sandboxed execution for safety, scalability, and reproducibi
 
 **Why Daytona?**
 - Most flexible sandbox platform (ephemeral VMs, snapshots, network isolation, resource controls)
-- Recommended by Harbor - the leading SWE eval framework uses it as primary backend
 - Growing adoption in open source and AI startups for agent infrastructure
 - Well-maintained SDK with async support, retry logic, file operations
 
 **Harbor** ([laude-institute/harbor](https://github.com/laude-institute/harbor)) uses Daytona:
 ```
-harbor run --dataset X --agent Y --env daytona --n-concurrent 32
+env = DaytonaEnvironment(
+    environment_dir=task.paths.environment_dir,
+    environment_name=task.name,
+    session_id=str(uuid4()),
+    trial_paths=trial_paths,
+    task_env_config=task.config.environment,
+)
+env.start()
+agent = AgentFactory.create_agent_from_name(
+    name=AgentName(agent_name),
+    logs_dir=logs_dir,
+    model_name=model_name,
+)
+agent.setup() # the agent get's installed in the environment
+agent.run(instruction, env, context)
 ```
 
 ---
