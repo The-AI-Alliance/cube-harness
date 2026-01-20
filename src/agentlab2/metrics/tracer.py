@@ -48,7 +48,6 @@ class _AgentTracer:
         self._tracer = self._provider.get_tracer(__name__)
         self._current_experiment: str | None = None
 
-
     @contextmanager
     def benchmark(self, name: str) -> Iterator[trace.Span]:
         with self._tracer.start_as_current_span(name) as span:
@@ -61,12 +60,11 @@ class _AgentTracer:
             finally:
                 self._current_experiment = None
 
-
     @contextmanager
     def episode(
-            self,
-            name: str,
-            experiment: str | None = None,
+        self,
+        name: str,
+        experiment: str | None = None,
     ) -> Iterator[trace.Span]:
         exp = experiment or self._current_experiment or "default"
         parent_ctx = _get_parent_ctx_env()
@@ -77,25 +75,21 @@ class _AgentTracer:
             span.set_attribute(AL2_EXPERIMENT, exp)
             yield span
 
-
     @contextmanager
     def step(self, name: str) -> Iterator[trace.Span]:
         with self._tracer.start_as_current_span(name) as span:
             span.set_attribute(AL2_TYPE, TYPE_STEP)
             yield span
 
-
     def log(self, data: dict[str, Any], name: str = "step") -> None:
         with self.step(name) as span:
             for k, v in data.items():
                 span.set_attribute(k, v)
 
-
     @contextmanager
     def span(self, name: str) -> Iterator[trace.Span]:
         with self._tracer.start_as_current_span(name) as span:
             yield span
-
 
     def shutdown(self) -> None:
         self._provider.shutdown()
@@ -128,7 +122,6 @@ def get_trace_env_vars() -> dict[str, str]:
 
 class _NoOpSpan:
     """A no-op span that ignores all attribute calls."""
-
 
     def set_attribute(self, key: str, value: Any) -> None:
         pass
