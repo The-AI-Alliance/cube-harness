@@ -1,7 +1,10 @@
 """LiveCodeBench task implementation."""
 
+import base64
 import json
 import logging
+import pickle
+import zlib
 from typing import Any
 
 from agentlab2.action_spaces.swe_action_space import SWEActionSpace
@@ -67,12 +70,12 @@ class LiveCodeBenchTask(Task):
 
     def _build_prompt(self) -> str:
         """Build the task prompt for the agent."""
-        # TODO: should see public test cases?
+        # Show public test cases as examples (validation uses private tests)
         public_tests = self._parse_test_cases(self.public_test_cases)
         test_examples = ""
         if public_tests:
             test_examples = "\n\nExample test cases:"
-            for i, tc in enumerate(public_tests[:3], 1):
+            for i, tc in enumerate(public_tests, 1):
                 test_examples += f"\nInput {i}: {tc.get('input', '')}"
                 test_examples += f"\nExpected Output {i}: {tc.get('output', '')}"
 
@@ -95,12 +98,27 @@ Your task:
 The solution should read from stdin and print to stdout."""
 
     def _parse_test_cases(self, test_cases_str: str) -> list[dict[str, Any]]:
-        """Parse test cases from JSON string."""
+        """Parse test cases from JSON string or encoded format.
+
+        LiveCodeBench uses two formats:
+        - public_test_cases: plain JSON string
+        - private_test_cases: base64 -> zlib -> pickle -> JSON
+        """
         if not test_cases_str:
             return []
+        # Try plain JSON first (public test cases)
         try:
             return json.loads(test_cases_str)
         except json.JSONDecodeError:
+            pass
+        # Try encoded format (private test cases): base64 -> zlib -> pickle -> json
+        try:
+            decoded = base64.b64decode(test_cases_str)
+            decompressed = zlib.decompress(decoded)
+            unpickled = pickle.loads(decompressed)
+            return json.loads(unpickled)
+        except Exception as e:
+            logger.warning(f"Failed to decode test cases: {e}")
             return []
 
     def _extract_stdout(self, bash_output: str) -> str:
@@ -122,9 +140,11 @@ The solution should read from stdin and print to stdout."""
         if "Error reading" in solution:
             return 0.0, {"done": True, "reason": "No solution file found", "passed": 0, "total": 0}
 
-        # Run against private test cases (or public if no private)
+        # Run against private test cases (hidden from the agent)
+        # Fall back to public only if private tests are unavailable
         test_cases = self._parse_test_cases(self.private_test_cases)
         if not test_cases:
+            logger.warning("No private test cases found, falling back to public tests")
             test_cases = self._parse_test_cases(self.public_test_cases)
 
         if not test_cases:
