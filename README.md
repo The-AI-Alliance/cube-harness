@@ -17,6 +17,21 @@ cd AgentLab2
 make install
 ```
 
+### API Keys
+* Set up your api keys in your `.env` of this project
+* Current hello world recipe is using an azure endpoint. You may change it for your needs (don't commit)
+* For azure, you need to provide these:
+```bash
+export AZURE_API_KEY=
+export AZURE_API_BASE=
+export AZURE_API_VERSION=
+```
+
+### Run Tests
+```bash
+make test
+```
+
 ### Run Hello Example
 
 The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark:
