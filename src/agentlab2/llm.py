@@ -3,14 +3,50 @@
 import pprint
 from datetime import datetime
 from functools import partial
-from typing import Callable, List, Literal
+from typing import Any, Callable, List, Literal
 from uuid import uuid4
 
-from litellm import Message, completion_with_retries
+from litellm import Message, completion_with_retries, get_llm_provider
 from litellm.utils import token_counter
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind
 from pydantic import Field
 
 from agentlab2.base import TypedBaseModel
+
+UNKNOWN_PROVIDER = "unknown (see litellm.get_llm_provider)"
+
+
+def _extract_provider_and_model(model_name: str) -> tuple[str, str]:
+    try:
+        extracted_model, provider, _, _ = get_llm_provider(model_name)
+        return provider, extracted_model
+    except Exception:
+        return UNKNOWN_PROVIDER, model_name
+
+
+def _trace_llm_call(
+    config: "LLMConfig",
+    response: Any,
+) -> None:
+    provider, model_name = _extract_provider_and_model(config.model_name)
+    span = trace.get_current_span()
+
+    span.set_attribute("gen_ai.operation.name", "chat")
+    span.set_attribute("gen_ai.provider.name", provider)
+    span.set_attribute("gen_ai.request.model", model_name)
+    span.set_attribute("gen_ai.request.temperature", config.temperature)
+    span.set_attribute("gen_ai.request.max_tokens", config.max_completion_tokens)
+
+    if hasattr(response, "id") and response.id:
+        span.set_attribute("gen_ai.response.id", response.id)
+    if hasattr(response, "model") and response.model:
+        span.set_attribute("gen_ai.response.model", response.model)
+    if hasattr(response, "usage") and response.usage:
+        if hasattr(response.usage, "prompt_tokens"):
+            span.set_attribute("gen_ai.usage.input_tokens", response.usage.prompt_tokens)
+        if hasattr(response.usage, "completion_tokens"):
+            span.set_attribute("gen_ai.usage.output_tokens", response.usage.completion_tokens)
 
 
 class Prompt(TypedBaseModel):
@@ -51,8 +87,9 @@ class LLMConfig(TypedBaseModel):
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
+        self._tracer = trace.get_tracer(__name__)
 
-    def __call__(self, prompt: Prompt) -> Message:
+    def _call_completion(self, prompt: Prompt) -> Any:
         kwargs = {
             "model": self.config.model_name,
             "temperature": self.config.temperature,
@@ -66,8 +103,16 @@ class LLM:
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
-        response = completion_with_retries(**kwargs)
-        return response.choices[0].message  # type: ignore
+        return completion_with_retries(**kwargs)
+
+    def __call__(self, prompt: Prompt) -> Message:
+        _, model_name = _extract_provider_and_model(self.config.model_name)
+        span_name = f"chat {model_name}"
+
+        with self._tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT):
+            response = self._call_completion(prompt)
+            _trace_llm_call(self.config, response)
+            return response.choices[0].message  # type: ignore
 
 
 class LLMCall(TypedBaseModel):
