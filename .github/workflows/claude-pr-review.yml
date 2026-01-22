@@ -1,0 +1,48 @@
+name: Claude PR Review
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  review-with-tracking:
+    # Only run on PR comments that contain "@claude /code-review"
+    if: |
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '@claude /code-review')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read       # Read repository files
+      pull-requests: write # Post PR comments, create reviews
+      issues: write        # Comment on issues (PRs are issues internally)
+      id-token: write      # OIDC authentication
+      actions: read        # github_ci MCP server
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.issue.pull_request.head.sha }}
+          fetch-depth: 0  # Full history for git blame/log
+
+      - name: PR Review with Progress Tracking
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Enable progress tracking
+          track_progress: true
+
+          # Trigger phrase: users comment "@claude /code-review"
+          trigger_phrase: "@claude /code-review"
+
+          # Additional context for /code-review command
+          prompt: |
+            Run /code-review --comment
+            
+            Review this PR against the AgentLab2 constitution defined in:
+            - .claude/rules/constitution.md (the full constitution with pillars and directives)
+            - .claude/rules/review-rules.md (enforceable rules with severity levels and examples)
+          # Tools for /code-review command (from official plugin documentation)
+          # Added Read, Glob, Grep for reading constitution files
+          claude_args: |
+            --max-turns 15 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr list:*),Read,Glob,Grep"
