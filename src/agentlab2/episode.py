@@ -7,8 +7,8 @@ from termcolor import colored
 from agentlab2.agent import AgentConfig
 from agentlab2.core import Trajectory, TrajectoryStep
 from agentlab2.environment import EnvConfig
-from agentlab2.storage import FileStorage, Storage
 from agentlab2.metrics.tracer import get_tracer
+from agentlab2.storage import FileStorage, Storage
 
 logger = logging.getLogger(__name__)
 
