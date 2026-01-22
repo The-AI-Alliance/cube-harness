@@ -17,6 +17,8 @@ from agentlab2.metrics.processor import AL2_EXPERIMENT, AL2_NAME, AL2_TYPE, TYPE
 ENV_TRACEPARENT = "TRACEPARENT"
 ENV_TRACE_OUTPUT = "AGENTLAB_TRACE_OUTPUT"
 ENV_OTLP_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+ENV_AUTH_CODE = "AGENTLAB_AUTH_CODE"
+AL2_AUTH = "al2.auth"
 
 
 class _AgentTracer:
@@ -27,11 +29,16 @@ class _AgentTracer:
         service_name: str,
         output_dir: str | Path | None = None,
         otlp_endpoint: str | None = None,
+        auth_code: str | None = None,
     ) -> None:
         assert output_dir or otlp_endpoint, "At least one collector (output_dir or otlp_endpoint) required"
 
         self.output_dir: Path | None = None
-        self._provider = TracerProvider(resource=Resource.create({SERVICE_NAME: service_name}))
+        resource_attrs = {SERVICE_NAME: service_name}
+        if auth_code:
+            resource_attrs[AL2_AUTH] = auth_code
+            os.environ[ENV_AUTH_CODE] = auth_code
+        self._provider = TracerProvider(resource=Resource.create(resource_attrs))
 
         if output_dir:
             self.output_dir = Path(output_dir)
@@ -115,7 +122,6 @@ def _get_parent_ctx_env() -> Context | None:
 
 
 def get_trace_env_vars() -> dict[str, str]:
-    # This helper is used only mainly by ray to propagate parameters to the workers.
     env_vars = {}
     if tp := os.environ.get(ENV_TRACEPARENT):
         env_vars[ENV_TRACEPARENT] = tp
@@ -123,6 +129,8 @@ def get_trace_env_vars() -> dict[str, str]:
         env_vars[ENV_TRACE_OUTPUT] = output
     if otlp := os.environ.get(ENV_OTLP_ENDPOINT):
         env_vars[ENV_OTLP_ENDPOINT] = otlp
+    if auth := os.environ.get(ENV_AUTH_CODE):
+        env_vars[ENV_AUTH_CODE] = auth
     return env_vars
 
 
@@ -165,15 +173,17 @@ def get_tracer(
     service_name: str,
     output_dir: str | Path | None = None,
     otlp_endpoint: str | None = None,
+    auth_code: str | None = None,
 ) -> _AgentTracer | _NoOpTracer:
-    # Code params override env vars
     output_dir = output_dir or os.environ.get(ENV_TRACE_OUTPUT)
     otlp_endpoint = otlp_endpoint or os.environ.get(ENV_OTLP_ENDPOINT)
+    auth_code = auth_code or os.environ.get(ENV_AUTH_CODE)
 
     if output_dir or otlp_endpoint:
         return _AgentTracer(
             service_name=service_name,
             output_dir=output_dir,
             otlp_endpoint=otlp_endpoint,
+            auth_code=auth_code,
         )
     return _NoOpTracer()
