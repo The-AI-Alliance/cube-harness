@@ -67,6 +67,9 @@ class Episode:
                         self.save_step(env_output)
 
                         span.set_attribute("agent_output", agent_output.model_dump_json())
+                        span.set_attribute("env_output", env_output.model_dump_json())
+                        span.set_attribute("done", env_output.done)
+                        span.set_attribute("success", env_output.reward > 0)
                         turns += 1
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
