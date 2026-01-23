@@ -9,8 +9,8 @@ import argparse
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from os.path import expanduser
 from pathlib import Path
-from posixpath import expanduser
 from typing import Any
 
 import gradio as gr
