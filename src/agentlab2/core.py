@@ -1,6 +1,7 @@
 import base64
 import io
 import json
+import traceback
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Protocol, Self, TypeAlias
 
@@ -62,9 +63,27 @@ class Action(TypedBaseModel):
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
 
+class StepError(TypedBaseModel):
+    """Represents an error that occurred during a step execution."""
+
+    error_type: str
+    exception_str: str
+    stack_trace: str
+
+    @classmethod
+    def from_exception(cls, exc: Exception) -> "StepError":
+        """Create a StepError from an exception object."""
+        return cls(
+            error_type=type(exc).__name__,
+            exception_str=str(exc),
+            stack_trace="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        )
+
+
 class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)
+    error: StepError | None = None
 
 
 _image_prefix = "data:image/png;base64,"
@@ -151,6 +170,7 @@ class EnvironmentOutput(TypedBaseModel):
     reward: float = 0.0
     done: bool = False
     info: dict = Field(default_factory=dict)
+    error: StepError | None = None
 
 
 class Trajectory(TypedBaseModel):
