@@ -21,7 +21,6 @@ class DiskSpanExporter(SpanExporter):
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._pending: list[Future[Path]] = []
 
-
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
         for span in spans:
             self._store.write_span(span)
@@ -42,14 +41,12 @@ class DiskSpanExporter(SpanExporter):
 
         return SpanExportResult.SUCCESS
 
-
     def force_flush(self, timeout_millis: int = 30000) -> bool:
         self._store.flush()
         for future in self._pending:
             future.result(timeout=timeout_millis / 1000)
         self._pending.clear()
         return True
-
 
     def shutdown(self) -> None:
         self.force_flush()
