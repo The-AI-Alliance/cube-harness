@@ -14,9 +14,9 @@ class JsonlSpanWriter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
-
     def write_span(self, span: ReadableSpan) -> None:
         context = span.get_span_context()  # type: ignore[no-untyped-call]
+        assert context is not None
         parent = span.parent
         record = SpanRecord(
             trace_id=context.trace_id,
@@ -30,12 +30,10 @@ class JsonlSpanWriter:
         )
         self.write(record)
 
-
     def write(self, record: SpanRecord) -> None:
         with self._lock:
             with self._path.open("a") as f:
                 f.write(record.model_dump_json() + "\n")
-
 
     def scan_all(self) -> list[SpanRecord]:
         with self._lock:
@@ -44,12 +42,10 @@ class JsonlSpanWriter:
             with self._path.open() as f:
                 return [SpanRecord.model_validate_json(line) for line in f if line.strip()]
 
-
     @staticmethod
     def flush() -> bool:
         # For now we just open the file on demand
         return True
-
 
     def close(self) -> None:
         # For now we just open the file on demand

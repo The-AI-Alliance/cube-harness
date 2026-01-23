@@ -12,7 +12,7 @@ dependencies = [
     "pydantic~=2.0",
     "litellm~=1.80.8",
     "playwright~=1.56",
-    "Pillow~=12.0",
+    "Pillow~=11.0",
     "beautifulsoup4~=4.14",
     "numpy~=2.3.5",
     "numpydoc~=1.10.0",
@@ -21,6 +21,8 @@ dependencies = [
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
     "miniwob>=1.0",
+    "gradio~=5.49",
+    "matplotlib>=3.8",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
@@ -43,6 +45,9 @@ line-ending = "auto"
 
 [tool.ruff.lint]
 extend-select = ["I"] # sort imports
+
+[project.scripts]
+al2-viewer = "agentlab2.viewer:main"
 
 [dependency-groups]
 dev = [
