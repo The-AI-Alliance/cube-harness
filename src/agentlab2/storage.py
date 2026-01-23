@@ -111,7 +111,7 @@ class FileStorage:
 
         # TODO: remove legacy format support
         if "metadata" not in trajectory_data:
-            trajectory_data = {"id": "", "metadata": trajectory_data}
+            trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
 
         steps: list[TrajectoryStep] = []
         if steps_path.exists():
