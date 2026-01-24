@@ -5,6 +5,7 @@ Terminal-Bench evaluates agents on real-world terminal tasks.
 Usage:
     uv run recipes/hello_tbench.py debug    # 1 task, sequential
     uv run recipes/hello_tbench.py oracle   # 10 tasks with oracle agent
+    uv run recipes/hello_tbench.py easy     # 4 easy tasks with react agent
     uv run recipes/hello_tbench.py          # Full run with Ray
 """
 
@@ -45,7 +46,8 @@ def main(mode: str) -> None:
         tool_config=tool_config,
         shuffle=True,
         shuffle_seed=42,
-        max_tasks={"debug": 1, "oracle": 10}.get(mode),
+        max_tasks={"debug": 1, "oracle": 10, "easy": 4}.get(mode),
+        difficulty_filter="easy" if mode == "easy" else None,
         oracle_mode=mode == "oracle",
     )
 
@@ -56,12 +58,12 @@ def main(mode: str) -> None:
         benchmark=benchmark,
     )
 
-    if mode in ("debug", "oracle"):
+    if mode in ("debug", "oracle", "easy"):
         run_sequentially(exp, debug_limit=1 if mode == "debug" else None)
     else:
         run_with_ray(exp, n_cpus=4)
 
 
 if __name__ == "__main__":
-    mode = sys.argv[-1] if len(sys.argv) > 1 and sys.argv[-1] in ("debug", "oracle") else "full"
+    mode = sys.argv[-1] if len(sys.argv) > 1 and sys.argv[-1] in ("debug", "oracle", "easy") else "full"
     main(mode)

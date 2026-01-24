@@ -1,19 +1,36 @@
 """Terminal-Bench benchmark implementation."""
 
+import io
 import logging
+import tarfile
 from pathlib import Path
 from random import Random
 
 from datasets import load_from_disk
 
 from agentlab2.benchmark import Benchmark
-from agentlab2.benchmarks.terminalbench.task import TerminalBenchTask
+from agentlab2.benchmarks.terminalbench.task import DEFAULT_IMAGE, TerminalBenchTask, parse_dockerfile
+from agentlab2.environment import EnvConfig
+from agentlab2.tools.daytona import DaytonaSWEToolConfig
 
 logger = logging.getLogger(__name__)
 
 # Default dataset path
 DEFAULT_DATASET_PATH = "./data/terminal_bench"
-# TODO: benchmark has a timeout set that we can't configure unless we modify episode.py
+
+
+def _extract_dockerfile(archive: bytes) -> str | None:
+    """Extract Dockerfile content from a task archive."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
+            for member in tar.getnames():
+                if member.endswith("Dockerfile") or "/Dockerfile" in member:
+                    f = tar.extractfile(member)
+                    if f:
+                        return f.read().decode("utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to extract Dockerfile: {e}")
+    return None
 
 
 class TerminalBenchBenchmark(Benchmark):
@@ -49,6 +66,7 @@ class TerminalBenchBenchmark(Benchmark):
     oracle_mode: bool = False  # If True, upload solution.sh for oracle agent
 
     _dataset: list | None = None
+    _tasks: list[TerminalBenchTask] | None = None
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -72,6 +90,9 @@ class TerminalBenchBenchmark(Benchmark):
 
     def load_tasks(self) -> list[TerminalBenchTask]:
         """Load tasks from the dataset."""
+        if self._tasks is not None:
+            return self._tasks
+
         if self._dataset is None:
             self.setup()
 
@@ -103,9 +124,18 @@ class TerminalBenchBenchmark(Benchmark):
         if self.max_tasks:
             tasks_data = tasks_data[: self.max_tasks]
 
-        # Create task objects
-        tasks = [
-            TerminalBenchTask(
+        # Create task objects with parsed Dockerfile info
+        tasks = []
+        for t in tasks_data:
+            # Parse Dockerfile to get base image and setup commands
+            dockerfile_content = _extract_dockerfile(t["archive"])
+            if dockerfile_content:
+                base_image, setup_commands = parse_dockerfile(dockerfile_content)
+            else:
+                base_image = DEFAULT_IMAGE
+                setup_commands = []
+
+            task = TerminalBenchTask(
                 id=t["task_id"],
                 instruction=t["base_description"],
                 archive=t["archive"],
@@ -114,14 +144,43 @@ class TerminalBenchBenchmark(Benchmark):
                 tags=t.get("tags", []),
                 max_agent_timeout_sec=t.get("max_agent_timeout_sec", 900),
                 max_test_timeout_sec=t.get("max_test_timeout_sec", 180),
+                base_image=base_image,
+                setup_commands=setup_commands,
                 oracle_mode=self.oracle_mode,
             )
-            for t in tasks_data
-        ]
+            tasks.append(task)
 
         logger.info(f"Created {len(tasks)} Terminal-Bench tasks")
+        self._tasks = tasks
         return tasks
+
+    def env_configs(self) -> list[EnvConfig]:
+        """Generate environment configurations with task-specific Docker images."""
+        tasks = self.load_tasks()
+
+        # Create a task-specific tool config for each task
+        configs = []
+        for task in tasks:
+            # Get base config settings
+            base_config = self.tool_config
+            if not isinstance(base_config, DaytonaSWEToolConfig):
+                raise TypeError(f"TerminalBenchBenchmark requires DaytonaSWEToolConfig, got {type(base_config)}")
+
+            # Create task-specific config with the correct image
+            task_tool_config = DaytonaSWEToolConfig(
+                api_key=base_config.api_key,
+                image=task.base_image,
+                cpus=base_config.cpus,
+                memory_gb=base_config.memory_gb,
+                disk_gb=base_config.disk_gb,
+            )
+
+            configs.append(EnvConfig(task=task, tool_config=task_tool_config))
+            logger.debug(f"Task {task.id}: using image {task.base_image}")
+
+        return configs
 
     def close(self) -> None:
         """Clean up resources."""
         self._dataset = None
+        self._tasks = None

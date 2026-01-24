@@ -18,6 +18,67 @@ logger = logging.getLogger(__name__)
 # Files that should NOT be given to the agent at setup
 HIDDEN_FILES = {"tests", "solution.sh", "run-tests.sh", "Dockerfile", "docker-compose.yaml", "task.yaml"}
 
+# Default image if we can't parse the Dockerfile
+DEFAULT_IMAGE = "python:3.13"
+
+
+def parse_dockerfile(dockerfile_content: str) -> tuple[str, list[str]]:
+    """Parse a Dockerfile to extract base image and RUN commands.
+
+    Returns:
+        Tuple of (base_image, list of shell commands from RUN instructions)
+    """
+    lines = dockerfile_content.split("\n")
+    base_image = DEFAULT_IMAGE
+    run_commands: list[str] = []
+
+    # Find the FROM line (last non-commented FROM takes precedence)
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if stripped.upper().startswith("FROM "):
+            # Extract image name, handling AS aliases
+            from_parts = stripped[5:].strip().split()
+            if from_parts:
+                base_image = from_parts[0]
+
+    # Extract RUN commands (handle multi-line with backslash)
+    current_run = []
+    in_run = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip comments
+        if stripped.startswith("#"):
+            continue
+
+        if stripped.upper().startswith("RUN "):
+            in_run = True
+            cmd = stripped[4:].strip()
+            if cmd.endswith("\\"):
+                current_run.append(cmd[:-1].strip())
+            else:
+                current_run.append(cmd)
+                run_commands.append(" ".join(current_run))
+                current_run = []
+                in_run = False
+        elif in_run:
+            if stripped.endswith("\\"):
+                current_run.append(stripped[:-1].strip())
+            else:
+                current_run.append(stripped)
+                run_commands.append(" ".join(current_run))
+                current_run = []
+                in_run = False
+
+    # Handle trailing RUN command
+    if current_run:
+        run_commands.append(" ".join(current_run))
+
+    return base_image, run_commands
+
 
 class TerminalBenchTask(Task):
     """A single Terminal-Bench task.
@@ -47,6 +108,8 @@ class TerminalBenchTask(Task):
         tags: list[str],
         max_agent_timeout_sec: int,
         max_test_timeout_sec: int,
+        base_image: str,
+        setup_commands: list[str],
         oracle_mode: bool = False,
     ) -> None:
         self.id = id
@@ -57,6 +120,8 @@ class TerminalBenchTask(Task):
         self.tags = tags
         self.max_agent_timeout_sec = max_agent_timeout_sec
         self.max_test_timeout_sec = max_test_timeout_sec
+        self.base_image = base_image
+        self.setup_commands = setup_commands
         self.oracle_mode = oracle_mode
         self._temp_dir: tempfile.TemporaryDirectory | None = None
         self._task_path: Path | None = None
@@ -129,12 +194,30 @@ class TerminalBenchTask(Task):
         b64_content = base64.b64encode(content).decode("ascii")
         self._tool.bash(f"echo '{b64_content}' | base64 -d > {remote_path}")
 
+    def _run_setup_commands(self) -> None:
+        """Run Dockerfile RUN commands to set up the environment."""
+        if not self.setup_commands:
+            return
+
+        logger.info(f"Running {len(self.setup_commands)} setup commands for task {self.id}")
+        for i, cmd in enumerate(self.setup_commands):
+            logger.debug(f"Setup command {i + 1}/{len(self.setup_commands)}: {cmd[:100]}...")
+            # Use longer timeout for setup commands (apt-get, pip install, etc.)
+            output = self._tool.bash(cmd, timeout=600)
+            if "[exit_code:" in output and "[exit_code: 0]" not in output:
+                logger.warning(f"Setup command failed: {cmd[:100]}...\nOutput: {output[:500]}")
+
     def setup(self, tool: DaytonaSWETool) -> tuple[Observation, dict]:
         """Initialize the task environment."""
-        logger.info(f"Setting up Terminal-Bench task: {self.id}")
+        logger.info(f"Setting up Terminal-Bench task: {self.id} (image: {self.base_image})")
 
         self._tool = tool
-        self._extract_archive()  # extract all the necessary files
+        self._extract_archive()
+
+        # Run Dockerfile setup commands first (before uploading files)
+        self._run_setup_commands()
+
+        # Create /app and upload files
         self._tool.bash("mkdir -p /app")
         self._upload_initial_files()
 
@@ -145,6 +228,7 @@ class TerminalBenchTask(Task):
             "difficulty": self.difficulty,
             "category": self.category,
             "tags": self.tags,
+            "base_image": self.base_image,
             "max_agent_timeout_sec": self.max_agent_timeout_sec,
         }
 

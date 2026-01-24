@@ -17,7 +17,7 @@ class DaytonaSWEToolConfig(ToolConfig):
     image: str = "python:3.13"
     cpus: int = 2
     memory_gb: int = 4
-    disk_gb: int = 10
+    disk_gb: int = 10  # Daytona max is 10GB
 
     def make(self) -> "DaytonaSWETool":
         return DaytonaSWETool(self)
