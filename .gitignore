@@ -283,3 +283,4 @@ node_modules
 # LSF license
 pac.entitlement
 outputs/
+data/terminal_bench
