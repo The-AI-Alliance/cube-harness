@@ -94,12 +94,12 @@ def main() -> None:
 
     print(f"\n[DONE] Dataset saved to: {outdir}")
     print("\nTo load the dataset locally:")
-    print(f"  from datasets import load_from_disk")
+    print("  from datasets import load_from_disk")
     print(f"  ds = load_from_disk('{outdir}')")
 
     if args.push:
-        print(f"\nOr load from HuggingFace Hub:")
-        print(f"  from datasets import load_dataset")
+        print("\nOr load from HuggingFace Hub:")
+        print("  from datasets import load_dataset")
         print(f"  ds = load_dataset('{args.repo_id}', split='test')")
 
 
