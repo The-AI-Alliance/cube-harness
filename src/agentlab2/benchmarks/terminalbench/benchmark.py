@@ -46,6 +46,7 @@ class TerminalBenchBenchmark(Benchmark):
     difficulty_filter: str | None = None
     category_filter: str | None = None
     task_ids: list[str] | None = None  # Specific task IDs to load
+    oracle_mode: bool = False  # If True, upload solution.sh for oracle agent
 
     _dataset: list | None = None
 
@@ -113,6 +114,7 @@ class TerminalBenchBenchmark(Benchmark):
                 tags=t.get("tags", []),
                 max_agent_timeout_sec=t.get("max_agent_timeout_sec", 900),
                 max_test_timeout_sec=t.get("max_test_timeout_sec", 180),
+                oracle_mode=self.oracle_mode,
             )
             for t in tasks_data
         ]

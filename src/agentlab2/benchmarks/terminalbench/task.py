@@ -47,6 +47,7 @@ class TerminalBenchTask(Task):
         tags: list[str],
         max_agent_timeout_sec: int,
         max_test_timeout_sec: int,
+        oracle_mode: bool = False,
     ) -> None:
         self.id = id
         self.instruction = instruction
@@ -56,6 +57,7 @@ class TerminalBenchTask(Task):
         self.tags = tags
         self.max_agent_timeout_sec = max_agent_timeout_sec
         self.max_test_timeout_sec = max_test_timeout_sec
+        self.oracle_mode = oracle_mode
         self._temp_dir: tempfile.TemporaryDirectory | None = None
         self._task_path: Path | None = None
 
@@ -76,9 +78,12 @@ class TerminalBenchTask(Task):
         if self._task_path is None:
             raise RuntimeError("Task archive not extracted")
 
+        # In oracle mode, also include solution.sh
+        hidden = HIDDEN_FILES - {"solution.sh"} if self.oracle_mode else HIDDEN_FILES
+
         initial_files = []
         for item in self._task_path.iterdir():
-            if item.name not in HIDDEN_FILES:
+            if item.name not in hidden:
                 initial_files.append(item)
         return initial_files
 
@@ -132,7 +137,7 @@ class TerminalBenchTask(Task):
         self._extract_archive()  # extract all the necessary files
         self._tool.bash("mkdir -p /app")
         self._upload_initial_files()
-        
+
         obs = Observation.from_text(self.instruction)
 
         return obs, {
