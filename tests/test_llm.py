@@ -128,7 +128,7 @@ class TestLLM:
         assert result.content == "Hello! How can I help?"
 
     @patch("agentlab2.llm.completion_with_retries")
-    def test_llm_call_with_tools(self, mock_completion, sample_llm_config):
+    def test_llm_call_with_tools(self, mock_completion, sample_llm_config) -> None:
         """Test LLM call with tools."""
         mock_message = MagicMock()
         mock_message.tool_calls = [MagicMock(function=MagicMock(name="search", arguments='{"query": "test"}'))]
@@ -147,7 +147,6 @@ class TestLLM:
         assert call_kwargs["tools"] == tools
         assert result.tool_calls is not None
         assert result.content == "Tool call made."
-
 
 class TestLLMCall:
     """Tests for LLMCall class."""

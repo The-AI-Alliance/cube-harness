@@ -1,7 +1,10 @@
+import json
+import logging
 import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
+from uuid import uuid4
 
 from opentelemetry import trace
 from opentelemetry.context import Context
@@ -10,13 +13,40 @@ from opentelemetry.propagate import extract, inject
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import SpanKind
 
+from agentlab2.core import Action
 from agentlab2.metrics.disk_exporter import DiskSpanExporter
 from agentlab2.metrics.processor import AL2_EXPERIMENT, AL2_NAME, AL2_TYPE, TYPE_EPISODE, TYPE_EXPERIMENT, TYPE_STEP
+
+_logger = logging.getLogger(__name__)
 
 ENV_TRACEPARENT = "TRACEPARENT"
 ENV_TRACE_OUTPUT = "AGENTLAB_TRACE_OUTPUT"
 ENV_OTLP_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+
+# https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/#gen-ai-agent-attributes
+GEN_AI_AGENT_NAME = "gen_ai.agent.name"
+GEN_AI_AGENT_ID = "gen_ai.agent.id"
+GEN_AI_AGENT_DESCRIPTION = "gen_ai.agent.description"
+
+# https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/#execute-tool
+GEN_AI_TOOL_NAME = "gen_ai.tool.name"
+GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id"
+GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments"
+GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result"
+
+_tool_tracer = trace.get_tracer(__name__)
+
+
+@contextmanager
+def tool_span(action: Action) -> Iterator[trace.Span]:
+    """Create a span for tool execution with GenAI semantic attributes."""
+    with _tool_tracer.start_as_current_span(f"execute_tool {action.name}", kind=SpanKind.INTERNAL) as span:
+        span.set_attribute(GEN_AI_TOOL_NAME, action.name)
+        span.set_attribute(GEN_AI_TOOL_CALL_ID, action.id)
+        span.set_attribute(GEN_AI_TOOL_CALL_ARGUMENTS, json.dumps(action.arguments))
+        yield span
 
 
 class _AgentTracer:
@@ -27,11 +57,23 @@ class _AgentTracer:
         service_name: str,
         output_dir: str | Path | None = None,
         otlp_endpoint: str | None = None,
+        agent_name: str | None = None,
+        agent_id: str | None = None,
+        agent_description: str | None = None,
     ) -> None:
         assert output_dir or otlp_endpoint, "At least one collector (output_dir or otlp_endpoint) required"
+        _logger.info(f"Creating _AgentTracer: service={service_name}, output_dir={output_dir}, otlp_endpoint={otlp_endpoint}")
 
         self.output_dir: Path | None = None
-        self._provider = TracerProvider(resource=Resource.create({SERVICE_NAME: service_name}))
+        resource_attrs = {SERVICE_NAME: service_name}
+
+        default_agent_id = agent_id or agent_name or uuid4().hex
+        resource_attrs[GEN_AI_AGENT_NAME] = agent_name or default_agent_id
+        resource_attrs[GEN_AI_AGENT_ID] = agent_id or default_agent_id
+        if agent_description is not None:
+            resource_attrs[GEN_AI_AGENT_DESCRIPTION] = agent_description
+
+        self._provider = TracerProvider(resource=Resource.create(resource_attrs))
 
         if output_dir:
             self.output_dir = Path(output_dir)
@@ -98,7 +140,9 @@ class _AgentTracer:
 
 
     def shutdown(self) -> None:
+        _logger.info("Shutting down tracer and flushing spans")
         self._provider.shutdown()
+        _logger.info("Tracer shutdown complete")
 
 
 def _set_traceparent_env() -> None:
@@ -115,7 +159,6 @@ def _get_parent_ctx_env() -> Context | None:
 
 
 def get_trace_env_vars() -> dict[str, str]:
-    # This helper is used only mainly by ray to propagate parameters to the workers.
     env_vars = {}
     if tp := os.environ.get(ENV_TRACEPARENT):
         env_vars[ENV_TRACEPARENT] = tp
@@ -165,8 +208,10 @@ def get_tracer(
     service_name: str,
     output_dir: str | Path | None = None,
     otlp_endpoint: str | None = None,
+    agent_name: str | None = None,
+    agent_id: str | None = None,
+    agent_description: str | None = None,
 ) -> _AgentTracer | _NoOpTracer:
-    # Code params override env vars
     output_dir = output_dir or os.environ.get(ENV_TRACE_OUTPUT)
     otlp_endpoint = otlp_endpoint or os.environ.get(ENV_OTLP_ENDPOINT)
 
@@ -175,5 +220,8 @@ def get_tracer(
             service_name=service_name,
             output_dir=output_dir,
             otlp_endpoint=otlp_endpoint,
+            agent_name=agent_name,
+            agent_id=agent_id,
+            agent_description=agent_description,
         )
     return _NoOpTracer()
