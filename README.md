@@ -17,6 +17,21 @@ cd AgentLab2
 make install
 ```
 
+### API Keys
+* Set up your api keys in your `.env` of this project
+* Current hello world recipe is using an azure endpoint. You may change it for your needs (don't commit)
+* For azure, you need to provide these:
+```bash
+export AZURE_API_KEY=
+export AZURE_API_BASE=
+export AZURE_API_VERSION=
+```
+
+### Run Tests
+```bash
+make test
+```
+
 ### Run Hello Example
 
 The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark:
@@ -49,6 +64,25 @@ You can customize the experiment by editing recipe [`recipes/hello_miniwob.py`](
 - `BrowserEnvConfig` - env class and its options: headless mode, screenshot capture, html pruning etc.
 - `ReactAgentConfig` - agent behavior
 - `MiniWobBenchmark` - bencmark selection
+
+## Experiment Viewer
+
+AgentLab2 includes a Gradio-based UI for exploring experiment results and trajectories:
+
+```bash
+make viewer
+# or: uv run al2-viewer
+```
+
+The viewer displays:
+- **Trajectory list** - all runs with task ID, steps, reward, and duration
+- **Visual timeline** - color-coded steps (blue=environment, green=agent) with duration-based widths
+- **Screenshots** - browser state at each environment step
+- **Step details** - observations, agent actions, and LLM reasoning
+- **Debug data** - raw JSON, LLM calls, and tool configurations
+
+![AgentLab2 Viewer Screenshot](docs/assets/images/al2_viewer.png)
+
 
 ## Architecture Overview
 

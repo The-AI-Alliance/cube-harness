@@ -2,7 +2,7 @@
 
 import json
 
-from agentlab2.core import EnvironmentOutput, Observation, Trajectory
+from agentlab2.core import EnvironmentOutput, Observation, Trajectory, TrajectoryStep
 from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment, ExpResult
 from tests.conftest import MockBenchmark, MockTask
@@ -24,7 +24,8 @@ class TestExpResult:
     def test_exp_result_with_trajectories(self):
         """Test ExpResult with trajectories."""
         obs = Observation.from_text("done")
-        traj = Trajectory(metadata={"task_id": "task_1"}, steps=[EnvironmentOutput(obs=obs, reward=1.0, done=True)])
+        step = TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=1.0, done=True))
+        traj = Trajectory(id="test_traj", metadata={"task_id": "task_1"}, steps=[step])
 
         result = ExpResult(exp_id="test_exp", tasks_num=1, trajectories={"task_1": traj})
 
