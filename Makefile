@@ -20,8 +20,9 @@ viewer:
 	uv run al2-viewer --debug
 
 install:
-	uv sync
+	uv sync --all-extras
 	uv pip install -e .
+	uv run playwright install chromium --with-deps
 
 format:
 	uv run ruff format .
