@@ -158,8 +158,10 @@ class Episode:
                             env_output = env.step(agent_output.actions)
                         except Exception as e:
                             logger.exception(f"Error in env.step() at turn {turns}: {e}")
+                            # Use previous observation since env.step() failed
+                            prev_obs = trajectory.last_env_step().obs if trajectory.steps else Observation(contents=[])
                             env_output = EnvironmentOutput(
-                                obs=env_output.obs, error=StepError.from_exception(e)
+                                obs=prev_obs, error=StepError.from_exception(e)
                             )
                             trajectory.append(env_output)
                             self.save_step(env_output)

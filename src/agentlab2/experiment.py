@@ -114,11 +114,15 @@ class Experiment(TypedBaseModel):
                         with open(traj_file) as f:
                             lines = f.readlines()
                             if lines:
-                                # Check last line for completion
+                                # Check last line for successful completion
                                 last_line = json.loads(lines[-1])
-                                if last_line.get("_type") == "agentlab2.core.EnvironmentOutput":
-                                    if not last_line.get("error") and last_line.get("done"):
-                                        successful_task_ids.add(task_id)
+                                # Success: last step is EnvironmentOutput with done=True and no error
+                                if (
+                                    last_line.get("_type") == "agentlab2.core.EnvironmentOutput"
+                                    and not last_line.get("error")
+                                    and last_line.get("done")
+                                ):
+                                    successful_task_ids.add(task_id)
                     except Exception:
                         pass
 
