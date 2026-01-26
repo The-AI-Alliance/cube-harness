@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # Pin to 22.04 - ubuntu-latest (24.04) has libasound2 package issues with Playwright
 
     steps:
       - name: Checkout code
