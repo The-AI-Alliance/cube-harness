@@ -33,7 +33,6 @@ def main(debug: bool) -> None:
         use_screenshot=True,
         use_html=True,
         use_axtree=False,
-        headless=False,
     )
     benchmark = MiniWobBenchmark(tool_config=tool_config)
     exp = Experiment(
