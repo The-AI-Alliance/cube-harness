@@ -1,12 +1,13 @@
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from PIL import Image
 
-from agentlab2.core import Action, ActionSchema, Content, Observation
-from agentlab2.tool import AbstractTool, ToolConfig
-from agentlab2.tools.bgym_core.action.highlevel import HighLevelActionSet
+from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
+from agentlab2.core import Action, Content, Observation
+from agentlab2.tool import Tool, ToolConfig
 from agentlab2.tools.bgym_core.env import BrowserEnv
 from agentlab2.tools.bgym_core.task import OpenEndedTask
 from agentlab2.tools.bgym_core.utils import flatten_axtree_to_str, flatten_dom_to_str
@@ -52,51 +53,30 @@ class BrowsergymConfig(ToolConfig):
     prune_html: bool = True
     max_wait: int = 60
 
-    # Action configuration - which BrowserGym action subsets to use
-    action_subsets: list[str] = ["bid", "nav"]
-
     def make(self) -> "BrowsergymTool":
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(AbstractTool):
-    """
-    BrowserGym tool wrapper that adapts BrowserGym's BrowserEnv to the AgentLab2 Tool interface.
+class BrowsergymTool(Tool, BidBrowserActionSpace):
+    """BrowserGym tool wrapper that adapts BrowserGym's BrowserEnv to the AgentLab2 Tool interface.
 
     This tool wraps the BrowserGym environment and provides:
-    - Action execution via BrowserGym's HighLevelActionSet (native actions like click, fill, hover)
+    - Action execution via BidBrowserActionSpace protocol (mapped to BrowserGym actions)
     - Observation extraction (HTML, accessibility tree, screenshots)
     - Proper lifecycle management (reset, close)
 
-    The action space is defined by BrowserGym's HighLevelActionSet.
+    The action space is defined by the BidBrowserActionSpace protocol, using BID-based element selection.
+    Actions are executed via BrowserGym's env.step() method.
     """
 
+    action_space = BidBrowserActionSpace
+
     def __init__(self, config: BrowsergymConfig) -> None:
+        super().__init__()
         self.config = config
         self._env: BrowserEnv | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
-        # HighLevelActionSet defines the available actions and converts to Python code
-        self._highlevel_action_set = HighLevelActionSet(
-            subsets=config.action_subsets,
-            multiaction=False,
-        )
-        self._action_schemas: list[ActionSchema] | None = None
-
-    @property
-    def action_set(self) -> list[ActionSchema]:
-        """Generate action schemas from HighLevelActionSet."""
-        if self._action_schemas is None:
-            tool_descriptions = self._highlevel_action_set.to_tool_description(api="openai")
-            self._action_schemas = [
-                ActionSchema(
-                    name=tool["name"],
-                    description=tool["description"],
-                    parameters=tool["parameters"],
-                )
-                for tool in tool_descriptions
-            ]
-        return self._action_schemas
 
     def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
@@ -162,50 +142,90 @@ class BrowsergymTool(AbstractTool):
         self._last_obs, self._last_info = self._env.reset()
 
     def execute_action(self, action: Action) -> Observation:
-        """Execute an action and return the observation."""
+        """Execute an action using BidBrowserActionSpace protocol and return the observation."""
+        action_obs = super().execute_action(action)
+        action_obs += self.page_obs()
+        return action_obs
+
+    def _execute_bgym_step(self, action_str: str) -> str:
+        """Execute a BrowserGym action string via env.step() and return result message."""
         self._ensure_env()
+        obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
+        self._last_obs = obs
+        self._last_info = info
 
-        # Convert Action to BrowserGym action string
-        action_str = self._action_to_string(action)
+        result = "Success"
+        if terminated:
+            result += " (Episode terminated)"
+        if truncated:
+            result += " (Episode truncated)"
+        return result
 
-        try:
-            obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
+    # === BidBrowserActionSpace protocol implementation ===
+    # Each method maps to a BrowserGym action and executes via env.step()
 
-            # Store last observation for utility methods
-            self._last_obs = obs
-            self._last_info = info
+    def browser_press_key(self, key: str) -> str:
+        """Press a key on the keyboard."""
+        action_str = f'keyboard_press("{key}")'
+        return self._execute_bgym_step(action_str)
 
-            # Build observation with action result
-            action_result = f"Action executed: {action_str}"
-            if terminated:
-                action_result += " (Episode terminated)"
-            if truncated:
-                action_result += " (Episode truncated)"
+    def browser_type(self, bid: str, text: str) -> str:
+        """Type text into the element specified by BID."""
+        # Escape quotes in the text
+        escaped_text = text.replace("\\", "\\\\").replace('"', '\\"')
+        action_str = f'fill(bid="{bid}", value="{escaped_text}")'
+        return self._execute_bgym_step(action_str)
 
-            obs_result = Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
-            # Convert BrowserGym observation dict to AgentLab2 Observation
-            obs_result += self._bgym_obs_to_agentlab_obs(obs)
-            return obs_result
+    def browser_click(self, bid: str) -> str:
+        """Click on an element specified by BID."""
+        action_str = f'click(bid="{bid}")'
+        return self._execute_bgym_step(action_str)
 
-        except Exception as e:
-            error_msg = f"Error executing action {action.name}: {e}"
-            logger.exception(error_msg)
-            return Observation(contents=[Content(data=error_msg, tool_call_id=action.id)])
+    def browser_drag(self, from_bid: str, to_bid: str) -> str:
+        """Drag and drop from one element to another."""
+        action_str = f'drag_and_drop(from_bid="{from_bid}", to_bid="{to_bid}")'
+        return self._execute_bgym_step(action_str)
 
-    def _action_to_string(self, action: Action) -> str:
-        """Convert an Action to a BrowserGym action string like 'click("a51")'."""
-        args_parts = []
-        for key, value in action.arguments.items():
-            if isinstance(value, str):
-                args_parts.append(f'{key}="{value}"')
-            else:
-                args_parts.append(f"{key}={repr(value)}")
-        args_str = ", ".join(args_parts)
-        return f"{action.name}({args_str})"
+    def browser_hover(self, bid: str) -> str:
+        """Hover over an element specified by BID."""
+        action_str = f'hover(bid="{bid}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_select_option(self, bid: str, value: str) -> str:
+        """Select an option from a dropdown element."""
+        escaped_value = value.replace("\\", "\\\\").replace('"', '\\"')
+        action_str = f'select_option(bid="{bid}", options="{escaped_value}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_mouse_click_xy(self, x: int, y: int) -> str:
+        """Click at a given x, y coordinate using the mouse."""
+        action_str = f"mouse_click(x={x}, y={y})"
+        return self._execute_bgym_step(action_str)
+
+    def browser_wait(self, seconds: int) -> str:
+        """Wait for a given number of seconds, up to max_wait."""
+        wait_seconds = min(seconds, self.config.max_wait)
+        wait_ms = wait_seconds * 1000
+        action_str = f"noop(wait_ms={wait_ms})"
+        return self._execute_bgym_step(action_str)
+
+    def browser_back(self) -> str:
+        """Navigate back in browser history."""
+        action_str = "go_back()"
+        return self._execute_bgym_step(action_str)
+
+    def browser_forward(self) -> str:
+        """Navigate forward in browser history."""
+        action_str = "go_forward()"
+        return self._execute_bgym_step(action_str)
+
+    def noop(self) -> str:
+        """No operation action."""
+        action_str = "noop()"
+        return self._execute_bgym_step(action_str)
 
     def _bgym_obs_to_agentlab_obs(self, bgym_obs: dict) -> Observation:
-        """
-        Convert BrowserGym observation dict to AgentLab2 Observation.
+        """Convert BrowserGym observation dict to AgentLab2 Observation.
 
         BrowserGym provides observations with keys like:
         - 'screenshot': numpy array (converted to PIL Image)
@@ -260,8 +280,7 @@ class BrowsergymTool(AbstractTool):
         return None
 
     def page_obs(self) -> Observation:
-        """
-        Get the current page observation from BrowserGym.
+        """Get the current page observation from BrowserGym.
 
         This method acts as an adapter, converting BrowserGym's observation format
         to AgentLab2's Observation format.
