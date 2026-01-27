@@ -140,7 +140,7 @@ def test_valid_action() -> None:
 click({repr(checkbox.get(BID_ATTR))}, "17" screen")  # typo here
 """
     with pytest.raises(ValueError):
-        python_action = action_set.to_python_code(action)
+        action_set.to_python_code(action)  # validate action parsing
 
     obs, reward, term, trunc, info = env.step(action)
     checkbox = get_checkbox_elem(obs)
@@ -496,7 +496,7 @@ def test_click_through_frames() -> None:
     action = f"""\
 click({repr(checkbox.get(BID_ATTR))})
 """
-    python_action = action_set.to_python_code(action)
+    action_set.to_python_code(action)  # validate action parsing
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -536,7 +536,7 @@ def test_fill_through_iframe() -> None:
     action = f"""\
 fill({repr(text_input.get(BID_ATTR))}, "This is a test value.")
 """
-    python_action = action_set.to_python_code(action)
+    action_set.to_python_code(action)  # validate action parsing
 
     obs, reward, term, trunc, info = env.step(action)
 
@@ -579,7 +579,7 @@ def test_click() -> None:
     action = f"""
 click({repr(checkbox.get(BID_ATTR))})
 """
-    python_action = action_set.to_python_code(action)
+    action_set.to_python_code(action)  # validate action parsing
 
     obs, reward, terminated, truncated, info = env.step(action)
     checkbox = get_checkbox_elem(obs)
@@ -594,7 +594,7 @@ click({repr(checkbox.get(BID_ATTR))})
     action = f"""\
 click({repr(checkbox.get(BID_ATTR))})
 """
-    python_action = action_set.to_python_code(action)
+    action_set.to_python_code(action)  # validate action parsing
 
     obs, reward, term, trunc, info = env.step(action)
     checkbox = get_checkbox_elem(obs)
@@ -610,7 +610,7 @@ click({repr(checkbox.get(BID_ATTR))})
 click({repr(checkbox.get(BID_ATTR))})
 click({repr(checkbox.get(BID_ATTR))})
 """
-    python_action = action_set.to_python_code(action)
+    action_set.to_python_code(action)  # validate action parsing
 
     obs, reward, term, trunc, info = env.step(action)
     checkbox = get_checkbox_elem(obs)
@@ -1288,7 +1288,7 @@ def test_forced_actions(retry_with_force: bool) -> None:
     checkbox = get_checkbox(obs)
     if retry_with_force:
         assert not obs["last_action_error"]
-        assert checkbox.get("checked", False) == False
+        assert not checkbox.get("checked", False)
     else:
         assert obs["last_action_error"]
         assert checkbox.has_attr("checked")

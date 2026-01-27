@@ -54,8 +54,8 @@ page.get_by_label("Age:", exact=True).press("Tab")
 
     assert obs["last_action_error"] == ""
     assert reward == 0
-    assert term == False
-    assert trunc == False
+    assert not term
+    assert not trunc
 
     obs, reward, term, trunc, info = env.step(
         """\
@@ -69,8 +69,8 @@ page.get_by_role("button", name="Submit").press("Enter")
 
     assert obs["last_action_error"] == ""
     assert reward == 0
-    assert term == False
-    assert trunc == False
+    assert not term
+    assert not trunc
 
     obs, reward, term, trunc, info = env.step(
         """\
@@ -81,8 +81,8 @@ page.get_by_role("button", name="Submit").press("Enter")
 
     assert obs["last_action_error"] != ""
     assert reward == 0
-    assert term == False
-    assert trunc == False
+    assert not term
+    assert not trunc
 
     env.close()
 
@@ -100,13 +100,13 @@ def test_max_episode_steps() -> None:
 
     obs, reward, term, trunc, info = env.step("")
 
-    assert term == False
-    assert trunc == False
+    assert not term
+    assert not trunc
 
     obs, reward, term, trunc, info = env.step("")
 
-    assert term == False
-    assert trunc == False
+    assert not term
+    assert not trunc
 
     # max_steps = 2
     env = gym.make(
@@ -121,13 +121,13 @@ def test_max_episode_steps() -> None:
 
     obs, reward, term, trunc, info = env.step("")
 
-    assert term == False
-    assert trunc == False
+    assert not term
+    assert not trunc
 
     obs, reward, term, trunc, info = env.step("")
 
-    assert term == False
-    assert trunc == True
+    assert not term
+    assert trunc
 
     env.close()
 

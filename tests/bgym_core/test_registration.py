@@ -55,7 +55,7 @@ def test_registration() -> None:
     env.reset()
     env.unwrapped.task.a == ""
     env.unwrapped.task.b == 0
-    env.unwrapped.task.c == False
+    assert not env.unwrapped.task.c
     env.close()
 
     env = gym.make("browsergym/test_task", task_kwargs={"a": "other", "b": 1})
@@ -65,7 +65,7 @@ def test_registration() -> None:
     env.reset()
     env.unwrapped.task.a == "other"
     env.unwrapped.task.b == 1
-    env.unwrapped.task.c == False
+    assert not env.unwrapped.task.c
     env.close()
 
     env = gym.make("browsergym/test_task_with_defaults")
@@ -75,7 +75,7 @@ def test_registration() -> None:
     env.reset()
     env.unwrapped.task.a == "new value"
     env.unwrapped.task.b == 1
-    env.unwrapped.task.c == False
+    assert not env.unwrapped.task.c
     env.close()
 
     env = gym.make("browsergym/test_task_with_defaults", task_kwargs={"b": 2})
@@ -85,7 +85,7 @@ def test_registration() -> None:
     env.reset()
     env.unwrapped.task.a == "new value"
     env.unwrapped.task.b == 2
-    env.unwrapped.task.c == False
+    assert not env.unwrapped.task.c
     env.close()
 
     env = gym.make("browsergym/test_task_with_defaults", task_kwargs={"a": "other"})
