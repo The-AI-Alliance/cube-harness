@@ -61,7 +61,9 @@ class MiniWobBenchmark(Benchmark):
             stderr_path = Path(tempfile.gettempdir()) / "miniwob_server_stderr.log"
             stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
             self.close()
-            raise RuntimeError(f"MiniWob server failed to start (exit code {self._server_process.returncode}): {stderr_content}")
+            raise RuntimeError(
+                f"MiniWob server failed to start (exit code {self._server_process.returncode}): {stderr_content}"
+            )
 
         # Check if the server is running by attempting to connect
         try:

@@ -282,9 +282,7 @@ def pop_bids_from_attribute(dom_snapshot: dict, attr: str) -> None:
                         break
 
 
-def extract_dom_extra_properties(
-    dom_snapshot: dict, scale_factor: float, device_pixel_ratio: float = 1.0
-) -> dict:
+def extract_dom_extra_properties(dom_snapshot: dict, scale_factor: float, device_pixel_ratio: float = 1.0) -> dict:
     def to_string(idx: int) -> str | None:
         if idx == -1:
             return None
