@@ -50,10 +50,10 @@ class WorkArenaBenchmark(Benchmark):
 
     level: Literal["l1", "l2", "l3"] = "l1"
     meta_seed: int = 42
-    n_seeds_l1: int = 10
+    n_seeds_l1: int = 5
     shuffle: bool = True
     shuffle_seed: int = 42
-    is_agent_curriculum: bool = True
+    is_agent_curriculum: bool = False
 
     def setup(self) -> None:
         """Set up the WorkArena benchmark.

@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Callable
 
+from termcolor import colored
+
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSubset, Observation, Task
 from agentlab2.tools.browsergym import BrowsergymTool
@@ -98,6 +100,7 @@ class WorkArenaTask(Task):
 
         # Get the goal from the BrowserGym task
         goal = self._get_goal_from_env()
+        logger.info(colored(f"WorkArena task goal: {goal}", "green"))
 
         # Build initial observation with goal and page state
         obs = Observation.from_text(goal)

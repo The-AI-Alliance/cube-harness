@@ -81,6 +81,7 @@ class Episode:
                         turns += 1
                 trajectory.end_time = time.time()
                 self.storage.save_trajectory(trajectory)  # save final trajectory with end_time
+                logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
             raise e

@@ -33,7 +33,7 @@ from agentlab2.tools.browsergym import BrowsergymConfig
 
 def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_{current_datetime}"
+    output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_l1_{current_datetime}"
 
     # Configure LLM
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
@@ -51,8 +51,8 @@ def main(debug: bool) -> None:
     # Configure WorkArena benchmark
     benchmark = WorkArenaBenchmark(
         tool_config=tool_config,
-        level="l1",  # Use atomic tasks for debugging, "l2" or "l3" for compositional
-        n_seeds_l1=2 if debug else 10,  # Fewer seeds in debug mode
+        level="l1",
+        n_seeds_l1=2 if debug else 5,  # Fewer seeds in debug mode
     )
 
     # Create experiment
