@@ -3,14 +3,14 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+from browsergym.core.env import BrowserEnv
+from browsergym.core.task import OpenEndedTask
+from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
-from agentlab2.tools.bgym_core.env import BrowserEnv
-from agentlab2.tools.bgym_core.task import OpenEndedTask
-from agentlab2.tools.bgym_core.utils import flatten_axtree_to_str, flatten_dom_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +77,19 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         self._env: BrowserEnv | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
+        self._last_reward: float = 0.0
+        self._last_terminated: bool = False
 
     def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
         # Use OpenEndedTask as default - it provides a browser without task-specific logic,
         # allowing AgentLab2's Task abstraction (e.g., MiniWobTask) to handle task setup
         task_entrypoint = self.config.task_entrypoint or OpenEndedTask
-        task_kwargs = self.config.task_kwargs or {"start_url": "about:blank", "goal": None}
+        # For OpenEndedTask, provide default start_url if not specified
+        # For other tasks (like WorkArena), use task_kwargs as-is (they have their own defaults)
+        task_kwargs = self.config.task_kwargs
+        if task_entrypoint is OpenEndedTask and not task_kwargs:
+            task_kwargs = {"start_url": "about:blank", "goal": None}
 
         env_kwargs = {
             "task_entrypoint": task_entrypoint,
@@ -134,12 +140,55 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         self._ensure_env()
         return self._env.page if self._env and hasattr(self._env, "page") else None
 
+    @property
+    def last_reward(self) -> float:
+        """Get the reward from the last step."""
+        return self._last_reward
+
+    @property
+    def last_terminated(self) -> bool:
+        """Check if the episode terminated on the last step."""
+        return self._last_terminated
+
     def reset(self) -> None:
         """Reset the environment."""
         if self._env is not None:
             self._env.close()
         self._env = self._create_env()
         self._last_obs, self._last_info = self._env.reset()
+
+    def set_gym_task(
+        self,
+        task_entrypoint: Callable[[], Any],
+        task_kwargs: dict | None = None,
+        seed: int | None = None,
+    ) -> None:
+        """Reinitialize the BrowserGym environment with a specific task.
+
+        This method allows tasks (like WorkArenaTask) to configure the BrowserGym
+        task after the tool has been created. It closes the existing environment
+        and creates a new one with the specified task entrypoint and kwargs.
+
+        Args:
+            task_entrypoint: The BrowserGym task class or factory function.
+            task_kwargs: Optional kwargs to pass to the task constructor (excluding seed).
+            seed: Random seed for the task (passed to env.reset(), not task_kwargs).
+        """
+        if self._env is not None:
+            self._env.close()
+            self._env = None
+
+        # Update config with task-specific settings
+        self.config = self.config.model_copy(
+            update={
+                "task_entrypoint": task_entrypoint,
+                "task_kwargs": task_kwargs or {},
+            }
+        )
+
+        # Create and reset the new environment
+        self._env = self._create_env()
+        self._last_obs, self._last_info = self._env.reset(seed=seed)
 
     def execute_action(self, action: Action) -> Observation:
         """Execute an action using BidBrowserActionSpace protocol and return the observation."""
@@ -153,6 +202,8 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
         self._last_obs = obs
         self._last_info = info
+        self._last_reward = reward
+        self._last_terminated = terminated
 
         result = "Success"
         if terminated:
@@ -244,6 +295,8 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 with_visible=False,
                 filter_visible_only=False,
             )
+            if self.config.prune_html:
+                html_str = prune_html(html_str)
             # BrowserGym's flatten_dom_to_str already provides a pruned representation
             obs.contents.append(Content(data=html_str, name="pruned_html"))
 
@@ -306,3 +359,5 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 self._env = None
                 self._last_obs = None
                 self._last_info = None
+                self._last_reward = 0.0
+                self._last_terminated = False
