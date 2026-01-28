@@ -1,8 +1,6 @@
-"""Terminal-Bench benchmark implementation."""
+"""Terminal-Bench 2 benchmark implementation."""
 
-import io
 import logging
-import tarfile
 from pathlib import Path
 from random import Random
 
@@ -15,20 +13,34 @@ from agentlab2.tools.daytona import DaytonaSWEToolConfig
 
 logger = logging.getLogger(__name__)
 
-# Default dataset path
-DEFAULT_DATASET_PATH = "./data/terminal_bench"
+# Default dataset path (Terminal-Bench 2)
+DEFAULT_DATASET_PATH = "./data/terminal_bench_v2"
 
 
-def _has_dockerfile(archive: bytes) -> bool:
-    """Check if archive contains a Dockerfile."""
-    try:
-        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
-            for member in tar.getnames():
-                if member.endswith("Dockerfile") or "/Dockerfile" in member:
-                    return True
-    except Exception as e:
-        logger.warning(f"Failed to check archive for Dockerfile: {e}")
-    return False
+def _parse_memory_str(mem_str: str) -> int:
+    """Parse memory string like '4G' to GB integer."""
+    if isinstance(mem_str, int):
+        return mem_str
+    mem_str = str(mem_str).upper().strip()
+    if mem_str.endswith("G"):
+        return int(mem_str[:-1])
+    if mem_str.endswith("GB"):
+        return int(mem_str[:-2])
+    if mem_str.endswith("M"):
+        return max(1, int(mem_str[:-1]) // 1024)
+    return 4  # Default
+
+
+def _parse_storage_str(storage_str: str) -> int:
+    """Parse storage string like '10G' to GB integer."""
+    if isinstance(storage_str, int):
+        return storage_str
+    storage_str = str(storage_str).upper().strip()
+    if storage_str.endswith("G"):
+        return int(storage_str[:-1])
+    if storage_str.endswith("GB"):
+        return int(storage_str[:-2])
+    return 10  # Default
 
 
 class TerminalBenchBenchmark(Benchmark):
@@ -122,7 +134,7 @@ class TerminalBenchBenchmark(Benchmark):
         if self.max_tasks:
             tasks_data = tasks_data[: self.max_tasks]
 
-        # Create task objects (Dockerfile content is extracted separately for env_configs)
+        # Create task objects with TB2 fields
         tasks = []
         for t in tasks_data:
             task = TerminalBenchTask(
@@ -132,8 +144,12 @@ class TerminalBenchBenchmark(Benchmark):
                 difficulty=t.get("difficulty", "unknown"),
                 category=t.get("category", ""),
                 tags=t.get("tags", []),
+                docker_image=t.get("docker_image", DEFAULT_IMAGE),
+                cpus=t.get("cpus", 1),
+                memory=t.get("memory", "4G"),
+                storage=t.get("storage", "10G"),
                 max_agent_timeout_sec=t.get("max_agent_timeout_sec", 900),
-                max_test_timeout_sec=t.get("max_test_timeout_sec", 180),
+                max_test_timeout_sec=t.get("max_test_timeout_sec", 900),
                 oracle_mode=self.oracle_mode,
             )
             tasks.append(task)
@@ -143,10 +159,9 @@ class TerminalBenchBenchmark(Benchmark):
         return tasks
 
     def env_configs(self) -> list[EnvConfig]:
-        """Generate environment configurations with task-specific Dockerfiles.
+        """Generate environment configurations with task-specific pre-built images.
 
-        Each task gets its own tool config with the archive bytes. Daytona extracts
-        the archive and builds the image from the Dockerfile (if present).
+        Terminal-Bench 2 uses pre-built Docker images for each task.
         """
         tasks = self.load_tasks()
 
@@ -158,25 +173,18 @@ class TerminalBenchBenchmark(Benchmark):
             if not isinstance(base_config, DaytonaSWEToolConfig):
                 raise TypeError(f"TerminalBenchBenchmark requires DaytonaSWEToolConfig, got {type(base_config)}")
 
-            # Check if archive has a Dockerfile
-            has_dockerfile = _has_dockerfile(task.archive)
-
-            # Create task-specific config with archive (for Dockerfile build context)
+            # Create task-specific config with the pre-built Docker image
             task_tool_config = DaytonaSWEToolConfig(
                 api_key=base_config.api_key,
-                image=DEFAULT_IMAGE,  # Fallback if no Dockerfile
-                dockerfile_archive=task.archive if has_dockerfile else None,
-                cpus=base_config.cpus,
-                memory_gb=base_config.memory_gb,
-                disk_gb=base_config.disk_gb,
+                image=task.docker_image,
+                cpus=task.cpus,
+                memory_gb=_parse_memory_str(task.memory),
+                disk_gb=_parse_storage_str(task.storage),
                 ephemeral=base_config.ephemeral,
             )
 
             configs.append(EnvConfig(task=task, tool_config=task_tool_config))
-            if has_dockerfile:
-                logger.debug(f"Task {task.id}: building from Dockerfile")
-            else:
-                logger.debug(f"Task {task.id}: using default image {DEFAULT_IMAGE}")
+            logger.debug(f"Task {task.id}: using image {task.docker_image}")
 
         return configs
 

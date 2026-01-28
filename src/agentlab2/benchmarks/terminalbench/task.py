@@ -1,4 +1,4 @@
-"""Terminal-Bench task implementation."""
+"""Terminal-Bench 2 task implementation."""
 
 import base64
 import io
@@ -16,10 +16,10 @@ from agentlab2.tools.daytona import DaytonaSWETool
 
 logger = logging.getLogger(__name__)
 
-# Files that should NOT be given to the agent at setup
-HIDDEN_FILES = {"tests", "solution.sh", "run-tests.sh", "Dockerfile", "docker-compose.yaml", "task.yaml"}
+# Files/directories that should NOT be given to the agent at setup (TB2 structure)
+HIDDEN_FILES = {"tests", "solution", "environment", "task.toml", "instruction.md"}
 
-# Default image if no Dockerfile is provided
+# Default image if none specified
 DEFAULT_IMAGE = "python:3.13"
 
 
@@ -49,6 +49,10 @@ class TerminalBenchTask(Task):
         difficulty: str,
         category: str,
         tags: list[str],
+        docker_image: str,
+        cpus: int,
+        memory: str,
+        storage: str,
         max_agent_timeout_sec: int,
         max_test_timeout_sec: int,
         oracle_mode: bool = False,
@@ -59,6 +63,10 @@ class TerminalBenchTask(Task):
         self.difficulty = difficulty
         self.category = category
         self.tags = tags
+        self.docker_image = docker_image
+        self.cpus = cpus
+        self.memory = memory
+        self.storage = storage
         self.max_agent_timeout_sec = max_agent_timeout_sec
         self.max_test_timeout_sec = max_test_timeout_sec
         self.oracle_mode = oracle_mode
@@ -78,12 +86,16 @@ class TerminalBenchTask(Task):
         return task_path
 
     def _get_initial_files(self) -> list[Path]:
-        """Get files to upload at setup (agent can see these)."""
+        """Get files to upload at setup (agent can see these).
+
+        TB2 structure: Files in the root that aren't tests/, solution/, environment/
+        are uploaded to /app. In oracle mode, we also upload solution/ contents.
+        """
         if self._task_path is None:
             raise RuntimeError("Task archive not extracted")
 
-        # In oracle mode, also include solution.sh
-        hidden = HIDDEN_FILES - {"solution.sh"} if self.oracle_mode else HIDDEN_FILES
+        # In oracle mode, also include solution directory
+        hidden = HIDDEN_FILES - {"solution"} if self.oracle_mode else HIDDEN_FILES
 
         initial_files = []
         for item in self._task_path.iterdir():
@@ -139,17 +151,22 @@ class TerminalBenchTask(Task):
     def setup(self, tool: DaytonaSWETool) -> tuple[Observation, dict]:
         """Initialize the task environment.
 
-        Note: Environment setup (apt-get, pip install, etc.) is handled by Daytona
-        building the Dockerfile. We only need to upload task files here.
+        TB2 uses pre-built Docker images that already contain /app with task files.
+        We only upload solution/ for oracle mode.
         """
-        logger.info(f"Setting up Terminal-Bench task: {self.id}")
+        logger.info(f"Setting up Terminal-Bench task: {self.id} (image: {self.docker_image})")
 
         self._tool = tool
         self._extract_archive()
 
-        # Create /app and upload task files
-        self._tool.bash("mkdir -p /app")
-        self._upload_initial_files()
+        # TB2 pre-built images already have /app set up
+        # For oracle mode, upload the solution directory to /solution (TB2 convention)
+        if self.oracle_mode:
+            solution_dir = self._task_path / "solution"
+            if solution_dir.exists():
+                self._tool.bash("mkdir -p /solution")
+                self._upload_directory(solution_dir, "/solution")
+                logger.debug("Uploaded solution/ to /solution for oracle mode")
 
         obs = Observation.from_text(self.instruction)
 
@@ -158,31 +175,28 @@ class TerminalBenchTask(Task):
             "difficulty": self.difficulty,
             "category": self.category,
             "tags": self.tags,
+            "docker_image": self.docker_image,
             "max_agent_timeout_sec": self.max_agent_timeout_sec,
         }
 
     def _upload_test_files(self) -> None:
-        """Upload test files at validation time."""
+        """Upload test files at validation time.
+
+        TB2 structure: tests/ directory contains test.sh and pytest files.
+        """
         if self._task_path is None:
             raise RuntimeError("Task archive not extracted")
 
         tests_dir = self._task_path / "tests"
-        run_tests_sh = self._task_path / "run-tests.sh"
 
-        # Create /tests directory
-        self._tool.bash("mkdir -p /tests")
+        # Create directories
+        self._tool.bash("mkdir -p /tests /logs/verifier")
 
         # Upload tests directory
         if tests_dir.exists():
             self._upload_directory(tests_dir, "/tests")
+            self._tool.bash("chmod +x /tests/test.sh")
             logger.debug("Uploaded tests/ to /tests")
-
-        # Upload run-tests.sh
-        if run_tests_sh.exists():
-            content = run_tests_sh.read_text(encoding="utf-8")
-            self._tool.write_file("/app/run-tests.sh", content)
-            self._tool.bash("chmod +x /app/run-tests.sh")
-            logger.debug("Uploaded run-tests.sh to /app/run-tests.sh")
 
     def _parse_pytest_output(self, output: str) -> dict[str, str]:
         """Parse pytest output to extract individual test results.
@@ -223,40 +237,36 @@ class TerminalBenchTask(Task):
     def validate_task(self, obs: Observation, *args: Any) -> tuple[float, dict]:
         """Validate the task by running tests.
 
-        Terminal-Bench uses binary scoring: all tests must pass for reward=1.0.
+        TB2 uses test.sh which writes reward to /logs/verifier/reward.txt.
         """
         logger.info(f"Validating Terminal-Bench task: {self.id}")
 
         # Upload test files
         self._upload_test_files()
 
-        # Run tests with TEST_DIR environment variable
-        test_command = "cd /app && export TEST_DIR=/tests && bash run-tests.sh"
+        # Run tests using TB2's test.sh
+        test_command = "cd /app && bash /tests/test.sh"
         output = self._tool.bash(test_command, timeout=self.max_test_timeout_sec)
 
-        # Parse test results
+        # Parse test results from pytest output
         test_results = self._parse_pytest_output(output)
 
-        # Determine if all tests passed
-        all_passed = len(test_results) > 0 and all(r == "passed" for r in test_results.values())
+        # TB2 writes reward to /logs/verifier/reward.txt
+        reward_output = self._tool.bash("cat /logs/verifier/reward.txt 2>/dev/null || echo 0")
+        reward_str = reward_output.strip().split()[0] if reward_output.strip() else "0"
+        try:
+            reward = float(reward_str)
+        except ValueError:
+            reward = 0.0
+
+        # Parse stats from test results
         n_passed = sum(1 for r in test_results.values() if r == "passed")
         n_total = len(test_results)
+        all_passed = n_total > 0 and all(r == "passed" for r in test_results.values())
 
-        # Check exit code in output (from our tool's format)
+        # Check exit code in output
         exit_code_match = re.search(r"\[exit_code:\s*(\d+)\]", output)
         exit_code = int(exit_code_match.group(1)) if exit_code_match else None
-
-        # Also check for pytest success indicators
-        pytest_passed = "passed" in output.lower() and "failed" not in output.lower()
-
-        # Binary reward: 1.0 if all tests pass, 0.0 otherwise
-        # Trust test_results if we have them, otherwise fall back to exit code
-        if n_total > 0:
-            reward = 1.0 if all_passed else 0.0
-        elif exit_code is not None:
-            reward = 1.0 if exit_code == 0 else 0.0
-        else:
-            reward = 1.0 if pytest_passed else 0.0
 
         return reward, {
             "done": True,
