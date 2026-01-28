@@ -595,3 +595,154 @@ class TestBrowsergymToolActionSet:
         }
 
         assert expected_actions.issubset(action_names)
+
+
+class TestBrowsergymToolCheckboxJsFallback:
+    """Tests for checkbox/radio JS fallback in browser_click."""
+
+    def _create_tool_with_mock_env_and_page(self) -> BrowsergymTool:
+        """Helper to create a tool with mocked environment and page."""
+        config = BrowsergymConfig()
+        tool = BrowsergymTool(config)
+
+        mock_env = MagicMock()
+        mock_env.step.return_value = ({}, 0.0, False, False, {})
+
+        mock_page = MagicMock()
+        mock_env.page = mock_page
+
+        tool._env = mock_env
+        tool._last_obs = {}
+
+        return tool
+
+    def test_get_checkbox_state_returns_true_when_checked(self) -> None:
+        """Test that _get_checkbox_state returns True for checked checkbox."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.return_value = True
+
+        result = tool._get_checkbox_state("a1")
+
+        assert result is True
+        tool._env.page.evaluate.assert_called_once()
+
+    def test_get_checkbox_state_returns_false_when_unchecked(self) -> None:
+        """Test that _get_checkbox_state returns False for unchecked checkbox."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.return_value = False
+
+        result = tool._get_checkbox_state("a1")
+
+        assert result is False
+
+    def test_get_checkbox_state_returns_none_for_non_checkbox(self) -> None:
+        """Test that _get_checkbox_state returns None for non-checkbox elements."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.return_value = None
+
+        result = tool._get_checkbox_state("b1")
+
+        assert result is None
+
+    def test_get_checkbox_state_returns_none_on_exception(self) -> None:
+        """Test that _get_checkbox_state returns None when evaluate raises."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.side_effect = Exception("JS error")
+
+        result = tool._get_checkbox_state("c1")
+
+        assert result is None
+
+    def test_toggle_checkbox_js_sets_checked_true(self) -> None:
+        """Test that _toggle_checkbox_js sets checkbox to checked."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.return_value = True
+
+        tool._toggle_checkbox_js("a1", True)
+
+        tool._env.page.evaluate.assert_called_once()
+        call_args = tool._env.page.evaluate.call_args[0][0]
+        assert "elem.checked = true" in call_args
+        assert 'querySelector(\'[bid="a1"]\')' in call_args
+
+    def test_toggle_checkbox_js_sets_checked_false(self) -> None:
+        """Test that _toggle_checkbox_js sets checkbox to unchecked."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.return_value = True
+
+        tool._toggle_checkbox_js("a1", False)
+
+        call_args = tool._env.page.evaluate.call_args[0][0]
+        assert "elem.checked = false" in call_args
+
+    def test_toggle_checkbox_js_dispatches_events(self) -> None:
+        """Test that _toggle_checkbox_js dispatches click, change, and input events."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.return_value = True
+
+        tool._toggle_checkbox_js("a1", True)
+
+        call_args = tool._env.page.evaluate.call_args[0][0]
+        assert "dispatchEvent(new Event('click'" in call_args
+        assert "dispatchEvent(new Event('change'" in call_args
+        assert "dispatchEvent(new Event('input'" in call_args
+
+    def test_toggle_checkbox_js_handles_exception_gracefully(self) -> None:
+        """Test that _toggle_checkbox_js doesn't raise on exception."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page.evaluate.side_effect = Exception("JS error")
+
+        # Should not raise
+        tool._toggle_checkbox_js("a1", True)
+
+    def test_browser_click_no_fallback_for_non_checkbox(self) -> None:
+        """Test that browser_click doesn't use JS fallback for non-checkbox elements."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # _get_checkbox_state returns None for non-checkboxes
+        tool._env.page.evaluate.return_value = None
+
+        tool.browser_click("btn1")
+
+        # Should only call env.step (no JS fallback)
+        tool._env.step.assert_called_once_with('click(bid="btn1")')
+        # evaluate called once for _get_checkbox_state
+        assert tool._env.page.evaluate.call_count == 1
+
+    def test_browser_click_no_fallback_when_native_click_works(self) -> None:
+        """Test that browser_click doesn't use JS fallback when native click toggles state."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # First call: state before (unchecked), Second call: state after (checked)
+        tool._env.page.evaluate.side_effect = [False, True]
+
+        tool.browser_click("cb1")
+
+        tool._env.step.assert_called_once_with('click(bid="cb1")')
+        # Two evaluate calls: before and after state check
+        assert tool._env.page.evaluate.call_count == 2
+
+    def test_browser_click_uses_fallback_when_native_click_fails(self) -> None:
+        """Test that browser_click uses JS fallback when native click doesn't toggle state."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # First call: state before (unchecked), Second call: state after (still unchecked), Third call: JS toggle
+        tool._env.page.evaluate.side_effect = [False, False, True]
+
+        tool.browser_click("custom-cb1")
+
+        tool._env.step.assert_called_once_with('click(bid="custom-cb1")')
+        # Three evaluate calls: before, after, and JS toggle
+        assert tool._env.page.evaluate.call_count == 3
+        # Verify JS toggle was called with correct checked value (True, since it was False before)
+        js_toggle_call = tool._env.page.evaluate.call_args_list[2][0][0]
+        assert "elem.checked = true" in js_toggle_call
+
+    def test_browser_click_fallback_unchecks_when_already_checked(self) -> None:
+        """Test that browser_click JS fallback unchecks when checkbox was checked."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # State before: checked, State after: still checked (click didn't work)
+        tool._env.page.evaluate.side_effect = [True, True, True]
+
+        tool.browser_click("cb1")
+
+        # Verify JS toggle was called with False (to uncheck)
+        js_toggle_call = tool._env.page.evaluate.call_args_list[2][0][0]
+        assert "elem.checked = false" in js_toggle_call
