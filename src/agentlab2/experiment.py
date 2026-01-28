@@ -7,7 +7,7 @@ from pydantic import Field
 
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
-from agentlab2.core import EnvironmentOutput, Trajectory, TypedBaseModel
+from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TypedBaseModel
 from agentlab2.episode import Episode
 from agentlab2.storage import FileStorage
 
@@ -113,8 +113,21 @@ class Experiment(TypedBaseModel):
                 try:
                     trajectory = storage.load_trajectory(trajectory_id)
                     # Check if trajectory completed successfully
+                    # A trajectory is successful if:
+                    # 1. The last env step has done=True
+                    # 2. There are no errors in any step
                     last_env_step = trajectory.last_env_step()
-                    if last_env_step.done and not last_env_step.error:
+                    has_error = False
+                    # Check all steps for errors
+                    for step in trajectory.steps:
+                        if isinstance(step.output, EnvironmentOutput) and step.output.error:
+                            has_error = True
+                            break
+                        if isinstance(step.output, AgentOutput) and step.output.error:
+                            has_error = True
+                            break
+                    
+                    if last_env_step.done and not has_error and not last_env_step.error:
                         task_id = trajectory.metadata.get("task_id")
                         if task_id:
                             successful_task_ids.add(task_id)
@@ -125,7 +138,9 @@ class Experiment(TypedBaseModel):
         failed_episodes = []
         for config_file in config_files:
             # Extract task_id from filename: episode_{id}_task_{task_id}.json
-            parts = config_file.stem.split("_task_")
+            # Use split with maxsplit=1 to handle task_ids that contain "_task_"
+            # Split from left so we only split on the FIRST "_task_" (the delimiter)
+            parts = config_file.stem.split("_task_", 1)
             if len(parts) == 2:
                 task_id = parts[1]
                 if task_id not in successful_task_ids:
@@ -134,6 +149,8 @@ class Experiment(TypedBaseModel):
                         failed_episodes.append(episode)
                     except Exception as e:
                         logger.exception(f"Failed to load episode config {config_file}: {e}")
+            else:
+                logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
 
         if not failed_episodes:
             logger.info("No failed episodes to relaunch")
@@ -204,7 +221,9 @@ class Experiment(TypedBaseModel):
         unstarted_episodes = []
         for config_file in config_files:
             # Extract task_id from filename: episode_{id}_task_{task_id}.json
-            parts = config_file.stem.split("_task_")
+            # Use split with maxsplit=1 to handle task_ids that contain "_task_"
+            # Split from left so we only split on the FIRST "_task_" (the delimiter)
+            parts = config_file.stem.split("_task_", 1)
             if len(parts) == 2:
                 task_id = parts[1]
                 if task_id not in started_task_ids:
