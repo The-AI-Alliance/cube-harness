@@ -7,6 +7,7 @@ from browsergym.core.env import BrowserEnv
 from browsergym.core.task import OpenEndedTask
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
+from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
@@ -197,6 +198,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
     def _execute_bgym_step(self, action_str: str) -> str:
         """Execute a BrowserGym action string via env.step() and return result message."""
         self._ensure_env()
+        logger.info(colored(f"Execute bgym step: {action_str}", "magenta"))
         obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
         self._last_obs = obs
         self._last_info = info
@@ -226,10 +228,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         return self._execute_bgym_step(action_str)
 
     def browser_click(self, bid: str) -> str:
-        """Click on an element specified by BID.
-
-        For checkboxes/radios, uses JavaScript fallback if standard click doesn't toggle state.
-        """
+        """Click on an element specified by BID."""
         # Get state before click (for checkbox/radio detection)
         state_before = self._get_checkbox_state(bid)
 
@@ -243,41 +242,110 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             if state_after == state_before:
                 # Click didn't toggle - use JS fallback
                 self._toggle_checkbox_js(bid, not state_before)
+                state_after_js = self._get_checkbox_state(bid)
+                logger.info(colored(f"Checkbox/radio {bid} clicked with JS fallback, state: {state_after_js}", "cyan"))
+                result = self._execute_bgym_step("noop()")  # Dummy step to update obs/info
 
         return result
 
+    def _get_frame_for_bid(self, bid: str) -> Any:
+        """Navigate to the correct frame for a BID using BrowserGym's naming convention.
+
+        BIDs like 'a195' encode iframe hierarchy:
+        - 'a' is the first iframe
+        - 'aA' would be a nested iframe inside 'a'
+        - '195' without prefix is in the main frame
+
+        Returns the frame/page where the element with this BID lives.
+        """
+        current_frame = self.page
+
+        # Parse the BID to find frame prefixes
+        i = 0
+        while i < len(bid) and not bid[i:].isnumeric():
+            i += 1
+            # Allow multi-character frame ids like aA, bCD etc.
+            while i < len(bid) and bid[i].isalpha() and bid[i].isupper():
+                i += 1
+
+            if i > 0:
+                frame_bid = bid[:i]  # bid of the next frame to select
+                try:
+                    frame_elem = current_frame.get_by_test_id(frame_bid)
+                    if frame_elem.count() > 0:
+                        current_frame = frame_elem.frame_locator(":scope")
+                    else:
+                        break
+                except Exception:
+                    break
+
+        return current_frame
+
     def _get_checkbox_state(self, bid: str) -> bool | None:
-        """Get checkbox/radio checked state, or None if not a checkbox/radio."""
+        """Get checkbox/radio checked state, or None if not a checkbox/radio.
+
+        Navigates to the correct iframe using BrowserGym's BID naming convention,
+        then checks the element's checkbox state.
+        """
         try:
-            result = self.page.evaluate(f"""
-                () => {{
-                    const elem = document.querySelector('[bid="{bid}"]');
-                    if (!elem || (elem.type !== 'checkbox' && elem.type !== 'radio')) return null;
-                    return elem.checked;
-                }}
-            """)
-            return result
+            # Navigate to the correct frame for this BID
+            frame = self._get_frame_for_bid(bid)
+            locator = frame.get_by_test_id(bid)
+
+            if locator.count() == 0:
+                return None
+
+            # Get the element's properties via evaluate
+            js_code = """
+                (elem) => {
+                    if (elem.type === 'checkbox' || elem.type === 'radio') {
+                        return { isCheckbox: true, checked: elem.checked };
+                    }
+                    if (elem.getAttribute('data-type') === 'checkbox') {
+                        return { isCheckbox: true, checked: elem.value === 'true' };
+                    }
+                    return { isCheckbox: false };
+                }
+            """
+            result = locator.evaluate(js_code)
+
+            if isinstance(result, dict) and result.get("isCheckbox"):
+                return result.get("checked")
+            return None
         except Exception:
             return None
 
     def _toggle_checkbox_js(self, bid: str, checked: bool) -> None:
-        """Toggle checkbox state using JavaScript."""
+        """Toggle checkbox state using JavaScript.
+
+        Navigates to the correct iframe using BrowserGym's BID naming convention,
+        then toggles the checkbox state.
+        """
         try:
-            js_code = f"""
-            () => {{
-                const elem = document.querySelector('[bid="{bid}"]');
-                if (!elem) return false;
-                elem.checked = {str(checked).lower()};
-                elem.dispatchEvent(new Event('click', {{ bubbles: true }}));
-                elem.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                elem.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                return true;
-            }}
+            frame = self._get_frame_for_bid(bid)
+            locator = frame.get_by_test_id(bid)
+
+            js_code = """
+            (elem, checked) => {
+                if (elem.type === 'checkbox' || elem.type === 'radio') {
+                    elem.checked = checked;
+                    elem.dispatchEvent(new Event('click', { bubbles: true }));
+                    elem.dispatchEvent(new Event('change', { bubbles: true }));
+                    elem.dispatchEvent(new Event('input', { bubbles: true }));
+                    return true;
+                }
+                if (elem.getAttribute('data-type') === 'checkbox') {
+                    elem.value = checked ? 'true' : 'false';
+                    elem.dispatchEvent(new Event('change', { bubbles: true }));
+                    elem.dispatchEvent(new Event('input', { bubbles: true }));
+                    return true;
+                }
+                return false;
+            }
             """
-            self.page.evaluate(js_code)
-            logger.info(f"Used JS fallback to set checkbox {bid} to {checked}")
-        except Exception as e:
-            logger.warning(f"Error in JS checkbox toggle for {bid}: {e}")
+            locator.evaluate(js_code, checked)
+        except Exception:
+            pass
 
     def browser_drag(self, from_bid: str, to_bid: str) -> str:
         """Drag and drop from one element to another."""

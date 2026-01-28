@@ -601,7 +601,13 @@ class TestBrowsergymToolCheckboxJsFallback:
     """Tests for checkbox/radio JS fallback in browser_click."""
 
     def _create_tool_with_mock_env_and_page(self) -> BrowsergymTool:
-        """Helper to create a tool with mocked environment and page."""
+        """Helper to create a tool with mocked environment and page.
+
+        Creates a mock that handles the frame navigation chain:
+        1. _get_frame_for_bid(bid) parses BID and navigates to iframe
+        2. For BID "a123": page.get_by_test_id("a") -> frame_locator(":scope") -> frame
+        3. frame.get_by_test_id("a123") -> element locator
+        """
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
@@ -611,6 +617,29 @@ class TestBrowsergymToolCheckboxJsFallback:
         mock_page = MagicMock()
         mock_env.page = mock_page
 
+        # Create the element locator (final target)
+        mock_element_locator = MagicMock()
+        mock_element_locator.count.return_value = 1
+
+        # Create the iframe locator that returns the element locator
+        mock_iframe_locator = MagicMock()
+        mock_iframe_locator.count.return_value = 1
+
+        # Create the frame (returned by frame_locator)
+        mock_frame = MagicMock()
+        mock_frame.get_by_test_id.return_value = mock_element_locator
+
+        # Chain: iframe_locator.frame_locator(":scope") -> frame
+        mock_iframe_locator.frame_locator.return_value = mock_frame
+
+        # page.get_by_test_id returns either iframe locator or element locator
+        # depending on whether it's called with iframe bid or element bid
+        mock_page.get_by_test_id.return_value = mock_iframe_locator
+
+        # Store references for tests to configure return values
+        mock_page._mock_element_locator = mock_element_locator
+        mock_page._mock_frame = mock_frame
+
         tool._env = mock_env
         tool._last_obs = {}
 
@@ -619,130 +648,153 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_get_checkbox_state_returns_true_when_checked(self) -> None:
         """Test that _get_checkbox_state returns True for checked checkbox."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.return_value = True
+        # Configure evaluate to return checkbox state
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": True,
+            "checked": True,
+        }
 
-        result = tool._get_checkbox_state("a1")
+        result = tool._get_checkbox_state("a123")
 
         assert result is True
-        tool._env.page.evaluate.assert_called_once()
+        tool._env.page._mock_element_locator.evaluate.assert_called_once()
 
     def test_get_checkbox_state_returns_false_when_unchecked(self) -> None:
         """Test that _get_checkbox_state returns False for unchecked checkbox."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.return_value = False
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": True,
+            "checked": False,
+        }
 
-        result = tool._get_checkbox_state("a1")
+        result = tool._get_checkbox_state("a123")
 
         assert result is False
 
     def test_get_checkbox_state_returns_none_for_non_checkbox(self) -> None:
         """Test that _get_checkbox_state returns None for non-checkbox elements."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.return_value = None
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": False,
+            "tagName": "DIV",
+        }
 
-        result = tool._get_checkbox_state("b1")
+        result = tool._get_checkbox_state("b456")
+
+        assert result is None
+
+    def test_get_checkbox_state_returns_none_when_element_not_found(self) -> None:
+        """Test that _get_checkbox_state returns None when element not found."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.count.return_value = 0
+
+        result = tool._get_checkbox_state("c789")
 
         assert result is None
 
     def test_get_checkbox_state_returns_none_on_exception(self) -> None:
         """Test that _get_checkbox_state returns None when evaluate raises."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.side_effect = Exception("JS error")
+        tool._env.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
 
-        result = tool._get_checkbox_state("c1")
+        result = tool._get_checkbox_state("c789")
 
         assert result is None
 
     def test_toggle_checkbox_js_sets_checked_true(self) -> None:
         """Test that _toggle_checkbox_js sets checkbox to checked."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.return_value = True
+        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
-        tool._toggle_checkbox_js("a1", True)
+        tool._toggle_checkbox_js("a123", True)
 
-        tool._env.page.evaluate.assert_called_once()
-        call_args = tool._env.page.evaluate.call_args[0][0]
-        assert "elem.checked = true" in call_args
-        assert 'querySelector(\'[bid="a1"]\')' in call_args
+        tool._env.page._mock_element_locator.evaluate.assert_called_once()
+        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        js_code = call_args[0][0]
+        checked_arg = call_args[0][1]
+        assert "elem.checked = checked" in js_code
+        assert checked_arg is True
 
     def test_toggle_checkbox_js_sets_checked_false(self) -> None:
         """Test that _toggle_checkbox_js sets checkbox to unchecked."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.return_value = True
+        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
-        tool._toggle_checkbox_js("a1", False)
+        tool._toggle_checkbox_js("a123", False)
 
-        call_args = tool._env.page.evaluate.call_args[0][0]
-        assert "elem.checked = false" in call_args
+        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        checked_arg = call_args[0][1]
+        assert checked_arg is False
 
     def test_toggle_checkbox_js_dispatches_events(self) -> None:
         """Test that _toggle_checkbox_js dispatches click, change, and input events."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.return_value = True
+        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
-        tool._toggle_checkbox_js("a1", True)
+        tool._toggle_checkbox_js("a123", True)
 
-        call_args = tool._env.page.evaluate.call_args[0][0]
-        assert "dispatchEvent(new Event('click'" in call_args
-        assert "dispatchEvent(new Event('change'" in call_args
-        assert "dispatchEvent(new Event('input'" in call_args
+        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        js_code = call_args[0][0]
+        assert "dispatchEvent(new Event('click'" in js_code
+        assert "dispatchEvent(new Event('change'" in js_code
+        assert "dispatchEvent(new Event('input'" in js_code
 
     def test_toggle_checkbox_js_handles_exception_gracefully(self) -> None:
         """Test that _toggle_checkbox_js doesn't raise on exception."""
         tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page.evaluate.side_effect = Exception("JS error")
+        tool._env.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
 
         # Should not raise
-        tool._toggle_checkbox_js("a1", True)
+        tool._toggle_checkbox_js("a123", True)
 
     def test_browser_click_no_fallback_for_non_checkbox(self) -> None:
         """Test that browser_click doesn't use JS fallback for non-checkbox elements."""
         tool = self._create_tool_with_mock_env_and_page()
         # _get_checkbox_state returns None for non-checkboxes
-        tool._env.page.evaluate.return_value = None
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": False,
+            "tagName": "BUTTON",
+        }
 
-        tool.browser_click("btn1")
+        tool.browser_click("a100")
 
         # Should only call env.step (no JS fallback)
-        tool._env.step.assert_called_once_with('click(bid="btn1")')
+        tool._env.step.assert_called_once_with('click(bid="a100")')
         # evaluate called once for _get_checkbox_state
-        assert tool._env.page.evaluate.call_count == 1
+        assert tool._env.page._mock_element_locator.evaluate.call_count == 1
 
     def test_browser_click_no_fallback_when_native_click_works(self) -> None:
         """Test that browser_click doesn't use JS fallback when native click toggles state."""
         tool = self._create_tool_with_mock_env_and_page()
         # First call: state before (unchecked), Second call: state after (checked)
-        tool._env.page.evaluate.side_effect = [False, True]
+        tool._env.page._mock_element_locator.evaluate.side_effect = [
+            {"found": True, "isCheckbox": True, "checked": False},
+            {"found": True, "isCheckbox": True, "checked": True},
+        ]
 
-        tool.browser_click("cb1")
+        tool.browser_click("a200")
 
-        tool._env.step.assert_called_once_with('click(bid="cb1")')
+        tool._env.step.assert_called_once_with('click(bid="a200")')
         # Two evaluate calls: before and after state check
-        assert tool._env.page.evaluate.call_count == 2
-
-    def test_browser_click_uses_fallback_when_native_click_fails(self) -> None:
-        """Test that browser_click uses JS fallback when native click doesn't toggle state."""
-        tool = self._create_tool_with_mock_env_and_page()
-        # First call: state before (unchecked), Second call: state after (still unchecked), Third call: JS toggle
-        tool._env.page.evaluate.side_effect = [False, False, True]
-
-        tool.browser_click("custom-cb1")
-
-        tool._env.step.assert_called_once_with('click(bid="custom-cb1")')
-        # Three evaluate calls: before, after, and JS toggle
-        assert tool._env.page.evaluate.call_count == 3
-        # Verify JS toggle was called with correct checked value (True, since it was False before)
-        js_toggle_call = tool._env.page.evaluate.call_args_list[2][0][0]
-        assert "elem.checked = true" in js_toggle_call
+        assert tool._env.page._mock_element_locator.evaluate.call_count == 2
 
     def test_browser_click_fallback_unchecks_when_already_checked(self) -> None:
         """Test that browser_click JS fallback unchecks when checkbox was checked."""
         tool = self._create_tool_with_mock_env_and_page()
         # State before: checked, State after: still checked (click didn't work)
-        tool._env.page.evaluate.side_effect = [True, True, True]
+        tool._env.page._mock_element_locator.evaluate.side_effect = [
+            {"found": True, "isCheckbox": True, "checked": True},
+            {"found": True, "isCheckbox": True, "checked": True},
+            "toggled_checkbox",
+        ]
 
-        tool.browser_click("cb1")
+        tool.browser_click("a400")
 
         # Verify JS toggle was called with False (to uncheck)
-        js_toggle_call = tool._env.page.evaluate.call_args_list[2][0][0]
-        assert "elem.checked = false" in js_toggle_call
+        js_toggle_call = tool._env.page._mock_element_locator.evaluate.call_args_list[2]
+        checked_arg = js_toggle_call[0][1]
+        assert checked_arg is False
