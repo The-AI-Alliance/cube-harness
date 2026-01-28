@@ -5,7 +5,7 @@ from pathlib import Path
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from agentlab2.core import Trajectory, TrajectoryStep
+from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.environment import EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage
@@ -38,11 +38,11 @@ class Episode:
         self.storage = storage or FileStorage(output_dir)
 
     def run(self) -> Trajectory:
-        """
-        Main loop to run the agent on a single specific task.
+        """Main loop to run the agent on a single specific task.
 
         Returns:
             Trajectory containing the full history of the run.
+
         """
         tracer = get_tracer(self.exp_name)
         env = self.env_config.make()
@@ -65,7 +65,7 @@ class Episode:
                         # Agent step
                         ts = time.time()
                         agent_output = agent.step(env_output.obs)
-                        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
+                        self.log_agent_output(turns, agent_output)
                         agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
                         self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(agent_step)
@@ -88,3 +88,14 @@ class Episode:
             env.close()
             tracer.shutdown()
         return trajectory
+
+    def log_agent_output(self, turns: int, agent_output: AgentOutput) -> None:
+        for llm_call in agent_output.llm_calls:
+            if llm_call.output.content:
+                logger.info(colored(f"Turn {turns} LLM Response: {llm_call.output.content}", "green"))
+            if hasattr(llm_call.output, "reasoning_content") and llm_call.output.reasoning_content:
+                logger.info(colored(f"Turn {turns} LLM Reasoning: {llm_call.output.reasoning_content}", "cyan"))
+            if hasattr(llm_call.output, "thinking_blocks") and llm_call.output.thinking_blocks:
+                for block in llm_call.output.thinking_blocks:
+                    logger.info(colored(f"Turn {turns} LLM Thinking Block: {block}", "cyan"))
+        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
