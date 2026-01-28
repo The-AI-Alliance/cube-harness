@@ -1,7 +1,8 @@
-.PHONY: help install format lint test coverage hello debug viewer
+.PHONY: help install update format lint test coverage hello debug viewer
 
 help:
 	@echo "make install    - Install dependencies in editable mode"
+	@echo "make update     - Update dependencies"
 	@echo "make format     - Format code"
 	@echo "make lint       - Lint and auto-fix"
 	@echo "make test       - Run unit tests"
@@ -24,14 +25,19 @@ install:
 	uv pip install -e .
 	uv run playwright install chromium --with-deps
 
+update:
+	uv sync --all-extras --update
+	uv pip install -e . --upgrade
+	uv run playwright install chromium --with-deps
+
 format:
 	uv run ruff format .
 
 lint:
 	uv run ruff check --fix .
 
-test:
-	uv run pytest tests/ -v
+test: install
+	uv run pytest -n 10 tests/ -v
 
 coverage:
 	uv run pytest tests/ --cov=agentlab2 --cov-report=term-missing
