@@ -1,5 +1,6 @@
 """Terminal-Bench task implementation."""
 
+import base64
 import io
 import logging
 import re
@@ -18,66 +19,8 @@ logger = logging.getLogger(__name__)
 # Files that should NOT be given to the agent at setup
 HIDDEN_FILES = {"tests", "solution.sh", "run-tests.sh", "Dockerfile", "docker-compose.yaml", "task.yaml"}
 
-# Default image if we can't parse the Dockerfile
+# Default image if no Dockerfile is provided
 DEFAULT_IMAGE = "python:3.13"
-
-
-def parse_dockerfile(dockerfile_content: str) -> tuple[str, list[str]]:
-    """Parse a Dockerfile to extract base image and RUN commands.
-
-    Returns:
-        Tuple of (base_image, list of shell commands from RUN instructions)
-    """
-    lines = dockerfile_content.split("\n")
-    base_image = DEFAULT_IMAGE
-    run_commands: list[str] = []
-
-    # Find the FROM line (last non-commented FROM takes precedence)
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            continue
-        if stripped.upper().startswith("FROM "):
-            # Extract image name, handling AS aliases
-            from_parts = stripped[5:].strip().split()
-            if from_parts:
-                base_image = from_parts[0]
-
-    # Extract RUN commands (handle multi-line with backslash)
-    current_run = []
-    in_run = False
-
-    for line in lines:
-        stripped = line.strip()
-
-        # Skip comments
-        if stripped.startswith("#"):
-            continue
-
-        if stripped.upper().startswith("RUN "):
-            in_run = True
-            cmd = stripped[4:].strip()
-            if cmd.endswith("\\"):
-                current_run.append(cmd[:-1].strip())
-            else:
-                current_run.append(cmd)
-                run_commands.append(" ".join(current_run))
-                current_run = []
-                in_run = False
-        elif in_run:
-            if stripped.endswith("\\"):
-                current_run.append(stripped[:-1].strip())
-            else:
-                current_run.append(stripped)
-                run_commands.append(" ".join(current_run))
-                current_run = []
-                in_run = False
-
-    # Handle trailing RUN command
-    if current_run:
-        run_commands.append(" ".join(current_run))
-
-    return base_image, run_commands
 
 
 class TerminalBenchTask(Task):
@@ -108,8 +51,6 @@ class TerminalBenchTask(Task):
         tags: list[str],
         max_agent_timeout_sec: int,
         max_test_timeout_sec: int,
-        base_image: str,
-        setup_commands: list[str],
         oracle_mode: bool = False,
     ) -> None:
         self.id = id
@@ -120,8 +61,6 @@ class TerminalBenchTask(Task):
         self.tags = tags
         self.max_agent_timeout_sec = max_agent_timeout_sec
         self.max_test_timeout_sec = max_test_timeout_sec
-        self.base_image = base_image
-        self.setup_commands = setup_commands
         self.oracle_mode = oracle_mode
         self._temp_dir: tempfile.TemporaryDirectory | None = None
         self._task_path: Path | None = None
@@ -158,9 +97,14 @@ class TerminalBenchTask(Task):
 
         for file_path in initial_files:
             if file_path.is_file():
-                content = file_path.read_text(encoding="utf-8", errors="replace")
                 remote_path = f"/app/{file_path.name}"
-                self._tool.write_file(remote_path, content)
+                try:
+                    content = file_path.read_text(encoding="utf-8")
+                    self._tool.write_file(remote_path, content)
+                except UnicodeDecodeError:
+                    # Handle binary files by base64 encoding
+                    logger.debug(f"Uploading {file_path.name} as binary (not valid UTF-8)")
+                    self._upload_binary_file(file_path, remote_path)
                 logger.debug(f"Uploaded {file_path.name} to {remote_path}")
             elif file_path.is_dir():
                 # Upload directory contents recursively
@@ -188,38 +132,24 @@ class TerminalBenchTask(Task):
 
     def _upload_binary_file(self, local_path: Path, remote_path: str) -> None:
         """Upload a binary file using base64 encoding."""
-        import base64
-
         content = local_path.read_bytes()
         b64_content = base64.b64encode(content).decode("ascii")
         self._tool.bash(f"echo '{b64_content}' | base64 -d > {remote_path}")
 
-    def _run_setup_commands(self) -> None:
-        """Run Dockerfile RUN commands to set up the environment."""
-        if not self.setup_commands:
-            return
-
-        logger.info(f"Running {len(self.setup_commands)} setup commands for task {self.id}")
-        for i, cmd in enumerate(self.setup_commands):
-            logger.debug(f"Setup command {i + 1}/{len(self.setup_commands)}: {cmd[:100]}...")
-            # Use longer timeout for setup commands (apt-get, pip install, etc.)
-            output = self._tool.bash(cmd, timeout=600)
-            if "[exit_code:" in output and "[exit_code: 0]" not in output:
-                logger.warning(f"Setup command failed: {cmd[:100]}...\nOutput: {output[:500]}")
-
     def setup(self, tool: DaytonaSWETool) -> tuple[Observation, dict]:
-        """Initialize the task environment."""
-        logger.info(f"Setting up Terminal-Bench task: {self.id} (image: {self.base_image})")
+        """Initialize the task environment.
+
+        Note: Environment setup (apt-get, pip install, etc.) is handled by Daytona
+        building the Dockerfile. We only need to upload task files here.
+        """
+        logger.info(f"Setting up Terminal-Bench task: {self.id}")
 
         self._tool = tool
         self._extract_archive()
 
-        # Create /app and upload files first (before setup commands, like Docker COPY before RUN)
+        # Create /app and upload task files
         self._tool.bash("mkdir -p /app")
         self._upload_initial_files()
-
-        # Run Dockerfile setup commands (after files are uploaded)
-        self._run_setup_commands()
 
         obs = Observation.from_text(self.instruction)
 
@@ -228,7 +158,6 @@ class TerminalBenchTask(Task):
             "difficulty": self.difficulty,
             "category": self.category,
             "tags": self.tags,
-            "base_image": self.base_image,
             "max_agent_timeout_sec": self.max_agent_timeout_sec,
         }
 

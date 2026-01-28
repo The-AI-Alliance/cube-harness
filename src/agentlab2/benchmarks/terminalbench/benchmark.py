@@ -9,7 +9,7 @@ from random import Random
 from datasets import load_from_disk
 
 from agentlab2.benchmark import Benchmark
-from agentlab2.benchmarks.terminalbench.task import DEFAULT_IMAGE, TerminalBenchTask, parse_dockerfile
+from agentlab2.benchmarks.terminalbench.task import DEFAULT_IMAGE, TerminalBenchTask
 from agentlab2.environment import EnvConfig
 from agentlab2.tools.daytona import DaytonaSWEToolConfig
 
@@ -19,18 +19,16 @@ logger = logging.getLogger(__name__)
 DEFAULT_DATASET_PATH = "./data/terminal_bench"
 
 
-def _extract_dockerfile(archive: bytes) -> str | None:
-    """Extract Dockerfile content from a task archive."""
+def _has_dockerfile(archive: bytes) -> bool:
+    """Check if archive contains a Dockerfile."""
     try:
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
             for member in tar.getnames():
                 if member.endswith("Dockerfile") or "/Dockerfile" in member:
-                    f = tar.extractfile(member)
-                    if f:
-                        return f.read().decode("utf-8")
+                    return True
     except Exception as e:
-        logger.warning(f"Failed to extract Dockerfile: {e}")
-    return None
+        logger.warning(f"Failed to check archive for Dockerfile: {e}")
+    return False
 
 
 class TerminalBenchBenchmark(Benchmark):
@@ -124,17 +122,9 @@ class TerminalBenchBenchmark(Benchmark):
         if self.max_tasks:
             tasks_data = tasks_data[: self.max_tasks]
 
-        # Create task objects with parsed Dockerfile info
+        # Create task objects (Dockerfile content is extracted separately for env_configs)
         tasks = []
         for t in tasks_data:
-            # Parse Dockerfile to get base image and setup commands
-            dockerfile_content = _extract_dockerfile(t["archive"])
-            if dockerfile_content:
-                base_image, setup_commands = parse_dockerfile(dockerfile_content)
-            else:
-                base_image = DEFAULT_IMAGE
-                setup_commands = []
-
             task = TerminalBenchTask(
                 id=t["task_id"],
                 instruction=t["base_description"],
@@ -144,8 +134,6 @@ class TerminalBenchBenchmark(Benchmark):
                 tags=t.get("tags", []),
                 max_agent_timeout_sec=t.get("max_agent_timeout_sec", 900),
                 max_test_timeout_sec=t.get("max_test_timeout_sec", 180),
-                base_image=base_image,
-                setup_commands=setup_commands,
                 oracle_mode=self.oracle_mode,
             )
             tasks.append(task)
@@ -155,7 +143,11 @@ class TerminalBenchBenchmark(Benchmark):
         return tasks
 
     def env_configs(self) -> list[EnvConfig]:
-        """Generate environment configurations with task-specific Docker images."""
+        """Generate environment configurations with task-specific Dockerfiles.
+
+        Each task gets its own tool config with the archive bytes. Daytona extracts
+        the archive and builds the image from the Dockerfile (if present).
+        """
         tasks = self.load_tasks()
 
         # Create a task-specific tool config for each task
@@ -166,17 +158,25 @@ class TerminalBenchBenchmark(Benchmark):
             if not isinstance(base_config, DaytonaSWEToolConfig):
                 raise TypeError(f"TerminalBenchBenchmark requires DaytonaSWEToolConfig, got {type(base_config)}")
 
-            # Create task-specific config with the correct image
+            # Check if archive has a Dockerfile
+            has_dockerfile = _has_dockerfile(task.archive)
+
+            # Create task-specific config with archive (for Dockerfile build context)
             task_tool_config = DaytonaSWEToolConfig(
                 api_key=base_config.api_key,
-                image=task.base_image,
+                image=DEFAULT_IMAGE,  # Fallback if no Dockerfile
+                dockerfile_archive=task.archive if has_dockerfile else None,
                 cpus=base_config.cpus,
                 memory_gb=base_config.memory_gb,
                 disk_gb=base_config.disk_gb,
+                ephemeral=base_config.ephemeral,
             )
 
             configs.append(EnvConfig(task=task, tool_config=task_tool_config))
-            logger.debug(f"Task {task.id}: using image {task.base_image}")
+            if has_dockerfile:
+                logger.debug(f"Task {task.id}: building from Dockerfile")
+            else:
+                logger.debug(f"Task {task.id}: using default image {DEFAULT_IMAGE}")
 
         return configs
 
