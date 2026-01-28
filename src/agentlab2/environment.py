@@ -58,7 +58,8 @@ class Environment(AbstractEnvironment):
 
     @property
     def action_set(self) -> list[ActionSchema]:
-        return self.tool.action_set
+        all_actions = self.tool.action_set
+        return self.task.filter_actions(all_actions)
 
     def setup(self) -> EnvironmentOutput:
         """Prepare tool and set up the task."""

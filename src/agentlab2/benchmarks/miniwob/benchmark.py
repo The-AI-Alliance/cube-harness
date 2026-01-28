@@ -46,6 +46,7 @@ class MiniWobBenchmark(Benchmark):
         tmp_dir = Path(tempfile.gettempdir())
         self._stdout_file = open(tmp_dir / "miniwob_server_stdout.log", "w")
         self._stderr_file = open(tmp_dir / "miniwob_server_stderr.log", "w")
+        logger.info(f"Starting MiniWob server at port {self.port} serving from {self.html_path}...")
         self._server_process = subprocess.Popen(
             [sys.executable, "-m", "http.server", str(self.port)],
             cwd=self.html_path,
@@ -53,13 +54,24 @@ class MiniWobBenchmark(Benchmark):
             stderr=self._stderr_file,
         )
         time.sleep(1)
+
+        # Check if the process started successfully
+        if self._server_process.poll() is not None:
+            self._stderr_file.flush()
+            stderr_path = Path(tempfile.gettempdir()) / "miniwob_server_stderr.log"
+            stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
+            self.close()
+            raise RuntimeError(
+                f"MiniWob server failed to start (exit code {self._server_process.returncode}): {stderr_content}"
+            )
+
         # Check if the server is running by attempting to connect
         try:
             urllib.request.urlopen(self.base_url, timeout=5)
             logger.info(f"MiniWob server responding at {self.base_url}")
         except Exception as e:
             self.close()
-            raise RuntimeError(f"MiniWob server failed to respond: {e}")
+            raise RuntimeError(f"MiniWob server failed to respond {self.base_url}: {e}")
 
     def load_tasks(self) -> list[MiniWobTask]:
         tasks = [

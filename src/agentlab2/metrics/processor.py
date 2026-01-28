@@ -39,11 +39,9 @@ def _zip_dir(dir_path: Path) -> Path:
 class TraceProcessor:
     """Exports episode spans to experiment/episode/step_{N}.json hierarchy."""
 
-
     def __init__(self, run_dir: Path) -> None:
         self._run_dir = run_dir
         self._store = JsonlSpanWriter(run_dir)
-
 
     def export_episode(self, episode_span: ReadableSpan) -> Path:
         """Export and zip a single episode when it completes."""

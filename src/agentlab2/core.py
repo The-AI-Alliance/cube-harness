@@ -3,7 +3,7 @@ import io
 import json
 import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Protocol, Self, TypeAlias
+from typing import Any, Callable, Dict, Protocol, Self, TypeAlias
 
 import litellm.utils
 from PIL import Image
@@ -85,6 +85,9 @@ class AgentOutput(TypedBaseModel):
     llm_calls: list[LLMCall] = Field(default_factory=list)
     error: StepError | None = None
 
+    def __str__(self) -> str:
+        return self.model_dump_json(exclude={"llm_calls"})
+
 
 _image_prefix = "data:image/png;base64,"
 
@@ -117,8 +120,10 @@ class Content(TypedBaseModel):
             v = v[len(_image_prefix) :]
             # Decode base64 string to bytes
             decoded_image = base64.b64decode(v)
-            # Open bytes as PIL Image
-            return Image.open(io.BytesIO(decoded_image))
+            # Open bytes as PIL Image and load immediately to avoid lazy loading issues
+            img = Image.open(io.BytesIO(decoded_image))
+            img.load()  # Force load to prevent BytesIO buffer from being garbage collected
+            return img
         return v  # Return original value if not a string (e.g., already an Image object)
 
     def to_message(self) -> dict:
@@ -173,6 +178,12 @@ class EnvironmentOutput(TypedBaseModel):
     error: StepError | None = None
 
 
+class TrajectoryStep(TypedBaseModel):
+    output: EnvironmentOutput | AgentOutput
+    start_time: float | None = None
+    end_time: float | None = None
+
+
 class Trajectory(TypedBaseModel):
     """
     Stores history of the previous interaction.
@@ -181,16 +192,17 @@ class Trajectory(TypedBaseModel):
     reward_info represents episode level reward data.
     """
 
-    steps: List[EnvironmentOutput | AgentOutput] = Field(default_factory=list)
+    id: str
+    steps: list[TrajectoryStep] = Field(default_factory=list)
     metadata: dict = Field(default_factory=dict)
-
-    def append(self, item: EnvironmentOutput | AgentOutput) -> None:
-        self.steps.append(item)
+    start_time: float | None = None
+    end_time: float | None = None
+    reward_info: dict = Field(default_factory=dict)
 
     def last_env_step(self) -> EnvironmentOutput:
         for step in reversed(self.steps):
-            if isinstance(step, EnvironmentOutput):
-                return step
+            if isinstance(step.output, EnvironmentOutput):
+                return step.output
         raise ValueError("No EnvironmentOutput found in the trajectory.")
 
 

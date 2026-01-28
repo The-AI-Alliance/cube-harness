@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Observation, Trajectory
+from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Observation, Trajectory, TrajectoryStep
 from agentlab2.episode import MAX_STEPS, Episode
 from tests.conftest import MockAgent
 
@@ -62,7 +62,7 @@ class TestEpisode:
         assert len(metadata_files) > 0, "No metadata file found"
 
         with open(metadata_files[0]) as f:
-            metadata = json.load(f)
+            metadata = json.load(f)["metadata"]
 
         assert "task_id" in metadata
 
@@ -136,32 +136,32 @@ class TestEpisode:
         last_env_step = trajectory.last_env_step()
         assert last_env_step.done is True
 
-    def test_episode_save_trajectory_creates_directory(self, mock_episode, tmp_dir):
+    def test_storage_save_trajectory_creates_directory(self, mock_episode, tmp_dir):
         """Test save_trajectory creates trajectory directory."""
-        trajectory = Trajectory(metadata={"task_id": "test"})
-        mock_episode.save_trajectory(trajectory)
+        trajectory = Trajectory(id="test_traj", metadata={"task_id": "test"})
+        mock_episode.storage.save_trajectory(trajectory)
 
         traj_dir = tmp_dir / "trajectories"
         assert traj_dir.exists()
 
-    def test_episode_save_step_without_trajectory(self, mock_episode):
+    def test_storage_save_step_without_trajectory(self, mock_episode):
         """Test save_step raises error if called before save_trajectory."""
         obs = Observation.from_text("test")
-        step = EnvironmentOutput(obs=obs)
+        step = TrajectoryStep(output=EnvironmentOutput(obs=obs))
 
         with pytest.raises(ValueError, match="Trajectory path not set"):
-            mock_episode.save_step(step)
+            mock_episode.storage.save_step(step, "nonexistent_traj", 0)
 
-    def test_episode_save_step_appends(self, mock_episode, tmp_dir):
+    def test_storage_save_step_appends(self, mock_episode, tmp_dir):
         """Test save_step appends to JSONL file."""
-        trajectory = Trajectory(metadata={"task_id": "test"})
-        mock_episode.save_trajectory(trajectory)
+        trajectory = Trajectory(id="test_traj", metadata={"task_id": "test"})
+        mock_episode.storage.save_trajectory(trajectory)
 
         # Save multiple steps
         for i in range(3):
             obs = Observation.from_text(f"step {i}")
-            step = EnvironmentOutput(obs=obs)
-            mock_episode.save_step(step)
+            step = TrajectoryStep(output=EnvironmentOutput(obs=obs))
+            mock_episode.storage.save_step(step, trajectory.id, i)
 
         # Read JSONL file
         traj_dir = tmp_dir / "trajectories"
@@ -221,4 +221,4 @@ class TestEpisode:
         files = [f.name for f in traj_dir.iterdir()]
 
         # Should contain run id
-        assert any("run42" in f for f in files)
+        assert any("ep42" in f for f in files)
