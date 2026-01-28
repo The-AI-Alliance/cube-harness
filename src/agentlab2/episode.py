@@ -78,6 +78,9 @@ class Episode:
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(env_step)
                         span.set_attribute("agent_output", agent_output.model_dump_json())
+                        span.set_attribute("env_output", env_output.model_dump_json())
+                        span.set_attribute("done", env_output.done)
+                        span.set_attribute("reward", env_output.reward)
                         turns += 1
                 trajectory.end_time = time.time()
                 self.storage.save_trajectory(trajectory)  # save final trajectory with end_time
