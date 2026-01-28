@@ -3,10 +3,11 @@
 Terminal-Bench evaluates agents on real-world terminal tasks.
 
 Usage:
-    uv run recipes/hello_tbench.py debug    # 1 task, sequential
-    uv run recipes/hello_tbench.py oracle   # 10 tasks with oracle agent
-    uv run recipes/hello_tbench.py easy     # 4 easy tasks with react agent
-    uv run recipes/hello_tbench.py          # Full run with Ray
+    uv run recipes/hello_tbench.py debug        # 1 task, sequential
+    uv run recipes/hello_tbench.py oracle       # 10 tasks with oracle agent
+    uv run recipes/hello_tbench.py oracle_full  # All tasks with oracle agent (30 Ray workers)
+    uv run recipes/hello_tbench.py easy         # 4 easy tasks with react agent
+    uv run recipes/hello_tbench.py              # Full run with Ray
 """
 
 import os
@@ -26,6 +27,8 @@ from agentlab2.experiment import Experiment  # noqa: E402
 from agentlab2.llm import LLMConfig  # noqa: E402
 from agentlab2.tools.daytona import DaytonaSWEToolConfig  # noqa: E402
 
+VALID_MODES = ("debug", "oracle", "oracle_full", "easy", "full")
+
 SYSTEM_PROMPT = """You are an expert software engineer working in a Linux terminal.
 Work in /app directory. Read existing files, test your solutions before declaring completion."""
 
@@ -36,7 +39,7 @@ def main(mode: str) -> None:
 
     tool_config = DaytonaSWEToolConfig(api_key=os.getenv("DAYTONA_API_KEY"))
 
-    if mode == "oracle":
+    if mode in ("oracle", "oracle_full"):
         agent_config = OracleAgentConfig()
     else:
         llm_config = LLMConfig(model_name="openai/gpt-5-nano", tool_choice="required")
@@ -44,11 +47,11 @@ def main(mode: str) -> None:
 
     benchmark = TerminalBenchBenchmark(
         tool_config=tool_config,
-        shuffle=True,
+        shuffle=mode != "oracle_full",
         shuffle_seed=42,
         max_tasks={"debug": 1, "oracle": 10, "easy": 4}.get(mode),
         difficulty_filter="easy" if mode == "easy" else None,
-        oracle_mode=mode == "oracle",
+        oracle_mode=mode in ("oracle", "oracle_full"),
     )
 
     exp = Experiment(
@@ -60,10 +63,12 @@ def main(mode: str) -> None:
 
     if mode in ("debug", "oracle", "easy"):
         run_sequentially(exp, debug_limit=1 if mode == "debug" else None)
+    elif mode == "oracle_full":
+        run_with_ray(exp, n_cpus=30)
     else:
         run_with_ray(exp, n_cpus=4)
 
 
 if __name__ == "__main__":
-    mode = sys.argv[-1] if len(sys.argv) > 1 and sys.argv[-1] in ("debug", "oracle", "easy") else "full"
+    mode = sys.argv[-1] if len(sys.argv) > 1 and sys.argv[-1] in VALID_MODES else "full"
     main(mode)
