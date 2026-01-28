@@ -82,8 +82,8 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
     def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
-        task_entrypoint = self.config.task_entrypoint or OpenEndedTask
-        task_kwargs = self.config.task_kwargs or {"start_url": "about:blank", "goal": None}
+        task_entrypoint = self.config.task_entrypoint if self.config.task_entrypoint is not None else OpenEndedTask
+        task_kwargs = self.config.task_kwargs if self.config.task_kwargs is not None else {"start_url": "about:blank", "goal": None}
 
         env_kwargs = {
             "task_entrypoint": task_entrypoint,
@@ -222,9 +222,58 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         return self._execute_bgym_step(action_str)
 
     def browser_click(self, bid: str) -> str:
-        """Click on an element specified by BID."""
+        """Click on an element specified by BID.
+
+        For checkboxes/radios, uses JavaScript fallback if standard click doesn't toggle state.
+        """
+        # Get state before click (for checkbox/radio detection)
+        state_before = self._get_checkbox_state(bid)
+
+        # Execute standard click
         action_str = f'click(bid="{bid}")'
-        return self._execute_bgym_step(action_str)
+        result = self._execute_bgym_step(action_str)
+
+        # For checkboxes/radios, verify state changed and use JS fallback if needed
+        if state_before is not None:
+            state_after = self._get_checkbox_state(bid)
+            if state_after == state_before:
+                # Click didn't toggle - use JS fallback
+                self._toggle_checkbox_js(bid, not state_before)
+
+        return result
+
+    def _get_checkbox_state(self, bid: str) -> bool | None:
+        """Get checkbox/radio checked state, or None if not a checkbox/radio."""
+        try:
+            result = self.page.evaluate(f"""
+                () => {{
+                    const elem = document.querySelector('[bid="{bid}"]');
+                    if (!elem || (elem.type !== 'checkbox' && elem.type !== 'radio')) return null;
+                    return elem.checked;
+                }}
+            """)
+            return result
+        except Exception:
+            return None
+
+    def _toggle_checkbox_js(self, bid: str, checked: bool) -> None:
+        """Toggle checkbox state using JavaScript."""
+        try:
+            js_code = f"""
+            () => {{
+                const elem = document.querySelector('[bid="{bid}"]');
+                if (!elem) return false;
+                elem.checked = {str(checked).lower()};
+                elem.dispatchEvent(new Event('click', {{ bubbles: true }}));
+                elem.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                elem.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                return true;
+            }}
+            """
+            self.page.evaluate(js_code)
+            logger.info(f"Used JS fallback to set checkbox {bid} to {checked}")
+        except Exception as e:
+            logger.warning(f"Error in JS checkbox toggle for {bid}: {e}")
 
     def browser_drag(self, from_bid: str, to_bid: str) -> str:
         """Drag and drop from one element to another."""
