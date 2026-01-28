@@ -82,14 +82,8 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
     def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
-        # Use OpenEndedTask as default - it provides a browser without task-specific logic,
-        # allowing AgentLab2's Task abstraction (e.g., MiniWobTask) to handle task setup
         task_entrypoint = self.config.task_entrypoint or OpenEndedTask
-        # For OpenEndedTask, provide default start_url if not specified
-        # For other tasks (like WorkArena), use task_kwargs as-is (they have their own defaults)
-        task_kwargs = self.config.task_kwargs
-        if task_entrypoint is OpenEndedTask and not task_kwargs:
-            task_kwargs = {"start_url": "about:blank", "goal": None}
+        task_kwargs = self.config.task_kwargs or {"start_url": "about:blank", "goal": None}
 
         env_kwargs = {
             "task_entrypoint": task_entrypoint,
