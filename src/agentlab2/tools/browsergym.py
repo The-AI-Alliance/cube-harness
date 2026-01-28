@@ -3,14 +3,14 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+from browsergym.core.env import BrowserEnv
+from browsergym.core.task import OpenEndedTask
+from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
-from agentlab2.tools.bgym_core.env import BrowserEnv
-from agentlab2.tools.bgym_core.task import OpenEndedTask
-from agentlab2.tools.bgym_core.utils import flatten_axtree_to_str, flatten_dom_to_str
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +244,8 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 with_visible=False,
                 filter_visible_only=False,
             )
+            if self.config.prune_html:
+                html_str = prune_html(html_str)
             # BrowserGym's flatten_dom_to_str already provides a pruned representation
             obs.contents.append(Content(data=html_str, name="pruned_html"))
 

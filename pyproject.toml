@@ -26,15 +26,7 @@ dependencies = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
-]
-
-[project.optional-dependencies]
-# BrowserGym core dependencies (for bgym_core module)
-browsergym = [
-    "gymnasium>=0.27",
-    "lxml>=4.9,<6.0.0",
-    "pyparsing>=3",
-    "playwright==1.44",
+    "browsergym-core>=0.14.3",
 ]
 
 [build-system]
