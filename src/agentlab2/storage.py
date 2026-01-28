@@ -9,6 +9,12 @@ from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 
 logger = logging.getLogger(__name__)
 
+# Forward reference to avoid circular import
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agentlab2.episode import EpisodeConfig
+
 
 class LLMCallRef(BaseModel):
     """Reference to an LLM call stored in a separate file."""
@@ -187,3 +193,44 @@ class FileStorage:
                 logger.error(f"Failed to load trajectory {trajectory_id}: {e}")
 
         return trajectories
+
+    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
+        """Save episode configuration to disk for later resumption.
+
+        Args:
+            episode_config: The episode configuration to save.
+        """
+        config_dir = self.output_dir / "episode_configs"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path = config_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
+
+        with open(config_path, "w") as f:
+            f.write(episode_config.model_dump_json(indent=2))
+        logger.info(f"Saved episode config to {config_path}")
+
+    def load_episode_config(self, config_path: Path) -> "EpisodeConfig":
+        """Load episode configuration from disk.
+
+        Args:
+            config_path: Path to the episode config JSON file.
+
+        Returns:
+            The loaded EpisodeConfig.
+        """
+        from agentlab2.episode import EpisodeConfig
+
+        with open(config_path) as f:
+            data = json.load(f)
+
+        return EpisodeConfig.model_validate(data)
+
+    def list_episode_configs(self) -> list[Path]:
+        """List all episode config files in the output directory.
+
+        Returns:
+            List of paths to episode config files.
+        """
+        config_dir = self.output_dir / "episode_configs"
+        if not config_dir.exists():
+            return []
+        return list(config_dir.glob("episode_*_task_*.json"))

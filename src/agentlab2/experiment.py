@@ -7,8 +7,9 @@ from pydantic import Field
 
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
-from agentlab2.core import Trajectory, TypedBaseModel
+from agentlab2.core import EnvironmentOutput, Trajectory, TypedBaseModel
 from agentlab2.episode import Episode
+from agentlab2.storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
@@ -87,49 +88,43 @@ class Experiment(TypedBaseModel):
     def relaunch_failed_episodes(self) -> ExpResult:
         """
         Relaunch all failed episodes from this experiment.
+        Failed episodes are those that started but did not complete successfully.
 
         Returns:
             ExpResult with trajectories from relaunched episodes
         """
-        config_dir = self.output_dir / "episode_configs"
-        if not config_dir.exists():
-            logger.warning(f"No episode configs found in {config_dir}")
+        storage = FileStorage(self.output_dir)
+        config_files = storage.list_episode_configs()
+
+        if not config_files:
+            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}")
             return ExpResult(
                 exp_id=f"{self.name}_relaunch",
                 tasks_num=0,
                 config=self.config,
             )
 
-        # Find all failed episodes (episodes with configs but no successful trajectory)
-        traj_dir = self.output_dir / "trajectories"
+        # Find all successful trajectories
         successful_task_ids = set()
+        traj_dir = self.output_dir / "trajectories"
         if traj_dir.exists():
-            for traj_file in traj_dir.glob("*.jsonl"):
-                # Extract task_id from filename: run{id}_task_{task_id}.jsonl
-                parts = traj_file.stem.split("_task_")
-                if len(parts) == 2:
-                    task_id = parts[1]
-                    # Check if trajectory completed successfully (has final env step without error)
-                    try:
-                        with open(traj_file) as f:
-                            lines = f.readlines()
-                            if lines:
-                                # Check last line for successful completion
-                                last_line = json.loads(lines[-1])
-                                # Success: last step is EnvironmentOutput with done=True and no error
-                                if (
-                                    last_line.get("_type") == "agentlab2.core.EnvironmentOutput"
-                                    and not last_line.get("error")
-                                    and last_line.get("done")
-                                ):
-                                    successful_task_ids.add(task_id)
-                    except Exception:
-                        pass
+            for metadata_file in traj_dir.glob("*.metadata.json"):
+                trajectory_id = metadata_file.stem.replace(".metadata", "")
+                try:
+                    trajectory = storage.load_trajectory(trajectory_id)
+                    # Check if trajectory completed successfully
+                    last_env_step = trajectory.last_env_step()
+                    if last_env_step.done and not last_env_step.error:
+                        task_id = trajectory.metadata.get("task_id")
+                        if task_id:
+                            successful_task_ids.add(task_id)
+                except Exception as e:
+                    logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
 
-        # Load and relaunch failed episodes
+        # Load and relaunch failed episodes (have configs and trajectories but not successful)
         failed_episodes = []
-        for config_file in config_dir.glob("episode_*_task_*.json"):
-            # Extract task_id from filename
+        for config_file in config_files:
+            # Extract task_id from filename: episode_{id}_task_{task_id}.json
             parts = config_file.stem.split("_task_")
             if len(parts) == 2:
                 task_id = parts[1]
@@ -164,6 +159,85 @@ class Experiment(TypedBaseModel):
             results = ExpResult(
                 exp_id=f"{self.name}_relaunch",
                 tasks_num=len(failed_episodes),
+                trajectories={traj.metadata["task_id"]: traj for traj in trajectories},
+                failures=failures,
+                config=self.config,
+            )
+            self.print_stats(results)
+            return results
+        finally:
+            self.benchmark.close()
+
+    def relaunch_unstarted_episodes(self) -> ExpResult:
+        """
+        Relaunch all episodes that were never started (have configs but no trajectory files).
+
+        Returns:
+            ExpResult with trajectories from relaunched episodes
+        """
+        storage = FileStorage(self.output_dir)
+        config_files = storage.list_episode_configs()
+
+        if not config_files:
+            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}")
+            return ExpResult(
+                exp_id=f"{self.name}_relaunch_unstarted",
+                tasks_num=0,
+                config=self.config,
+            )
+
+        # Find all tasks that have trajectories (started at least once)
+        started_task_ids = set()
+        traj_dir = self.output_dir / "trajectories"
+        if traj_dir.exists():
+            for metadata_file in traj_dir.glob("*.metadata.json"):
+                trajectory_id = metadata_file.stem.replace(".metadata", "")
+                try:
+                    trajectory = storage.load_trajectory(trajectory_id)
+                    task_id = trajectory.metadata.get("task_id")
+                    if task_id:
+                        started_task_ids.add(task_id)
+                except Exception as e:
+                    logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
+
+        # Load and relaunch unstarted episodes (have configs but no trajectories)
+        unstarted_episodes = []
+        for config_file in config_files:
+            # Extract task_id from filename: episode_{id}_task_{task_id}.json
+            parts = config_file.stem.split("_task_")
+            if len(parts) == 2:
+                task_id = parts[1]
+                if task_id not in started_task_ids:
+                    try:
+                        episode = Episode.load_config(config_file, self.benchmark)
+                        unstarted_episodes.append(episode)
+                    except Exception as e:
+                        logger.exception(f"Failed to load episode config {config_file}: {e}")
+
+        if not unstarted_episodes:
+            logger.info("No unstarted episodes to relaunch")
+            return ExpResult(
+                exp_id=f"{self.name}_relaunch_unstarted",
+                tasks_num=0,
+                config=self.config,
+            )
+
+        logger.info(f"Relaunching {len(unstarted_episodes)} unstarted episodes")
+        self.benchmark.setup()
+        try:
+            trajectories = []
+            failures = {}
+            for episode in unstarted_episodes:
+                try:
+                    trajectory = episode.run()
+                    trajectories.append(trajectory)
+                except Exception as e:
+                    logger.exception(f"Episode {episode.id} (task {episode.task_id}) failed: {e}")
+                    failures[episode.task_id] = str(e)
+
+            results = ExpResult(
+                exp_id=f"{self.name}_relaunch_unstarted",
+                tasks_num=len(unstarted_episodes),
                 trajectories={traj.metadata["task_id"]: traj for traj in trajectories},
                 failures=failures,
                 config=self.config,

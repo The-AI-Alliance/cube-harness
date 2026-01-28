@@ -80,13 +80,9 @@ class Episode:
         """
         from agentlab2.storage import FileStorage
 
-        # Load config to get output_dir first, then use storage to load properly
-        with open(config_path) as f:
-            data = json.load(f)
-        temp_config = EpisodeConfig.model_validate(data)
-
-        # Now use storage to load (in case storage has special handling)
-        storage = FileStorage(temp_config.output_dir)
+        # Infer output_dir from config_path structure: {output_dir}/episode_configs/episode_*.json
+        output_dir = config_path.parent.parent
+        storage = FileStorage(output_dir)
         episode_config = storage.load_episode_config(config_path)
 
         # Find the task in the benchmark
