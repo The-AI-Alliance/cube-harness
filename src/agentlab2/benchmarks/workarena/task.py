@@ -93,7 +93,7 @@ class WorkArenaTask(Task):
         # Log the BrowserGym task state
         if tool._env and tool._env.task:
             logger.info(f"BrowserGym task class: {tool._env.task.__class__.__name__}")
-            if hasattr(tool._env.task, 'start_url'):
+            if hasattr(tool._env.task, "start_url"):
                 logger.info(f"BrowserGym task start_url: {tool._env.task.start_url}")
 
         # Get the goal from the BrowserGym task

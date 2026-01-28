@@ -45,7 +45,7 @@ def main(debug: bool) -> None:
         headless=not debug,  # Show browser in debug mode
         use_screenshot=True,
         use_axtree=True,
-        use_html=True,
+        use_html=False,
     )
 
     # Configure WorkArena benchmark
