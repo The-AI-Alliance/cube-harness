@@ -83,7 +83,11 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
     def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
         task_entrypoint = self.config.task_entrypoint if self.config.task_entrypoint is not None else OpenEndedTask
-        task_kwargs = self.config.task_kwargs if self.config.task_kwargs is not None else {"start_url": "about:blank", "goal": None}
+        task_kwargs = (
+            self.config.task_kwargs
+            if self.config.task_kwargs is not None
+            else {"start_url": "about:blank", "goal": None}
+        )
 
         env_kwargs = {
             "task_entrypoint": task_entrypoint,
