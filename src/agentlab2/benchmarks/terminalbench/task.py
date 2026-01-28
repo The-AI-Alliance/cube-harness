@@ -179,11 +179,11 @@ class TerminalBenchTask(Task):
                 self._tool.bash(f"mkdir -p {remote_parent}")
                 # Read and upload file
                 try:
-                    content = item.read_text(encoding="utf-8", errors="replace")
+                    content = item.read_text(encoding="utf-8")
                     self._tool.write_file(remote_path, content)
-                except Exception as e:
+                except UnicodeDecodeError:
                     # Handle binary files by base64 encoding
-                    logger.warning(f"Could not upload {item} as text: {e}, trying binary")
+                    logger.debug(f"Uploading {item} as binary (not valid UTF-8)")
                     self._upload_binary_file(item, remote_path)
 
     def _upload_binary_file(self, local_path: Path, remote_path: str) -> None:
@@ -214,12 +214,12 @@ class TerminalBenchTask(Task):
         self._tool = tool
         self._extract_archive()
 
-        # Run Dockerfile setup commands first (before uploading files)
-        self._run_setup_commands()
-
-        # Create /app and upload files
+        # Create /app and upload files first (before setup commands, like Docker COPY before RUN)
         self._tool.bash("mkdir -p /app")
         self._upload_initial_files()
+
+        # Run Dockerfile setup commands (after files are uploaded)
+        self._run_setup_commands()
 
         obs = Observation.from_text(self.instruction)
 

@@ -17,7 +17,8 @@ class DaytonaSWEToolConfig(ToolConfig):
     image: str = "python:3.13"
     cpus: int = 2
     memory_gb: int = 4
-    disk_gb: int = 10  # Daytona max is 10GB
+    disk_gb: int = 10
+    ephemeral: bool = True
 
     def make(self) -> "DaytonaSWETool":
         return DaytonaSWETool(self)
@@ -46,6 +47,7 @@ class DaytonaSWETool(Tool, SWEActionSpace):
                 ),
                 auto_stop_interval=0,
                 auto_delete_interval=0,
+                ephemeral=self.config.ephemeral,
             )
             self._sandbox = self._client.create(params)
             logger.info(f"Daytona sandbox SSH URL: `{self._sandbox.create_ssh_access().ssh_command}`")
