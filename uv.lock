@@ -32,12 +32,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-browsergym = [
-    { name = "gymnasium" },
-    { name = "lxml" },
-    { name = "playwright" },
-    { name = "pyparsing" },
-]
 workarena = [
     { name = "browsergym-workarena" },
 ]
@@ -56,9 +50,7 @@ requires-dist = [
     { name = "browsergym-core", specifier = ">=0.14.3" },
     { name = "browsergym-workarena", marker = "extra == 'workarena'", specifier = ">=0.5.2" },
     { name = "gradio", specifier = "~=5.49" },
-    { name = "gymnasium", marker = "extra == 'browsergym'", specifier = ">=0.27" },
     { name = "litellm", specifier = "~=1.80.8" },
-    { name = "lxml", marker = "extra == 'browsergym'", specifier = ">=4.9,<6.0.0" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "miniwob", specifier = ">=1.0" },
     { name = "numpy", specifier = "~=2.3.5" },
@@ -68,9 +60,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "pillow", specifier = "~=11.0" },
     { name = "playwright", specifier = "==1.44" },
-    { name = "playwright", marker = "extra == 'browsergym'", specifier = "==1.44" },
     { name = "pydantic", specifier = "~=2.0" },
-    { name = "pyparsing", marker = "extra == 'browsergym'", specifier = ">=3" },
     { name = "python-dotenv", specifier = "~=1.2.0" },
     { name = "ray", extras = ["default"], specifier = ">=2.52.1" },
     { name = "tenacity", specifier = "~=8.5.0" },

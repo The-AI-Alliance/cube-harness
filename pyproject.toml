@@ -30,13 +30,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# BrowserGym core dependencies (for bgym_core module)
-browsergym = [
-    "gymnasium>=0.27",
-    "lxml>=4.9,<6.0.0",
-    "pyparsing>=3",
-    "playwright==1.44",
-]
 # WorkArena benchmark dependencies
 workarena = [
     "browsergym-workarena>=0.5.2",
@@ -50,7 +43,6 @@ build-backend = "uv_build"
 fix = true
 line-length = 120
 indent-width = 4
-exclude = ["benchmarks/"]
 
 [tool.ruff.format]
 quote-style = "double"
