@@ -37,7 +37,11 @@ def main(debug: bool) -> None:
 
     # Configure LLM
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
-    agent_config = ReactAgentConfig(llm_config=llm_config)
+    agent_config = ReactAgentConfig(
+        render_last_n_steps=4,
+        max_actions=20,
+        llm_config=llm_config,
+    )
 
     # Configure BrowserGym tool
     # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
@@ -67,7 +71,8 @@ def main(debug: bool) -> None:
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_sequentially(exp)
+        # run_with_ray(exp, n_cpus=4)
 
 
 if __name__ == "__main__":
