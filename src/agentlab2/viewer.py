@@ -266,10 +266,47 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         """Refresh the experiment directory dropdown."""
         return gr.Dropdown(choices=get_directory_contents(state.results_dir), value=current_choice)
 
-    def on_select_experiment(exp_name: str) -> tuple[list[list[Any]] | None, TrajectoryId | None]:
+    def _compute_experiment_stats(
+        finished_rewards: list[float],
+        finished_steps: list[int],
+        finished_durations: list[float],
+        n_failed: int,
+    ) -> str:
+        """Compute experiment-level statistics and return as markdown string."""
+        n_finished = len(finished_rewards)
+        n_total = n_finished + n_failed
+
+        if n_total == 0:
+            return ""
+
+        stats_parts = [f"📊 **{n_total}** trajectories"]
+
+        # Show finished/failed counts
+        if n_failed > 0:
+            stats_parts.append(f"│ ✅ Finished: **{n_finished}** │ ❌ Failed: **{n_failed}**")
+        else:
+            stats_parts.append(f"│ ✅ All Finished: **{n_finished}**")
+
+        # Compute averages only from finished trajectories
+        if n_finished > 0:
+            avg_reward = sum(finished_rewards) / n_finished
+            avg_steps = sum(finished_steps) / n_finished
+            success_rate = sum(1 for r in finished_rewards if r > 0) / n_finished * 100
+
+            stats_parts.append(f"│ Avg Reward: **{avg_reward:.2f}**")
+            stats_parts.append(f"│ Success Rate: **{success_rate:.0f}%**")
+            stats_parts.append(f"│ Avg Steps: **{avg_steps:.1f}**")
+
+            if finished_durations:
+                avg_duration = sum(finished_durations) / len(finished_durations)
+                stats_parts.append(f"│ Avg Duration: **{format_duration(avg_duration)}**")
+
+        return " ".join(stats_parts)
+
+    def on_select_experiment(exp_name: str) -> tuple[str, list[list[Any]] | None, TrajectoryId | None]:
         """Handle experiment selection."""
         if exp_name == "Select experiment directory" or not exp_name:
-            return None, None
+            return "", None, None
 
         # Extract directory name (remove trajectory count suffix)
         dir_name = exp_name.split(" (")[0]
@@ -277,22 +314,42 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         result = state.load_experiment(exp_dir)
         if "error" in result:
-            return None, None
+            return "", None, None
 
-        # Create trajectory table
+        # Create trajectory table and collect stats
         traj_data = []
+        finished_rewards = []
+        finished_steps = []
+        finished_durations = []
+        n_failed = 0
+
         for traj in state.trajectories.values():
             n_steps = len(traj.steps)
+
             final_reward = 0.0
             for step in reversed(traj.steps):
                 if isinstance(step.output, EnvironmentOutput):
                     final_reward = step.output.reward
                     break
+
             task_id = traj.metadata.get("task_id", "unknown")
-            duration_str = "-"
-            if traj.start_time is not None and traj.end_time is not None:
-                duration_str = format_duration(traj.end_time - traj.start_time)
+
+            # Trajectory is considered finished only if it has timing data
+            is_finished = traj.start_time is not None and traj.end_time is not None
+            if is_finished:
+                duration = traj.end_time - traj.start_time
+                duration_str = format_duration(duration)
+                finished_rewards.append(final_reward)
+                finished_steps.append(n_steps)
+                finished_durations.append(duration)
+            else:
+                duration_str = "-"
+                n_failed += 1
+
             traj_data.append([traj.id, task_id, n_steps, f"{final_reward:.2f}", duration_str])
+
+        # Calculate experiment statistics
+        exp_stats = _compute_experiment_stats(finished_rewards, finished_steps, finished_durations, n_failed)
 
         # Select first trajectory by default
         first_traj = None
@@ -301,7 +358,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             state.select_trajectory(first_id)
             first_traj = TrajectoryId(exp_dir=str(exp_dir), trajectory_name=first_id)
 
-        return traj_data, first_traj
+        return exp_stats, traj_data, first_traj
 
     def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> StepId | None:
         """Handle trajectory selection from table."""
@@ -693,6 +750,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         # Trajectory selection (collapsible after selection)
         with gr.Accordion("📂 Trajectories", open=True):
+            experiment_stats = gr.Markdown("", elem_id="experiment_stats")
             trajectory_table = gr.DataFrame(
                 headers=["Name", "Task ID", "Steps", "Reward", "Duration"],
                 max_height=300,
@@ -764,7 +822,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         exp_dir_choice.change(
             fn=on_select_experiment,
             inputs=exp_dir_choice,
-            outputs=[trajectory_table, traj_id],
+            outputs=[experiment_stats, trajectory_table, traj_id],
         )
 
         trajectory_table.select(
