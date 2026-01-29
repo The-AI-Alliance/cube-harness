@@ -18,7 +18,7 @@ class ReactAgentConfig(AgentConfig):
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
     max_history_tokens: int = 120000  # compact history if it exceeds N tokens
-    render_last_n_steps: int = 4  # include last N steps in prompt, if -1 - include all
+    render_last_n_steps: int = -1  # include last N steps in prompt, if -1 - include all
     system_prompt: str = """
 You are an expert AI Agent trained to assist users with complex web tasks.
 Your role is to understand the goal, perform actions until the goal is accomplished and respond in a helpful and accurate manner.
@@ -61,8 +61,12 @@ class ReactAgent(Agent):
             self.tools.append(STOP_ACTION.as_dict())
 
         self.history: list[dict | Message] = []
+        self._actions_cnt = 0
 
     def step(self, obs: Observation) -> AgentOutput:
+        if self.max_actions_reached():
+            logger.info("Max actions reached, issuing STOP action.")
+            return AgentOutput(actions=[Action(id="stop", name=STOP_ACTION.name, arguments={})])
         self.history += obs.to_llm_messages()
         self.maybe_compact_history()
         messages = self.choose_steps_to_render(self.history)
@@ -75,6 +79,7 @@ class ReactAgent(Agent):
             logger.exception(colored(f"Error getting LLM response: {e}. Prompt: {prompt}", "red"))
             raise e
         self.history.append(llm_output)
+        self._actions_cnt += 1
         llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output)
         return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
 
@@ -104,8 +109,7 @@ class ReactAgent(Agent):
         return actions
 
     def max_actions_reached(self) -> bool:
-        prev_actions = [msg for msg in self.history if isinstance(msg, Message) and msg.tool_calls]
-        return len(prev_actions) >= self.config.max_actions
+        return self._actions_cnt >= self.config.max_actions
 
     def maybe_compact_history(self):
         tokens = self.token_counter(messages=self.history)
