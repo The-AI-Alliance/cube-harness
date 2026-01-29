@@ -18,6 +18,7 @@ class ReactAgentConfig(AgentConfig):
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
     max_history_tokens: int = 120000  # compact history if it exceeds N tokens
+    render_last_n_steps: int = 4  # include last N steps in prompt, if -1 - include all
     system_prompt: str = """
 You are an expert AI Agent trained to assist users with complex web tasks.
 Your role is to understand the goal, perform actions until the goal is accomplished and respond in a helpful and accurate manner.
@@ -64,11 +65,7 @@ class ReactAgent(Agent):
     def step(self, obs: Observation) -> AgentOutput:
         self.history += obs.to_llm_messages()
         self.maybe_compact_history()
-        messages = [
-            dict(role="system", content=self.config.system_prompt),
-            *self.history,
-            dict(role="user", content=self.config.react_prompt),
-        ]
+        messages = self.choose_steps_to_render(self.history)
         prompt = Prompt(messages=messages, tools=self.tools)
         try:
             logger.debug(f"Prompt: {prompt}")
@@ -80,6 +77,16 @@ class ReactAgent(Agent):
         self.history.append(llm_output)
         llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output)
         return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
+
+    def choose_steps_to_render(self, history: list[dict | Message]) -> list[dict | Message]:
+        """Select which parts of history to include in the prompt based on length."""
+        # goal + last N messages
+        return [
+            dict(role="system", content=self.config.system_prompt),
+            self.history[0],  # goal
+            *self.history[-self.config.render_last_n_steps :],
+            dict(role="user", content=self.config.react_prompt),
+        ]
 
     def _parse_actions(self, llm_output: Message) -> list[Action]:
         actions = []
