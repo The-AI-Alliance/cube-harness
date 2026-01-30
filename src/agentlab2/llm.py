@@ -55,11 +55,28 @@ class LLMConfig(TypedBaseModel):
         return partial(token_counter, model=self.model_name)
 
 
+class Usage(TypedBaseModel):
+    """Token usage information from LLM response."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cached_tokens: int = 0  # tokens read from cache (cache hit)
+    cache_creation_tokens: int = 0  # tokens written to cache (Anthropic)
+
+
+class LLMResponse(TypedBaseModel):
+    """Response from LLM containing message and usage info."""
+
+    message: Message
+    usage: Usage
+
+
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
 
-    def __call__(self, prompt: Prompt) -> Message:
+    def __call__(self, prompt: Prompt) -> LLMResponse:
         kwargs = {
             "model": self.config.model_name,
             "temperature": self.config.temperature,
@@ -74,7 +91,42 @@ class LLM:
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
         response = completion_with_retries(**kwargs)
-        return response.choices[0].message  # type: ignore
+        usage = self._extract_usage(response)
+        return LLMResponse(message=response.choices[0].message, usage=usage)
+
+    def _extract_usage(self, response) -> Usage:
+        """Extract usage info from LiteLLM response."""
+        usage_data = getattr(response, "usage", None)
+        if usage_data is None:
+            return Usage()
+
+        def safe_int(value: object) -> int:
+            """Safely convert a value to int, returning 0 for non-numeric types."""
+            if isinstance(value, int):
+                return value
+            return 0
+
+        cached_tokens = 0
+        cache_creation_tokens = 0
+
+        # Check prompt_tokens_details for cached_tokens (OpenAI/Anthropic)
+        prompt_details = getattr(usage_data, "prompt_tokens_details", None)
+        if prompt_details:
+            cached_tokens = safe_int(getattr(prompt_details, "cached_tokens", 0))
+
+        # Anthropic-specific fields
+        cache_creation_tokens = safe_int(getattr(usage_data, "cache_creation_input_tokens", 0))
+        cache_read = safe_int(getattr(usage_data, "cache_read_input_tokens", 0))
+        if cache_read > 0:
+            cached_tokens = cache_read  # Anthropic uses this field name
+
+        return Usage(
+            prompt_tokens=safe_int(getattr(usage_data, "prompt_tokens", 0)),
+            completion_tokens=safe_int(getattr(usage_data, "completion_tokens", 0)),
+            total_tokens=safe_int(getattr(usage_data, "total_tokens", 0)),
+            cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+        )
 
 
 class LLMCall(TypedBaseModel):
@@ -85,3 +137,4 @@ class LLMCall(TypedBaseModel):
     llm_config: LLMConfig
     prompt: Prompt
     output: Message
+    usage: Usage = Field(default_factory=Usage)

@@ -70,15 +70,23 @@ class ReactAgent(Agent):
             dict(role="user", content=self.config.react_prompt),
         ]
         prompt = Prompt(messages=messages, tools=self.tools)
+        prompt_tokens = self.token_counter(messages=messages)
+        logger.info(f"Prompt tokens (estimated): {prompt_tokens}")
         try:
             logger.debug(f"Prompt: {prompt}")
-            llm_output = self.llm(prompt)
-            logger.debug(f"LLM Response: {llm_output}")
+            llm_response = self.llm(prompt)
+            logger.debug(f"LLM Response: {llm_response}")
         except Exception as e:
             logger.exception(colored(f"Error getting LLM response: {e}. Prompt: {prompt}", "red"))
             raise e
+        usage = llm_response.usage
+        logger.info(
+            f"LLM usage - prompt: {usage.prompt_tokens}, completion: {usage.completion_tokens}, "
+            f"cached: {usage.cached_tokens}, cache_created: {usage.cache_creation_tokens}"
+        )
+        llm_output = llm_response.message
         self.history.append(llm_output)
-        llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output)
+        llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output, usage=usage)
         return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
 
     def _parse_actions(self, llm_output: Message) -> list[Action]:
@@ -123,12 +131,12 @@ class ReactAgent(Agent):
         ]
         prompt = Prompt(messages=messages)
         try:
-            llm_message = self.llm(prompt)
+            llm_response = self.llm(prompt)
         except Exception as e:
             logger.exception(f"Error compacting history: {e}")
             raise
 
-        summary = llm_message.content
+        summary = llm_response.message.content
         logger.info(f"Compacted {midpoint} messages into summary:\n{summary}")
         # Rebuild history: system + summary + remaining messages
         summary_message = dict(role="assistant", content=f"## Previous Interactions summary:\n{summary}")
