@@ -352,7 +352,13 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         total_cache_creation_tokens = 0
         total_cost = 0.0
 
-        for traj in state.trajectories.values():
+        # Sort trajectories by start_time ascending (None values go to the end)
+        sorted_trajectories = sorted(
+            state.trajectories.values(),
+            key=lambda t: (t.start_time is None, t.start_time or 0),
+        )
+
+        for traj in sorted_trajectories:
             n_steps = len(traj.steps)
 
             final_reward = 0.0
