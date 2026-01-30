@@ -56,6 +56,7 @@ class Usage(TypedBaseModel):
     total_tokens: int = 0
     cached_tokens: int = 0  # tokens read from cache (cache hit)
     cache_creation_tokens: int = 0  # tokens written to cache (Anthropic)
+    cost: float = 0.0  # cost in USD from LiteLLM pricing
 
 
 class LLMResponse(TypedBaseModel):
@@ -99,6 +100,12 @@ class LLM:
                 return value
             return 0
 
+        def safe_float(value: object) -> float:
+            """Safely convert a value to float, returning 0.0 for non-numeric types."""
+            if isinstance(value, (int, float)):
+                return float(value)
+            return 0.0
+
         cached_tokens = 0
         cache_creation_tokens = 0
 
@@ -113,12 +120,19 @@ class LLM:
         if cache_read > 0:
             cached_tokens = cache_read  # Anthropic uses this field name
 
+        # Extract cost from LiteLLM's hidden params
+        cost = 0.0
+        hidden_params = getattr(response, "_hidden_params", {})
+        if isinstance(hidden_params, dict):
+            cost = safe_float(hidden_params.get("response_cost", 0.0))
+
         return Usage(
             prompt_tokens=safe_int(getattr(usage_data, "prompt_tokens", 0)),
             completion_tokens=safe_int(getattr(usage_data, "completion_tokens", 0)),
             total_tokens=safe_int(getattr(usage_data, "total_tokens", 0)),
             cached_tokens=cached_tokens,
             cache_creation_tokens=cache_creation_tokens,
+            cost=cost,
         )
 
 

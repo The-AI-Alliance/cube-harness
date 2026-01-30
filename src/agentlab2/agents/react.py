@@ -83,7 +83,7 @@ class ReactAgent(Agent):
         usage = llm_response.usage
         logger.info(
             f"LLM usage - prompt: {usage.prompt_tokens}, completion: {usage.completion_tokens}, "
-            f"cached: {usage.cached_tokens}, cache_created: {usage.cache_creation_tokens}"
+            f"cached: {usage.cached_tokens}, cache_created: {usage.cache_creation_tokens}, cost: ${usage.cost:.4f}"
         )
         llm_output = llm_response.message
         self.history.append(llm_output)
