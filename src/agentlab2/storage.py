@@ -9,12 +9,6 @@ from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 
 logger = logging.getLogger(__name__)
 
-# Forward reference to avoid circular import
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from agentlab2.episode import EpisodeConfig
-
 
 class LLMCallRef(BaseModel):
     """Reference to an LLM call stored in a separate file."""
@@ -31,6 +25,10 @@ class Storage(Protocol):
 
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
         """Append a single step to the trajectory."""
+        ...
+
+    def save_episode_config(self, episode_config) -> None:
+        """Save episode configuration to disk for later resumption."""
         ...
 
 
@@ -194,7 +192,7 @@ class FileStorage:
 
         return trajectories
 
-    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
+    def save_episode_config(self, episode_config) -> None:
         """Save episode configuration to disk for later resumption.
 
         Args:
@@ -208,7 +206,7 @@ class FileStorage:
             f.write(episode_config.model_dump_json(indent=2))
         logger.info(f"Saved episode config to {config_path}")
 
-    def load_episode_config(self, config_path: Path) -> "EpisodeConfig":
+    def load_episode_config(self, config_path: Path):
         """Load episode configuration from disk.
 
         Args:

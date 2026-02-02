@@ -126,7 +126,7 @@ class Experiment(TypedBaseModel):
                         if isinstance(step.output, AgentOutput) and step.output.error:
                             has_error = True
                             break
-                    
+
                     if last_env_step.done and not has_error and not last_env_step.error:
                         task_id = trajectory.metadata.get("task_id")
                         if task_id:
