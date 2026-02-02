@@ -315,7 +315,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             token_parts.append(f"completion: **{total_completion:,}**")
             token_parts.append(f"total: **{total_prompt + total_completion:,}**")
             if total_cached > 0:
-                cache_pct = (total_cached / total_prompt * 100)
+                cache_pct = total_cached / total_prompt * 100
                 token_parts.append(f"cached: **{total_cached:,}** ({cache_pct:.0f}%)")
             if total_cache_created > 0:
                 token_parts.append(f"cache_created: **{total_cache_created:,}**")
@@ -410,7 +410,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             "cache_created": total_cache_creation_tokens,
             "cost": total_cost,
         }
-        exp_stats = _compute_experiment_stats(finished_rewards, finished_steps, finished_durations, n_failed, token_stats)
+        exp_stats = _compute_experiment_stats(
+            finished_rewards, finished_steps, finished_durations, n_failed, token_stats
+        )
 
         # Select first trajectory by default
         first_traj = None
@@ -663,7 +665,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         if total_prompt_tokens > 0:
             token_stats = f"📊 prompt: **{total_prompt_tokens:,}** │ completion: **{total_completion_tokens:,}** │ total: **{total_prompt_tokens + total_completion_tokens:,}**"
             if total_cached_tokens > 0:
-                cache_pct = (total_cached_tokens / total_prompt_tokens * 100)
+                cache_pct = total_cached_tokens / total_prompt_tokens * 100
                 token_stats += f" │ cached: **{total_cached_tokens:,}** ({cache_pct:.0f}%)"
             if total_cache_creation_tokens > 0:
                 token_stats += f" │ cache_created: **{total_cache_creation_tokens:,}**"
