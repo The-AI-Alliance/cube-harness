@@ -134,6 +134,11 @@ class _AgentTracer:
             yield span
 
     def shutdown(self) -> None:
+        """Shutdown the tracer provider.
+
+        Note: The provider is shared. Only call once per process. Calling
+        shutdown() multiple times will cause errors on subsequent calls.
+        """
         _logger.info("Shutting down tracer and flushing spans")
         self._provider.shutdown()
         _logger.info("Tracer shutdown complete")

@@ -2,10 +2,11 @@ import logging
 import time
 from pathlib import Path
 
+from opentelemetry.trace import Span
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
+from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.environment import EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage
@@ -36,6 +37,17 @@ class Episode:
         self.exp_name = exp_name
         self.max_steps = max_steps
         self.storage = storage or FileStorage(output_dir)
+
+    def _record_step_attributes(
+        self,
+        span: Span,
+        agent_output: AgentOutput,
+        env_output: EnvironmentOutput,
+    ) -> None:
+        span.set_attribute("agent_output", agent_output.model_dump_json())
+        span.set_attribute("env_output", env_output.model_dump_json())
+        span.set_attribute("done", env_output.done)
+        span.set_attribute("reward", env_output.reward)
 
     def run(self) -> Trajectory:
         """Main loop to run the agent on a single specific task.
@@ -77,10 +89,7 @@ class Episode:
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(env_step)
-                        span.set_attribute("agent_output", agent_output.model_dump_json())
-                        span.set_attribute("env_output", env_output.model_dump_json())
-                        span.set_attribute("done", env_output.done)
-                        span.set_attribute("reward", env_output.reward)
+                        self._record_step_attributes(span, agent_output, env_output)
                         turns += 1
                 trajectory.end_time = time.time()
                 self.storage.save_trajectory(trajectory)  # save final trajectory with end_time
