@@ -1,16 +1,23 @@
 """LLM interaction abstractions, LiteLLM based."""
 
+import os
 import pprint
 from datetime import datetime
 from functools import partial
 from typing import Callable, List, Literal
 from uuid import uuid4
 
+import litellm
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
 from pydantic import Field
 
 from agentlab2.base import TypedBaseModel
+
+os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
+litellm.callbacks = ["otel"]
+# LiteLLM creates "litellm_request" spans with ~50 GenAI semantic attributes (tokens, cost, etc).
+# See: litellm/integrations/opentelemetry.py, https://opentelemetry.io/docs/specs/semconv/gen-ai/
 
 
 class Prompt(TypedBaseModel):

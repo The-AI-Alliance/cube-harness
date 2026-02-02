@@ -130,7 +130,7 @@ class TestLLM:
         assert result.usage.prompt_tokens == 0  # No usage info provided
 
     @patch("agentlab2.llm.completion_with_retries")
-    def test_llm_call_with_tools(self, mock_completion, sample_llm_config):
+    def test_llm_call_with_tools(self, mock_completion, sample_llm_config) -> None:
         """Test LLM call with tools."""
         tool_call = ChatCompletionMessageToolCall(
             id="call_1", function=Function(name="search", arguments='{"query": "test"}'), type="function"
