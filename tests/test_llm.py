@@ -4,6 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from litellm import Message
+from litellm.types.utils import ChatCompletionMessageToolCall, Function
 
 from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt
 
@@ -112,10 +113,10 @@ class TestLLM:
     @patch("agentlab2.llm.completion_with_retries")
     def test_llm_call(self, mock_completion, sample_llm_config, sample_prompt):
         """Test LLM call with mocked completion."""
-        mock_message = MagicMock()
-        mock_message.content = "Hello! How can I help?"
+        mock_message = Message(role="assistant", content="Hello! How can I help?")
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = None  # Simulate no usage info
         mock_completion.return_value = mock_response
 
         llm = LLM(config=sample_llm_config)
@@ -125,16 +126,19 @@ class TestLLM:
         call_kwargs = mock_completion.call_args.kwargs
         assert call_kwargs["model"] == "gpt-5-nano"
         assert call_kwargs["temperature"] == 0.7
-        assert result.content == "Hello! How can I help?"
+        assert result.message.content == "Hello! How can I help?"
+        assert result.usage.prompt_tokens == 0  # No usage info provided
 
     @patch("agentlab2.llm.completion_with_retries")
     def test_llm_call_with_tools(self, mock_completion, sample_llm_config) -> None:
         """Test LLM call with tools."""
-        mock_message = MagicMock()
-        mock_message.tool_calls = [MagicMock(function=MagicMock(name="search", arguments='{"query": "test"}'))]
-        mock_message.content = "Tool call made."
+        tool_call = ChatCompletionMessageToolCall(
+            id="call_1", function=Function(name="search", arguments='{"query": "test"}'), type="function"
+        )
+        mock_message = Message(role="assistant", content="Tool call made.", tool_calls=[tool_call])
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = None  # Simulate no usage info
         mock_completion.return_value = mock_response
 
         tools = [{"type": "function", "function": {"name": "search", "parameters": {}}}]
@@ -145,8 +149,8 @@ class TestLLM:
 
         call_kwargs = mock_completion.call_args.kwargs
         assert call_kwargs["tools"] == tools
-        assert result.tool_calls is not None
-        assert result.content == "Tool call made."
+        assert result.message.tool_calls is not None
+        assert result.message.content == "Tool call made."
 
 class TestLLMCall:
     """Tests for LLMCall class."""
