@@ -111,6 +111,7 @@ class WorkArenaTask(Task):
             "task_class": self.workarena_task_class.__name__,
             "seed": self.seed,
             "level": self.level,
+            "goal": goal,
         }
 
         return obs, info

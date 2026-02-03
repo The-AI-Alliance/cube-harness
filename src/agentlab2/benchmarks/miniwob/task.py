@@ -64,7 +64,7 @@ class MiniWobTask(Task):
         goal, info = self._parse_setup_result(setup_result)
         obs = Observation.from_text(goal)
         obs += self.obs_postprocess(self._tool.page_obs())
-        return obs, {**info, "task_id": self.id, "task_url": self.url, "task_desc": self.desc}
+        return obs, {**info, "task_id": self.id, "task_url": self.url, "task_desc": self.desc, "goal": goal}
 
     def validate_task(self, *args) -> tuple[float, dict]:
         """
