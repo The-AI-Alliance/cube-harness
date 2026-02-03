@@ -43,9 +43,9 @@ def main(debug: bool) -> None:
     # IMPORTANT: BrowsergymConfig must provide at least what ObsFlags expects
     use_html = False
     use_axtree = True
-    use_screenshot = True
+    use_screenshot = False
 
-    # Configure GenericAgent with flags similar to the old GPT-4o configuration
+    # Configure GenericAgent with flags matching FLAGS_CUSTOM from original agentlab
     agent_config = GenericAgentConfig(
         llm_config=llm_config,
         max_actions=20,
@@ -53,20 +53,32 @@ def main(debug: bool) -> None:
             obs=ObsFlags(
                 use_html=use_html,
                 use_ax_tree=use_axtree,
-                use_screenshot=use_screenshot,
+                use_focused_element=True,
+                use_error_logs=True,
                 use_history=True,
+                use_past_error_logs=False,
                 use_action_history=True,
-                use_think_history=False,
-                use_memory_history=True,
+                use_think_history=True,
+                use_diff=False,
+                html_type="pruned_html",
+                use_screenshot=use_screenshot,
+                use_som=False,
+                extract_visible_tag=True,
+                extract_clickable_tag=False,
+                extract_coords="False",
+                filter_visible_elements_only=False,
             ),
             use_plan=False,
             use_criticise=False,
             use_thinking=True,
             use_memory=False,
             use_concrete_example=True,
-            use_abstract_example=False,
+            use_abstract_example=True,
             use_hints=True,
+            enable_chat=False,
+            max_prompt_tokens=40_000,
             be_cautious=True,
+            extra_instructions=None,
         ),
     )
 
@@ -75,7 +87,7 @@ def main(debug: bool) -> None:
     # These flags must be >= the agent's ObsFlags to provide required observations
     tool_config = BrowsergymConfig(
         headless=not debug,  # Show browser in debug mode
-        use_screenshot=use_screenshot,
+        use_screenshot=use_screenshot,  # False - matching FLAGS_CUSTOM
         use_axtree=use_axtree,
         use_html=use_html,
     )
