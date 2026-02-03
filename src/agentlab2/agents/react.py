@@ -18,7 +18,7 @@ class ReactAgentConfig(AgentConfig):
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
     max_history_tokens: int = 120000  # compact history if it exceeds N tokens
-    render_last_n_steps: int = -1  # include last N steps in prompt, if -1 - include all
+    render_last_n_steps: int = -1  # include last N steps in prompt, if -1 - include all. For tasks with long obs.
     system_prompt: str = """
 You are an expert AI Agent trained to assist users with complex web tasks.
 Your role is to understand the goal, perform actions until the goal is accomplished and respond in a helpful and accurate manner.

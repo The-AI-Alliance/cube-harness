@@ -8,7 +8,7 @@ from browsergym.core.task import OpenEndedTask
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
 from termcolor import colored
-
+from playwright.sync_api import Page, Frame
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
@@ -90,6 +90,10 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             else {"start_url": "about:blank", "goal": None}
         )
 
+        env_kwargs = self._build_env_kwargs(task_entrypoint, task_kwargs)
+        return BrowserEnv(**env_kwargs)
+
+    def _build_env_kwargs(self, task_entrypoint, task_kwargs) -> dict:
         env_kwargs = {
             "task_entrypoint": task_entrypoint,
             "task_kwargs": task_kwargs,
@@ -119,8 +123,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             env_kwargs["record_video_dir"] = self.config.record_video_dir
         if self.config.action_mapping is not None:
             env_kwargs["action_mapping"] = self.config.action_mapping
-
-        return BrowserEnv(**env_kwargs)
+        return env_kwargs
 
     def _ensure_env(self) -> None:
         """Ensure the environment is created and reset."""
@@ -134,7 +137,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         return self._env  # type: ignore
 
     @property
-    def page(self) -> Any:
+    def page(self) -> Page:
         """Access the current Playwright page from BrowserGym."""
         self._ensure_env()
         return self._env.page if self._env and hasattr(self._env, "page") else None
@@ -248,7 +251,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
         return result
 
-    def _get_frame_for_bid(self, bid: str) -> Any:
+    def _get_frame_for_bid(self, bid: str) -> Page | Frame:
         """Navigate to the correct frame for a BID using BrowserGym's naming convention.
 
         BIDs like 'a195' encode iframe hierarchy:
@@ -258,7 +261,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
         Returns the frame/page where the element with this BID lives.
         """
-        current_frame = self.page
+        current_frame: Page | Frame = self.page
 
         # Parse the BID to find frame prefixes
         i = 0

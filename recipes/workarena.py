@@ -31,7 +31,7 @@ from agentlab2.llm import LLMConfig
 from agentlab2.tools.browsergym import BrowsergymConfig
 
 
-def main(debug: bool) -> None:
+def main(debug: bool):
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_l1_{current_datetime}"
 
