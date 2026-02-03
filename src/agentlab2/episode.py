@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Self
 
+from opentelemetry.trace import Span
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
@@ -118,6 +119,17 @@ class Episode:
         """
         return self.run()
 
+    def _record_step_attributes(
+        self,
+        span: Span,
+        agent_output: AgentOutput,
+        env_output: EnvironmentOutput,
+    ) -> None:
+        span.set_attribute("agent_output", agent_output.model_dump_json())
+        span.set_attribute("env_output", env_output.model_dump_json())
+        span.set_attribute("done", env_output.done)
+        span.set_attribute("reward", env_output.reward)
+
     def run(self) -> Trajectory:
         """Main loop to run the agent on a single specific task.
 
@@ -179,7 +191,7 @@ class Episode:
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(env_step)
-                        span.set_attribute("agent_output", agent_output.model_dump_json())
+                        self._record_step_attributes(span, agent_output, env_output)
                         turns += 1
                 trajectory.end_time = time.time()
                 self.storage.save_trajectory(trajectory)  # save final trajectory with end_time
