@@ -1,6 +1,7 @@
 """WorkArena task wrapper for AgentLab2."""
 
 import logging
+import time
 from typing import Any, Callable
 
 from termcolor import colored
@@ -44,6 +45,7 @@ class WorkArenaTask(Task):
         workarena_task_class: Callable[..., Any],
         seed: int,
         level: str = "l1",
+        wait_first_page_time: float = 10.0,
     ) -> None:
         """Initialize a WorkArena task wrapper.
 
@@ -57,6 +59,7 @@ class WorkArenaTask(Task):
         self.workarena_task_class = workarena_task_class
         self.seed = seed
         self.level = level
+        self.wait_first_page_time = wait_first_page_time
 
     def setup(self, tool: BrowsergymTool) -> tuple[Observation, dict]:
         """Set up the WorkArena task by initializing the BrowserGym environment.
@@ -99,6 +102,8 @@ class WorkArenaTask(Task):
                 logger.info(f"BrowserGym task start_url: {tool._env.task.start_url}")
 
         # Get the goal from the BrowserGym task
+        tool.noop()  # perform a noop to ensure env is ready
+        time.sleep(self.wait_first_page_time)  # wait for page to load
         goal = self._get_goal_from_env()
         logger.info(colored(f"WorkArena task goal: {goal}", "green"))
 

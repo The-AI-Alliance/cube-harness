@@ -45,7 +45,7 @@ class BrowsergymConfig(ToolConfig):
     resizeable_window: bool = False
     action_mapping: Callable | None = None
     use_raw_page_output: bool = False
-    pre_observation_delay: float = 0.0
+    pre_observation_delay: float = 2.5
 
     # Observation configuration
     use_html: bool = True
