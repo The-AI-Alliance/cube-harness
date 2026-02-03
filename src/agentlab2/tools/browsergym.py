@@ -7,8 +7,9 @@ from browsergym.core.env import BrowserEnv
 from browsergym.core.task import OpenEndedTask
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
+from playwright.sync_api import Frame, Page
 from termcolor import colored
-from playwright.sync_api import Page, Frame
+
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
