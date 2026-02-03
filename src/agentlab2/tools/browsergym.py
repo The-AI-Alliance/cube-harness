@@ -431,6 +431,18 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 screenshot_img = Image.fromarray(screenshot)
                 obs.contents.append(Content(data=screenshot_img, name="screenshot"))
 
+        # Add focused element BID if available (raw bid value for agent to format)
+        if "focused_element_bid" in bgym_obs:
+            focused_bid = bgym_obs["focused_element_bid"]
+            if focused_bid:
+                obs.contents.append(Content(data=focused_bid, name="focused_element"))
+
+        # Add last action error if there was one (raw error message for agent to format)
+        if "last_action_error" in bgym_obs:
+            error = bgym_obs["last_action_error"]
+            if error:
+                obs.contents.append(Content(data=str(error), name="last_action_error"))
+
         return obs
 
     # === Utility methods for BrowserTaskTool (goto, evaluate_js, page_obs) ===
