@@ -41,6 +41,8 @@ class DaytonaSWEToolConfig(ToolConfig):
     memory_gb: int = 4
     disk_gb: int = 10
     ephemeral: bool = True
+    auto_stop_minutes: int = 10  # Auto-stop after N minutes of inactivity (safety net)
+    auto_delete_minutes: int = 5  # Auto-delete N minutes after stopping
 
     def make(self) -> "DaytonaSWETool":
         return DaytonaSWETool(self)
@@ -73,8 +75,8 @@ class DaytonaSWETool(Tool, SWEActionSpace):
                 memory=self.config.memory_gb,
                 disk=self.config.disk_gb,
             ),
-            auto_stop_interval=0,
-            auto_delete_interval=0,
+            auto_stop_interval=self.config.auto_stop_minutes,
+            auto_delete_interval=self.config.auto_delete_minutes,
             ephemeral=self.config.ephemeral,
         )
         sandbox = self._client.create(params)
