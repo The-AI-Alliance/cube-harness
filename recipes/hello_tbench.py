@@ -68,7 +68,7 @@ def main(mode: str, tool: str, otlp_endpoint: str | None = None) -> None:
     if mode in ("oracle", "oracle_full"):
         agent_config = OracleAgentConfig()
     else:
-        llm_config = LLMConfig(model_name="openai/gpt-5-nano", tool_choice="required")
+        llm_config = LLMConfig(model_name="openai/gpt-5-mini", tool_choice="required")
         agent_config = ReactAgentConfig(
             llm_config=llm_config,
             system_prompt=SYSTEM_PROMPT,
