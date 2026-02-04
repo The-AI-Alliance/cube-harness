@@ -69,7 +69,13 @@ def main(mode: str, tool: str, otlp_endpoint: str | None = None) -> None:
         agent_config = OracleAgentConfig()
     else:
         llm_config = LLMConfig(model_name="openai/gpt-5-nano", tool_choice="required")
-        agent_config = ReactAgentConfig(llm_config=llm_config, system_prompt=SYSTEM_PROMPT)
+        agent_config = ReactAgentConfig(
+            llm_config=llm_config,
+            system_prompt=SYSTEM_PROMPT,
+            max_actions=100,
+            max_obs_chars=200000,
+            max_history_tokens=240000,
+        )
 
     benchmark = TerminalBenchBenchmark(
         tool_config=tool_config,
