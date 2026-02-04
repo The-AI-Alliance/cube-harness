@@ -109,10 +109,11 @@ class DockerSWETool(Tool, SWEActionSpace):
         self._ensure_container()
 
         try:
-            # Use bash -lc to get login shell environment
-            wrapped_cmd = f"bash -lc {shlex.quote(command)}"
+            # Wrap command with timeout and bash login shell
+            # Use timeout command for enforcement since exec_run doesn't support timeout
+            wrapped_cmd = f"timeout {timeout}s bash -lc {shlex.quote(command)}"
 
-            exit_code, output = self._exec_command(wrapped_cmd, timeout)
+            exit_code, output = self._exec_command(wrapped_cmd)
 
             # Decode output
             stdout = output.decode("utf-8", errors="replace").strip() if output else ""
@@ -120,7 +121,10 @@ class DockerSWETool(Tool, SWEActionSpace):
             parts = []
             if stdout:
                 parts.append(stdout)
-            if exit_code != 0:
+            # exit code 124 means timeout was reached
+            if exit_code == 124:
+                parts.append(f"[error] Command timed out after {timeout}s")
+            elif exit_code != 0:
                 parts.append(f"[exit_code: {exit_code}]")
 
             return "\n".join(parts) if parts else "(no output)"
@@ -129,13 +133,12 @@ class DockerSWETool(Tool, SWEActionSpace):
             return f"[error] {e}"
 
     @_retry_io
-    def _exec_command(self, command: str, timeout: int) -> tuple[int, bytes]:
+    def _exec_command(self, command: str) -> tuple[int, bytes]:
         """Execute command in container with retry."""
         exec_result = self._container.exec_run(
             command,
             workdir=self.config.working_dir,
             demux=False,  # Combined stdout/stderr
-            timeout=timeout,
         )
         return exec_result.exit_code, exec_result.output
 

@@ -10,6 +10,10 @@ Usage:
     uv run recipes/hello_tbench.py easy                     # 4 easy tasks with react agent
     uv run recipes/hello_tbench.py easy --tool docker       # 4 easy tasks, local Docker
     uv run recipes/hello_tbench.py                          # Full run with Ray
+
+Tracing (Jaeger):
+    uv run recipes/hello_tbench.py debug --trace            # Traces to localhost:4318
+    uv run recipes/hello_tbench.py debug --trace http://jaeger:4318/v1/traces  # Custom endpoint
 """
 
 import argparse
@@ -53,9 +57,10 @@ def create_tool_config(tool: str) -> DaytonaSWEToolConfig | DockerSWEToolConfig:
         raise ValueError(f"Unknown tool: {tool}. Use 'daytona' or 'docker'")
 
 
-def main(mode: str, tool: str) -> None:
+def main(mode: str, tool: str, otlp_endpoint: str | None = None) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path("outputs/terminalbench") / f"tbench_{mode}_{tool}_{current_datetime}"
+    trace_output = str(output_dir / "traces") if otlp_endpoint else None
 
     tool_config = create_tool_config(tool)
     print(f"Using tool: {tool} ({type(tool_config).__name__})")
@@ -83,11 +88,16 @@ def main(mode: str, tool: str) -> None:
     )
 
     if mode in ("debug", "oracle", "easy"):
-        run_sequentially(exp, debug_limit=1 if mode == "debug" else None)
+        run_sequentially(
+            exp,
+            debug_limit=1 if mode == "debug" else None,
+            trace_output=trace_output,
+            otlp_endpoint=otlp_endpoint,
+        )
     elif mode == "oracle_full":
-        run_with_ray(exp, n_cpus=30)
+        run_with_ray(exp, n_cpus=30, trace_output=trace_output, otlp_endpoint=otlp_endpoint)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_with_ray(exp, n_cpus=4, trace_output=trace_output, otlp_endpoint=otlp_endpoint)
 
 
 if __name__ == "__main__":
@@ -105,5 +115,13 @@ if __name__ == "__main__":
         choices=["daytona", "docker"],
         help="Tool backend: 'daytona' (cloud) or 'docker' (local). Default: daytona",
     )
+    parser.add_argument(
+        "--trace",
+        nargs="?",
+        const="http://localhost:4318/v1/traces",
+        default=None,
+        metavar="ENDPOINT",
+        help="Enable tracing to Jaeger. Default endpoint: http://localhost:4318/v1/traces",
+    )
     args = parser.parse_args()
-    main(args.mode, args.tool)
+    main(args.mode, args.tool, otlp_endpoint=args.trace)
