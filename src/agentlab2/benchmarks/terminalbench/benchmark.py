@@ -10,6 +10,10 @@ from agentlab2.benchmark import Benchmark
 from agentlab2.benchmarks.terminalbench.task import DEFAULT_IMAGE, TerminalBenchTask
 from agentlab2.environment import EnvConfig
 from agentlab2.tools.daytona import DaytonaSWEToolConfig
+from agentlab2.tools.docker import DockerSWEToolConfig
+
+# Type alias for supported SWE tool configs
+SWEToolConfig = DaytonaSWEToolConfig | DockerSWEToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -162,19 +166,27 @@ class TerminalBenchBenchmark(Benchmark):
         """Generate environment configurations with task-specific pre-built images.
 
         Terminal-Bench 2 uses pre-built Docker images for each task.
+        Supports both DaytonaSWEToolConfig (cloud) and DockerSWEToolConfig (local).
         """
         tasks = self.load_tasks()
 
         # Create a task-specific tool config for each task
         configs = []
         for task in tasks:
-            # Get base config settings
             base_config = self.tool_config
-            if not isinstance(base_config, DaytonaSWEToolConfig):
-                raise TypeError(f"TerminalBenchBenchmark requires DaytonaSWEToolConfig, got {type(base_config)}")
+            task_tool_config = self._create_task_tool_config(base_config, task)
+            configs.append(EnvConfig(task=task, tool_config=task_tool_config))
+            logger.debug(f"Task {task.id}: using image {task.docker_image}")
 
-            # Create task-specific config with the pre-built Docker image
-            task_tool_config = DaytonaSWEToolConfig(
+        return configs
+
+    def _create_task_tool_config(self, base_config: SWEToolConfig, task: TerminalBenchTask) -> SWEToolConfig:
+        """Create a task-specific tool config from the base config.
+
+        Preserves the config type (Daytona or Docker) while setting task-specific values.
+        """
+        if isinstance(base_config, DaytonaSWEToolConfig):
+            return DaytonaSWEToolConfig(
                 api_key=base_config.api_key,
                 image=task.docker_image,
                 cpus=task.cpus,
@@ -182,11 +194,22 @@ class TerminalBenchBenchmark(Benchmark):
                 disk_gb=_parse_storage_str(task.storage),
                 ephemeral=base_config.ephemeral,
             )
-
-            configs.append(EnvConfig(task=task, tool_config=task_tool_config))
-            logger.debug(f"Task {task.id}: using image {task.docker_image}")
-
-        return configs
+        elif isinstance(base_config, DockerSWEToolConfig):
+            return DockerSWEToolConfig(
+                image=task.docker_image,
+                cpus=task.cpus,
+                memory_gb=_parse_memory_str(task.memory),
+                disk_gb=_parse_storage_str(task.storage),
+                working_dir=base_config.working_dir,
+                network_mode=base_config.network_mode,
+                remove_on_close=base_config.remove_on_close,
+                pull_policy=base_config.pull_policy,
+            )
+        else:
+            raise TypeError(
+                f"TerminalBenchBenchmark requires DaytonaSWEToolConfig or DockerSWEToolConfig, "
+                f"got {type(base_config).__name__}"
+            )
 
     def close(self) -> None:
         """Clean up resources."""

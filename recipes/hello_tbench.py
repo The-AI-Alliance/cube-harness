@@ -3,15 +3,17 @@
 Terminal-Bench evaluates agents on real-world terminal tasks.
 
 Usage:
-    uv run recipes/hello_tbench.py debug        # 1 task, sequential
-    uv run recipes/hello_tbench.py oracle       # 10 tasks with oracle agent
-    uv run recipes/hello_tbench.py oracle_full  # All tasks with oracle agent (30 Ray workers)
-    uv run recipes/hello_tbench.py easy         # 4 easy tasks with react agent
-    uv run recipes/hello_tbench.py              # Full run with Ray
+    uv run recipes/hello_tbench.py debug                    # 1 task, sequential (Daytona)
+    uv run recipes/hello_tbench.py oracle                   # 10 tasks with oracle agent
+    uv run recipes/hello_tbench.py oracle --tool docker     # 10 tasks with oracle, local Docker
+    uv run recipes/hello_tbench.py oracle_full              # All tasks with oracle agent (30 Ray workers)
+    uv run recipes/hello_tbench.py easy                     # 4 easy tasks with react agent
+    uv run recipes/hello_tbench.py easy --tool docker       # 4 easy tasks, local Docker
+    uv run recipes/hello_tbench.py                          # Full run with Ray
 """
 
+import argparse
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -26,6 +28,7 @@ from agentlab2.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from agentlab2.experiment import Experiment  # noqa: E402
 from agentlab2.llm import LLMConfig  # noqa: E402
 from agentlab2.tools.daytona import DaytonaSWEToolConfig  # noqa: E402
+from agentlab2.tools.docker import DockerSWEToolConfig  # noqa: E402
 
 VALID_MODES = ("debug", "oracle", "oracle_full", "easy", "full")
 
@@ -33,11 +36,29 @@ SYSTEM_PROMPT = """You are an expert software engineer working in a Linux termin
 Work in /app directory. Read existing files, test your solutions before declaring completion."""
 
 
-def main(mode: str) -> None:
-    current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path("outputs/terminalbench") / f"tbench_{mode}_{current_datetime}"
+def create_tool_config(tool: str) -> DaytonaSWEToolConfig | DockerSWEToolConfig:
+    """Create the appropriate tool config based on the tool parameter."""
+    if tool == "daytona":
+        api_key = os.getenv("DAYTONA_API_KEY")
+        if not api_key:
+            raise ValueError("DAYTONA_API_KEY environment variable is required for Daytona tool")
+        return DaytonaSWEToolConfig(api_key=api_key)
+    elif tool == "docker":
+        return DockerSWEToolConfig(
+            pull_policy="missing",  # Pull images only if not present locally
+            remove_on_close=True,
+            network_mode="bridge",
+        )
+    else:
+        raise ValueError(f"Unknown tool: {tool}. Use 'daytona' or 'docker'")
 
-    tool_config = DaytonaSWEToolConfig(api_key=os.getenv("DAYTONA_API_KEY"))
+
+def main(mode: str, tool: str) -> None:
+    current_datetime = time.strftime("%Y%m%d_%H%M%S")
+    output_dir = Path("outputs/terminalbench") / f"tbench_{mode}_{tool}_{current_datetime}"
+
+    tool_config = create_tool_config(tool)
+    print(f"Using tool: {tool} ({type(tool_config).__name__})")
 
     if mode in ("oracle", "oracle_full"):
         agent_config = OracleAgentConfig()
@@ -70,5 +91,19 @@ def main(mode: str) -> None:
 
 
 if __name__ == "__main__":
-    mode = sys.argv[-1] if len(sys.argv) > 1 and sys.argv[-1] in VALID_MODES else "full"
-    main(mode)
+    parser = argparse.ArgumentParser(description="Run Terminal-Bench experiments")
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="full",
+        choices=VALID_MODES,
+        help="Execution mode (default: full)",
+    )
+    parser.add_argument(
+        "--tool",
+        default="daytona",
+        choices=["daytona", "docker"],
+        help="Tool backend: 'daytona' (cloud) or 'docker' (local). Default: daytona",
+    )
+    args = parser.parse_args()
+    main(args.mode, args.tool)
