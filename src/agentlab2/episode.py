@@ -6,14 +6,14 @@ from opentelemetry.trace import Span
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
-from agentlab2.environment import EnvConfig
+from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
+from agentlab2.environment import STOP_ACTION, EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage
 
 logger = logging.getLogger(__name__)
 
-MAX_STEPS = 1000  # System-wide upper limit on steps
+MAX_STEPS = 50  # System-wide fallback limit (agent's max_actions takes priority)
 
 
 class Episode:
@@ -73,6 +73,22 @@ class Episode:
                 logger.info(colored(f"Start env output: {env_output}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.max_steps:
+                    # Check if agent has reached its max_actions limit
+                    if hasattr(agent, "max_actions_reached") and agent.max_actions_reached():
+                        logger.info(f"Agent reached max_actions limit at turn {turns}, forcing stop")
+                        ts = time.time()
+                        agent_output = AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
+                        agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
+                        self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
+                        trajectory.steps.append(agent_step)
+
+                        env_ts = time.time()
+                        env_output = env.step(agent_output.actions)
+                        env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
+                        self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
+                        trajectory.steps.append(env_step)
+                        break
+
                     with tracer.step(f"turn_{turns}") as span:
                         # Agent step
                         ts = time.time()

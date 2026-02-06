@@ -10,7 +10,7 @@ from uuid import uuid4
 import litellm
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
-from pydantic import Field
+from pydantic import Field, field_serializer
 
 from agentlab2.base import TypedBaseModel
 
@@ -20,11 +20,25 @@ litellm.callbacks = ["otel"]
 # See: litellm/integrations/opentelemetry.py, https://opentelemetry.io/docs/specs/semconv/gen-ai/
 
 
+def _message_to_dict(msg: dict | Message) -> dict:
+    """Convert a Message object to dict for serialization."""
+    if isinstance(msg, dict):
+        return msg
+    if hasattr(msg, "model_dump"):
+        return msg.model_dump(exclude_none=True)
+    return dict(msg)
+
+
 class Prompt(TypedBaseModel):
     """Represents the input prompt to chat completion api of LLM."""
 
     messages: List[dict | Message]
     tools: List[dict] = Field(default_factory=list)
+
+    @field_serializer("messages")
+    def serialize_messages(self, messages: List[dict | Message]) -> List[dict]:
+        """Convert Message objects to dicts for JSON serialization."""
+        return [_message_to_dict(m) for m in messages]
 
     def __str__(self) -> str:
         """Debug view of the prompt."""
@@ -150,5 +164,10 @@ class LLMCall(TypedBaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     llm_config: LLMConfig
     prompt: Prompt
-    output: Message
+    output: Message | dict
     usage: Usage = Field(default_factory=Usage)
+
+    @field_serializer("output")
+    def serialize_output(self, output: Message | dict) -> dict:
+        """Convert Message to dict for JSON serialization."""
+        return _message_to_dict(output)
