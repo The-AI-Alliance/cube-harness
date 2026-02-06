@@ -1181,6 +1181,23 @@ class GenericAgent(Agent):
                 # Parse response for think/plan/memory/criticise tags
                 ans_dict = main_prompt.parse_answer(text_response)
 
+                # Extract extended thinking from model's native thinking (reasoning_effort)
+                reasoning_content = getattr(llm_response.message, "reasoning_content", None)
+                thinking_blocks = getattr(llm_response.message, "thinking_blocks", None)
+
+                if reasoning_content:
+                    if "think" not in ans_dict:
+                        ans_dict["think"] = reasoning_content
+                    else:
+                        ans_dict["think"] = f"{reasoning_content}\n\n{ans_dict['think']}"
+
+                if thinking_blocks:
+                    think = "\n".join(thinking_blocks)
+                    if "think" not in ans_dict:
+                        ans_dict["think"] = think
+                    else:
+                        ans_dict["think"] = f"{ans_dict['think']}\n\n" + think
+
                 # Parse actions from tool calls
                 actions = parse_actions(llm_response.message)
                 if actions:
