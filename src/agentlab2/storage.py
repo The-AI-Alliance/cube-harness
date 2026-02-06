@@ -32,6 +32,10 @@ class Storage(Protocol):
         """Append a single step to the trajectory."""
         ...
 
+    def save_episode_config(self, episode_config) -> None:
+        """Save episode configuration to disk for later resumption."""
+        ...
+
 
 class FileStorage:
     """File-based storage for trajectories."""
@@ -193,7 +197,7 @@ class FileStorage:
 
         return trajectories
 
-    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
+    def save_episode_config(self, episode_config) -> None:
         """Save episode configuration to disk for later resumption.
 
         Args:
@@ -207,7 +211,7 @@ class FileStorage:
             f.write(episode_config.model_dump_json(indent=2))
         logger.info(f"Saved episode config to {config_path}")
 
-    def load_episode_config(self, config_path: Path) -> "EpisodeConfig":
+    def load_episode_config(self, config_path: Path):
         """Load episode configuration from disk.
 
         Args:

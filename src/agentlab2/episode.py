@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 from pathlib import Path
@@ -169,9 +168,7 @@ class Episode:
                         except Exception as e:
                             logger.exception(f"Error in env.step() at turn {turns}: {e}")
                             # Use current env_output.obs since env.step() failed (env_output still has previous value)
-                            env_output = EnvironmentOutput(
-                                obs=env_output.obs, error=StepError.from_exception(e)
-                            )
+                            env_output = EnvironmentOutput(obs=env_output.obs, error=StepError.from_exception(e))
                             env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                             self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                             trajectory.steps.append(env_step)

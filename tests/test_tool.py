@@ -214,6 +214,7 @@ class TestToolExecutionSpans:
         call_args = mock_tracer.start_as_current_span.call_args
         assert call_args[0][0] == "execute_tool click"
         from opentelemetry.trace import SpanKind
+
         assert call_args[1]["kind"] == SpanKind.INTERNAL
 
     @patch("agentlab2.metrics.tracer._tool_tracer")
