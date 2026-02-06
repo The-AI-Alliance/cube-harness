@@ -9,11 +9,10 @@ from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 
 logger = logging.getLogger(__name__)
 
-# Forward reference to avoid circular import
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from agentlab2.episode import EpisodeConfig
+# Import EpisodeConfig at module level
+# This is safe because EpisodeConfig is defined before Episode class in episode.py
+# and storage.py is imported by episode.py after EpisodeConfig is defined
+from agentlab2.episode import EpisodeConfig
 
 
 class LLMCallRef(BaseModel):
@@ -217,8 +216,6 @@ class FileStorage:
         Returns:
             The loaded EpisodeConfig.
         """
-        from agentlab2.episode import EpisodeConfig
-
         with open(config_path) as f:
             data = json.load(f)
 

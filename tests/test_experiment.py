@@ -108,8 +108,8 @@ class TestExperiment:
         assert len(episodes) == len(mock_benchmark.env_configs())
         for i, episode in enumerate(episodes):
             assert isinstance(episode, Episode)
-            assert episode.id == i
-            assert episode.output_dir == tmp_dir
+            assert episode.config.id == i
+            assert episode.config.output_dir == tmp_dir
             assert episode.env_config.task is not None
 
     def test_experiment_create_episodes_multiple_tasks(self, tmp_dir, mock_agent_config, mock_tool_config):
@@ -209,4 +209,115 @@ class TestExperiment:
         env_configs = mock_benchmark.env_configs()
 
         for episode, env_config in zip(episodes, env_configs):
-            assert episode.task_id == env_config.task.id
+            assert episode.config.task_id == env_config.task.id
+
+    def test_experiment_relaunch_failed_episodes(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test relaunch_failed_episodes correctly identifies and relaunches failed episodes."""
+        from agentlab2.core import StepError
+
+        # Create tasks
+        tasks = [MockTask(goal=f"Task {i}") for i in range(3)]
+        benchmark = MockBenchmark(tasks_list=tasks, tool_config=mock_tool_config)
+
+        exp = Experiment(
+            name="test_relaunch_failed",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+
+        # Create episodes
+        episodes = exp.create_episodes()
+
+        # Run first episode to completion (successful)
+        episodes[0].run()
+
+        # Run second episode but simulate failure by creating a trajectory with error
+        from agentlab2.core import Observation, Trajectory, TrajectoryStep
+        from agentlab2.storage import FileStorage
+
+        storage = FileStorage(tmp_dir)
+        failed_traj = Trajectory(
+            id=f"{episodes[1].config.task_id}_ep{episodes[1].config.id}",
+            metadata={"task_id": episodes[1].config.task_id},
+        )
+        obs = Observation.from_text("test")
+        from agentlab2.core import EnvironmentOutput
+
+        # Add a step with error to simulate failure
+        failed_env_output = EnvironmentOutput(obs=obs, error=StepError.from_exception(ValueError("Test error")))
+        failed_traj.steps.append(TrajectoryStep(output=failed_env_output))
+        storage.save_trajectory(failed_traj)
+
+        # Third episode not started (no trajectory)
+
+        # Test relaunch_failed_episodes
+        benchmark.setup()
+        try:
+            results = exp.relaunch_failed_episodes()
+            # Should find episode 1 as failed (has trajectory with error)
+            assert results.tasks_num == 1
+            # The relaunched episode should run successfully
+            assert len(results.trajectories) == 1
+            assert len(results.failures) == 0
+        finally:
+            benchmark.close()
+
+    def test_experiment_relaunch_unstarted_episodes(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test relaunch_unstarted_episodes correctly identifies and relaunches unstarted episodes."""
+        # Create tasks
+        tasks = [MockTask(goal=f"Task {i}") for i in range(3)]
+        benchmark = MockBenchmark(tasks_list=tasks, tool_config=mock_tool_config)
+
+        exp = Experiment(
+            name="test_relaunch_unstarted",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+
+        # Create episodes (this saves configs)
+        episodes = exp.create_episodes()
+
+        # Run only first episode (leaving 2 and 3 unstarted)
+        episodes[0].run()
+
+        # Test relaunch_unstarted_episodes
+        benchmark.setup()
+        try:
+            results = exp.relaunch_unstarted_episodes()
+            # Should find episodes 1 and 2 as unstarted
+            assert results.tasks_num == 2
+            # Both should run successfully
+            assert len(results.trajectories) == 2
+            assert len(results.failures) == 0
+        finally:
+            benchmark.close()
+
+    def test_experiment_relaunch_no_episodes(self, tmp_dir, mock_agent_config, mock_benchmark):
+        """Test relaunch methods return empty results when no episodes to relaunch."""
+        exp = Experiment(
+            name="test_no_relaunch",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=mock_benchmark,
+        )
+
+        # Create episodes and run all successfully
+        episodes = exp.create_episodes()
+        for episode in episodes:
+            episode.run()
+
+        # Test relaunch_failed_episodes - should find nothing
+        mock_benchmark.setup()
+        try:
+            failed_results = exp.relaunch_failed_episodes()
+            assert failed_results.tasks_num == 0
+            assert len(failed_results.trajectories) == 0
+
+            # Test relaunch_unstarted_episodes - should find nothing
+            unstarted_results = exp.relaunch_unstarted_episodes()
+            assert unstarted_results.tasks_num == 0
+            assert len(unstarted_results.trajectories) == 0
+        finally:
+            mock_benchmark.close()

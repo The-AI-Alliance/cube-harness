@@ -475,3 +475,152 @@ class TestFileStorageRoundtrip:
         assert isinstance(step2.output, EnvironmentOutput)
         assert step2.output.reward == 1.0
         assert step2.output.done is True
+
+
+class TestFileStorageEpisodeConfig:
+    """Tests for FileStorage episode config save/load functionality."""
+
+    def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test save_episode_config creates episode_configs directory."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+        episode_config = EpisodeConfig(
+            id=0,
+            task_id="test_task",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="test_exp",
+            output_dir=tmp_dir,
+            max_steps=100,
+        )
+
+        storage.save_episode_config(episode_config)
+
+        config_dir = Path(tmp_dir) / "episode_configs"
+        assert config_dir.exists()
+
+    def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test save_episode_config creates correct config file."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+        episode_config = EpisodeConfig(
+            id=5,
+            task_id="my_task_123",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="test_exp",
+            output_dir=tmp_dir,
+            max_steps=200,
+        )
+
+        storage.save_episode_config(episode_config)
+
+        config_path = Path(tmp_dir) / "episode_configs" / "episode_5_task_my_task_123.json"
+        assert config_path.exists()
+
+    def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test episode config save/load round-trip."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+
+        # Create and save config
+        original_config = EpisodeConfig(
+            id=42,
+            task_id="roundtrip_task",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="roundtrip_exp",
+            output_dir=tmp_dir,
+            max_steps=500,
+        )
+
+        storage.save_episode_config(original_config)
+
+        # Load config
+        config_path = Path(tmp_dir) / "episode_configs" / "episode_42_task_roundtrip_task.json"
+        loaded_config = storage.load_episode_config(config_path)
+
+        # Verify all fields match
+        assert loaded_config.id == original_config.id
+        assert loaded_config.task_id == original_config.task_id
+        assert loaded_config.exp_name == original_config.exp_name
+        assert loaded_config.max_steps == original_config.max_steps
+        assert loaded_config.output_dir == original_config.output_dir
+        assert loaded_config.agent_config == original_config.agent_config
+        assert loaded_config.tool_config == original_config.tool_config
+
+    def test_load_episode_config_not_found(self, tmp_dir):
+        """Test load_episode_config raises error for non-existent file."""
+        storage = FileStorage(tmp_dir)
+        config_path = Path(tmp_dir) / "episode_configs" / "nonexistent.json"
+
+        with pytest.raises(FileNotFoundError):
+            storage.load_episode_config(config_path)
+
+    def test_list_episode_configs(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test list_episode_configs returns all config files."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+
+        # Save multiple configs
+        for i in range(3):
+            config = EpisodeConfig(
+                id=i,
+                task_id=f"task_{i}",
+                agent_config=mock_agent_config,
+                tool_config=mock_tool_config,
+                exp_name="test_exp",
+                output_dir=tmp_dir,
+                max_steps=100,
+            )
+            storage.save_episode_config(config)
+
+        # List configs
+        config_files = storage.list_episode_configs()
+
+        assert len(config_files) == 3
+        # Verify all files exist and have correct naming pattern
+        for config_file in config_files:
+            assert config_file.exists()
+            assert config_file.name.startswith("episode_")
+            assert "_task_" in config_file.name
+            assert config_file.name.endswith(".json")
+
+    def test_list_episode_configs_empty_directory(self, tmp_dir):
+        """Test list_episode_configs returns empty list when no configs exist."""
+        storage = FileStorage(tmp_dir)
+        config_files = storage.list_episode_configs()
+
+        assert config_files == []
+
+    def test_episode_config_filename_parsing(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test episode config filename format is correct for parsing."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+
+        # Save config with task_id that contains underscores
+        config = EpisodeConfig(
+            id=10,
+            task_id="task_with_underscores_123",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="test_exp",
+            output_dir=tmp_dir,
+            max_steps=100,
+        )
+
+        storage.save_episode_config(config)
+
+        # Verify filename format
+        config_path = Path(tmp_dir) / "episode_configs" / "episode_10_task_task_with_underscores_123.json"
+        assert config_path.exists()
+
+        # Load it back
+        loaded = storage.load_episode_config(config_path)
+        assert loaded.id == 10
+        assert loaded.task_id == "task_with_underscores_123"

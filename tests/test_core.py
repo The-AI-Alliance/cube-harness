@@ -12,6 +12,7 @@ from agentlab2.core import (
     Content,
     EnvironmentOutput,
     Observation,
+    StepError,
     TrajectoryStep,
 )
 
@@ -328,3 +329,88 @@ class TestTrajectory:
         data = json.loads(json_str)
         assert data["metadata"]["task_id"] == "test_task"
         assert len(data["steps"]) == 2
+
+
+class TestStepError:
+    """Tests for StepError class."""
+
+    def test_step_error_from_exception_basic(self):
+        """Test StepError.from_exception() creates proper error object."""
+        try:
+            raise ValueError("Test error message")
+        except ValueError as e:
+            step_error = StepError.from_exception(e)
+
+        assert step_error.error_type == "ValueError"
+        assert step_error.exception_str == "Test error message"
+        assert len(step_error.stack_trace) > 0
+        assert "ValueError" in step_error.stack_trace
+        assert "Test error message" in step_error.stack_trace
+
+    def test_step_error_from_exception_different_types(self):
+        """Test StepError.from_exception() with different exception types."""
+        exceptions = [
+            RuntimeError("Runtime error"),
+            KeyError("Missing key"),
+            TypeError("Type mismatch"),
+        ]
+
+        for exc in exceptions:
+            step_error = StepError.from_exception(exc)
+            assert step_error.error_type == type(exc).__name__
+            assert step_error.exception_str == str(exc)
+            assert len(step_error.stack_trace) > 0
+
+    def test_step_error_from_exception_with_traceback(self):
+        """Test StepError.from_exception() includes full stack trace."""
+        try:
+            def inner_function():
+                raise ValueError("Inner error")
+
+            inner_function()
+        except ValueError as e:
+            step_error = StepError.from_exception(e)
+
+        assert step_error.error_type == "ValueError"
+        assert "inner_function" in step_error.stack_trace
+        assert "Inner error" in step_error.stack_trace
+
+    def test_step_error_serialization(self):
+        """Test StepError JSON serialization."""
+        try:
+            raise RuntimeError("Serialization test")
+        except RuntimeError as e:
+            step_error = StepError.from_exception(e)
+
+        json_str = step_error.model_dump_json()
+        data = json.loads(json_str)
+
+        assert data["error_type"] == "RuntimeError"
+        assert data["exception_str"] == "Serialization test"
+        assert "stack_trace" in data
+        assert len(data["stack_trace"]) > 0
+
+    def test_step_error_in_agent_output(self):
+        """Test StepError can be stored in AgentOutput."""
+        try:
+            raise ValueError("Agent error")
+        except ValueError as e:
+            step_error = StepError.from_exception(e)
+
+        agent_output = AgentOutput(error=step_error)
+        assert agent_output.error is not None
+        assert agent_output.error.error_type == "ValueError"
+        assert agent_output.error.exception_str == "Agent error"
+
+    def test_step_error_in_environment_output(self):
+        """Test StepError can be stored in EnvironmentOutput."""
+        try:
+            raise RuntimeError("Environment error")
+        except RuntimeError as e:
+            step_error = StepError.from_exception(e)
+
+        obs = Observation.from_text("test")
+        env_output = EnvironmentOutput(obs=obs, error=step_error)
+        assert env_output.error is not None
+        assert env_output.error.error_type == "RuntimeError"
+        assert env_output.error.exception_str == "Environment error"

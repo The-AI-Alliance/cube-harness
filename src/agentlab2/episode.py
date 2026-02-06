@@ -45,30 +45,20 @@ class Episode:
         max_steps: int = MAX_STEPS,
         storage: Storage | None = None,
     ) -> None:
-        self.id = id
-        self.output_dir = output_dir
-        self.agent_config = agent_config
-        self.task_id = env_config.task.id
+        self.config = EpisodeConfig(
+            id=id,
+            task_id=env_config.task.id,
+            agent_config=agent_config,
+            tool_config=env_config.tool_config,
+            exp_name=exp_name,
+            output_dir=output_dir,
+            max_steps=max_steps,
+        )
         self.env_config = env_config
-        self.exp_name = exp_name
-        self.max_steps = max_steps
         self.storage = storage or FileStorage(output_dir)
 
-    def save_config(self) -> None:
-        """Save episode configuration to disk for later resumption."""
-        episode_config = EpisodeConfig(
-            id=self.id,
-            task_id=self.task_id,
-            agent_config=self.agent_config,
-            tool_config=self.env_config.tool_config,
-            exp_name=self.exp_name,
-            output_dir=self.output_dir,
-            max_steps=self.max_steps,
-        )
-        self.storage.save_episode_config(episode_config)
-
     @classmethod
-    def load_config(cls, config_path: Path, benchmark) -> Self:
+    def load_episode_from_config(cls, config_path: Path, benchmark) -> Self:
         """
         Load episode configuration from disk and recreate the episode.
 
@@ -79,8 +69,6 @@ class Episode:
         Returns:
             Episode instance ready to run
         """
-        from agentlab2.storage import FileStorage
-
         # Infer output_dir from config_path structure: {output_dir}/episode_configs/episode_*.json
         output_dir = config_path.parent.parent
         storage = FileStorage(output_dir)
@@ -100,15 +88,17 @@ class Episode:
         # Recreate EnvConfig
         env_config = EnvConfig(task=task, tool_config=episode_config.tool_config)
 
-        # Create and return Episode
-        return cls(
+        # Create and return Episode with config stored internally
+        episode = cls(
             id=episode_config.id,
             output_dir=episode_config.output_dir,
             agent_config=episode_config.agent_config,
             env_config=env_config,
             exp_name=episode_config.exp_name,
             max_steps=episode_config.max_steps,
+            storage=storage,
         )
+        return episode
 
     def relaunch(self) -> Trajectory:
         """
@@ -137,23 +127,23 @@ class Episode:
             Trajectory containing the full history of the run.
 
         """
-        tracer = get_tracer(self.exp_name)
+        tracer = get_tracer(self.config.exp_name)
         env = self.env_config.make()
-        agent = self.agent_config.make(env.action_set)
+        agent = self.config.agent_config.make(env.action_set)
         try:
-            with tracer.episode(self.task_id, experiment=self.exp_name):
+            with tracer.episode(self.config.task_id, experiment=self.config.exp_name):
                 start_time = time.time()
                 env_output = env.setup()
                 trajectory = Trajectory(
-                    id=f"{self.task_id}_ep{self.id}",
+                    id=f"{self.config.task_id}_ep{self.config.id}",
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
-                    metadata={"task_id": self.task_id, **env_output.info},
+                    metadata={"task_id": self.config.task_id, **env_output.info},
                     start_time=start_time,
                 )
                 self.storage.save_trajectory(trajectory)
                 logger.info(colored(f"Start env output: {env_output}", "blue"))
                 turns = 0
-                while not env_output.done and turns < self.max_steps:
+                while not env_output.done and turns < self.config.max_steps:
                     with tracer.step(f"turn_{turns}") as span:
                         # Agent step
                         ts = time.time()
