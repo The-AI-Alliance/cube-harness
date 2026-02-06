@@ -1,13 +1,15 @@
-import json
 import logging
+import time
 from pathlib import Path
 
+from opentelemetry.trace import Span
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Trajectory
+from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.environment import STOP_ACTION, EnvConfig
 from agentlab2.metrics.tracer import get_tracer
+from agentlab2.storage import FileStorage, Storage
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ class Episode:
         env_config: EnvConfig,
         exp_name: str = "default",
         max_steps: int = MAX_STEPS,
+        storage: Storage | None = None,
     ) -> None:
         self.id = id
         self.output_dir = output_dir
@@ -33,52 +36,79 @@ class Episode:
         self.env_config = env_config
         self.exp_name = exp_name
         self.max_steps = max_steps
-        self._output_name = ""
+        self.storage = storage or FileStorage(output_dir)
+
+    def _record_step_attributes(
+        self,
+        span: Span,
+        agent_output: AgentOutput,
+        env_output: EnvironmentOutput,
+    ) -> None:
+        span.set_attribute("agent_output", agent_output.model_dump_json())
+        span.set_attribute("env_output", env_output.model_dump_json())
+        span.set_attribute("done", env_output.done)
+        span.set_attribute("reward", env_output.reward)
 
     def run(self) -> Trajectory:
-        """
-        Main loop to run the agent on a single specific task.
+        """Main loop to run the agent on a single specific task.
 
         Returns:
             Trajectory containing the full history of the run.
+
         """
         tracer = get_tracer(self.exp_name)
         env = self.env_config.make()
         agent = self.agent_config.make(env.action_set)
         try:
             with tracer.episode(self.task_id, experiment=self.exp_name):
+                start_time = time.time()
                 env_output = env.setup()
-                # logger.info(colored(f"Initial env output: {env_output}", "blue"))
-                trajectory = Trajectory(steps=[env_output], metadata={"task_id": self.task_id})
-                self.save_trajectory(trajectory)
+                trajectory = Trajectory(
+                    id=f"{self.task_id}_ep{self.id}",
+                    steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
+                    metadata={"task_id": self.task_id, **env_output.info},
+                    start_time=start_time,
+                )
+                self.storage.save_trajectory(trajectory)
+                logger.info(colored(f"Start env output: {env_output}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.max_steps:
                     # Check if agent has reached its max_actions limit
                     if hasattr(agent, "max_actions_reached") and agent.max_actions_reached():
                         logger.info(f"Agent reached max_actions limit at turn {turns}, forcing stop")
+                        ts = time.time()
                         agent_output = AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
-                        trajectory.append(agent_output)
-                        self.save_step(agent_output)
+                        agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
+                        self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
+                        trajectory.steps.append(agent_step)
+
+                        env_ts = time.time()
                         env_output = env.step(agent_output.actions)
-                        trajectory.append(env_output)
-                        self.save_step(env_output)
+                        env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
+                        self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
+                        trajectory.steps.append(env_step)
                         break
 
                     with tracer.step(f"turn_{turns}") as span:
                         # Agent step
+                        ts = time.time()
                         agent_output = agent.step(env_output.obs)
-                        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
-                        trajectory.append(agent_output)
-                        self.save_step(agent_output)
+                        self.log_agent_output(turns, agent_output)
+                        agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
+                        self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
+                        trajectory.steps.append(agent_step)
 
                         # Environment step
+                        env_ts = time.time()
                         env_output = env.step(agent_output.actions)
                         logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
-                        trajectory.append(env_output)
-                        self.save_step(env_output)
-
-                        span.set_attribute("agent_output", agent_output.model_dump_json())
+                        env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
+                        self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
+                        trajectory.steps.append(env_step)
+                        self._record_step_attributes(span, agent_output, env_output)
                         turns += 1
+                trajectory.end_time = time.time()
+                self.storage.save_trajectory(trajectory)  # save final trajectory with end_time
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
             raise e
@@ -87,27 +117,13 @@ class Episode:
             tracer.shutdown()
         return trajectory
 
-    def save_trajectory(self, trajectory: Trajectory) -> None:
-        """Save the trajectory to the output directory."""
-        # TODO: Replace with tracing implementation
-        traj_dir = self.output_dir / "trajectories"
-        traj_dir.mkdir(parents=True, exist_ok=True)
-        self._output_name = traj_dir / f"run{self.id}_task_{self.task_id}"
-        with open(f"{self._output_name}.metadata.json", "w") as f:
-            f.write(json.dumps(trajectory.metadata, indent=2))
-        with open(f"{self._output_name}.jsonl", "a") as f:
-            pass  # Create empty file for appending steps later
-        logger.info(f"Saved trajectory for task {self.task_id} to {self._output_name}")
-
-    def save_step(self, step: AgentOutput | EnvironmentOutput) -> None:
-        """Append a single step to the trajectory JSONL file."""
-        # TODO: Replace with tracing implementation
-        if not self._output_name:
-            raise ValueError("Trajectory path not set. Call save_trajectory first.")
-        try:
-            with open(f"{self._output_name}.jsonl", "a") as f:
-                line = step.model_dump_json(serialize_as_any=True)
-                f.write(f"{line}\n")
-        except Exception as e:
-            logger.exception(f"Error saving step to trajectory {self._output_name}: {e}")
-            raise e
+    def log_agent_output(self, turns: int, agent_output: AgentOutput) -> None:
+        for llm_call in agent_output.llm_calls:
+            if llm_call.output.content:
+                logger.info(colored(f"Turn {turns} LLM Response: {llm_call.output.content}", "green"))
+            if hasattr(llm_call.output, "reasoning_content") and llm_call.output.reasoning_content:
+                logger.info(colored(f"Turn {turns} LLM Reasoning: {llm_call.output.reasoning_content}", "cyan"))
+            if hasattr(llm_call.output, "thinking_blocks") and llm_call.output.thinking_blocks:
+                for block in llm_call.output.thinking_blocks:
+                    logger.info(colored(f"Turn {turns} LLM Thinking Block: {block}", "cyan"))
+        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))

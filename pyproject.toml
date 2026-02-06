@@ -7,12 +7,12 @@ authors = [
     { name = "Aman Jaiswal", email = "amanjaiswal73892@gmail.com" },
     { name = "Oleh Shliazhko", email = "oleh.shliazhko@servicenow.com" },
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
     "pydantic~=2.0",
     "litellm~=1.80.8",
-    "playwright~=1.56",
-    "Pillow~=12.0",
+    "playwright==1.44",
+    "Pillow~=11.0",
     "beautifulsoup4~=4.14",
     "numpy~=2.3.5",
     "numpydoc~=1.10.0",
@@ -21,9 +21,12 @@ dependencies = [
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
     "miniwob>=1.0",
+    "gradio~=5.49",
+    "matplotlib>=3.8",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
+    "browsergym-core>=0.14.3",
     "daytona>=0.133.0",
     "datasets>=4.5.0",
     "docker>=7.1.0",
@@ -47,12 +50,22 @@ line-ending = "auto"
 [tool.ruff.lint]
 extend-select = ["I"] # sort imports
 
+[project.scripts]
+al2-viewer = "agentlab2.viewer:main"
+
 [dependency-groups]
 dev = [
     "ruff>=0.14.7",
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "huggingface-hub>=1.3.3",
+    "pytest-xdist>=3.8.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')"
 ]
 
 [tool.setuptools.packages.find]

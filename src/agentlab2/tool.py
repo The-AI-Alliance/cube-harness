@@ -1,8 +1,11 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, get_protocol_members
+from typing import Any, Callable, List
+
+from typing_extensions import get_protocol_members
 
 from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
+from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ class Tool(AbstractTool):
     """
     Base class for tool that implements an action space protocol.
 
-    :var Returns: Description
+    :var action_space: Protocol defining the actions this tool supports
     """
 
     action_space: Any
@@ -59,11 +62,16 @@ class Tool(AbstractTool):
 
     def execute_action(self, action: Action) -> Observation:
         fn = self.get_action_method(action)
-        try:
-            action_result = fn(**action.arguments) or "Success"
-        except Exception as e:
-            action_result = f"Error executing action {action.name}: {e}"
-            logger.exception(action_result)
+
+        with tool_span(action) as span:
+            try:
+                action_result = fn(**action.arguments) or "Success"
+            except Exception as e:
+                action_result = f"Error executing action {action.name}: {e}"
+                logger.exception(action_result)
+
+            span.set_attribute(GEN_AI_TOOL_CALL_RESULT, str(action_result))
+
         return Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
 
     @property

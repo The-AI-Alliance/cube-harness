@@ -16,6 +16,7 @@ class JsonlSpanWriter:
 
     def write_span(self, span: ReadableSpan) -> None:
         context = span.get_span_context()  # type: ignore[no-untyped-call]
+        assert context is not None
         parent = span.parent
         record = SpanRecord(
             trace_id=context.trace_id,
