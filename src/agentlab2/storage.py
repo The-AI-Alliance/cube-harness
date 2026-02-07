@@ -9,10 +9,11 @@ from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 
 logger = logging.getLogger(__name__)
 
-# Import EpisodeConfig at module level
-# This is safe because EpisodeConfig is defined before Episode class in episode.py
-# and storage.py is imported by episode.py after EpisodeConfig is defined
-from agentlab2.episode import EpisodeConfig
+# Forward reference to avoid circular import
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agentlab2.episode import EpisodeConfig
 
 
 class LLMCallRef(BaseModel):
@@ -211,7 +212,7 @@ class FileStorage:
             f.write(episode_config.model_dump_json(indent=2))
         logger.info(f"Saved episode config to {config_path}")
 
-    def load_episode_config(self, config_path: Path):
+    def load_episode_config(self, config_path: Path) -> "EpisodeConfig":
         """Load episode configuration from disk.
 
         Args:
@@ -220,6 +221,9 @@ class FileStorage:
         Returns:
             The loaded EpisodeConfig.
         """
+        # Import here to avoid circular dependency at module level
+        from agentlab2.episode import EpisodeConfig
+
         with open(config_path) as f:
             data = json.load(f)
 

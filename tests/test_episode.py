@@ -267,7 +267,9 @@ class TestEpisode:
     def test_episode_captures_env_error(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test Episode captures environment errors correctly in trajectory."""
 
-        class ErrorTask:
+        from agentlab2.core import Task, ActionSchema
+
+        class ErrorTask(Task):
             id = "error_task"
             validate_per_step = True
 
@@ -278,8 +280,14 @@ class TestEpisode:
             def validate_task(self, obs):
                 raise ValueError("Environment validation failed")
 
-            def filter_actions(self, actions):
+            def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
                 return actions
+
+            def accept_agent_stop(self) -> bool:
+                return True
+
+            def teardown(self) -> None:
+                pass
 
         from agentlab2.environment import EnvConfig
 

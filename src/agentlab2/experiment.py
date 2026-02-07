@@ -216,7 +216,7 @@ class Experiment(TypedBaseModel):
             results = ExpResult(
                 exp_id=f"{self.name}_{exp_id_suffix}",
                 tasks_num=len(episodes),
-                trajectories={traj.metadata["task_id"]: traj for traj in trajectories},
+                trajectories={traj.id: traj for traj in trajectories},
                 failures=failures,
                 config=self.config,
             )
@@ -265,11 +265,55 @@ class Experiment(TypedBaseModel):
                 config=self.config,
             )
 
-        # Find all successful trajectories
-        successful_task_ids = self._load_successful_task_ids(storage)
+        # Check each episode config individually to see if it has a failed trajectory
+        failed_episodes = []
+        for config_file in config_files:
+            parsed = self._parse_episode_config_filename(config_file)
+            if not parsed:
+                logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
+                continue
 
-        # Load and relaunch failed episodes (have configs and trajectories but not successful)
-        failed_episodes = self._find_episodes_to_relaunch(config_files, successful_task_ids, include=False)
+            episode_id, task_id = parsed
+            trajectory_id = f"{task_id}_ep{episode_id}"
+
+            # Check if this episode has a trajectory
+            traj_dir = self.output_dir / "trajectories"
+            metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
+            if not metadata_path.exists():
+                # Episode not started, skip
+                continue
+
+            # Episode has a trajectory, check if it's successful
+            try:
+                trajectory = storage.load_trajectory(trajectory_id)
+                last_env_step = trajectory.last_env_step()
+                has_error = False
+                # Check all steps for errors
+                for step in trajectory.steps:
+                    if isinstance(step.output, EnvironmentOutput) and step.output.error:
+                        has_error = True
+                        break
+                    if isinstance(step.output, AgentOutput) and step.output.error:
+                        has_error = True
+                        break
+
+                # Episode is failed if it has errors or didn't complete successfully
+                is_successful = last_env_step.done and not has_error and not last_env_step.error
+                if not is_successful:
+                    # This episode failed, add it to relaunch list
+                    try:
+                        episode = Episode.load_episode_from_config(config_file, self.benchmark)
+                        failed_episodes.append(episode)
+                    except Exception as e:
+                        logger.exception(f"Failed to load episode config {config_file}: {e}")
+            except Exception as e:
+                logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
+                # If we can't load the trajectory, consider it failed
+                try:
+                    episode = Episode.load_episode_from_config(config_file, self.benchmark)
+                    failed_episodes.append(episode)
+                except Exception as e2:
+                    logger.exception(f"Failed to load episode config {config_file}: {e2}")
 
         return self._execute_episodes(failed_episodes, "relaunch")
 
@@ -291,10 +335,26 @@ class Experiment(TypedBaseModel):
                 config=self.config,
             )
 
-        # Find all tasks that have trajectories (started at least once)
-        started_task_ids = self._load_started_task_ids(storage)
+        # Check each episode config individually to see if it has a trajectory
+        unstarted_episodes = []
+        traj_dir = self.output_dir / "trajectories"
+        for config_file in config_files:
+            parsed = self._parse_episode_config_filename(config_file)
+            if not parsed:
+                logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
+                continue
 
-        # Load and relaunch unstarted episodes (have configs but no trajectories)
-        unstarted_episodes = self._find_episodes_to_relaunch(config_files, started_task_ids, include=False)
+            episode_id, task_id = parsed
+            trajectory_id = f"{task_id}_ep{episode_id}"
+
+            # Check if this episode has a trajectory
+            metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
+            if not metadata_path.exists():
+                # Episode not started, add it to relaunch list
+                try:
+                    episode = Episode.load_episode_from_config(config_file, self.benchmark)
+                    unstarted_episodes.append(episode)
+                except Exception as e:
+                    logger.exception(f"Failed to load episode config {config_file}: {e}")
 
         return self._execute_episodes(unstarted_episodes, "relaunch_unstarted")
