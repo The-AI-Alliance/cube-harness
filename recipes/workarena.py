@@ -24,11 +24,18 @@ import time
 from pathlib import Path
 
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.workarena import WorkArenaBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
 from agentlab2.tools.browsergym import BrowsergymConfig
+
+try:
+    from agentlab2.benchmarks.workarena import WorkArenaBenchmark
+except ImportError:
+    print(
+        "WorkArena benchmark requires 'browsergym-workarena'. Run `make install` to install all optional dependencies."
+    )
+    sys.exit(1)
 
 
 def main(debug: bool):
