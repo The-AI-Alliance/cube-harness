@@ -2,7 +2,7 @@ import base64
 import io
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Protocol, Self, TypeAlias
+from typing import Any, Callable, Dict, Self
 
 import litellm.utils
 from PIL import Image
@@ -186,13 +186,18 @@ class Trajectory(TypedBaseModel):
         raise ValueError("No EnvironmentOutput found in the trajectory.")
 
 
-class ActionSpace(Protocol):
-    """Base class for action spaces."""
+class ActionSpace(frozenset[Callable]):
+    """A set of action callables representing a subset of an action space.
 
-    pass
+    Supports set operations (&, -, |) for composing action subsets.
+    """
 
+    def __new__(cls, *actions: Callable) -> "ActionSpace":
+        return super().__new__(cls, actions)
 
-ActionSubset: TypeAlias = tuple[Callable, ...]
+    @property
+    def names(self) -> frozenset[str]:
+        return frozenset(action.__name__ for action in self)
 
 
 class Task(ABC):

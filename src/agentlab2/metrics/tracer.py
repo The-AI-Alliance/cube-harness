@@ -62,7 +62,9 @@ class _AgentTracer:
         agent_description: str | None = None,
     ) -> None:
         assert output_dir or otlp_endpoint, "At least one collector (output_dir or otlp_endpoint) required"
-        _logger.info(f"Creating _AgentTracer: service={service_name}, output_dir={output_dir}, otlp_endpoint={otlp_endpoint}")
+        _logger.info(
+            f"Creating _AgentTracer: service={service_name}, output_dir={output_dir}, otlp_endpoint={otlp_endpoint}"
+        )
 
         self.output_dir: Path | None = None
         resource_attrs = {SERVICE_NAME: service_name}
