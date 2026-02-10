@@ -210,7 +210,7 @@ class Task(ABC):
         Returns:
             Tuple of (Observation, dict with additional task info)
         """
-        self._tool = tool
+        pass
 
     def teardown(self) -> None:
         """Optional clean up after task completion."""
