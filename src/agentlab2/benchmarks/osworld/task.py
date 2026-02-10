@@ -1,0 +1,234 @@
+"""OSWorld task implementation for desktop automation.
+
+This module provides the OSWorldTask class that manages the lifecycle of a single
+OSWorld task, including VM setup, observation building, and evaluation.
+"""
+
+import logging
+from typing import TYPE_CHECKING, List, Optional
+
+from agentlab2.core import ActionSchema, Observation, Task
+
+if TYPE_CHECKING:
+    from agentlab2.tools.computer import Computer
+
+logger = logging.getLogger(__name__)
+
+
+class OSWorldTask(Task):
+    """Represents a single OSWorld task.
+
+    OSWorld tasks are desktop-based tasks that run inside Docker containers
+    or VMs, where agents interact via mouse/keyboard actions and observe
+    via screenshots and accessibility trees.
+
+    Reference: https://github.com/xlang-ai/OSWorld
+
+    Attributes:
+        id: Unique task identifier (UUID in original OSWorld)
+        desc: Human-readable task description
+        domain: Task domain (e.g., "chrome", "os", "libreoffice", "vscode")
+        instruction: The natural language instruction for the agent
+        snapshot: VM snapshot name to restore before task (default: "init_state")
+        related_apps: List of applications involved in the task
+        config: Setup scripts to run before task starts
+        evaluator: Evaluation configuration with function name and expected results
+        validate_per_step: Whether to validate after each step (default: False)
+        max_turns: Maximum number of agent turns allowed
+    """
+
+    validate_per_step: bool = False
+
+    def __init__(
+        self,
+        id: str,
+        desc: str,
+        domain: str = "general",
+        instruction: str = "",
+        snapshot: str = "init_state",
+        related_apps: Optional[List[str]] = None,
+        config: Optional[List[dict]] = None,
+        evaluator: Optional[dict] = None,
+        max_turns: int = 30,
+    ) -> None:
+        self.id = id
+        self.desc = desc
+        self.domain = domain
+        self.instruction = instruction
+        self.snapshot = snapshot
+        self.related_apps = related_apps or []
+        self.config = config or []
+        self.evaluator = evaluator or {}
+        self.max_turns = max_turns
+        self._tool: "Computer | None" = None
+        self._is_done: bool = False
+
+    def setup(self, tool: "Computer") -> tuple[Observation, dict]:
+        """Set up the OSWorld task.
+
+        This method:
+        1. Stores reference to the tool for later use
+        2. Calls tool.setup_task() which restores VM and waits for stabilization
+        3. Gets initial observation with screenshot and accessibility tree
+        4. Prepends task instruction to observation
+
+        Args:
+            tool: The Computer tool instance for interacting with the VM
+
+        Returns:
+            Tuple of (initial observation, task info dict)
+        """
+        self._tool = tool
+        self._is_done = False
+        logger.info(f"Setting up OSWorld task: {self.id} (domain={self.domain})")
+
+        # Build task config for desktop_env
+        task_config = {
+            "id": self.id,
+            "instruction": self.instruction,
+            "config": self.config,
+            "evaluator": self.evaluator,
+            "snapshot": self.snapshot,
+            "related_apps": self.related_apps,
+        }
+
+        # Setup VM (includes 60s wait and initial observation)
+        obs = self._tool.setup_task(task_config)
+
+        # Prepend instruction as text observation
+        goal = self.instruction or self.desc
+        goal_obs = Observation.from_text(f"Task: {goal}")
+        obs = goal_obs + obs
+
+        info = {
+            "task_id": self.id,
+            "task_desc": self.desc,
+            "task_domain": self.domain,
+            "task_snapshot": self.snapshot,
+            "task_related_apps": self.related_apps,
+        }
+        return obs, info
+
+    def validate_task(self, obs: Observation) -> tuple[float, dict]:
+        """Validate if the task has been completed successfully.
+
+        This calls desktop_env's built-in evaluation which handles various
+        evaluation methods depending on the task:
+        - File existence/content checks
+        - Application state verification
+        - Screenshot comparison
+        - Custom evaluation scripts
+
+        Args:
+            obs: Current observation (not used, evaluation is VM-based)
+
+        Returns:
+            Tuple of (reward 0.0-1.0, info dict with 'done' key)
+        """
+        if not self._tool:
+            logger.warning(f"No tool available for task {self.id}")
+            return 0.0, {"done": False, "error": "no_tool"}
+
+        if not self.evaluator:
+            logger.warning(f"No evaluator configured for task {self.id}")
+            return 0.0, {"done": False, "error": "no_evaluator"}
+
+        eval_func = self.evaluator.get("func", "unknown")
+        logger.debug(f"Validating task {self.id} with evaluator: {eval_func}")
+
+        try:
+            # Call desktop_env's evaluate() method
+            reward = self._tool.evaluate_task()
+            done = reward > 0.0 or self._is_done
+
+            logger.info(
+                f"Task {self.id} validation: reward={reward}, done={done}, evaluator={eval_func}"
+            )
+
+            return reward, {
+                "done": done,
+                "evaluator": eval_func,
+                "expected": self.evaluator.get("expected", {}),
+            }
+        except Exception as e:
+            logger.error(f"Task validation failed: {e}")
+            return 0.0, {"done": False, "error": str(e)}
+
+    def filter_actions(self, actions: List[ActionSchema]) -> List[ActionSchema]:
+        """Filter available actions for this task.
+
+        By default, all Computer actions are allowed.
+        Override in subclasses or configure via task JSON if needed.
+
+        Args:
+            actions: Full list of available actions from the tool
+
+        Returns:
+            Filtered list of actions allowed for this task
+        """
+        # By default, allow all actions
+        return actions
+
+    def obs_postprocess(self, obs: Observation) -> Observation:
+        """Post-process observation before returning to agent.
+
+        For OSWorld tasks, this linearizes the raw accessibility tree XML
+        into a tab-separated table format suitable for agent consumption.
+
+        Args:
+            obs: Raw observation from the tool with raw accessibility_tree
+
+        Returns:
+            Processed observation with linearized axtree_txt
+        """
+        from agentlab2.benchmarks.osworld.osworld_axtree import linearize_accessibility_tree
+
+        # Find and linearize accessibility tree if present
+        new_contents = []
+        for content in obs.contents:
+            if content.name == "accessibility_tree":
+                # Linearize the raw XML accessibility tree
+                try:
+                    platform = self._tool.config.os_type.lower() if self._tool else "ubuntu"
+                    axtree_txt = linearize_accessibility_tree(content.data, platform=platform)
+                    # Replace raw tree with linearized version
+                    new_contents.append(
+                        content.model_copy(update={"data": axtree_txt, "name": "axtree_txt"})
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to linearize accessibility tree: {e}")
+                    # Keep the raw tree if linearization fails
+                    new_contents.append(content)
+            else:
+                # Keep other contents as-is
+                new_contents.append(content)
+
+        # Create new observation with processed contents
+        return obs.model_copy(update={"contents": new_contents})
+
+    def finished(self) -> bool:
+        """Check if the task is finished.
+
+        Returns:
+            True if task has reached a terminal state
+        """
+        return self._is_done
+
+    def mark_done(self, success: bool = False) -> None:
+        """Mark the task as done.
+
+        Called when agent signals DONE or FAIL, or when max_turns reached.
+
+        Args:
+            success: Whether the task was completed successfully
+        """
+        self._is_done = True
+        logger.info(f"Task {self.id} marked as done (success={success})")
+
+    def teardown(self) -> None:
+        """Clean up after task completion.
+
+        VM cleanup is handled by the Computer tool's close() method.
+        """
+        logger.info(f"Tearing down OSWorld task: {self.id}")
+        # Cleanup is handled at the tool level
