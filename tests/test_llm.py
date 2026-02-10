@@ -152,6 +152,7 @@ class TestLLM:
         assert result.message.tool_calls is not None
         assert result.message.content == "Tool call made."
 
+
 class TestLLMCall:
     """Tests for LLMCall class."""
 
