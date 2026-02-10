@@ -63,7 +63,6 @@ class Environment(AbstractEnvironment):
 
     def setup(self) -> EnvironmentOutput:
         """Prepare tool and set up the task."""
-        self.tool.reset()
         obs, info = self.task.setup(self.tool)
         return EnvironmentOutput(obs=obs, info=info)
 
