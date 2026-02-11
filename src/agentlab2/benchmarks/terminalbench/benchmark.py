@@ -128,7 +128,7 @@ class TerminalBenchBenchmark(Benchmark):
         if not dataset_path.exists():
             raise FileNotFoundError(
                 f"Terminal-Bench dataset not found at {self.dataset_path}. "
-                "Run benchmark.install() or `uv run scripts/export_terminal_bench.py` to download it."
+                "Run benchmark.install() to download it."
             )
 
         try:

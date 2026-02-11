@@ -36,10 +36,7 @@ Comparison of AgentLab2 ReactAgent results on Terminal-Bench 2.0 against the pub
 ### Reproducing
 
 ```bash
-# Install dataset
-uv run scripts/export_terminal_bench.py
-
-# Run with GPT-5-Mini (full, 4 Ray workers)
+# Run with GPT-5-Mini (full, 4 Ray workers — dataset auto-installs on first run)
 uv run recipes/hello_tbench.py full --model openai/gpt-5-mini
 
 # Run with GPT-5-Nano
