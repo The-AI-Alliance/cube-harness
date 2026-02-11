@@ -359,7 +359,7 @@ class TestEpisode:
             agent_config=mock_agent_config,
             env_config=mock_env_config,
         )
-        episode2._allow_overwrite = True
+        episode2.allow_overwrite = True
         episode2.run()
 
         # Both archived and current files should exist

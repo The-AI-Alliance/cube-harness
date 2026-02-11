@@ -63,6 +63,8 @@ class Experiment(TypedBaseModel):
             successful_ids = self._load_successful_trajectory_ids(storage)
             failed_ids = started_ids - successful_ids
             failed = self._find_episodes_to_relaunch(config_files, failed_ids, include=True)
+            for episode in failed:
+                episode.allow_overwrite = True  # Allow overwriting existing trajectory since this is a retried episode
             logger.info(f"Retrying: {len(failed)} failed episodes (out of {len(config_files)} total)")
             episodes.extend(failed)
 

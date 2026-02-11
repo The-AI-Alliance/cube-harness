@@ -1,5 +1,6 @@
 """Test script to verify error handling and experiment resumption features."""
 
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -168,7 +169,6 @@ def test_agent_error():
                 lines = f.readlines()
                 logger.info(f"✓ Trajectory has {len(lines)} steps")
                 # Check for error in any step (should be in AgentOutput)
-                import json
 
                 found_error = False
                 for line in lines:
@@ -233,8 +233,6 @@ def test_env_error():
                 lines = f.readlines()
                 logger.info(f"✓ Trajectory has {len(lines)} steps")
                 # Check for error in any step (should be in EnvironmentOutput)
-                import json
-
                 found_error = False
                 for line in lines:
                     step = json.loads(line)

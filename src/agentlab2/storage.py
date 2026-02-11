@@ -87,11 +87,10 @@ class FileStorage:
     def _archive_trajectory(self, trajectory_id: str) -> None:
         """Rename existing trajectory files with an archived timestamp suffix."""
         traj_dir = self.output_dir / "trajectories"
-        timestamp = int(time.time())
         for ext in [".metadata.json", ".jsonl"]:
             old_path = traj_dir / f"{trajectory_id}{ext}"
             if old_path.exists():
-                new_path = traj_dir / f"{trajectory_id}.archived_{timestamp}{ext}"
+                new_path = traj_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
                 old_path.rename(new_path)
                 logger.info(f"Archived {old_path.name} -> {new_path.name}")
 
@@ -218,6 +217,8 @@ class FileStorage:
         trajectories = []
         # Find all metadata files and extract trajectory IDs
         for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
             trajectory_id = metadata_file.stem.replace(".metadata", "")
             try:
                 trajectory = self.load_trajectory(trajectory_id)
@@ -227,15 +228,19 @@ class FileStorage:
 
         return trajectories
 
-    def save_episode_config(self, episode_config) -> None:
+    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
         """Save episode configuration to disk for later resumption.
 
         Args:
-            episode_config: The episode configuration to save.
+            episode_config: The episode configuration to save.e
         """
         config_dir = self.output_dir / "episode_configs"
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
+        if config_path.exists():
+            raise FileExistsError(
+                f"Episode config already exists: {config_path}, are you trying to resume without setting the flag Experiment.resume?"
+            )
 
         with open(config_path, "w") as f:
             f.write(episode_config.model_dump_json(indent=2, serialize_as_any=True))

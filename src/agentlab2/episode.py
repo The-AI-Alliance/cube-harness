@@ -55,7 +55,7 @@ class Episode:
         )
         self.env_config = env_config
         self.storage = storage or FileStorage(output_dir)
-        self._allow_overwrite = False
+        self.allow_overwrite = False
 
     @classmethod
     def load_episode_from_config(cls, config_path: Path, benchmark) -> Self:
@@ -96,19 +96,9 @@ class Episode:
             env_config=env_config,
             exp_name=episode_config.exp_name,
             max_steps=episode_config.max_steps,
-            storage=storage,
+            storage=storage,  # Allow overwriting existing trajectory since this is a resumed episode
         )
-        episode._allow_overwrite = True
         return episode
-
-    def relaunch(self) -> Trajectory:
-        """
-        Relaunch a failed episode. This is the same as run() but provided for clarity.
-
-        Returns:
-            Trajectory containing the full history of the run.
-        """
-        return self.run()
 
     def _record_step_attributes(
         self,
@@ -141,7 +131,7 @@ class Episode:
                     metadata={"task_id": self.config.task_id, **env_output.info},
                     start_time=start_time,
                 )
-                self.storage.save_trajectory(trajectory, allow_overwrite=self._allow_overwrite)
+                self.storage.save_trajectory(trajectory, allow_overwrite=self.allow_overwrite)
                 logger.info(colored(f"Start env output: {env_output}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
