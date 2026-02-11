@@ -8,7 +8,7 @@ from typing import Protocol
 from agentlab2.agent import Agent, AgentConfig
 from agentlab2.benchmark import Benchmark
 from agentlab2.core import Action, ActionSchema, AgentOutput, Observation, Task
-from agentlab2.environment import EnvConfig, Environment
+from agentlab2.environment import EnvConfig
 from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment
 from agentlab2.tool import Tool, ToolConfig
@@ -143,7 +143,6 @@ def test_agent_error():
         agent_config = ErrorAgentConfig(error_on_step=1)
         tool_config = MockToolConfig()
         task = MockTask()
-        benchmark = MockBenchmark([task], tool_config)
 
         env_config = EnvConfig(task=task, tool_config=tool_config)
         episode = Episode(
@@ -157,7 +156,7 @@ def test_agent_error():
 
         # Run episode - should catch agent error
         try:
-            trajectory = episode.run()
+            episode.run()
         except RuntimeError as e:
             logger.info(f"✓ Episode correctly raised error: {e}")
 
@@ -177,7 +176,7 @@ def test_agent_error():
                     output = step.get("output", {})
                     if output.get("_type") == "agentlab2.core.AgentOutput" and output.get("error"):
                         error = output["error"]
-                        logger.info(f"✓ Error stored in trajectory:")
+                        logger.info("✓ Error stored in trajectory:")
                         logger.info(f"  - Error type: {error['error_type']}")
                         logger.info(f"  - Error message: {error['exception_str']}")
                         logger.info(f"  - Has stack trace: {len(error['stack_trace']) > 0}")
@@ -210,7 +209,6 @@ def test_env_error():
         agent_config = ErrorAgentConfig()  # No agent errors
         tool_config = MockToolConfig()
         task = MockTask(should_error_on_step=2)  # Error in env.step()
-        benchmark = MockBenchmark([task], tool_config)
 
         env_config = EnvConfig(task=task, tool_config=tool_config)
         episode = Episode(
@@ -223,7 +221,7 @@ def test_env_error():
 
         # Run episode - should catch env error
         try:
-            trajectory = episode.run()
+            episode.run()
         except ValueError as e:
             logger.info(f"✓ Episode correctly raised error: {e}")
 
@@ -243,7 +241,7 @@ def test_env_error():
                     output = step.get("output", {})
                     if output.get("_type") == "agentlab2.core.EnvironmentOutput" and output.get("error"):
                         error = output["error"]
-                        logger.info(f"✓ Error stored in trajectory:")
+                        logger.info("✓ Error stored in trajectory:")
                         logger.info(f"  - Error type: {error['error_type']}")
                         logger.info(f"  - Error message: {error['exception_str']}")
                         found_error = True
@@ -278,7 +276,7 @@ def test_experiment_resumption():
         )
 
         # Create episodes (this saves configs)
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         logger.info(f"✓ Created {len(episodes)} episodes")
 
         # Run first episode - it will fail
@@ -292,23 +290,14 @@ def test_experiment_resumption():
         config_files = list(config_dir.glob("*.json"))
         logger.info(f"✓ Found {len(config_files)} episode configs")
 
-        # Test relaunching failed episodes
-        benchmark.setup()
-        try:
-            # Check what files exist
-            traj_dir = output_dir / "trajectories"
-            config_dir = output_dir / "episode_configs"
-            logger.info(f"  Trajectory files: {list(traj_dir.glob('*.jsonl')) if traj_dir.exists() else 'None'}")
-            logger.info(f"  Config files: {list(config_dir.glob('*.json')) if config_dir.exists() else 'None'}")
-            
-            results = exp.relaunch_failed_episodes()
-            if results.tasks_num > 0:
-                logger.info(f"✓ Relaunched {results.tasks_num} failed episodes")
-                logger.info(f"✓ Results: {len(results.trajectories)} successful, {len(results.failures)} failed")
-            else:
-                logger.warning("⚠ No failed episodes found to relaunch (this might be expected if logic needs adjustment)")
-        finally:
-            benchmark.close()
+        # Test finding failed episodes via retry_failed flag
+        exp.retry_failed = True
+        failed_episodes = exp.get_episodes_to_run()
+        exp.retry_failed = False
+        if failed_episodes:
+            logger.info(f"✓ Found {len(failed_episodes)} failed episodes to relaunch")
+        else:
+            logger.warning("⚠ No failed episodes found to relaunch")
 
 
 if __name__ == "__main__":

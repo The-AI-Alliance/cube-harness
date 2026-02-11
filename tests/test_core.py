@@ -364,6 +364,7 @@ class TestStepError:
     def test_step_error_from_exception_with_traceback(self):
         """Test StepError.from_exception() includes full stack trace."""
         try:
+
             def inner_function():
                 raise ValueError("Inner error")
 

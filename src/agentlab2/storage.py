@@ -2,19 +2,16 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 
-logger = logging.getLogger(__name__)
-
-# Forward reference to avoid circular import
-from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from agentlab2.episode import EpisodeConfig
+
+logger = logging.getLogger(__name__)
 
 
 class LLMCallRef(BaseModel):
@@ -241,7 +238,7 @@ class FileStorage:
         config_path = config_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
 
         with open(config_path, "w") as f:
-            f.write(episode_config.model_dump_json(indent=2))
+            f.write(episode_config.model_dump_json(indent=2, serialize_as_any=True))
         logger.info(f"Saved episode config to {config_path}")
 
     def load_episode_config(self, config_path: Path) -> "EpisodeConfig":

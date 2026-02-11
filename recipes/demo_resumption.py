@@ -52,7 +52,7 @@ def run_initial_evaluation(exp: Experiment, interrupt_after: int = 3) -> None:
 
     exp.benchmark.setup()
     try:
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         logger.info(f"Created {len(episodes)} episodes")
 
         # Run only the first few episodes to simulate interruption
@@ -61,13 +61,13 @@ def run_initial_evaluation(exp: Experiment, interrupt_after: int = 3) -> None:
         failures = {}
 
         for i, episode in enumerate(episodes[:interrupt_after]):
-            logger.info(f"\n--- Running Episode {i+1}/{interrupt_after} (Task: {episode.config.task_id}) ---")
+            logger.info(f"\n--- Running Episode {i + 1}/{interrupt_after} (Task: {episode.config.task_id}) ---")
             try:
                 trajectory = episode.run()
                 trajectories.append(trajectory)
-                logger.info(f"✓ Episode {i+1} completed successfully")
+                logger.info(f"✓ Episode {i + 1} completed successfully")
             except Exception as e:
-                logger.exception(f"✗ Episode {i+1} failed: {e}")
+                logger.exception(f"✗ Episode {i + 1} failed: {e}")
                 failures[episode.config.task_id] = str(e)
 
         logger.info(f"\n✓ Completed {len(trajectories)} episodes successfully")
@@ -86,13 +86,17 @@ def resume_evaluation(exp: Experiment) -> None:
     Args:
         exp: The experiment to resume
     """
+    from agentlab2.exp_runner import run_sequentially
+
     logger.info("\n" + "=" * 80)
     logger.info("PHASE 2: Resuming Evaluation")
     logger.info("=" * 80)
 
     # First, resume unstarted episodes (those that were never run)
     logger.info("\n--- Resuming unstarted episodes ---")
-    unstarted_results = exp.relaunch_unstarted_episodes()
+    exp.resume = True
+    exp.retry_failed = False
+    unstarted_results = run_sequentially(exp)
 
     if unstarted_results.tasks_num > 0:
         logger.info(f"✓ Resumed {unstarted_results.tasks_num} unstarted episodes")
@@ -103,7 +107,9 @@ def resume_evaluation(exp: Experiment) -> None:
 
     # Then, resume failed episodes (those that started but failed)
     logger.info("\n--- Resuming failed episodes ---")
-    failed_results = exp.relaunch_failed_episodes()
+    exp.resume = False
+    exp.retry_failed = True
+    failed_results = run_sequentially(exp)
 
     if failed_results.tasks_num > 0:
         logger.info(f"✓ Resumed {failed_results.tasks_num} failed episodes")
@@ -143,7 +149,7 @@ def main(interrupt_after: int = 3, resume: bool = True) -> None:
     logger.info(f"Will resume: {resume}")
 
     # Setup experiment with limited benchmark
-    llm_config = LLMConfig(model_name="azure/gpt-4o-mini", temperature=0.0)
+    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
     tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
     benchmark = LimitedMiniWobBenchmark(tool_config=tool_config, max_tasks=10)
@@ -167,7 +173,7 @@ def main(interrupt_after: int = 3, resume: bool = True) -> None:
     else:
         logger.info("\n⚠ Resumption skipped (resume=False)")
         logger.info(f"   To resume later, load the experiment from: {output_dir / 'experiment_config.json'}")
-        logger.info("   Then call: exp.relaunch_unstarted_episodes() and exp.relaunch_failed_episodes()")
+        logger.info("   Then set exp.resume=True and/or exp.retry_failed=True, then call run_sequentially(exp)")
 
     logger.info("\n" + "=" * 80)
     logger.info("DEMONSTRATION COMPLETE")

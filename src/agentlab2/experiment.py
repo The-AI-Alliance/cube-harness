@@ -27,12 +27,49 @@ class Experiment(TypedBaseModel):
     output_dir: Path
     agent_config: AgentConfig
     benchmark: Benchmark
+    resume: bool = False
+    retry_failed: bool = False
 
     @property
     def config(self) -> dict:
         return self.model_dump(serialize_as_any=True)
 
-    def create_episodes(self):
+    def get_episodes_to_run(self) -> list[Episode]:
+        """Get episodes to run based on resume/retry_failed flags.
+
+        - Neither flag set: creates all episodes from scratch.
+        - resume=True: returns only unstarted episodes (have configs but no trajectory files).
+        - retry_failed=True: returns only failed episodes (started but not successful).
+        - Both flags: returns unstarted + failed episodes.
+        """
+        if not self.resume and not self.retry_failed:
+            return self._create_all_episodes()
+
+        storage = FileStorage(self.output_dir)
+        config_files = storage.list_episode_configs()
+        if not config_files:
+            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}, creating from scratch")
+            return self._create_all_episodes()
+
+        started_ids = self._load_started_trajectory_ids()
+        episodes: list[Episode] = []
+
+        if self.resume:
+            unstarted = self._find_episodes_to_relaunch(config_files, started_ids, include=False)
+            logger.info(f"Resuming: {len(unstarted)} unstarted episodes (out of {len(config_files)} total)")
+            episodes.extend(unstarted)
+
+        if self.retry_failed:
+            successful_ids = self._load_successful_trajectory_ids(storage)
+            failed_ids = started_ids - successful_ids
+            failed = self._find_episodes_to_relaunch(config_files, failed_ids, include=True)
+            logger.info(f"Retrying: {len(failed)} failed episodes (out of {len(config_files)} total)")
+            episodes.extend(failed)
+
+        return episodes
+
+    def _create_all_episodes(self) -> list[Episode]:
+        """Create all episodes from scratch and save their configs to disk."""
         episodes = [
             Episode(
                 id=i,
@@ -43,7 +80,6 @@ class Experiment(TypedBaseModel):
             )
             for i, env_config in enumerate(self.benchmark.env_configs())
         ]
-        # Save episode configs to disk for resumption
         for episode in episodes:
             episode.storage.save_episode_config(episode.config)
         logger.info(f"Prepared {len(episodes)} episodes for experiment '{self.name}'")
@@ -54,7 +90,7 @@ class Experiment(TypedBaseModel):
         output_path.mkdir(parents=True, exist_ok=True)
         config_path = output_path / "experiment_config.json"
         with open(config_path, "w") as f:
-            f.write(self.model_dump_json(indent=2))
+            f.write(self.model_dump_json(indent=2, serialize_as_any=True))
         logger.info(f"Saved experiment config to {config_path}")
 
     @classmethod
@@ -156,7 +192,9 @@ class Experiment(TypedBaseModel):
             if parsed:
                 episode_id, task_id = parsed
                 trajectory_id = f"{task_id}_ep{episode_id}"
-                should_include = trajectory_id in filter_trajectory_ids if include else trajectory_id not in filter_trajectory_ids
+                should_include = (
+                    trajectory_id in filter_trajectory_ids if include else trajectory_id not in filter_trajectory_ids
+                )
                 if should_include:
                     try:
                         episode = Episode.load_episode_from_config(config_file, self.benchmark)
@@ -166,49 +204,6 @@ class Experiment(TypedBaseModel):
             else:
                 logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
         return episodes
-
-    def _execute_episodes(self, episodes: list[Episode], exp_id_suffix: str) -> ExpResult:
-        """Execute a list of episodes and return results.
-
-        Args:
-            episodes: List of Episode objects to execute.
-            exp_id_suffix: Suffix to append to experiment name for the result exp_id.
-
-        Returns:
-            ExpResult containing trajectories and failures from executed episodes.
-        """
-        if not episodes:
-            logger.info(f"No episodes to relaunch for {exp_id_suffix}")
-            return ExpResult(
-                exp_id=f"{self.name}_{exp_id_suffix}",
-                tasks_num=0,
-                config=self.config,
-            )
-
-        logger.info(f"Relaunching {len(episodes)} episodes ({exp_id_suffix})")
-        self.benchmark.setup()
-        try:
-            trajectories = []
-            failures = {}
-            for episode in episodes:
-                try:
-                    trajectory = episode.run()
-                    trajectories.append(trajectory)
-                except Exception as e:
-                    logger.exception(f"Episode {episode.config.id} (task {episode.config.task_id}) failed: {e}")
-                    failures[episode.config.task_id] = str(e)
-
-            results = ExpResult(
-                exp_id=f"{self.name}_{exp_id_suffix}",
-                tasks_num=len(episodes),
-                trajectories={traj.id: traj for traj in trajectories},
-                failures=failures,
-                config=self.config,
-            )
-            self.print_stats(results)
-            return results
-        finally:
-            self.benchmark.close()
 
     def print_stats(self, results: ExpResult) -> None:
         if not results.trajectories:
@@ -230,51 +225,3 @@ class Experiment(TypedBaseModel):
         logger.info(f"  Accuracy (avg. final reward): {accuracy:.4f}")
         logger.info(f"  Failed tasks: {len(results.failures)}")
         logger.info(f"Saved to: {self.output_dir}")
-
-    def relaunch_failed_episodes(self) -> ExpResult:
-        """
-        Relaunch all failed episodes from this experiment.
-        Failed episodes are those that started but did not complete successfully.
-
-        Returns:
-            ExpResult with trajectories from relaunched episodes
-        """
-        storage = FileStorage(self.output_dir)
-        config_files = storage.list_episode_configs()
-
-        if not config_files:
-            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}")
-            return ExpResult(
-                exp_id=f"{self.name}_relaunch",
-                tasks_num=0,
-                config=self.config,
-            )
-
-        started_trajectory_ids = self._load_started_trajectory_ids()
-        successful_trajectory_ids = self._load_successful_trajectory_ids(storage)
-        failed_trajectory_ids = started_trajectory_ids - successful_trajectory_ids
-
-        failed_episodes = self._find_episodes_to_relaunch(config_files, failed_trajectory_ids, include=True)
-        return self._execute_episodes(failed_episodes, "relaunch")
-
-    def relaunch_unstarted_episodes(self) -> ExpResult:
-        """
-        Relaunch all episodes that were never started (have configs but no trajectory files).
-
-        Returns:
-            ExpResult with trajectories from relaunched episodes
-        """
-        storage = FileStorage(self.output_dir)
-        config_files = storage.list_episode_configs()
-
-        if not config_files:
-            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}")
-            return ExpResult(
-                exp_id=f"{self.name}_relaunch_unstarted",
-                tasks_num=0,
-                config=self.config,
-            )
-
-        started_trajectory_ids = self._load_started_trajectory_ids()
-        unstarted_episodes = self._find_episodes_to_relaunch(config_files, started_trajectory_ids, include=False)
-        return self._execute_episodes(unstarted_episodes, "relaunch_unstarted")

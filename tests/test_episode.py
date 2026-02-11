@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Observation, StepError, Trajectory, TrajectoryStep
+from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Observation, Trajectory, TrajectoryStep
 from agentlab2.episode import MAX_STEPS, Episode
 from tests.conftest import MockAgent
 
@@ -267,7 +267,7 @@ class TestEpisode:
     def test_episode_captures_env_error(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test Episode captures environment errors correctly in trajectory."""
 
-        from agentlab2.core import Task, ActionSchema
+        from agentlab2.core import ActionSchema, Task
 
         class ErrorTask(Task):
             id = "error_task"
@@ -275,6 +275,7 @@ class TestEpisode:
 
             def setup(self, tool):
                 from agentlab2.core import Observation
+
                 return Observation.from_text("Start"), {}
 
             def validate_task(self, obs):

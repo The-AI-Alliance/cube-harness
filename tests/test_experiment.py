@@ -103,7 +103,7 @@ class TestExperiment:
             benchmark=mock_benchmark,
         )
 
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
 
         assert len(episodes) == len(mock_benchmark.env_configs())
         for i, episode in enumerate(episodes):
@@ -124,7 +124,7 @@ class TestExperiment:
             benchmark=benchmark,
         )
 
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         assert len(episodes) == 5
         for i, episode in enumerate(episodes):
             assert episode.env_config.task == tasks[i]
@@ -191,7 +191,7 @@ class TestExperiment:
             benchmark=mock_benchmark,
         )
 
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
 
         for episode in episodes:
             assert episode.env_config.tool_config == mock_benchmark.tool_config
@@ -205,97 +205,80 @@ class TestExperiment:
             benchmark=mock_benchmark,
         )
 
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         env_configs = mock_benchmark.env_configs()
 
         for episode, env_config in zip(episodes, env_configs):
             assert episode.config.task_id == env_config.task.id
 
-    def test_experiment_relaunch_failed_episodes(self, tmp_dir, mock_agent_config, mock_tool_config):
-        """Test relaunch_failed_episodes correctly identifies and relaunches failed episodes."""
-        from agentlab2.core import StepError
+    def test_retry_failed_episodes(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test retry_failed=True returns only failed episodes."""
+        from agentlab2.core import EnvironmentOutput, Observation, StepError, Trajectory, TrajectoryStep
+        from agentlab2.storage import FileStorage
 
         # Create tasks
         tasks = [MockTask(goal=f"Task {i}") for i in range(3)]
         benchmark = MockBenchmark(tasks_list=tasks, tool_config=mock_tool_config)
 
         exp = Experiment(
-            name="test_relaunch_failed",
+            name="test_retry_failed",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             benchmark=benchmark,
         )
 
         # Create episodes
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
 
         # Run first episode to completion (successful)
         episodes[0].run()
 
-        # Run second episode but simulate failure by creating a trajectory with error
-        from agentlab2.core import Observation, Trajectory, TrajectoryStep
-        from agentlab2.storage import FileStorage
-
+        # Simulate failure for second episode by creating a trajectory with error
         storage = FileStorage(tmp_dir)
         failed_traj = Trajectory(
             id=f"{episodes[1].config.task_id}_ep{episodes[1].config.id}",
             metadata={"task_id": episodes[1].config.task_id},
         )
         obs = Observation.from_text("test")
-        from agentlab2.core import EnvironmentOutput
-
-        # Add a step with error to simulate failure
         failed_env_output = EnvironmentOutput(obs=obs, error=StepError.from_exception(ValueError("Test error")))
         failed_traj.steps.append(TrajectoryStep(output=failed_env_output))
         storage.save_trajectory(failed_traj)
 
         # Third episode not started (no trajectory)
 
-        # Test relaunch_failed_episodes
-        benchmark.setup()
-        try:
-            results = exp.relaunch_failed_episodes()
-            # Should find episode 1 as failed (has trajectory with error)
-            assert results.tasks_num == 1
-            # The relaunched episode should run successfully
-            assert len(results.trajectories) == 1
-            assert len(results.failures) == 0
-        finally:
-            benchmark.close()
+        # With retry_failed=True, should find only episode 1 as failed
+        exp.retry_failed = True
+        failed_episodes = exp.get_episodes_to_run()
+        assert len(failed_episodes) == 1
+        assert failed_episodes[0].config.id == episodes[1].config.id
 
-    def test_experiment_relaunch_unstarted_episodes(self, tmp_dir, mock_agent_config, mock_tool_config):
-        """Test relaunch_unstarted_episodes correctly identifies and relaunches unstarted episodes."""
+    def test_resume_returns_unstarted(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test resume=True returns only unstarted episodes."""
         # Create tasks
         tasks = [MockTask(goal=f"Task {i}") for i in range(3)]
         benchmark = MockBenchmark(tasks_list=tasks, tool_config=mock_tool_config)
 
         exp = Experiment(
-            name="test_relaunch_unstarted",
+            name="test_resume_unstarted",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             benchmark=benchmark,
         )
 
-        # Create episodes (this saves configs)
-        episodes = exp.create_episodes()
+        # First call creates all episodes and saves configs
+        episodes = exp.get_episodes_to_run()
+        assert len(episodes) == 3
 
         # Run only first episode (leaving 2 and 3 unstarted)
         episodes[0].run()
 
-        # Test relaunch_unstarted_episodes
-        benchmark.setup()
-        try:
-            results = exp.relaunch_unstarted_episodes()
-            # Should find episodes 1 and 2 as unstarted
-            assert results.tasks_num == 2
-            # Both should run successfully
-            assert len(results.trajectories) == 2
-            assert len(results.failures) == 0
-        finally:
-            benchmark.close()
+        # With resume=True, should return only unstarted episodes
+        exp.resume = True
+        resumed_episodes = exp.get_episodes_to_run()
+        assert len(resumed_episodes) == 2
 
-    def test_experiment_relaunch_no_episodes(self, tmp_dir, mock_agent_config, mock_benchmark):
-        """Test relaunch methods return empty results when no episodes to relaunch."""
+    def test_resume_and_retry_empty_when_all_succeeded(self, tmp_dir, mock_agent_config, mock_benchmark):
+        """Test resume and retry_failed return empty when all episodes succeeded."""
         exp = Experiment(
             name="test_no_relaunch",
             output_dir=tmp_dir,
@@ -304,20 +287,10 @@ class TestExperiment:
         )
 
         # Create episodes and run all successfully
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         for episode in episodes:
             episode.run()
 
-        # Test relaunch_failed_episodes - should find nothing
-        mock_benchmark.setup()
-        try:
-            failed_results = exp.relaunch_failed_episodes()
-            assert failed_results.tasks_num == 0
-            assert len(failed_results.trajectories) == 0
-
-            # Test relaunch_unstarted_episodes - should find nothing
-            unstarted_results = exp.relaunch_unstarted_episodes()
-            assert unstarted_results.tasks_num == 0
-            assert len(unstarted_results.trajectories) == 0
-        finally:
-            mock_benchmark.close()
+        exp.resume = True
+        exp.retry_failed = True
+        assert exp.get_episodes_to_run() == []
