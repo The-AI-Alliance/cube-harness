@@ -14,10 +14,10 @@ from pydantic import Field
 
 from agentlab2.base import TypedBaseModel
 
-os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
-litellm.callbacks = ["otel"]
-# LiteLLM creates "litellm_request" spans with ~50 GenAI semantic attributes (tokens, cost, etc).
-# See: litellm/integrations/opentelemetry.py, https://opentelemetry.io/docs/specs/semconv/gen-ai/
+# NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
+# When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
+# which dumps huge JSON span dicts to stdout. Instead, enable the callback only
+# after a proper TracerProvider has been set up (see metrics/tracer.py).
 
 
 class Prompt(TypedBaseModel):
