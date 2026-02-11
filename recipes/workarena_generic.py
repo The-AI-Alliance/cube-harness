@@ -64,7 +64,7 @@ def main(debug: bool) -> None:
                 use_screenshot=use_screenshot,
                 use_som=False,
                 extract_visible_tag=True,
-                extract_clickable_tag=False,
+                extract_clickable_tag=True,
                 extract_coords="False",
                 filter_visible_elements_only=False,
             ),
