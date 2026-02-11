@@ -57,9 +57,10 @@ def create_tool_config(tool: str) -> DaytonaSWEToolConfig | DockerSWEToolConfig:
         raise ValueError(f"Unknown tool: {tool}. Use 'daytona' or 'docker'")
 
 
-def main(mode: str, tool: str, otlp_endpoint: str | None = None) -> None:
+def main(mode: str, tool: str, model: str = "openai/gpt-5-mini", otlp_endpoint: str | None = None) -> None:
+    model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path("outputs/terminalbench") / f"tbench_{mode}_{tool}_{current_datetime}"
+    output_dir = Path.home() / "agentlab_results" / "al2" / f"tbench_{mode}_{model_short}_{tool}_{current_datetime}"
     trace_output = str(output_dir / "traces") if otlp_endpoint else None
 
     tool_config = create_tool_config(tool)
@@ -68,7 +69,7 @@ def main(mode: str, tool: str, otlp_endpoint: str | None = None) -> None:
     if mode in ("oracle", "oracle_full"):
         agent_config = OracleAgentConfig()
     else:
-        llm_config = LLMConfig(model_name="openai/gpt-5-mini", tool_choice="required")
+        llm_config = LLMConfig(model_name=model, tool_choice="required")
         agent_config = ReactAgentConfig(
             llm_config=llm_config,
             system_prompt=SYSTEM_PROMPT,
@@ -122,6 +123,11 @@ if __name__ == "__main__":
         help="Tool backend: 'daytona' (cloud) or 'docker' (local). Default: daytona",
     )
     parser.add_argument(
+        "--model",
+        default="openai/gpt-5-mini",
+        help="LLM model name (default: openai/gpt-5-mini)",
+    )
+    parser.add_argument(
         "--trace",
         nargs="?",
         const="http://localhost:4318/v1/traces",
@@ -130,4 +136,4 @@ if __name__ == "__main__":
         help="Enable tracing to Jaeger. Default endpoint: http://localhost:4318/v1/traces",
     )
     args = parser.parse_args()
-    main(args.mode, args.tool, otlp_endpoint=args.trace)
+    main(args.mode, args.tool, model=args.model, otlp_endpoint=args.trace)

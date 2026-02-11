@@ -26,7 +26,7 @@ Strategy:
 
 def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path("outputs/livecodebench") / f"livecodebench_{current_datetime}"
+    output_dir = Path.home() / "agentlab_results" / "al2" / f"livecodebench_{current_datetime}"
 
     llm_config = LLMConfig(model_name="openai/gpt-5-nano", tool_choice="required")
     agent_config = ReactAgentConfig(llm_config=llm_config, system_prompt=SYSTEM_PROMPT)

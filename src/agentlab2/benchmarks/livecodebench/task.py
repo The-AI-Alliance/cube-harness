@@ -36,6 +36,8 @@ class LiveCodeBenchTask(Task):
         public_test_cases: str,
         private_test_cases: str,
         metadata: str,
+        execution_timeout: int = 10,
+        debug: bool = False,
     ) -> None:
         self.id = id
         self.question_title = question_title
@@ -46,6 +48,8 @@ class LiveCodeBenchTask(Task):
         self.public_test_cases = public_test_cases
         self.private_test_cases = private_test_cases
         self.metadata = metadata
+        self.execution_timeout = execution_timeout
+        self.debug = debug
         self._solution_file = "/workspace/solution.py"
 
     def setup(self, tool: DaytonaSWETool) -> tuple[Observation, dict]:
@@ -98,12 +102,7 @@ Your task:
 The solution should read from stdin and print to stdout."""
 
     def _parse_test_cases(self, test_cases_str: str) -> list[dict[str, Any]]:
-        """Parse test cases from JSON string or encoded format.
-
-        LiveCodeBench uses two formats:
-        - public_test_cases: plain JSON string
-        - private_test_cases: base64 -> zlib -> pickle -> JSON
-        """
+        """Parse test cases from plain JSON or encoded (base64 -> zlib -> pickle) format."""
         if not test_cases_str:
             return []
         # Try plain JSON first (public test cases)
@@ -163,8 +162,8 @@ The solution should read from stdin and print to stdout."""
 
             # Run solution (stderr captured separately by tool)
             result = self._tool.bash(
-                "cd /workspace && timeout 10 python solution.py < test_input.txt",
-                timeout=15,
+                f"cd /workspace && timeout {self.execution_timeout} python solution.py < test_input.txt",
+                timeout=self.execution_timeout + 5,
             )
 
             # Extract stdout from structured output
@@ -185,13 +184,15 @@ The solution should read from stdin and print to stdout."""
             )
 
         reward = passed / total if total > 0 else 0.0
-        return reward, {
+        info: dict[str, Any] = {
             "done": True,
             "passed": passed,
             "total": total,
             "pass_rate": reward,
-            "results": results[:5],  # First 5 results for debugging
         }
+        if self.debug:
+            info["results"] = results[:5]
+        return reward, info
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
         """Filter to only SWE actions."""

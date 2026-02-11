@@ -1,10 +1,15 @@
 """Terminal-Bench 2 benchmark implementation."""
 
+import io
 import logging
+import subprocess
+import tarfile
+import tempfile
+import tomllib
 from pathlib import Path
 from random import Random
 
-from datasets import load_from_disk
+from datasets import Dataset, load_from_disk
 
 from agentlab2.benchmark import Benchmark
 from agentlab2.benchmarks.terminalbench.task import DEFAULT_IMAGE, TerminalBenchTask
@@ -18,7 +23,54 @@ SWEToolConfig = DaytonaSWEToolConfig | DockerSWEToolConfig
 logger = logging.getLogger(__name__)
 
 # Default dataset path (Terminal-Bench 2)
-DEFAULT_DATASET_PATH = "./data/terminal_bench_v2"
+DEFAULT_DATASET_PATH = str(Path.home() / ".agentlab" / "data" / "terminal_bench_v2")
+
+
+def _create_task_archive(task_dir: Path) -> bytes:
+    """Create a tar.gz archive of a task directory."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for item in task_dir.rglob("*"):
+            if item.is_file():
+                arcname = str(item.relative_to(task_dir))
+                tar.add(item, arcname=arcname)
+    return buffer.getvalue()
+
+
+def _load_task_from_repo(task_dir: Path) -> dict | None:
+    """Load a single task from a Terminal-Bench repo directory."""
+    task_toml = task_dir / "task.toml"
+    instruction_md = task_dir / "instruction.md"
+
+    if not task_toml.exists() or not instruction_md.exists():
+        return None
+
+    with open(task_toml, "rb") as f:
+        config = tomllib.load(f)
+
+    instruction = instruction_md.read_text(encoding="utf-8").strip()
+
+    metadata = config.get("metadata", {})
+    env_config = config.get("environment", {})
+    agent_config = config.get("agent", {})
+    verifier_config = config.get("verifier", {})
+
+    archive = _create_task_archive(task_dir)
+
+    return {
+        "task_id": task_dir.name,
+        "base_description": instruction,
+        "archive": archive,
+        "difficulty": metadata.get("difficulty", "unknown"),
+        "category": metadata.get("category", ""),
+        "tags": metadata.get("tags", []),
+        "docker_image": env_config.get("docker_image", "python:3.13"),
+        "cpus": env_config.get("cpus", 1),
+        "memory": env_config.get("memory", "4G"),
+        "storage": env_config.get("storage", "10G"),
+        "max_agent_timeout_sec": int(agent_config.get("timeout_sec", 900)),
+        "max_test_timeout_sec": int(verifier_config.get("timeout_sec", 900)),
+    }
 
 
 def _parse_memory_str(mem_str: str) -> int:
@@ -48,26 +100,10 @@ def _parse_storage_str(storage_str: str) -> int:
 
 
 class TerminalBenchBenchmark(Benchmark):
-    """Terminal-Bench benchmark for evaluating agents on real-world terminal tasks.
+    """Terminal-Bench 2 benchmark — real-world terminal tasks with pytest-based validation.
 
-    Terminal-Bench evaluates how well agents handle tasks like:
-    - Compiling code and building software
-    - Training ML models
-    - Setting up servers and debugging systems
-    - File operations and data processing
-
-    Tasks are loaded from a local HuggingFace dataset (exported via export_terminal_bench.py).
-    Each task includes an instruction, a Docker environment, and pytest-based validation.
-
+    Tasks are loaded from a local HuggingFace dataset (see ``install()``).
     Scoring is binary: all tests must pass for reward=1.0.
-
-    Attributes:
-        dataset_path: Path to the local dataset directory.
-        shuffle: Whether to shuffle tasks.
-        shuffle_seed: Random seed for shuffling.
-        max_tasks: Maximum number of tasks to load (None = all).
-        difficulty_filter: Filter by difficulty ("easy", "medium", "hard").
-        category_filter: Filter by category (e.g., "scientific-computing").
     """
 
     dataset_path: str = DEFAULT_DATASET_PATH
@@ -85,14 +121,14 @@ class TerminalBenchBenchmark(Benchmark):
     model_config = {"arbitrary_types_allowed": True}
 
     def setup(self) -> None:
-        """Load the dataset from disk."""
+        """Load the pre-installed dataset from disk into memory."""
         logger.info(f"Loading Terminal-Bench dataset from {self.dataset_path}")
 
         dataset_path = Path(self.dataset_path)
         if not dataset_path.exists():
             raise FileNotFoundError(
                 f"Terminal-Bench dataset not found at {self.dataset_path}. "
-                "Run `uv run scripts/export_terminal_bench.py` to download it."
+                "Run benchmark.install() or `uv run scripts/export_terminal_bench.py` to download it."
             )
 
         try:
@@ -103,7 +139,7 @@ class TerminalBenchBenchmark(Benchmark):
             raise RuntimeError(f"Failed to load Terminal-Bench dataset: {e}")
 
     def load_tasks(self) -> list[TerminalBenchTask]:
-        """Load tasks from the dataset."""
+        """Load, filter, and return task objects from the dataset."""
         if self._tasks is not None:
             return self._tasks
 
@@ -163,11 +199,7 @@ class TerminalBenchBenchmark(Benchmark):
         return tasks
 
     def env_configs(self) -> list[EnvConfig]:
-        """Generate environment configurations with task-specific pre-built images.
-
-        Terminal-Bench 2 uses pre-built Docker images for each task.
-        Supports both DaytonaSWEToolConfig (cloud) and DockerSWEToolConfig (local).
-        """
+        """Generate per-task environment configs with task-specific Docker images."""
         tasks = self.load_tasks()
 
         # Create a task-specific tool config for each task
@@ -181,10 +213,7 @@ class TerminalBenchBenchmark(Benchmark):
         return configs
 
     def _create_task_tool_config(self, base_config: SWEToolConfig, task: TerminalBenchTask) -> SWEToolConfig:
-        """Create a task-specific tool config from the base config.
-
-        Preserves the config type (Daytona or Docker) while setting task-specific values.
-        """
+        """Clone ``base_config`` with task-specific image, CPU, memory, and disk settings."""
         if isinstance(base_config, DaytonaSWEToolConfig):
             return DaytonaSWEToolConfig(
                 api_key=base_config.api_key,
@@ -210,6 +239,38 @@ class TerminalBenchBenchmark(Benchmark):
                 f"TerminalBenchBenchmark requires DaytonaSWEToolConfig or DockerSWEToolConfig, "
                 f"got {type(base_config).__name__}"
             )
+
+    def install(self) -> None:
+        """Clone the terminal-bench-2 repo and export tasks as a HuggingFace dataset."""
+        outdir = Path(self.dataset_path).resolve()
+        if outdir.exists():
+            logger.info(f"Dataset already exists at {outdir}, skipping install")
+            return
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_dir = Path(tmpdir) / "terminal-bench-2"
+
+            logger.info("Cloning laude-institute/terminal-bench-2...")
+            subprocess.run(
+                ["git", "clone", "--depth", "1", "https://github.com/laude-institute/terminal-bench-2.git", str(repo_dir)],
+                check=True,
+            )
+
+            tasks = []
+            for item in sorted(repo_dir.iterdir()):
+                if item.is_dir() and (item / "task.toml").exists():
+                    task = _load_task_from_repo(item)
+                    if task:
+                        tasks.append(task)
+                        logger.info(f"  Loaded task: {task['task_id']} ({task['difficulty']}, image: {task['docker_image']})")
+
+            logger.info(f"Loaded {len(tasks)} tasks from Terminal-Bench")
+
+            ds = Dataset.from_list(tasks)
+            outdir.mkdir(parents=True, exist_ok=True)
+            ds.save_to_disk(str(outdir))
+
+        logger.info(f"Dataset saved to: {outdir}")
 
     def close(self) -> None:
         """Clean up resources."""

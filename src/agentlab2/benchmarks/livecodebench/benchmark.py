@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from random import Random
 
 from huggingface_hub import hf_hub_download
@@ -14,10 +15,7 @@ JSONL_FILES = ["test.jsonl", "test2.jsonl", "test3.jsonl", "test4.jsonl", "test5
 
 
 class LiveCodeBenchBenchmark(Benchmark):
-    """LiveCodeBench benchmark for code generation tasks.
-
-    Uses DaytonaSWETool to execute code in sandboxed environments.
-    """
+    """LiveCodeBench benchmark — competitive programming tasks validated in sandboxed environments."""
 
     shuffle: bool = True
     shuffle_seed: int = 42
@@ -26,34 +24,41 @@ class LiveCodeBenchBenchmark(Benchmark):
     jsonl_files: list[str] = ["test6.jsonl"]  # Which files to load
 
     _dataset: list | None = None
+    _local_paths: list[str] | None = None
 
     model_config = {"arbitrary_types_allowed": True}
 
-    def setup(self) -> None:
-        """Download and prepare the dataset."""
-        logger.info("Loading LiveCodeBench dataset")
+    def install(self) -> None:
+        """Download dataset JSONL files from HuggingFace Hub to local cache."""
+        logger.info("Downloading LiveCodeBench dataset files")
+        local_paths = []
+        for jsonl_file in self.jsonl_files:
+            if jsonl_file not in JSONL_FILES:
+                logger.warning(f"Skipping unknown file: {jsonl_file}")
+                continue
+            local_path = hf_hub_download(
+                repo_id="livecodebench/code_generation_lite",
+                filename=jsonl_file,
+                repo_type="dataset",
+            )
+            local_paths.append(local_path)
+            logger.info(f"Downloaded {jsonl_file} to {local_path}")
+        self._local_paths = local_paths
 
+    def setup(self) -> None:
+        """Load pre-downloaded JSONL files into memory. Calls ``install()`` if needed."""
+        if self._local_paths is None:
+            self.install()
+
+        logger.info("Loading LiveCodeBench dataset")
         try:
             all_tasks = []
-            for jsonl_file in self.jsonl_files:
-                if jsonl_file not in JSONL_FILES:
-                    logger.warning(f"Skipping unknown file: {jsonl_file}")
-                    continue
-
-                # Download the JSONL file
-                local_path = hf_hub_download(
-                    repo_id="livecodebench/code_generation_lite",
-                    filename=jsonl_file,
-                    repo_type="dataset",
-                )
-
-                # Load tasks from JSONL
+            for local_path in self._local_paths:
                 with open(local_path, encoding="utf-8") as f:
                     for line in f:
                         task_data = json.loads(line)
                         all_tasks.append(task_data)
-
-                logger.info(f"Loaded {len(all_tasks)} tasks from {jsonl_file}")
+                logger.info(f"Loaded {len(all_tasks)} tasks from {Path(local_path).name}")
 
             self._dataset = all_tasks
             logger.info(f"Total: {len(self._dataset)} tasks from LiveCodeBench")
@@ -61,7 +66,7 @@ class LiveCodeBenchBenchmark(Benchmark):
             raise RuntimeError(f"Failed to load LiveCodeBench dataset: {e}")
 
     def load_tasks(self) -> list[LiveCodeBenchTask]:
-        """Load tasks from the dataset."""
+        """Load, filter, and return task objects from the dataset."""
         if self._dataset is None:
             self.setup()
 
