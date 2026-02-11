@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -25,7 +26,7 @@ class LLMCallRef(BaseModel):
 class Storage(Protocol):
     """Protocol for trajectory storage backends."""
 
-    def save_trajectory(self, trajectory: Trajectory) -> None:
+    def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None:
         """Initialize storage for a trajectory and save metadata."""
         ...
 
@@ -33,7 +34,7 @@ class Storage(Protocol):
         """Append a single step to the trajectory."""
         ...
 
-    def save_episode_config(self, episode_config) -> None:
+    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
         """Save episode configuration to disk for later resumption."""
         ...
 
@@ -45,11 +46,31 @@ class FileStorage:
         self.output_dir = Path(output_dir)
         self._current_traj_paths: dict[str, Path] = {}
 
-    def save_trajectory(self, trajectory: Trajectory) -> None:
-        """Save the trajectory metadata and initialize the JSONL file."""
+    def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None:
+        """Save the trajectory metadata and initialize the JSONL file.
+
+        Args:
+            trajectory: The trajectory to save.
+            allow_overwrite: If True, archive existing trajectory files before saving.
+                If False, raise FileExistsError when trajectory files already exist.
+                Re-saves within the same session (e.g. updating end_time) are always allowed.
+        """
         traj_dir = self.output_dir / "trajectories"
         traj_dir.mkdir(parents=True, exist_ok=True)
         cur_path = traj_dir / trajectory.id
+
+        # Check for pre-existing files from a previous run.
+        # Skip the check if this trajectory was already created in this session (re-save for end_time update).
+        is_resave = trajectory.id in self._current_traj_paths
+        metadata_path = Path(f"{cur_path}.metadata.json")
+        if not is_resave and metadata_path.exists():
+            if not allow_overwrite:
+                raise FileExistsError(
+                    f"Trajectory '{trajectory.id}' already exists at {cur_path}. "
+                    "Use allow_overwrite=True to archive the old trajectory and overwrite."
+                )
+            self._archive_trajectory(trajectory.id)
+
         self._current_traj_paths[trajectory.id] = cur_path
         with open(f"{cur_path}.metadata.json", "w") as f:
             # Serialize entire trajectory excluding steps
@@ -65,6 +86,17 @@ class FileStorage:
             self._append_step(step, trajectory.id, i)
 
         logger.info(f"Saved trajectory to {cur_path}")
+
+    def _archive_trajectory(self, trajectory_id: str) -> None:
+        """Rename existing trajectory files with an archived timestamp suffix."""
+        traj_dir = self.output_dir / "trajectories"
+        timestamp = int(time.time())
+        for ext in [".metadata.json", ".jsonl"]:
+            old_path = traj_dir / f"{trajectory_id}{ext}"
+            if old_path.exists():
+                new_path = traj_dir / f"{trajectory_id}.archived_{timestamp}{ext}"
+                old_path.rename(new_path)
+                logger.info(f"Archived {old_path.name} -> {new_path.name}")
 
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
         """Append a single step to the trajectory JSONL file."""

@@ -90,78 +90,62 @@ class Experiment(TypedBaseModel):
                 return None
         return None
 
-    def _load_successful_task_ids(self, storage: FileStorage) -> set[str]:
-        """Load task IDs for episodes that completed successfully.
+    def _is_trajectory_successful(self, trajectory: Trajectory) -> bool:
+        """Check if a trajectory completed successfully.
+
+        A trajectory is successful if the last env step has done=True and no steps contain errors.
+        """
+        last_env_step = trajectory.last_env_step()
+        for step in trajectory.steps:
+            if isinstance(step.output, (EnvironmentOutput, AgentOutput)) and step.output.error:
+                return False
+        return last_env_step.done
+
+    def _load_successful_trajectory_ids(self, storage: FileStorage) -> set[str]:
+        """Load trajectory IDs for episodes that completed successfully.
 
         Args:
             storage: FileStorage instance to load trajectories from.
 
         Returns:
-            Set of task IDs that have successful trajectories.
+            Set of trajectory IDs that completed successfully.
         """
-        successful_task_ids = set()
+        successful = set()
         traj_dir = self.output_dir / "trajectories"
         if traj_dir.exists():
             for metadata_file in traj_dir.glob("*.metadata.json"):
                 trajectory_id = metadata_file.stem.replace(".metadata", "")
                 try:
                     trajectory = storage.load_trajectory(trajectory_id)
-                    # Check if trajectory completed successfully
-                    # A trajectory is successful if:
-                    # 1. The last env step has done=True
-                    # 2. There are no errors in any step
-                    last_env_step = trajectory.last_env_step()
-                    has_error = False
-                    # Check all steps for errors
-                    for step in trajectory.steps:
-                        if isinstance(step.output, EnvironmentOutput) and step.output.error:
-                            has_error = True
-                            break
-                        if isinstance(step.output, AgentOutput) and step.output.error:
-                            has_error = True
-                            break
-
-                    if last_env_step.done and not has_error and not last_env_step.error:
-                        task_id = trajectory.metadata.get("task_id")
-                        if task_id:
-                            successful_task_ids.add(task_id)
+                    if self._is_trajectory_successful(trajectory):
+                        successful.add(trajectory_id)
                 except Exception as e:
                     logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
-        return successful_task_ids
+        return successful
 
-    def _load_started_task_ids(self, storage: FileStorage) -> set[str]:
-        """Load task IDs for episodes that have been started.
-
-        Args:
-            storage: FileStorage instance to load trajectories from.
+    def _load_started_trajectory_ids(self) -> set[str]:
+        """Load trajectory IDs for episodes that have been started.
 
         Returns:
-            Set of task IDs that have trajectories (started at least once).
+            Set of trajectory IDs that have metadata files on disk.
         """
-        started_task_ids = set()
+        started = set()
         traj_dir = self.output_dir / "trajectories"
         if traj_dir.exists():
             for metadata_file in traj_dir.glob("*.metadata.json"):
-                trajectory_id = metadata_file.stem.replace(".metadata", "")
-                try:
-                    trajectory = storage.load_trajectory(trajectory_id)
-                    task_id = trajectory.metadata.get("task_id")
-                    if task_id:
-                        started_task_ids.add(task_id)
-                except Exception as e:
-                    logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
-        return started_task_ids
+                started.add(metadata_file.stem.replace(".metadata", ""))
+        return started
 
     def _find_episodes_to_relaunch(
-        self, config_files: list[Path], filter_task_ids: set[str], include: bool = True
+        self, config_files: list[Path], filter_trajectory_ids: set[str], include: bool = True
     ) -> list[Episode]:
-        """Find episodes to relaunch based on task ID filter.
+        """Find episodes to relaunch based on trajectory ID filter.
 
         Args:
             config_files: List of episode config file paths.
-            filter_task_ids: Set of task IDs to filter by.
-            include: If True, include episodes with task_ids in filter_task_ids.
-                    If False, exclude episodes with task_ids in filter_task_ids.
+            filter_trajectory_ids: Set of trajectory IDs to filter by.
+            include: If True, include episodes whose trajectory ID is in the set.
+                    If False, exclude episodes whose trajectory ID is in the set.
 
         Returns:
             List of Episode objects to relaunch.
@@ -171,7 +155,8 @@ class Experiment(TypedBaseModel):
             parsed = self._parse_episode_config_filename(config_file)
             if parsed:
                 episode_id, task_id = parsed
-                should_include = task_id in filter_task_ids if include else task_id not in filter_task_ids
+                trajectory_id = f"{task_id}_ep{episode_id}"
+                should_include = trajectory_id in filter_trajectory_ids if include else trajectory_id not in filter_trajectory_ids
                 if should_include:
                     try:
                         episode = Episode.load_episode_from_config(config_file, self.benchmark)
@@ -265,56 +250,11 @@ class Experiment(TypedBaseModel):
                 config=self.config,
             )
 
-        # Check each episode config individually to see if it has a failed trajectory
-        failed_episodes = []
-        for config_file in config_files:
-            parsed = self._parse_episode_config_filename(config_file)
-            if not parsed:
-                logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
-                continue
+        started_trajectory_ids = self._load_started_trajectory_ids()
+        successful_trajectory_ids = self._load_successful_trajectory_ids(storage)
+        failed_trajectory_ids = started_trajectory_ids - successful_trajectory_ids
 
-            episode_id, task_id = parsed
-            trajectory_id = f"{task_id}_ep{episode_id}"
-
-            # Check if this episode has a trajectory
-            traj_dir = self.output_dir / "trajectories"
-            metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
-            if not metadata_path.exists():
-                # Episode not started, skip
-                continue
-
-            # Episode has a trajectory, check if it's successful
-            try:
-                trajectory = storage.load_trajectory(trajectory_id)
-                last_env_step = trajectory.last_env_step()
-                has_error = False
-                # Check all steps for errors
-                for step in trajectory.steps:
-                    if isinstance(step.output, EnvironmentOutput) and step.output.error:
-                        has_error = True
-                        break
-                    if isinstance(step.output, AgentOutput) and step.output.error:
-                        has_error = True
-                        break
-
-                # Episode is failed if it has errors or didn't complete successfully
-                is_successful = last_env_step.done and not has_error and not last_env_step.error
-                if not is_successful:
-                    # This episode failed, add it to relaunch list
-                    try:
-                        episode = Episode.load_episode_from_config(config_file, self.benchmark)
-                        failed_episodes.append(episode)
-                    except Exception as e:
-                        logger.exception(f"Failed to load episode config {config_file}: {e}")
-            except Exception as e:
-                logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
-                # If we can't load the trajectory, consider it failed
-                try:
-                    episode = Episode.load_episode_from_config(config_file, self.benchmark)
-                    failed_episodes.append(episode)
-                except Exception as e2:
-                    logger.exception(f"Failed to load episode config {config_file}: {e2}")
-
+        failed_episodes = self._find_episodes_to_relaunch(config_files, failed_trajectory_ids, include=True)
         return self._execute_episodes(failed_episodes, "relaunch")
 
     def relaunch_unstarted_episodes(self) -> ExpResult:
@@ -335,26 +275,6 @@ class Experiment(TypedBaseModel):
                 config=self.config,
             )
 
-        # Check each episode config individually to see if it has a trajectory
-        unstarted_episodes = []
-        traj_dir = self.output_dir / "trajectories"
-        for config_file in config_files:
-            parsed = self._parse_episode_config_filename(config_file)
-            if not parsed:
-                logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
-                continue
-
-            episode_id, task_id = parsed
-            trajectory_id = f"{task_id}_ep{episode_id}"
-
-            # Check if this episode has a trajectory
-            metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
-            if not metadata_path.exists():
-                # Episode not started, add it to relaunch list
-                try:
-                    episode = Episode.load_episode_from_config(config_file, self.benchmark)
-                    unstarted_episodes.append(episode)
-                except Exception as e:
-                    logger.exception(f"Failed to load episode config {config_file}: {e}")
-
+        started_trajectory_ids = self._load_started_trajectory_ids()
+        unstarted_episodes = self._find_episodes_to_relaunch(config_files, started_trajectory_ids, include=False)
         return self._execute_episodes(unstarted_episodes, "relaunch_unstarted")

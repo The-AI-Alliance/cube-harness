@@ -624,3 +624,74 @@ class TestFileStorageEpisodeConfig:
         loaded = storage.load_episode_config(config_path)
         assert loaded.id == 10
         assert loaded.task_id == "task_with_underscores_123"
+
+
+class TestFileStorageOverwrite:
+    """Tests for save_trajectory overwrite / archive behavior."""
+
+    def test_save_trajectory_raises_on_duplicate(self, tmp_dir) -> None:
+        """Saving a trajectory with the same ID twice (different session) raises FileExistsError."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="dup_test", metadata={"task_id": "t1"})
+        storage.save_trajectory(traj)
+
+        # New storage instance (simulates a new session)
+        storage2 = FileStorage(tmp_dir)
+        with pytest.raises(FileExistsError, match="dup_test"):
+            storage2.save_trajectory(traj)
+
+    def test_save_trajectory_allows_resave_same_session(self, tmp_dir) -> None:
+        """Re-saving within the same session (e.g. end_time update) succeeds without allow_overwrite."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="resave_test", metadata={"task_id": "t1"})
+        storage.save_trajectory(traj)
+        # Second save in same session — should not raise
+        traj.end_time = 999.0
+        storage.save_trajectory(traj)
+
+    def test_save_trajectory_archives_on_overwrite(self, tmp_dir) -> None:
+        """With allow_overwrite=True, old trajectory files are archived before saving."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="archive_test", metadata={"task_id": "t1"})
+        obs = Observation.from_text("old data")
+        env_out = EnvironmentOutput(obs=obs, reward=0.5)
+        traj.steps.append(TrajectoryStep(output=env_out))
+        storage.save_trajectory(traj)
+
+        traj_dir = Path(tmp_dir) / "trajectories"
+
+        # New storage instance with allow_overwrite
+        storage2 = FileStorage(tmp_dir)
+        traj2 = Trajectory(id="archive_test", metadata={"task_id": "t1"})
+        storage2.save_trajectory(traj2, allow_overwrite=True)
+
+        # Archived files should exist
+        archived_metadata = list(traj_dir.glob("archive_test.archived_*.metadata.json"))
+        archived_jsonl = list(traj_dir.glob("archive_test.archived_*.jsonl"))
+        assert len(archived_metadata) == 1
+        assert len(archived_jsonl) == 1
+
+        # New files should also exist
+        assert (traj_dir / "archive_test.metadata.json").exists()
+        assert (traj_dir / "archive_test.jsonl").exists()
+
+        # Archived JSONL should contain the old step data
+        with open(archived_jsonl[0]) as f:
+            lines = f.readlines()
+        assert len(lines) == 1
+        assert "0.5" in lines[0]  # old reward
+
+        # New JSONL should be empty (no steps in traj2)
+        with open(traj_dir / "archive_test.jsonl") as f:
+            assert f.read() == ""
+
+    def test_save_trajectory_overwrite_false_is_default(self, tmp_dir) -> None:
+        """allow_overwrite defaults to False."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="default_test", metadata={"task_id": "t1"})
+        storage.save_trajectory(traj)
+
+        storage2 = FileStorage(tmp_dir)
+        # Should raise without explicit allow_overwrite=True
+        with pytest.raises(FileExistsError):
+            storage2.save_trajectory(traj)

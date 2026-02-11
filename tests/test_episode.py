@@ -320,3 +320,50 @@ class TestEpisode:
         assert error_step is not None, "No error found in env steps"
         assert error_step.output.error.error_type == "ValueError"
         assert "Environment validation failed" in error_step.output.error.exception_str
+
+    def test_episode_run_raises_on_duplicate_trajectory(self, tmp_dir, mock_agent_config, mock_env_config) -> None:
+        """Running the same episode twice raises FileExistsError (prevents accidental overwrites)."""
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            env_config=mock_env_config,
+        )
+        episode.run()
+
+        # Second run with a fresh Episode (same ID, new storage session)
+        episode2 = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            env_config=mock_env_config,
+        )
+        with pytest.raises(FileExistsError):
+            episode2.run()
+
+    def test_episode_relaunch_archives_old_trajectory(self, tmp_dir, mock_agent_config, mock_env_config) -> None:
+        """An episode loaded from config (_allow_overwrite=True) archives the old trajectory."""
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            env_config=mock_env_config,
+        )
+        episode.run()
+
+        # Simulate a relaunch by creating a new episode with _allow_overwrite=True
+        episode2 = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            env_config=mock_env_config,
+        )
+        episode2._allow_overwrite = True
+        episode2.run()
+
+        # Both archived and current files should exist
+        traj_dir = tmp_dir / "trajectories"
+        traj_id = f"{episode.config.task_id}_ep{episode.config.id}"
+        archived = list(traj_dir.glob(f"{traj_id}.archived_*.metadata.json"))
+        assert len(archived) == 1
+        assert (traj_dir / f"{traj_id}.metadata.json").exists()
