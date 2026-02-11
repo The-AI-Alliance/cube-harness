@@ -1,13 +1,11 @@
 """LLM interaction abstractions, LiteLLM based."""
 
-import os
 import pprint
 from datetime import datetime
 from functools import partial
 from typing import Callable, List, Literal
 from uuid import uuid4
 
-import litellm
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
 from pydantic import Field
