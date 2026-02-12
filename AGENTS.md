@@ -87,8 +87,7 @@ exp_runner.py (sequential or Ray parallel execution)
 - **Observation**: List of Contents, convertible to LLM messages
 - **EnvironmentOutput**: Result of env step (obs, reward, done, info)
 - **Trajectory**: Full interaction history with steps and metadata
-- **ActionSpace**: Protocol base class for action spaces
-- **ActionSubset**: Type alias for tuple of action methods (for filtering)
+- **ActionSpace**: Type alias for tuple of action methods (for filtering)
 - **Task**: Abstract task with `setup(tool)`, `validate_task()`, `filter_actions()`, `obs_postprocess()`
 
 ### agent.py - Agent Protocol
