@@ -41,6 +41,9 @@ workarena = [
 requires = ["uv_build>=0.8.22,<0.9.0"]
 build-backend = "uv_build"
 
+[tool.uv]
+constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
+
 [tool.ruff]
 fix = true
 line-length = 120
