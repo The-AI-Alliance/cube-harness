@@ -355,31 +355,30 @@ class TestShrinkableObservation:
 class TestThink:
     """Tests for the Think prompt element."""
 
-    def test_abstract_ex_visible(self) -> None:
-        """Test abstract example when visible."""
+    def test_prompt_instructs_thinking(self) -> None:
+        """Test that Think prompt instructs to reason before acting."""
         think = Think(visible=True)
-        assert "<think>" in think.abstract_ex
-        assert "Think step by step" in think.abstract_ex
+        prompt = think.prompt
+        assert "think" in prompt.lower()
+        assert "action" in prompt.lower() or "step" in prompt.lower()
 
-    def test_concrete_ex_visible(self) -> None:
-        """Test concrete example when visible."""
+    def test_examples_no_think_tags(self) -> None:
+        """Test that Think examples don't require <think> tag format."""
         think = Think(visible=True)
-        assert "<think>" in think.concrete_ex
-        assert "select_option" in think.concrete_ex
+        assert "<think>" not in think.abstract_ex
+        assert "<think>" not in think.concrete_ex
 
-    def test_parse_answer_success(self) -> None:
-        """Test parsing think tag successfully."""
+    def test_parse_answer_with_think_tags(self) -> None:
+        """Test parsing when model produces <think> tags in text."""
         think = Think()
         result = think.parse_answer("<think>My thought process</think>")
         assert result["think"] == "My thought process"
 
-    def test_parse_answer_missing_tag(self) -> None:
-        """Test parsing when think tag is missing."""
+    def test_parse_answer_no_tags(self) -> None:
+        """Test parsing when model doesn't produce <think> tags (reasoning via native mechanism)."""
         think = Think()
         result = think.parse_answer("No think tag here")
-        # Should return whole text as think with parse_error
-        assert "think" in result
-        assert "parse_error" in result
+        assert result == {}
 
 
 # ============================================================================
@@ -546,6 +545,19 @@ class TestHistoryStep:
         assert "Error" in step.prompt
         assert "Error occurred" in step.prompt
 
+    def test_prompt_no_thought_placeholder(self) -> None:
+        """Test step shows explicit placeholder when thought is absent."""
+        flags = ObsFlags(use_think_history=True)
+        step = HistoryStep(action=None, memory=None, thought=None, error=None, flags=flags)
+        assert "[No thinking on this step]" in step.prompt
+        assert "<think>" not in step.prompt
+
+    def test_prompt_renders_none_action_when_history_enabled(self) -> None:
+        """Test step renders action even when None (action is always shown)."""
+        flags = ObsFlags(use_action_history=True)
+        step = HistoryStep(action=None, memory=None, thought=None, error=None, flags=flags)
+        assert "<action>" in step.prompt
+
     def test_prompt_empty_when_nothing_enabled(self) -> None:
         """Test step prompt is empty when nothing is enabled."""
         flags = ObsFlags(use_action_history=False, use_think_history=False)
@@ -698,8 +710,8 @@ class TestMainPrompt:
         assert "# Observation" in prompt
 
     def test_build_prompt_with_thinking(self) -> None:
-        """Test prompt includes thinking example when enabled."""
-        flags = GenericPromptFlags(use_thinking=True, use_concrete_example=True)
+        """Test prompt includes thinking instruction when enabled."""
+        flags = GenericPromptFlags(use_thinking=True)
         prompt = MainPrompt(
             obs_history=[],
             actions=[],
@@ -712,7 +724,8 @@ class TestMainPrompt:
             goal="Goal",
         )
         built = prompt.build_prompt()
-        assert "<think>" in built
+        assert "think" in built.lower()
+        assert "action" in built.lower() or "step" in built.lower()
 
     def test_build_prompt_with_plan(self) -> None:
         """Test prompt includes plan when enabled."""

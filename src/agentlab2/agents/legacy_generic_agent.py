@@ -412,36 +412,39 @@ class Think(PromptElement):
 
     @property
     def _prompt(self) -> str:
-        return ""
+        return """\
+Always think carefully before performing any action. You MUST write your reasoning
+as text content in your response before calling any tool. Analyze the current state
+of the page, consider the effect of your previous actions, and reason step by step
+about what to do next. Your text reasoning will be recorded and shown in the history
+of subsequent steps, so make it informative.
+"""
 
     @property
     def _abstract_ex(self) -> str:
         return """
-<think>
+(Write your reasoning as text content before calling tools)
 Think step by step. If you need to make calculations such as coordinates, write them here. Describe the effect
-that your previous action had on the current content of the page.
-</think>
+that your previous action had on the current content of the page. Then call the appropriate tool(s).
 """
 
     @property
     def _concrete_ex(self) -> str:
         return """
-<think>
 From previous action I tried to set the value of year to "2022",
 using select_option, but it doesn't appear to be in the form. It may be a
 dynamic dropdown, I will try using click with the bid "a324" and look at the
 response from the page.
-</think>
+(Then call the browser_click tool with bid="a324")
 """
 
     def parse_answer(self, text: str) -> dict[str, Any]:
-        # Match old behavior: try to parse required "think" tag,
-        # if missing/fails, return whole text as think with parse_error
+        # Try to extract <think> tags if the model produced them
         try:
-            result = parse_html_tags(text, keys=["think"], optional_keys=[])
-            return result
-        except ValueError as e:
-            return {"think": text, "parse_error": str(e)}
+            return parse_html_tags(text, keys=["think"], optional_keys=[])
+        except ValueError:
+            # No <think> tags — thinking comes from reasoning_content instead
+            return {}
 
 
 class Plan(PromptElement):
@@ -624,13 +627,16 @@ class HistoryStep:
 
     @property
     def prompt(self) -> str:
-        """Build step prompt using XML tags."""
+        """Build step prompt with think/action history."""
         prompt = ""
 
-        if self.flags.use_think_history and self.thought:
-            prompt += f"\n<think>\n{self.thought}\n</think>\n"
+        if self.flags.use_think_history:
+            if self.thought:
+                prompt += f"\n<think>\n{self.thought}\n</think>\n"
+            else:
+                prompt += "\n[No thinking on this step]\n"
 
-        if self.flags.use_action_history and self.action:
+        if self.flags.use_action_history:
             prompt += f"\n<action>\n{self.action}\n</action>\n"
 
         # Error logs (if use_past_error_logs is enabled)
@@ -816,7 +822,7 @@ and executed by a program, make sure to follow the formatting instructions.
 
 Here is an abstract version of the answer with description of the content of
 each tag. Make sure you follow this structure, but replace the content with your
-answer:
+answer. Always write your reasoning as text, then call the tool(s):
 """,
                 self.think.abstract_ex,
                 self.plan.abstract_ex,
@@ -832,7 +838,7 @@ answer:
 # Concrete Example
 
 Here is a concrete example of how to format your answer.
-Make sure to follow the template with proper tags:
+Write your reasoning as text first, then call the appropriate tool(s):
 """,
                 self.think.concrete_ex,
                 self.plan.concrete_ex,
@@ -880,8 +886,13 @@ class GenericAgentConfig(AgentConfig):
     max_actions: int = 50
     system_prompt: str = """\
 You are an agent trying to solve a web task based on the content of the page and
-user instructions. You can interact with the page and explore, and send messages to the user. Each time you
-submit an action it will be sent to the browser and you will receive a new page."""
+user instructions. You can interact with the page and explore, and send messages to the user.
+You can produce multiple actions at once. Each time you submit actions,
+they will be sent to the browser and you will receive a new page.
+
+IMPORTANT: Always include your reasoning as text content in your response BEFORE making tool calls.
+Explain what you observe on the page, what you decided to do, and why. Never respond with only
+tool calls and no text — always write out your thinking first, then call the tools."""
 
     def make(self, action_set: list[ActionSchema] | None = None, **kwargs: Any) -> "GenericAgent":
         return GenericAgent(config=self, action_set=action_set or [])
@@ -985,16 +996,16 @@ class GenericAgent(Agent):
         self.plan = ans_dict.get("plan", self.plan)
         self.plan_step = ans_dict.get("step", self.plan_step)
 
-        action = ans_dict.get("action")
-        action_str = str(action) if action else None
+        thoughts = ans_dict.get("thoughts")
+        actions: list[Action] = ans_dict.get("actions")  # type: ignore
+        action_str = str(actions) if actions else None
         self.actions.append(action_str)
         self.memories.append(ans_dict.get("memory"))
-        self.thoughts.append(ans_dict.get("think"))
+        self.thoughts.append(thoughts)
         self._actions_cnt += 1
 
         # Build output
-        actions = [action] if action else []
-        return AgentOutput(actions=actions, llm_calls=[llm_call] if llm_call else [])
+        return AgentOutput(actions=actions, llm_calls=[llm_call] if llm_call else [], thinking=thoughts)
 
     def _extract_obs_data(self, obs: Observation) -> tuple[str, dict[str, str | None]]:
         """Extract both formatted text and raw components from observation in one pass.
@@ -1186,23 +1197,29 @@ class GenericAgent(Agent):
                 thinking_blocks = getattr(llm_response.message, "thinking_blocks", None)
 
                 if reasoning_content:
-                    if "think" not in ans_dict:
-                        ans_dict["think"] = reasoning_content
+                    if "thoughts" not in ans_dict:
+                        ans_dict["thoughts"] = reasoning_content
                     else:
-                        ans_dict["think"] = f"{reasoning_content}\n\n{ans_dict['think']}"
+                        ans_dict["thoughts"] = f"{reasoning_content}\n\n{ans_dict['thoughts']}"
 
                 if thinking_blocks:
-                    think = "\n".join(thinking_blocks)
-                    if "think" not in ans_dict:
-                        ans_dict["think"] = think
+                    thoughts = "\n".join(thinking_blocks)
+                    if "thoughts" not in ans_dict:
+                        ans_dict["thoughts"] = thoughts
                     else:
-                        ans_dict["think"] = f"{ans_dict['think']}\n\n" + think
+                        ans_dict["thoughts"] = f"{ans_dict['thoughts']}\n\n" + thoughts
+
+                # Fallback: use text content as implicit thinking when no other
+                # thinking source was found. Models often emit reasoning text
+                # alongside tool calls (e.g. "I will click on...").
+                if "thoughts" not in ans_dict and text_response.strip():
+                    ans_dict["thoughts"] = text_response.strip()
 
                 # Parse actions from tool calls
                 actions = parse_actions(llm_response.message)
                 if actions:
                     # Return first action (multiaction not supported in legacy agent)
-                    ans_dict["action"] = actions[0]
+                    ans_dict["actions"] = actions
                     logger.info(f"Successfully parsed action from tool call on attempt {retry_num + 1}")
                     return ans_dict, llm_call
 
@@ -1226,7 +1243,7 @@ class GenericAgent(Agent):
 
         # All retries exhausted
         logger.error(f"All retry attempts exhausted. Last error: {last_error}")
-        return {"action": None}, llm_call
+        return {"actions": None}, llm_call
 
     def reset(self) -> None:
         """Reset agent state for a new episode."""

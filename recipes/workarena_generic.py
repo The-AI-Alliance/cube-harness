@@ -37,7 +37,12 @@ def main(debug: bool) -> None:
     output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_generic_{current_datetime}"
 
     # Configure LLM
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(
+        model_name="azure/gpt-5-mini",
+        temperature=1.0,
+        reasoning_effort="medium",
+        parallel_tool_calls=True,
+    )
 
     # Observation flags - these control what the agent uses in prompts
     # IMPORTANT: BrowsergymConfig must provide at least what ObsFlags expects
@@ -87,7 +92,7 @@ def main(debug: bool) -> None:
     # These flags must be >= the agent's ObsFlags to provide required observations
     tool_config = BrowsergymConfig(
         headless=not debug,  # Show browser in debug mode
-        use_screenshot=use_screenshot,  # False - matching FLAGS_CUSTOM
+        use_screenshot=True,  # Always save screenshot in trajectory for debug
         use_axtree=use_axtree,
         use_html=use_html,
     )

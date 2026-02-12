@@ -84,6 +84,7 @@ class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)
     error: StepError | None = None
+    thinking: str | None = None  # Optional field to capture agent's reasoning text
 
     def __str__(self) -> str:
         return self.model_dump_json(exclude={"llm_calls"})
