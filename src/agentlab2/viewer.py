@@ -361,11 +361,18 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         for traj in sorted_trajectories:
             n_steps = len(traj.steps)
 
-            final_reward = 0.0
-            for step in reversed(traj.steps):
-                if isinstance(step.output, EnvironmentOutput):
-                    final_reward = step.output.reward
-                    break
+            if traj.reward_info:
+                final_reward = traj.reward_info.get("reward", 0.0)
+                final_message = traj.reward_info.get("message", "")
+            else:
+                # Fallback: find last reward from steps (for older trajectories without reward_info)
+                final_reward = 0.0
+                final_message = ""
+                for step in reversed(traj.steps):
+                    if isinstance(step.output, EnvironmentOutput):
+                        final_reward = step.output.reward
+                        final_message = step.output.info.get("message", "")
+                        break
 
             # Collect token stats from agent steps (per-trajectory and totals)
             traj_tokens = 0
@@ -400,7 +407,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             tokens_str = f"{traj_tokens:,}" if traj_tokens > 0 else "-"
             cost_str = f"${traj_cost:.4f}" if traj_cost > 0 else "-"
 
-            traj_data.append([traj.id, task_id, n_steps, f"{final_reward:.2f}", duration_str, tokens_str, cost_str])
+            traj_data.append(
+                [traj.id, task_id, n_steps, f"{final_reward:.2f}", final_message, duration_str, tokens_str, cost_str]
+            )
 
         # Calculate experiment statistics
         token_stats = {
@@ -866,7 +875,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         with gr.Accordion("📂 Trajectories", open=True):
             experiment_stats = gr.Markdown("", elem_id="experiment_stats")
             trajectory_table = gr.DataFrame(
-                headers=["Name", "Task ID", "Steps", "Reward", "Duration", "Tokens", "Cost"],
+                headers=["Name", "Task ID", "Steps", "Reward", "Message", "Duration", "Tokens", "Cost"],
                 max_height=300,
                 show_label=False,
                 interactive=False,

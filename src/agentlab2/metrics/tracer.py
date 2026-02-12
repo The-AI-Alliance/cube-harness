@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+import litellm
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -89,6 +90,12 @@ class _AgentTracer:
 
         # Set as global provider so OTEL-instrumented libraries emit spans into this trace
         trace.set_tracer_provider(self._provider)
+
+        # Enable litellm OTEL callback now that a proper TracerProvider is configured.
+        # This must happen after set_tracer_provider() to avoid ConsoleSpanExporter fallback.
+        os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
+        litellm.callbacks = ["otel"]
+
         self._tracer = self._provider.get_tracer(__name__)
         self._current_experiment: str | None = None
 

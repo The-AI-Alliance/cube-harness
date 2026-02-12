@@ -1,3 +1,4 @@
+
 [project]
 name = "agentlab2"
 version = "0.1.0"
@@ -26,6 +27,7 @@ dependencies = [
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
 ]
@@ -39,6 +41,9 @@ workarena = [
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
 [tool.ruff]
 fix = true
