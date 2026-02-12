@@ -7,6 +7,8 @@ from browsergym.core.env import BrowserEnv
 from browsergym.core.task import OpenEndedTask
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
+from playwright.sync_api import Frame, Page
+from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
@@ -77,14 +79,22 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         self._env: BrowserEnv | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
+        self._last_reward: float = 0.0
+        self._last_terminated: bool = False
 
     def _create_env(self) -> BrowserEnv:
         """Create a new BrowserGym environment instance."""
-        # Use OpenEndedTask as default - it provides a browser without task-specific logic,
-        # allowing AgentLab2's Task abstraction (e.g., MiniWobTask) to handle task setup
-        task_entrypoint = self.config.task_entrypoint or OpenEndedTask
-        task_kwargs = self.config.task_kwargs or {"start_url": "about:blank", "goal": None}
+        task_entrypoint = self.config.task_entrypoint if self.config.task_entrypoint is not None else OpenEndedTask
+        task_kwargs = (
+            self.config.task_kwargs
+            if self.config.task_kwargs is not None
+            else {"start_url": "about:blank", "goal": None}
+        )
 
+        env_kwargs = self._build_env_kwargs(task_entrypoint, task_kwargs)
+        return BrowserEnv(**env_kwargs)
+
+    def _build_env_kwargs(self, task_entrypoint, task_kwargs) -> dict:
         env_kwargs = {
             "task_entrypoint": task_entrypoint,
             "task_kwargs": task_kwargs,
@@ -114,8 +124,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             env_kwargs["record_video_dir"] = self.config.record_video_dir
         if self.config.action_mapping is not None:
             env_kwargs["action_mapping"] = self.config.action_mapping
-
-        return BrowserEnv(**env_kwargs)
+        return env_kwargs
 
     def _ensure_env(self) -> None:
         """Ensure the environment is created and reset."""
@@ -129,10 +138,20 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         return self._env  # type: ignore
 
     @property
-    def page(self) -> Any:
+    def page(self) -> Page:
         """Access the current Playwright page from BrowserGym."""
         self._ensure_env()
         return self._env.page if self._env and hasattr(self._env, "page") else None
+
+    @property
+    def last_reward(self) -> float:
+        """Get the reward from the last step."""
+        return self._last_reward
+
+    @property
+    def last_terminated(self) -> bool:
+        """Check if the episode terminated on the last step."""
+        return self._last_terminated
 
     def reset(self) -> None:
         """Reset the environment."""
@@ -140,6 +159,39 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             self._env.close()
         self._env = self._create_env()
         self._last_obs, self._last_info = self._env.reset()
+
+    def set_gym_task(
+        self,
+        task_entrypoint: Callable[[], Any],
+        task_kwargs: dict | None = None,
+        seed: int | None = None,
+    ) -> None:
+        """Reinitialize the BrowserGym environment with a specific task.
+
+        This method allows tasks (like WorkArenaTask) to configure the BrowserGym
+        task after the tool has been created. It closes the existing environment
+        and creates a new one with the specified task entrypoint and kwargs.
+
+        Args:
+            task_entrypoint: The BrowserGym task class or factory function.
+            task_kwargs: Optional kwargs to pass to the task constructor (excluding seed).
+            seed: Random seed for the task (passed to env.reset(), not task_kwargs).
+        """
+        if self._env is not None:
+            self._env.close()
+            self._env = None
+
+        # Update config with task-specific settings
+        self.config = self.config.model_copy(
+            update={
+                "task_entrypoint": task_entrypoint,
+                "task_kwargs": task_kwargs or {},
+            }
+        )
+
+        # Create and reset the new environment
+        self._env = self._create_env()
+        self._last_obs, self._last_info = self._env.reset(seed=seed)
 
     def execute_action(self, action: Action) -> Observation:
         """Execute an action using BidBrowserActionSpace protocol and return the observation."""
@@ -150,9 +202,12 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
     def _execute_bgym_step(self, action_str: str) -> str:
         """Execute a BrowserGym action string via env.step() and return result message."""
         self._ensure_env()
+        logger.info(colored(f"Execute bgym step: {action_str}", "magenta"))
         obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
         self._last_obs = obs
         self._last_info = info
+        self._last_reward = reward
+        self._last_terminated = terminated
 
         result = "Success"
         if terminated:
@@ -178,8 +233,123 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
     def browser_click(self, bid: str) -> str:
         """Click on an element specified by BID."""
+        # Get state before click (for checkbox/radio detection)
+        state_before = self._get_checkbox_state(bid)
+
+        # Execute standard click
         action_str = f'click(bid="{bid}")'
-        return self._execute_bgym_step(action_str)
+        result = self._execute_bgym_step(action_str)
+
+        # For checkboxes/radios, verify state changed and use JS fallback if needed
+        if state_before is not None:
+            state_after = self._get_checkbox_state(bid)
+            if state_after == state_before:
+                # Click didn't toggle - use JS fallback
+                self._toggle_checkbox_js(bid, not state_before)
+                state_after_js = self._get_checkbox_state(bid)
+                logger.info(colored(f"Checkbox/radio {bid} clicked with JS fallback, state: {state_after_js}", "cyan"))
+                result = self._execute_bgym_step("noop()")  # Dummy step to update obs/info
+
+        return result
+
+    def _get_frame_for_bid(self, bid: str) -> Page | Frame:
+        """Navigate to the correct frame for a BID using BrowserGym's naming convention.
+
+        BIDs like 'a195' encode iframe hierarchy:
+        - 'a' is the first iframe
+        - 'aA' would be a nested iframe inside 'a'
+        - '195' without prefix is in the main frame
+
+        Returns the frame/page where the element with this BID lives.
+        """
+        current_frame: Page | Frame = self.page
+
+        # Parse the BID to find frame prefixes
+        i = 0
+        while i < len(bid) and not bid[i:].isnumeric():
+            i += 1
+            # Allow multi-character frame ids like aA, bCD etc.
+            while i < len(bid) and bid[i].isalpha() and bid[i].isupper():
+                i += 1
+
+            if i > 0:
+                frame_bid = bid[:i]  # bid of the next frame to select
+                try:
+                    frame_elem = current_frame.get_by_test_id(frame_bid)
+                    if frame_elem.count() > 0:
+                        current_frame = frame_elem.frame_locator(":scope")
+                    else:
+                        break
+                except Exception:
+                    break
+
+        return current_frame
+
+    def _get_checkbox_state(self, bid: str) -> bool | None:
+        """Get checkbox/radio checked state, or None if not a checkbox/radio.
+
+        Navigates to the correct iframe using BrowserGym's BID naming convention,
+        then checks the element's checkbox state.
+        """
+        try:
+            # Navigate to the correct frame for this BID
+            frame = self._get_frame_for_bid(bid)
+            locator = frame.get_by_test_id(bid)
+
+            if locator.count() == 0:
+                return None
+
+            # Get the element's properties via evaluate
+            js_code = """
+                (elem) => {
+                    if (elem.type === 'checkbox' || elem.type === 'radio') {
+                        return { isCheckbox: true, checked: elem.checked };
+                    }
+                    if (elem.getAttribute('data-type') === 'checkbox') {
+                        return { isCheckbox: true, checked: elem.value === 'true' };
+                    }
+                    return { isCheckbox: false };
+                }
+            """
+            result = locator.evaluate(js_code)
+
+            if isinstance(result, dict) and result.get("isCheckbox"):
+                return result.get("checked")
+            return None
+        except Exception:
+            return None
+
+    def _toggle_checkbox_js(self, bid: str, checked: bool) -> None:
+        """Toggle checkbox state using JavaScript.
+
+        Navigates to the correct iframe using BrowserGym's BID naming convention,
+        then toggles the checkbox state.
+        """
+        try:
+            frame = self._get_frame_for_bid(bid)
+            locator = frame.get_by_test_id(bid)
+
+            js_code = """
+            (elem, checked) => {
+                if (elem.type === 'checkbox' || elem.type === 'radio') {
+                    elem.checked = checked;
+                    elem.dispatchEvent(new Event('click', { bubbles: true }));
+                    elem.dispatchEvent(new Event('change', { bubbles: true }));
+                    elem.dispatchEvent(new Event('input', { bubbles: true }));
+                    return true;
+                }
+                if (elem.getAttribute('data-type') === 'checkbox') {
+                    elem.value = checked ? 'true' : 'false';
+                    elem.dispatchEvent(new Event('change', { bubbles: true }));
+                    elem.dispatchEvent(new Event('input', { bubbles: true }));
+                    return true;
+                }
+                return false;
+            }
+            """
+            locator.evaluate(js_code, checked)
+        except Exception:
+            pass
 
     def browser_drag(self, from_bid: str, to_bid: str) -> str:
         """Drag and drop from one element to another."""
@@ -308,3 +478,5 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 self._env = None
                 self._last_obs = None
                 self._last_info = None
+                self._last_reward = 0.0
+                self._last_terminated = False

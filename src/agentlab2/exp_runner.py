@@ -39,7 +39,7 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        log_file = ray_log_dir / f"run_{episode.id}_task_{episode.task_id}.log"
+        log_file = ray_log_dir / f"run_{episode.config.id}_task_{episode.config.task_id}.log"
         sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
         sys.stderr = sys.stdout
         logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stdout, force=True)
@@ -58,8 +58,8 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
 
     exp.benchmark.setup()
     try:
-        episodes = exp.create_episodes()
-        ref_to_id = {run_episode.remote(episode): episode.task_id for episode in episodes}
+        episodes = exp.get_episodes_to_run()
+        ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
         results = _poll_ray(exp, ref_to_id, ray_poll_timeout)
         exp.print_stats(results)
@@ -113,7 +113,7 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
     exp.save_config()
     exp.benchmark.setup()
     try:
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
             episodes = episodes[:debug_limit]

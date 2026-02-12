@@ -56,6 +56,7 @@ class MiniWobTask(Task):
             info: dict, custom information from the task.
         """
         self._tool = tool
+        tool.reset()
         logger.info(f"Setting up MiniWob task {self.id} at {self.url}")
         self._tool.goto(self.url)
         setup_js = self._get_setup_js()

@@ -20,6 +20,7 @@ dependencies = [
     { name = "numpy" },
     { name = "numpydoc" },
     { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
     { name = "pillow" },
@@ -29,6 +30,11 @@ dependencies = [
     { name = "ray", extra = ["default"] },
     { name = "tenacity" },
     { name = "termcolor" },
+]
+
+[package.optional-dependencies]
+workarena = [
+    { name = "browsergym-workarena" },
 ]
 
 [package.dev-dependencies]
@@ -43,6 +49,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
+    { name = "browsergym-workarena", marker = "extra == 'workarena'", specifier = ">=0.5.2" },
     { name = "gradio", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "matplotlib", specifier = ">=3.8" },
@@ -50,6 +57,7 @@ requires-dist = [
     { name = "numpy", specifier = "~=2.3.5" },
     { name = "numpydoc", specifier = "~=1.10.0" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.39.1" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "pillow", specifier = "~=11.0" },
@@ -379,6 +387,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6e/7f/117045de497484a161753e31cb60708d8f0bdd244e2c1ee8979e01d87452/browsergym_core-0.14.3.tar.gz", hash = "sha256:3a2e0e095445df2ff5093307a7a8bd2e978a5f912613f38479de9cebbd9b7568", size = 184654 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/42/0996359dccd3205094036c488c4f1e045f6bf9e1d794d57307718ee32014/browsergym_core-0.14.3-py3-none-any.whl", hash = "sha256:f75079a23cf7ec7d625e841129c9e18a6c9c218236b96b36882b13066770eb0e", size = 191594 },
+]
+
+[[package]]
+name = "browsergym-workarena"
+version = "0.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "browsergym-core" },
+    { name = "english-words" },
+    { name = "faker" },
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "requests" },
+    { name = "tenacity" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/55/59/accdd20c02458fef43018b29ad9845ad10dd3f7529b766a7ab235df7a2e5/browsergym_workarena-0.5.2.tar.gz", hash = "sha256:952b567c475ee8105f98bcccdbea0f3c825df875fbeba493682469371dab65a6", size = 6615395 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/f6/e0f4e8d57ca744a4c3dd530f94e728ce26a17f6ca6a96cf5db54a8286d91/browsergym_workarena-0.5.2-py3-none-any.whl", hash = "sha256:6f30f7c063947a1a4ad589c192ba7b01d4e5b6218321e989eb2153c48ba60fed", size = 6783845 },
 ]
 
 [[package]]
@@ -776,12 +803,33 @@ wheels = [
 ]
 
 [[package]]
+name = "english-words"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/95/12d90f2a3af18305b13d7c09401b59bd235db4cfb63d76ddf594748c2de8/english-words-2.0.2.tar.gz", hash = "sha256:e51d05607fe92ebf65047a2359e977c78a46aa16d1d92a3cba0bac3e34957d8e", size = 8152008 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/6f/42700113073ca6775fb12a260112f0cb36449a2c2e42dcd53d3fcc6970b4/english_words-2.0.2-py3-none-any.whl", hash = "sha256:a65b900b17201526d8ab2d414f45e5a37afc714a1857377b30182c754ae6e0d6", size = 8196368 },
+]
+
+[[package]]
 name = "execnet"
 version = "2.1.2"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bf/89/780e11f9588d9e7128a3f87788354c7946a9cbb1401ad38a48c4db9a4f07/execnet-2.1.2.tar.gz", hash = "sha256:63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd", size = 166622 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", hash = "sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec", size = 40708 },
+]
+
+[[package]]
+name = "faker"
+version = "40.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/77/1c3ff07b6739b9a1d23ca01ec0a90a309a33b78e345a3eb52f9ce9240e36/faker-40.1.2.tar.gz", hash = "sha256:b76a68163aa5f171d260fc24827a8349bc1db672f6a665359e8d0095e8135d30", size = 1949802 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/ec/91a434c8a53d40c3598966621dea9c50512bec6ce8e76fa1751015e74cef/faker-40.1.2-py3-none-any.whl", hash = "sha256:93503165c165d330260e4379fd6dc07c94da90c611ed3191a0174d2ab9966a42", size = 1985633 },
 ]
 
 [[package]]
@@ -2028,6 +2076,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/9d/22d241b66f7bbde88a3bfa6847a351d2c46b84de23e71222c6aae25c7050/opentelemetry_exporter_otlp_proto_common-1.39.1.tar.gz", hash = "sha256:763370d4737a59741c89a67b50f9e39271639ee4afc999dadfe768541c027464", size = 20409 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/02/ffc3e143d89a27ac21fd557365b98bd0653b98de8a101151d5805b5d4c33/opentelemetry_exporter_otlp_proto_common-1.39.1-py3-none-any.whl", hash = "sha256:08f8a5862d64cc3435105686d0216c1365dc5701f86844a8cd56597d0c764fde", size = 18366 },
+]
+
+[[package]]
+name = "opentelemetry-exporter-otlp-proto-grpc"
+version = "1.39.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "googleapis-common-protos" },
+    { name = "grpcio" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-common" },
+    { name = "opentelemetry-proto" },
+    { name = "opentelemetry-sdk" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/53/48/b329fed2c610c2c32c9366d9dc597202c9d1e58e631c137ba15248d8850f/opentelemetry_exporter_otlp_proto_grpc-1.39.1.tar.gz", hash = "sha256:772eb1c9287485d625e4dbe9c879898e5253fea111d9181140f51291b5fec3ad", size = 24650 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/a3/cc9b66575bd6597b98b886a2067eea2693408d2d5f39dad9ab7fc264f5f3/opentelemetry_exporter_otlp_proto_grpc-1.39.1-py3-none-any.whl", hash = "sha256:fa1c136a05c7e9b4c09f739469cbdb927ea20b34088ab1d959a849b5cc589c18", size = 19766 },
 ]
 
 [[package]]
