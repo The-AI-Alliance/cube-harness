@@ -30,7 +30,12 @@ def main(debug: bool):
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_with_ray(
+            exp,
+            n_cpus=4,
+            trace_output=f"{exp.output_dir}/traces",
+            otlp_endpoint="http://localhost:4318/v1/traces",
+        )
 
 
 if __name__ == "__main__":
