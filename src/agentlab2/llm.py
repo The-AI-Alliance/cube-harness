@@ -9,10 +9,10 @@ from uuid import uuid4
 from litellm import Message, completion_with_retries, get_llm_provider
 from litellm.utils import token_counter
 from opentelemetry import trace
-from opentelemetry.trace import SpanKind
 from pydantic import Field
 
 from agentlab2.base import TypedBaseModel
+from agentlab2.metrics.genai import chat_span, set_output_messages
 
 UNKNOWN_PROVIDER = "unknown (see litellm.get_llm_provider)"
 
@@ -87,7 +87,6 @@ class LLMConfig(TypedBaseModel):
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
-        self._tracer = trace.get_tracer(__name__)
 
     def _call_completion(self, prompt: Prompt) -> Any:
         kwargs = {
@@ -106,13 +105,12 @@ class LLM:
         return completion_with_retries(**kwargs)
 
     def __call__(self, prompt: Prompt) -> Message:
-        _, model_name = _extract_provider_and_model(self.config.model_name)
-        span_name = f"chat {model_name}"
-
-        with self._tracer.start_as_current_span(span_name, kind=SpanKind.CLIENT):
+        with chat_span(self.config.model_name, prompt.messages) as span:
             response = self._call_completion(prompt)
+            msg = response.choices[0].message
             _trace_llm_call(self.config, response)
-            return response.choices[0].message  # type: ignore
+            set_output_messages(span, msg)
+            return msg
 
 
 class LLMCall(TypedBaseModel):
