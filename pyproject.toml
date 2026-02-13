@@ -29,6 +29,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
+    "mcp[cli]>=1.2.0",
 ]
 
 [project.optional-dependencies]
@@ -60,6 +61,7 @@ extend-select = ["I"] # sort imports
 
 [project.scripts]
 al2-viewer = "agentlab2.viewer:main"
+al2-mcp-server = "agentlab2.mcp.server:main"
 
 [dependency-groups]
 dev = [
@@ -67,6 +69,7 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "pytest-xdist>=3.8.0",
+    "pytest-asyncio>=1.3.0",
 ]
 
 [tool.pytest.ini_options]
