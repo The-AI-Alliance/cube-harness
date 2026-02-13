@@ -53,7 +53,6 @@ def main(debug: bool) -> None:
     # Configure GenericAgent with flags matching FLAGS_CUSTOM from original agentlab
     agent_config = GenericAgentConfig(
         llm_config=llm_config,
-        max_actions=20,
         flags=GenericPromptFlags(
             obs=ObsFlags(
                 use_html=use_html,
@@ -116,7 +115,7 @@ def main(debug: bool) -> None:
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=1)
+        run_with_ray(exp, n_cpus=2)
 
 
 if __name__ == "__main__":

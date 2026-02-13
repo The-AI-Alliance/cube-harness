@@ -948,7 +948,10 @@ class GenericAgent(Agent):
         # Check if max actions reached
         if self._actions_cnt >= self.config.max_actions:
             logger.info("Max actions reached, issuing STOP action.")
-            return AgentOutput(actions=[Action(id="stop", name=STOP_ACTION.name, arguments={})])
+            return AgentOutput(
+                actions=[Action(id="stop", name=STOP_ACTION.name, arguments={})],
+                thinking="Reached max actions, stopping.",
+            )
 
         # Extract observation data (text for history + raw components for shrinkable observation)
         obs_text, obs_components = self._extract_obs_data(obs)
