@@ -13,6 +13,7 @@ from litellm.utils import token_counter
 from pydantic import Field
 
 from agentlab2.base import TypedBaseModel
+from agentlab2.metrics.genai import chat_span, set_output_messages
 
 os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
 litellm.callbacks = ["otel"]
@@ -91,9 +92,14 @@ class LLM:
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
-        response = completion_with_retries(**kwargs)
+
+        with chat_span(self.config.model_name, prompt.messages) as span:
+            response = completion_with_retries(**kwargs)
+            msg = response.choices[0].message
+            set_output_messages(span, msg)
+
         usage = self._extract_usage(response)
-        return LLMResponse(message=response.choices[0].message, usage=usage)
+        return LLMResponse(message=msg, usage=usage)
 
     def _extract_usage(self, response) -> Usage:
         """Extract usage info from LiteLLM response."""
