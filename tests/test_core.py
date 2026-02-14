@@ -68,10 +68,9 @@ class TestAction:
         assert sample_action.name == "click"
         assert sample_action.arguments == {"element_id": "button_1"}
 
-    def test_action_without_id(self):
-        """Test Action creation without id."""
+    def test_action_auto_assigns_id(self) -> None:
         action = Action(name="scroll", arguments={"direction": "down"})
-        assert action.id is None
+        assert isinstance(action.id, str) and len(action.id) == 32
         assert action.name == "scroll"
 
     def test_action_default_arguments(self):

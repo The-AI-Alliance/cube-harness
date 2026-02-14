@@ -3,6 +3,7 @@ import io
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Protocol, Self, TypeAlias
+from uuid import uuid4
 
 import litellm.utils
 from PIL import Image
@@ -57,7 +58,7 @@ class Action(TypedBaseModel):
         arguments (Any): The arguments to be passed to the function.
     """
 
-    id: str | None = None
+    id: str = Field(default_factory=lambda: uuid4().hex)
     name: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
