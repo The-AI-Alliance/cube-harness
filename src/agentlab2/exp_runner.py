@@ -51,6 +51,33 @@ def _extract_model(exp: Experiment) -> str | None:
     return llm_config.model_name if llm_config else None
 
 
+class TeeWriter:
+    def __init__(self, *writers: TextIO) -> None:
+        self.writers = writers
+
+    def write(self, data: str) -> int:
+        for writer in self.writers:
+            writer.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for writer in self.writers:
+            writer.flush()
+
+
+@contextmanager
+def tee_to_file(log_file: Path) -> Iterator[None]:
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    with log_file.open("w") as f:
+        tee_out = TeeWriter(original_stdout, f)
+        tee_err = TeeWriter(original_stderr, f)
+        with redirect_stdout(tee_out), redirect_stderr(tee_err):  # type: ignore[type-var]
+            logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=tee_err, force=True)
+            yield
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=original_stderr, force=True)
+
+
 def run_with_ray(
     exp: Experiment,
     n_cpus: int = 4,
