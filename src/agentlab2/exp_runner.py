@@ -17,14 +17,28 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 
+def _extract_model(exp: Experiment) -> str | None:
+    llm_config = getattr(exp.agent_config, "llm_config", None)
+    return llm_config.model_name if llm_config else None
+
+
 def run_with_ray(
     exp: Experiment,
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
     trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
+    model: str | None = None,
+    agent_name: str | None = None,
 ) -> ExpResult:
-    tracer = get_tracer(exp.name, output_dir=trace_output, otlp_endpoint=otlp_endpoint)
+    model = model or _extract_model(exp)
+    tracer = get_tracer(
+        exp.name,
+        output_dir=trace_output,
+        otlp_endpoint=otlp_endpoint,
+        model=model,
+        agent_name=agent_name,
+    )
 
     try:
         with tracer.benchmark(exp.name):
@@ -99,8 +113,17 @@ def run_sequentially(
     debug_limit: int | None = None,
     trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
+    model: str | None = None,
+    agent_name: str | None = None,
 ) -> ExpResult:
-    tracer = get_tracer(exp.name, output_dir=trace_output, otlp_endpoint=otlp_endpoint)
+    model = model or _extract_model(exp)
+    tracer = get_tracer(
+        exp.name,
+        output_dir=trace_output,
+        otlp_endpoint=otlp_endpoint,
+        model=model,
+        agent_name=agent_name,
+    )
 
     try:
         with tracer.benchmark(exp.name):
