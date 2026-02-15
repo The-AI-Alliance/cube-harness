@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 from typing import Self
 
-from opentelemetry.trace import Span
+from opentelemetry.trace import Span, StatusCode
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
@@ -122,7 +122,7 @@ class Episode:
         env = self.env_config.make()
         agent = self.config.agent_config.make(env.action_set)
         try:
-            with tracer.episode(self.config.task_id, experiment=self.config.exp_name):
+            with tracer.episode(self.config.task_id, experiment=self.config.exp_name) as episode_span:
                 start_time = time.time()
                 env_output = env.setup()
                 trajectory = Trajectory(
@@ -136,7 +136,6 @@ class Episode:
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
                     with tracer.step(f"turn_{turns}") as span:
-                        # Agent step
                         ts = time.time()
                         try:
                             agent_output = agent.step(env_output.obs)
@@ -153,7 +152,6 @@ class Episode:
                         self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(agent_step)
 
-                        # Environment step
                         env_ts = time.time()
                         try:
                             env_output = env.step(agent_output.actions)
@@ -174,8 +172,11 @@ class Episode:
                         turns += 1
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
-                self.storage.save_trajectory(trajectory)  # save final trajectory with end_time and reward
+                self.storage.save_trajectory(trajectory)
                 logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
+                final_reward = trajectory.last_env_step().reward
+                status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
+                episode_span.set_status(status)
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
             raise e
