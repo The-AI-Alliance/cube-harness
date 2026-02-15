@@ -2,7 +2,9 @@
 
 import logging
 import sys
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
+from typing import Iterator, TextIO
 from uuid import uuid4
 
 import ray
@@ -15,6 +17,33 @@ from agentlab2.metrics.tracer import get_trace_env_vars, get_tracer
 LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d %(funcName)s() - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+
+class TeeWriter:
+    def __init__(self, *writers: TextIO) -> None:
+        self.writers = writers
+
+    def write(self, data: str) -> int:
+        for writer in self.writers:
+            writer.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for writer in self.writers:
+            writer.flush()
+
+
+@contextmanager
+def tee_to_file(log_file: Path) -> Iterator[None]:
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    with log_file.open("w") as f:
+        tee_out = TeeWriter(original_stdout, f)
+        tee_err = TeeWriter(original_stderr, f)
+        with redirect_stdout(tee_out), redirect_stderr(tee_err):  # type: ignore[type-var]
+            logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=tee_err, force=True)
+            yield
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=original_stderr, force=True)
 
 
 def run_with_ray(
@@ -35,19 +64,18 @@ def run_with_ray(
 
 def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) -> ExpResult:
     exp.save_config()
-    ray_log_dir = Path(exp.output_dir) / "ray_logs"
+    log_dir = Path(exp.output_dir) / "logs"
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        log_file = ray_log_dir / f"run_{episode.config.id}_task_{episode.config.task_id}.log"
-        sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
-        sys.stderr = sys.stdout
+        trajectory_id = f"{episode.config.task_id}_ep{episode.config.id}"
+        log_file = log_dir / f"{trajectory_id}.log"
+        sys.stdout = sys.stderr = log_file.open("a", buffering=1)
         logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stdout, force=True)
-        trajectory = episode.run()
-        return trajectory
+        return episode.run()
 
     if not ray.is_initialized():
-        ray_log_dir.mkdir(parents=True, exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",
@@ -111,13 +139,20 @@ def run_sequentially(
 
 def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResult:
     exp.save_config()
+    log_dir = Path(exp.output_dir) / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
     exp.benchmark.setup()
     try:
         episodes = exp.get_episodes_to_run()
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
             episodes = episodes[:debug_limit]
-        trajectories = [episode.run() for episode in episodes]
+        trajectories = []
+        for episode in episodes:
+            trajectory_id = f"{episode.config.task_id}_ep{episode.config.id}"
+            log_file = log_dir / f"{trajectory_id}.log"
+            with tee_to_file(log_file):
+                trajectories.append(episode.run())
         results = ExpResult(
             tasks_num=len(episodes),
             trajectories={traj.metadata["task_id"]: traj for traj in trajectories},

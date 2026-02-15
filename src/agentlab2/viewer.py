@@ -43,6 +43,7 @@ class ViewerState:
     exp_dirs: list[Path] = field(default_factory=list)
     trajectories: dict[str, Trajectory] = field(default_factory=dict)
     current_trajectory: Trajectory | None = None
+    current_exp_dir: Path | None = None
     step: int = 0
 
     def load_experiment(self, exp_dir: Path) -> dict[str, Any]:
@@ -333,6 +334,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         # Extract directory name (remove trajectory count suffix)
         dir_name = exp_name.split(" (")[0]
         exp_dir = state.results_dir / dir_name
+        state.current_exp_dir = exp_dir
 
         result = state.load_experiment(exp_dir)
         if "error" in result:
@@ -485,6 +487,15 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             if llm_call.prompt.tools:
                 return json.dumps(llm_call.prompt.tools, indent=2)
         return "No tools in current step"
+
+    def update_episode_logs() -> str:
+        if not state.current_trajectory or not state.current_exp_dir:
+            return "No trajectory selected"
+        storage = FileStorage(state.current_exp_dir)
+        traj_id = state.current_trajectory.id
+        if storage.has_logs(traj_id):
+            return storage.load_logs(traj_id)
+        return f"No logs found for {traj_id}\nExpected at: {storage.get_log_path(traj_id)}"
 
     def update_raw_json() -> str:
         """Get raw JSON of current step."""
@@ -927,6 +938,8 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                     llm_calls = gr.Code(language="json", show_label=False)
                 with gr.Tab("LLM Tools"):
                     llm_tools = gr.Code(language="json", show_label=False)
+                with gr.Tab("Episode Logs"):
+                    episode_logs = gr.Code(language=None, show_label=False)
 
         # Event handlers
         refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
@@ -967,6 +980,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         step_id.change(fn=update_raw_json, outputs=raw_json)
         step_id.change(fn=update_llm_calls, outputs=llm_calls)
         step_id.change(fn=update_llm_tools, outputs=llm_tools)
+        traj_id.change(fn=update_episode_logs, outputs=episode_logs)
 
         # Initial load
         demo.load(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)

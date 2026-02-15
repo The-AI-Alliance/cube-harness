@@ -197,6 +197,18 @@ class FileStorage:
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
 
+    def get_log_path(self, trajectory_id: str) -> Path:
+        return self.output_dir / "logs" / f"{trajectory_id}.log"
+
+    def load_logs(self, trajectory_id: str) -> str:
+        log_path = self.get_log_path(trajectory_id)
+        if not log_path.exists():
+            return ""
+        return log_path.read_text()
+
+    def has_logs(self, trajectory_id: str) -> bool:
+        return self.get_log_path(trajectory_id).exists()
+
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.
 
