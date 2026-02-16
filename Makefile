@@ -23,12 +23,12 @@ viewer:
 install:
 	uv sync --all-extras
 	uv pip install -e .
-	uv run playwright install chromium --with-deps
+	uv run playwright install chromium
 
 update:
 	uv sync --all-extras --update
 	uv pip install -e . --upgrade
-	uv run playwright install chromium --with-deps
+	uv run playwright install chromium
 
 format:
 	uv run ruff format .

@@ -53,12 +53,13 @@ def main(debug: bool):
         observe_after_action=True,  # Default Fase, set to True for debugging/visualization (adds ~1-2s per action)
     )
 
-    # Configure OSWorld benchmark (paths are automatic now)
+    # Configure OSWorld benchmark
+    # Use tasks_file for custom tasks, or omit it to use the full OSWorld repo
     benchmark = OSWorldBenchmark(
         tool_config=tool_config,
+        tasks_file="src/agentlab2/benchmarks/osworld/osworld_tasks.json",
         domain="all",  # or specific: "chrome", "os", "libreoffice"
         shuffle=True,
-        test_set_name="test_all.json",  # or "test_small.json" for quick testing
     )
 
     exp = Experiment(

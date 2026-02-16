@@ -9,7 +9,7 @@ import logging
 import random
 from copy import deepcopy
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import Field
 
@@ -40,7 +40,8 @@ class OSWorldBenchmark(Benchmark):
 
     Attributes:
         tool_config: Configuration for the Computer tool
-        test_set_path: Path to OSWorld task definitions
+        tasks_file: Path to a flat JSON array of tasks (overrides test_set_path/test_set_name)
+        test_set_path: Path to OSWorld task definitions (used when tasks_file is not set)
         test_set_name: Name of test set file (e.g., "test_all.json")
         domain: Task domain filter ("all", "chrome", "os", "libreoffice", etc.)
         shuffle: Whether to shuffle tasks before returning them
@@ -50,7 +51,8 @@ class OSWorldBenchmark(Benchmark):
     # Tool configuration (required by Benchmark base class)
     tool_config: ComputerConfig = Field(default_factory=ComputerConfig)
 
-    # Task selection
+    # Task selection - either a direct tasks file or OSWorld repo format
+    tasks_file: Optional[str] = None  # Path to flat JSON array of tasks
     test_set_path: str = str(OSWORLD_REPO_DIR / "evaluation_examples")
     test_set_name: str = "test_all.json"
     domain: str = "all"  # or specific domain like "chrome", "libreoffice", etc.
@@ -60,13 +62,20 @@ class OSWorldBenchmark(Benchmark):
     def setup(self) -> None:
         """Initialize benchmark.
 
-        Automatically clones OSWorld repo if not present.
+        If tasks_file is set, validates the file exists.
+        Otherwise, automatically clones OSWorld repo if not present.
         Desktop_env VMs are managed per-task by the Computer tool.
         """
         logger.info(
             f"Setting up OSWorld benchmark with provider={self.tool_config.provider}, "
             f"domain={self.domain}"
         )
+
+        if self.tasks_file:
+            # Using a custom tasks file - just validate it exists
+            if not Path(self.tasks_file).exists():
+                raise FileNotFoundError(f"Tasks file not found: {self.tasks_file}")
+            return
 
         # Ensure OSWorld repo exists (auto-install if needed)
         if not OSWORLD_REPO_DIR.exists():
@@ -93,8 +102,61 @@ class OSWorldBenchmark(Benchmark):
     def load_tasks(self) -> list[OSWorldTask]:
         """Load and return all OSWorld tasks.
 
-        Tasks are loaded from JSON files in the test_set_path directory.
-        Each task specifies its configuration, evaluation criteria, and setup commands.
+        If tasks_file is set, loads tasks from a flat JSON array.
+        Otherwise, loads from OSWorld repo's directory structure.
+
+        Returns:
+            List of OSWorldTask instances
+        """
+        if self.tasks_file:
+            return self._load_tasks_from_file(self.tasks_file)
+        return self._load_tasks_from_repo()
+
+    def _load_tasks_from_file(self, tasks_file: str) -> list[OSWorldTask]:
+        """Load tasks from a flat JSON array file.
+
+        Expected format: [{"id": "...", "instruction": "...", ...}, ...]
+
+        Args:
+            tasks_file: Path to JSON file with task array
+
+        Returns:
+            List of OSWorldTask instances
+        """
+        with open(tasks_file) as f:
+            task_list = json.load(f)
+
+        tasks = []
+        for task_data in task_list:
+            # Filter by domain if not "all"
+            task_domain = task_data.get("domain", "general")
+            if self.domain != "all" and task_domain != self.domain:
+                continue
+
+            task = OSWorldTask(
+                id=task_data["id"],
+                desc=task_data.get("desc", task_data.get("instruction", "")),
+                domain=task_domain,
+                instruction=task_data.get("instruction", ""),
+                snapshot=task_data.get("snapshot", "init_state"),
+                related_apps=task_data.get("related_apps", []),
+                config=task_data.get("config", []),
+                evaluator=task_data.get("evaluator", {}),
+                max_turns=task_data.get("max_turns", 50),
+            )
+            tasks.append(task)
+
+        if self.shuffle:
+            random.seed(self.shuffle_seed)
+            random.shuffle(tasks)
+
+        logger.info(f"Loaded {len(tasks)} tasks from {tasks_file}")
+        return tasks
+
+    def _load_tasks_from_repo(self) -> list[OSWorldTask]:
+        """Load tasks from OSWorld repo's directory structure.
+
+        Loads from test_set_path using the domain→task ID mapping format.
 
         Returns:
             List of OSWorldTask instances
