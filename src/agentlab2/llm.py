@@ -35,6 +35,8 @@ class LLMConfig(TypedBaseModel):
     """Thin LLM wrapper around LiteLLM completion API."""
 
     model_name: str
+    api_base: str | None = None
+    api_key: str | None = None
     temperature: float = 1.0
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
@@ -87,6 +89,10 @@ class LLM:
             "tools": prompt.tools,
             "messages": prompt.messages,
         }
+        if self.config.api_base is not None:
+            kwargs["api_base"] = self.config.api_base
+        if self.config.api_key is not None:
+            kwargs["api_key"] = self.config.api_key
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
         response = completion_with_retries(**kwargs)
