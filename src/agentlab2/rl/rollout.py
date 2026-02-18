@@ -14,11 +14,25 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class RolloutMetrics:
+    n_llm_calls: int
+    n_step_errors: int
+    n_observations: int
+    n_steps: int
+    total_execution_time: float
+    agent_execution_time: float
+    environment_execution_time: float
+    env_step_time: float
+    agent_step_time: float
+
+
+@dataclass
 class RolloutResult:
     """Result of a single rollout containing training data for RL."""
 
     text_pairs: list[TextPair]
     reward: float
+    metrics: RolloutMetrics
 
 
 def rollout(
@@ -55,7 +69,46 @@ def rollout(
     for call, step_reward in calls_with_rewards:
         text_pairs.append(llm_call_to_text_pair(call, step_reward))
 
-    return RolloutResult(text_pairs=text_pairs, reward=reward)
+    metrics = _compute_metrics(trajectory)
+    return RolloutResult(text_pairs=text_pairs, reward=reward, metrics=metrics)
+
+
+def _compute_metrics(trajectory: Trajectory) -> RolloutMetrics:
+    """Compute rollout metrics from a trajectory."""
+    n_llm_calls = 0
+    n_step_errors = 0
+    n_observations = 0
+    n_steps = 0
+    agent_execution_time = 0.0
+    environment_execution_time = 0.0
+
+    for step in trajectory.steps:
+        step_duration = (step.end_time or 0.0) - (step.start_time or 0.0)
+        if isinstance(step.output, AgentOutput):
+            n_steps += 1
+            n_llm_calls += len(step.output.llm_calls)
+            agent_execution_time += step_duration
+            if step.output.error is not None:
+                n_step_errors += 1
+        elif isinstance(step.output, EnvironmentOutput):
+            n_observations += 1
+            environment_execution_time += step_duration
+            if step.output.error is not None:
+                n_step_errors += 1
+
+    total_execution_time = (trajectory.end_time or 0.0) - (trajectory.start_time or 0.0)
+
+    return RolloutMetrics(
+        n_llm_calls=n_llm_calls,
+        n_step_errors=n_step_errors,
+        n_observations=n_observations,
+        n_steps=n_steps,
+        total_execution_time=total_execution_time,
+        agent_execution_time=agent_execution_time,
+        environment_execution_time=environment_execution_time,
+        env_step_time=environment_execution_time / n_observations if n_observations > 0 else 0.0,
+        agent_step_time=agent_execution_time / n_steps if n_steps > 0 else 0.0,
+    )
 
 
 def _extract_llm_calls(trajectory: Trajectory) -> list[tuple[LLMCall, float | None]]:
