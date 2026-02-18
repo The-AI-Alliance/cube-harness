@@ -8,18 +8,9 @@ from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory
 from agentlab2.environment import EnvConfig
 from agentlab2.episode import Episode
 from agentlab2.llm import LLMCall
-from agentlab2.rl.llm_call_renderer import llm_call_to_text_pair
+from agentlab2.rl.llm_call_renderer import TextPair, llm_call_to_text_pair
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class TextPair:
-    """A single training sample from an LLM call."""
-
-    prompt_text: str
-    response_text: str
-    reward: float | None = None
 
 
 @dataclass
@@ -58,12 +49,11 @@ def rollout(
         )
         trajectory = episode.run()
 
-    calls_with_rewards = _extract_llm_calls(trajectory)
     reward = trajectory.reward_info.get("reward", 0.0)
     text_pairs = []
+    calls_with_rewards = _extract_llm_calls(trajectory)
     for call, step_reward in calls_with_rewards:
-        prompt_text, response_text = llm_call_to_text_pair(call)
-        text_pairs.append(TextPair(prompt_text=prompt_text, response_text=response_text, reward=step_reward))
+        text_pairs.append(llm_call_to_text_pair(call, step_reward))
 
     return RolloutResult(text_pairs=text_pairs, reward=reward)
 
