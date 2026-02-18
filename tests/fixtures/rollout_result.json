@@ -3,22 +3,26 @@
     {
       "prompt_text": "<s><|begin_system|>\nYou are a thoughtful, systematic AI assistant from ServiceNow Language Models (SLAM) lab. Analyze each question carefully, present your reasoning step-by-step, then provide the final response after the marker [BEGIN FINAL RESPONSE].\n<|begin_user|>\nClick the button.\n<|begin_assistant|>\nHere are my reasoning steps:\n",
       "response_text": "\n<tool_calls>[{\"name\": \"click\", \"arguments\": {\"element_id\": \"btn_1\"}}]</tool_calls>\n<|end|>\n",
-      "reward": 0.0
+      "reward": 0.0,
+      "images": []
     },
     {
       "prompt_text": "<s><|begin_system|>\nYou are a thoughtful, systematic AI assistant from ServiceNow Language Models (SLAM) lab. Analyze each question carefully, present your reasoning step-by-step, then provide the final response after the marker [BEGIN FINAL RESPONSE].\n<|begin_user|>\nClick the button.\n<|begin_assistant|>\n\n<tool_calls>[{\"name\": \"click\", \"arguments\": {\"element_id\": \"btn_1\"}, \"id\": \"call_0\"}]</tool_calls>\n<|end|>\n<|begin_tool_result|>\nClicked on btn_1\n\n\n<|begin_user|>\nNow type hello.\n<|begin_assistant|>\nHere are my reasoning steps:\n",
       "response_text": "I'll type hello.\n<tool_calls>[{\"name\": \"type_text\", \"arguments\": {\"element_id\": \"input_1\", \"text\": \"hello\"}}]</tool_calls>\n<|end|>\n",
-      "reward": 0.0
+      "reward": 0.0,
+      "images": []
     },
     {
       "prompt_text": "<s><|begin_system|>\nYou are a thoughtful, systematic AI assistant from ServiceNow Language Models (SLAM) lab. Analyze each question carefully, present your reasoning step-by-step, then provide the final response after the marker [BEGIN FINAL RESPONSE].\n<|begin_user|>\nClick btn_2 and type world.\n<|begin_assistant|>\nHere are my reasoning steps:\n",
       "response_text": "I'll do both.\n<tool_calls>[{\"name\": \"click\", \"arguments\": {\"element_id\": \"btn_2\"}}, {\"name\": \"type_text\", \"arguments\": {\"element_id\": \"input_2\", \"text\": \"world\"}}]</tool_calls>\n<|end|>\n",
-      "reward": 0.0
+      "reward": 0.0,
+      "images": []
     },
     {
       "prompt_text": "<s><|begin_system|>\nYou are a thoughtful, systematic AI assistant from ServiceNow Language Models (SLAM) lab. Analyze each question carefully, present your reasoning step-by-step, then provide the final response after the marker [BEGIN FINAL RESPONSE].\n<|begin_user|>\nFinish.\n<|begin_assistant|>\nHere are my reasoning steps:\n",
       "response_text": "Done.\n<|end|>\n",
-      "reward": 1.0
+      "reward": 1.0,
+      "images": []
     }
   ],
   "reward": 1.0

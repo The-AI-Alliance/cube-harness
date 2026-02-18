@@ -137,7 +137,12 @@ def _result_to_dict(result: RolloutResult) -> dict:
     """Serialize RolloutResult to a comparable dict."""
     return {
         "text_pairs": [
-            {"prompt_text": tp.prompt_text, "response_text": tp.response_text, "reward": tp.reward}
+            {
+                "prompt_text": tp.prompt_text,
+                "response_text": tp.response_text,
+                "reward": tp.reward,
+                "images": tp.images,
+            }
             for tp in result.text_pairs
         ],
         "reward": result.reward,
