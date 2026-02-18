@@ -19,7 +19,6 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 
-<<<<<<< feat/episode-log-capture
 class TeeWriter:
     def __init__(self, *writers: TextIO) -> None:
         self.writers = writers
@@ -45,11 +44,11 @@ def tee_to_file(log_file: Path) -> Iterator[None]:
             logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=tee_err, force=True)
             yield
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=original_stderr, force=True)
-=======
+
+
 def _extract_model(exp: Experiment) -> str | None:
     llm_config = getattr(exp.agent_config, "llm_config", None)
     return llm_config.model_name if llm_config else None
->>>>>>> main
 
 
 def run_with_ray(
