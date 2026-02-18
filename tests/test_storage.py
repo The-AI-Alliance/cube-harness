@@ -154,6 +154,39 @@ class TestFileStorageWithSteps:
             storage.save_step(TrajectoryStep(output=sample_env_output), "unknown_traj", 0)
 
 
+class TestFileStorageLogs:
+    """Tests for per-episode log helpers in FileStorage."""
+
+    def test_get_log_path(self, tmp_dir: Path) -> None:
+        """Test that log path uses logs/{trajectory_id}.log convention."""
+        storage = FileStorage(tmp_dir)
+
+        log_path = storage.get_log_path("task_a_ep3")
+
+        assert log_path == Path(tmp_dir) / "logs" / "task_a_ep3.log"
+
+    def test_load_logs_returns_full_file_contents(self, tmp_dir: Path) -> None:
+        """Test that load_logs returns complete log file content."""
+        storage = FileStorage(tmp_dir)
+        log_path = storage.get_log_path("task_b_ep1")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("line 1\nline 2\nline 3\n")
+
+        loaded = storage.load_logs("task_b_ep1")
+
+        assert loaded == "line 1\nline 2\nline 3\n"
+        assert storage.has_logs("task_b_ep1") is True
+
+    def test_load_logs_missing_file(self, tmp_dir: Path) -> None:
+        """Test missing log file handling."""
+        storage = FileStorage(tmp_dir)
+
+        loaded = storage.load_logs("missing_ep0")
+
+        assert loaded == ""
+        assert storage.has_logs("missing_ep0") is False
+
+
 class TestFileStorageWithLLMCalls:
     """Tests for FileStorage LLM call extraction."""
 

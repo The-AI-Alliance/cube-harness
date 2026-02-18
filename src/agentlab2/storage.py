@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 from pydantic import BaseModel
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
+from agentlab2.episode_logs import get_log_path as get_episode_log_path
 
 if TYPE_CHECKING:
     from agentlab2.episode import EpisodeConfig
@@ -196,6 +197,18 @@ class FileStorage:
 
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
+
+    def get_log_path(self, trajectory_id: str) -> Path:
+        return get_episode_log_path(self.output_dir, trajectory_id)
+
+    def load_logs(self, trajectory_id: str) -> str:
+        log_path = self.get_log_path(trajectory_id)
+        if not log_path.exists():
+            return ""
+        return log_path.read_text()
+
+    def has_logs(self, trajectory_id: str) -> bool:
+        return self.get_log_path(trajectory_id).exists()
 
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.
