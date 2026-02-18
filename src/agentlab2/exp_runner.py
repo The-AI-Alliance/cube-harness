@@ -1,7 +1,6 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
-import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,10 +8,10 @@ import ray
 
 from agentlab2.core import Trajectory
 from agentlab2.episode import Episode
+from agentlab2.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from agentlab2.experiment import Experiment, ExpResult
 from agentlab2.metrics.tracer import get_trace_env_vars, get_tracer
 
-LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d %(funcName)s() - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
@@ -49,19 +48,15 @@ def run_with_ray(
 
 def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) -> ExpResult:
     exp.save_config()
-    ray_log_dir = Path(exp.output_dir) / "ray_logs"
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        log_file = ray_log_dir / f"run_{episode.config.id}_task_{episode.config.task_id}.log"
-        sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
-        sys.stderr = sys.stdout
-        logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stdout, force=True)
-        trajectory = episode.run()
-        return trajectory
+        trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+        log_file = get_log_path(exp.output_dir, trajectory_id)
+        with redirect_output_to_log(log_file, append=True, tee=False, log_format=LOG_FORMAT):
+            return episode.run()
 
     if not ray.is_initialized():
-        ray_log_dir.mkdir(parents=True, exist_ok=True)
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",
@@ -140,7 +135,12 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
             episodes = episodes[:debug_limit]
-        trajectories = [episode.run() for episode in episodes]
+        trajectories = []
+        for episode in episodes:
+            trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+            log_file = get_log_path(exp.output_dir, trajectory_id)
+            with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
+                trajectories.append(episode.run())
         results = ExpResult(
             tasks_num=len(episodes),
             trajectories={traj.metadata["task_id"]: traj for traj in trajectories},
