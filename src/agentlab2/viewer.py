@@ -434,17 +434,17 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         return exp_stats, traj_data, first_traj
 
-    def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> StepId | None:
+    def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> TrajectoryId | None:
         """Handle trajectory selection from table."""
         if traj_table is None or len(traj_table) == 0:
             return None
 
         row = evt.index[0]
-        traj_id = traj_table.iloc[row, 0]
-        state.select_trajectory(traj_id)
-        return StepId(trajectory_id=TrajectoryId(trajectory_name=traj_id), step=0)
+        traj_name = traj_table.iloc[row, 0]
+        state.select_trajectory(traj_name)
+        return TrajectoryId(exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name)
 
-    def new_trajectory(traj_id: TrajectoryId) -> StepId:
+    def new_trajectory(traj_id: TrajectoryId | None) -> StepId:
         """Handle new trajectory selection."""
         if traj_id and traj_id.trajectory_name:
             state.select_trajectory(traj_id.trajectory_name)
@@ -953,7 +953,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         trajectory_table.select(
             fn=on_select_trajectory,
             inputs=trajectory_table,
-            outputs=step_id,
+            outputs=traj_id,
         )
 
         traj_id.change(fn=new_trajectory, inputs=traj_id, outputs=step_id)
