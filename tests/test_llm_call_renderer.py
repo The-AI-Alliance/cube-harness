@@ -185,7 +185,7 @@ class TestLlmCallToTextPair:
             output=Message(content="hello", role="assistant"),
         )
         with pytest.raises(NotImplementedError, match="unknown-model"):
-            llm_call_to_text_pair(llm_call)
+            llm_call_to_text_pair(llm_call, step_reward=0.0)
 
     @pytest.mark.slow
     def test_text_in_has_special_tokens(self) -> None:
@@ -196,11 +196,11 @@ class TestLlmCallToTextPair:
             ],
             output=Message(content="Done.", role="assistant"),
         )
-        text_in, _ = llm_call_to_text_pair(llm_call)
-        assert "<|begin_system|>" in text_in
-        assert "<|begin_user|>" in text_in
-        assert "<|begin_assistant|>" in text_in
-        assert "Here are my reasoning steps:" in text_in
+        result = llm_call_to_text_pair(llm_call, step_reward=0.0)
+        assert "<|begin_system|>" in result.prompt_text
+        assert "<|begin_user|>" in result.prompt_text
+        assert "<|begin_assistant|>" in result.prompt_text
+        assert "Here are my reasoning steps:" in result.prompt_text
 
     @pytest.mark.slow
     def test_history_tool_ids_present_in_input_not_output(self) -> None:
@@ -217,9 +217,11 @@ class TestLlmCallToTextPair:
             ],
             output=Message(content="Done.", role="assistant"),
         )
-        text_in, text_out = llm_call_to_text_pair(llm_call)
-        assert '"id": "c_hist"' in text_in
-        assert "c_hist" not in text_out
+        result = llm_call_to_text_pair(llm_call, step_reward=1.0)
+        assert '"id": "c_hist"' in result.prompt_text
+        assert "c_hist" not in result.response_text
+        assert result.reward == 1.0
+        assert result.images == []
 
 
 # ---------------------------------------------------------------------------
