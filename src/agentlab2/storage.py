@@ -197,6 +197,40 @@ class FileStorage:
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
 
+    def list_trajectory_ids(self) -> list[str]:
+        """List all non-archived trajectory IDs in the output directory."""
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return []
+        ids = []
+        for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
+            ids.append(metadata_file.stem.replace(".metadata", ""))
+        return ids
+
+    def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
+        """List trajectory IDs with the latest modification time of their files.
+
+        Returns a dict mapping trajectory ID to the max mtime across its
+        metadata.json and .jsonl files. Useful for detecting changes without
+        loading full trajectory data.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return {}
+        result: dict[str, float] = {}
+        for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
+            traj_id = metadata_file.stem.replace(".metadata", "")
+            jsonl_path = traj_dir / f"{traj_id}.jsonl"
+            mtime = metadata_file.stat().st_mtime
+            if jsonl_path.exists():
+                mtime = max(mtime, jsonl_path.stat().st_mtime)
+            result[traj_id] = mtime
+        return result
+
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.
 
