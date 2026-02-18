@@ -15,22 +15,48 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "rollout_result.json"
 
 _APRIEL_LLM_CONFIG = LLMConfig(model_name="hosted_vllm/ServiceNow-AI/Apriel-1.6-15b-Thinker")
 
+# Minimal 2x2 PNGs for testing image extraction and ordering.
+_RED_IMAGE_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP8zwACTGCSAQANHQEDgslx/wAAAABJRU5ErkJggg=="
+)
+_BLUE_IMAGE_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGNkYPjPwMDAxAAGAAsfAQMU4wsAAAAAAElFTkSuQmCC"
+)
+
 
 def _make_tool_call(name: str, arguments: str, tc_id: str) -> dict:
     """Build a tool_call dict for a Message."""
     return {"id": tc_id, "type": "function", "function": {"name": name, "arguments": arguments}}
 
 
+def _image_message(image_url: str) -> dict:
+    """Build a user message with a screenshot image (multimodal content)."""
+    return {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "screenshot"},
+            {"type": "image_url", "image_url": {"url": image_url}},
+        ],
+    }
+
+
 # Scripted turns for the deterministic agent.
 # Each entry: (actions, llm_call_kwargs)
 _SCRIPT: list[tuple[list[Action], dict]] = [
-    # Turn 0: click a button
+    # Turn 0: click a button (prompt includes a red screenshot)
     (
         [Action(id="call_0", name="click", arguments={"element_id": "btn_1"})],
         {
             "id": "llm_0",
             "timestamp": "2025-01-01T00:00:00",
-            "prompt": Prompt(messages=[{"role": "user", "content": "Click the button."}]),
+            "prompt": Prompt(
+                messages=[
+                    {"role": "user", "content": "Click the button."},
+                    _image_message(_RED_IMAGE_URL),
+                ]
+            ),
             "output": Message(
                 content=None,
                 role="assistant",
@@ -39,7 +65,7 @@ _SCRIPT: list[tuple[list[Action], dict]] = [
             "usage": Usage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
         },
     ),
-    # Turn 1: type text into an input
+    # Turn 1: type text into an input (prompt includes history with red screenshot + new blue screenshot)
     (
         [Action(id="call_1", name="type_text", arguments={"element_id": "input_1", "text": "hello"})],
         {
@@ -48,6 +74,7 @@ _SCRIPT: list[tuple[list[Action], dict]] = [
             "prompt": Prompt(
                 messages=[
                     {"role": "user", "content": "Click the button."},
+                    _image_message(_RED_IMAGE_URL),
                     {
                         "role": "assistant",
                         "content": None,
@@ -55,6 +82,7 @@ _SCRIPT: list[tuple[list[Action], dict]] = [
                     },
                     {"role": "tool", "content": "Clicked on btn_1", "tool_call_id": "call_0"},
                     {"role": "user", "content": "Now type hello."},
+                    _image_message(_BLUE_IMAGE_URL),
                 ],
             ),
             "output": Message(
@@ -65,7 +93,7 @@ _SCRIPT: list[tuple[list[Action], dict]] = [
             "usage": Usage(prompt_tokens=30, completion_tokens=10, total_tokens=40),
         },
     ),
-    # Turn 2: two actions in one step (click + type)
+    # Turn 2: two actions in one step (click + type), no screenshot
     (
         [
             Action(id="call_2a", name="click", arguments={"element_id": "btn_2"}),
