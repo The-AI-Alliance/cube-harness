@@ -6,7 +6,7 @@ from typing import Any, Callable
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
-from agentlab2.core import ActionSchema, ActionSubset, Observation, Task
+from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
 from agentlab2.tools.browsergym import BrowsergymTool
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class WorkArenaTask(Task):
     """
 
     validate_per_step: bool = True
-    supported_actions: ActionSubset = (
+    supported_actions: ActionSpace = ActionSpace(
         BidBrowserActionSpace.browser_press_key,
         BidBrowserActionSpace.browser_type,
         BidBrowserActionSpace.browser_click,
