@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 from pydantic import BaseModel
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
+from agentlab2.episode_logs import get_log_path as get_episode_log_path
 
 if TYPE_CHECKING:
     from agentlab2.episode import EpisodeConfig
@@ -198,7 +199,7 @@ class FileStorage:
         return step_data
 
     def get_log_path(self, trajectory_id: str) -> Path:
-        return self.output_dir / "logs" / f"{trajectory_id}.log"
+        return get_episode_log_path(self.output_dir, trajectory_id)
 
     def load_logs(self, trajectory_id: str) -> str:
         log_path = self.get_log_path(trajectory_id)
