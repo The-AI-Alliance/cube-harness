@@ -7,7 +7,6 @@ Supports live monitoring of in-progress experiments via filesystem polling.
 
 import argparse
 import json
-import time as _time
 from dataclasses import dataclass, field
 from os.path import expanduser
 from pathlib import Path
@@ -20,6 +19,7 @@ from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, Trajector
 from agentlab2.storage import FileStorage
 
 _STATUS_EMOJIS = {"running": "\u23f3", "success": "\u2705", "error": "\u274c", "completed": "\u2b1c"}
+_LIVE_REFRESH_INTERVAL_S = 3.0
 
 
 def _trajectory_status(traj: Trajectory) -> str:
@@ -885,10 +885,10 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             return StepId(trajectory_id=traj_id, step=clicked_step)
         return StepId(trajectory_id=traj_id, step=0)
 
-    def on_live_toggle(is_live: bool, interval: float) -> tuple[gr.Timer, gr.Row]:
-        return gr.Timer(value=interval, active=is_live), gr.Row(visible=is_live)
+    def on_live_toggle(is_live: bool) -> tuple[gr.Timer, gr.Row]:
+        return gr.Timer(value=_LIVE_REFRESH_INTERVAL_S, active=is_live), gr.Row(visible=is_live)
 
-    def on_timer_tick() -> tuple[str, list[list[Any]] | None, str, str, gr.Timer]:
+    def on_timer_tick() -> tuple[str, list[list[Any]] | None, str, gr.Timer]:
         state.refresh_experiment()
 
         if state.current_trajectory and state.current_trajectory.id in state.trajectories:
@@ -897,12 +897,11 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                 state.current_trajectory = updated
 
         traj_data, exp_stats, progress_html = _build_experiment_view()
-        timestamp = _time.strftime("%H:%M:%S")
 
         if state.is_experiment_complete():
-            return exp_stats, traj_data, progress_html, f"Last refresh: {timestamp} (complete)", gr.Timer(active=False)
+            return exp_stats, traj_data, progress_html, gr.Timer(active=False)
 
-        return exp_stats, traj_data, progress_html, f"Last refresh: {timestamp}", gr.Timer()
+        return exp_stats, traj_data, progress_html, gr.Timer()
 
     # --- Build Gradio UI ---
 
@@ -933,14 +932,12 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             refresh_button = gr.Button("Refresh", scale=0, size="sm")
 
         with gr.Row():
-            live_toggle = gr.Checkbox(label="Live Mode", value=False, scale=0, min_width=120)
-            refresh_interval = gr.Slider(minimum=2, maximum=30, value=5, step=1, label="Refresh interval (s)", scale=1)
-            last_refresh_label = gr.Markdown("", scale=2)
+            live_toggle = gr.Checkbox(label="Live Mode", value=True, scale=0, min_width=90)
 
-        timer = gr.Timer(value=5, active=False)
+        timer = gr.Timer(value=_LIVE_REFRESH_INTERVAL_S, active=True)
 
         with gr.Accordion("\U0001f4c2 Trajectories", open=True):
-            live_progress_row = gr.Row(visible=False)
+            live_progress_row = gr.Row(visible=True)
             with live_progress_row:
                 progress_bar = gr.HTML("")
             experiment_stats = gr.Markdown("", elem_id="experiment_stats")
@@ -1041,13 +1038,13 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         live_toggle.change(
             fn=on_live_toggle,
-            inputs=[live_toggle, refresh_interval],
+            inputs=[live_toggle],
             outputs=[timer, live_progress_row],
         )
 
         timer.tick(
             fn=on_timer_tick,
-            outputs=[experiment_stats, trajectory_table, progress_bar, last_refresh_label, timer],
+            outputs=[experiment_stats, trajectory_table, progress_bar, timer],
         )
 
         demo.load(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
