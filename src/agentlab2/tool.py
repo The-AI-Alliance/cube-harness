@@ -2,6 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, List
 
+from termcolor import colored
 from typing_extensions import get_protocol_members
 
 from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
@@ -61,7 +62,14 @@ class Tool(AbstractTool):
         return fn
 
     def execute_action(self, action: Action) -> Observation:
-        fn = self.get_action_method(action)
+        try:
+            fn = self.get_action_method(action)
+        except ValueError as e:
+            logger.warning(colored(str(e), "red"))
+            return Observation(
+                contents=[Content(data=f"Uknown tool name: {action.name}", tool_call_id=action.id)],
+                has_error=True,
+            )
 
         with tool_span(action) as span:
             try:
