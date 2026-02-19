@@ -618,28 +618,39 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
-        """Periodic refresh handler: bulk-loads stubs, then live-polls for new/changed trajectories.
+    def on_bg_tick_progress() -> tuple[str, gr.Timer]:
+        """Fast tick: updates only the progress bar and timer state.
 
-        Two phases share a single timer:
-        1. While _bg_loading_done is False: background thread is still bulk-loading stubs.
-        2. Once _bg_loading_done is True: calls refresh_experiment() to pick up new or
-           changed trajectory files written by a running experiment. Timer deactivates only
-           when is_experiment_complete() returns True (all trajectories have end_time set).
+        This handler has a minimal outputs list (progress_bar + bg_timer) so Gradio's
+        loading animation never touches the tables or stats widgets, eliminating blink.
+        """
+        n_completed = len(state._completed_ids)
+        n_total = len(state.trajectories)
+        n_running = sum(1 for t in state.trajectories if t.end_time is None)
+        new_progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
+        if new_progress_html != state._last_progress_html:
+            state._last_progress_html = new_progress_html
+            progress_html: Any = new_progress_html
+        else:
+            progress_html = gr.skip()
 
-        All table/stats outputs use gr.skip() when nothing has changed to avoid
-        unnecessary DOM re-renders (which cause visible blinking).
+        still_active = not state._bg_loading_done or not state.is_experiment_complete()
+        return progress_html, gr.Timer(active=still_active)
+
+    def on_bg_tick_tables() -> tuple[Any, Any, Any, Any, gr.Tab, gr.Tab, gr.Tab]:
+        """Slow tick: updates tables and stats only when data has actually changed.
+
+        During bulk loading (_bg_loading_done is False) this fires every tick.
+        After loading, it calls refresh_experiment() and only updates when files change.
+        Returns gr.skip() for all outputs when nothing has changed.
         """
         if state._bg_loading_done:
             changed = state.refresh_experiment()
         else:
             changed = True  # bg thread still running — always refresh tables
 
-        still_active = not state._bg_loading_done or not state.is_experiment_complete()
-        timer_update = gr.Timer(active=still_active)
-
         if not changed:
-            return gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), timer_update, gr.skip(), gr.skip(), gr.skip()
+            return gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip()
 
         new_exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         exp_stats: Any = new_exp_stats if new_exp_stats != state._last_exp_stats else gr.skip()
@@ -663,18 +674,8 @@ def run_xray(
         traj_id = state.current_trajectory.id if state.current_trajectory else None
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
-        n_completed = len(state._completed_ids)
-        n_total = len(state.trajectories)
-        n_running = sum(1 for t in state.trajectories if t.end_time is None)
-        new_progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
-        if new_progress_html != state._last_progress_html:
-            state._last_progress_html = new_progress_html
-            progress_html: Any = new_progress_html
-        else:
-            progress_html = gr.skip()
-
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, *tab_labels
 
     def navigate_prev(step_id: StepId) -> StepId:
         step = max(0, step_id.step - 1)
@@ -1046,8 +1047,13 @@ def run_xray(
         )
 
         bg_timer.tick(
-            fn=on_bg_load_tick,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, progress_bar, bg_timer, agents_tab, tasks_tab, seeds_tab],
+            fn=on_bg_tick_progress,
+            outputs=[progress_bar, bg_timer],
+            show_progress="hidden",
+        )
+        bg_timer.tick(
+            fn=on_bg_tick_tables,
+            outputs=[experiment_stats, agent_table, task_table, seed_table, agents_tab, tasks_tab, seeds_tab],
             show_progress="hidden",
         )
 
