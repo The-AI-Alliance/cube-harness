@@ -51,7 +51,7 @@ MINIMAL_TASK_CONFIG: dict = {
     "id": "debug",
     "instruction": "Debug session — no specific task",
     "config": [],
-    "evaluator": {},
+    "evaluator": {"func": "infeasible", "expected": {}},
 }
 
 HELP_TEXT = """
