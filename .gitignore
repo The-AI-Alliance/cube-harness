@@ -8,7 +8,6 @@ temp/
 
 # Local development files (not for commit)
 cache/
-migrate_osworld.py
 
 # Releases
 releases/*.temp
