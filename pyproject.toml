@@ -60,6 +60,7 @@ extend-select = ["I"] # sort imports
 
 [project.scripts]
 al2-viewer = "agentlab2.viewer:main"
+al2-xray = "agentlab2.analyze.xray:main"
 
 [dependency-groups]
 dev = [
