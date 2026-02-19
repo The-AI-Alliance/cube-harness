@@ -10,7 +10,7 @@ import logging
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from PIL import Image
 
@@ -31,6 +31,7 @@ if spec is not None:
     # Override desktop_env's default VM download directory to use AgentLab2 data dir
     try:
         from pathlib import Path
+
         import desktop_env.providers.docker.manager as docker_manager
 
         AGENTLAB2_VM_DIR = Path.home() / ".agentlab2" / "benchmarks" / "osworld" / "vm_data"
@@ -46,7 +47,7 @@ else:
 class ComputerConfig(ToolConfig):
     """Configuration for Computer tool."""
 
-    provider: str = "docker"  # vmware, virtualbox, docker, aws
+    provider: str = "docker"  # vmware, virtualbox, docker, aws, azure, gcp, aliyun, volcengine
     region: Optional[str] = None
     path_to_vm: Optional[str] = None
     snapshot_name: str = "init_state"

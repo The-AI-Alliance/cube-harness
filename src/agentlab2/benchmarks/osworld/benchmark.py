@@ -20,7 +20,7 @@ from agentlab2.tools.computer import ComputerConfig
 logger = logging.getLogger(__name__)
 
 # Provider types supported by OSWorld
-ProviderType = Literal["vmware", "virtualbox", "docker", "aws"]
+ProviderType = Literal["vmware", "virtualbox", "docker", "aws", "azure", "gcp", "aliyun", "volcengine"]
 
 # AgentLab2 data directory for OSWorld
 AGENTLAB2_DIR = Path.home() / ".agentlab2"

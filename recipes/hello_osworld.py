@@ -76,11 +76,11 @@ def main(debug: bool):
         print(f"Output directory: {output_dir}")
         print(f"Provider: {tool_config.provider}")
         print(f"Domain: {benchmark.domain}")
-        print(f"VM will start, wait 60s, then agent can interact")
+        print("VM will start, wait 60s, then agent can interact")
         print("=" * 60 + "\n")
         run_sequentially(exp, debug_limit=2)
     else:
-        print(f"\nRunning OSWorld benchmark with Ray (4 CPUs)")
+        print("\nRunning OSWorld benchmark with Ray (4 CPUs)")
         print(f"Output directory: {output_dir}\n")
         run_with_ray(exp, n_cpus=4)
 
