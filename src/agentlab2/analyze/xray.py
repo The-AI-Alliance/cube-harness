@@ -193,19 +193,6 @@ class XRayState:
             return []
         return [i for i, ts in enumerate(self.current_trajectory.steps) if isinstance(ts.output, EnvironmentOutput)]
 
-    def get_filtered_trajectories(
-        self,
-        agent_key: str | None = None,
-        task_id: str | None = None,
-    ) -> list[Trajectory]:
-        """Return trajectories filtered by agent_key and/or task_id."""
-        result = self.trajectories
-        if agent_key is not None:
-            result = [t for t in result if t.metadata.get("agent_name", "unknown") == agent_key]
-        if task_id is not None:
-            result = [t for t in result if t.metadata.get("task_id", "unknown") == task_id]
-        return result
-
     def total_ui_steps(self) -> int:
         """Number of UI steps = number of EnvironmentOutputs in current trajectory."""
         return len(self._env_step_indices)
@@ -287,6 +274,9 @@ def if_active(tab_name: str, n_out: int = 1) -> Callable:
 
 
 _CSS = """
+html {
+    color-scheme: light only;
+}
 .compact-header {
     padding: 8px 16px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -353,6 +343,8 @@ th {
 }
 """
 
+_FORCE_LIGHT_JS = "() => { document.body.classList.remove('dark'); }"
+
 _SHORTCUT_JS = """
 <script>
 function shortcuts(e) {
@@ -381,7 +373,6 @@ document.addEventListener('keydown', shortcuts, false);
 # ---------------------------------------------------------------------------
 # HTML rendering helpers (tables + info panels)
 # ---------------------------------------------------------------------------
-
 
 
 def _render_goal_panel(text: str) -> str:
@@ -790,7 +781,7 @@ def run_xray(
     # Build the Gradio UI
     # ------------------------------------------------------------------
 
-    with gr.Blocks(theme=gr.themes.Soft(), css=_CSS, head=_SHORTCUT_JS) as demo:  # type: ignore[attr-defined]
+    with gr.Blocks(theme=gr.themes.Soft(), css=_CSS, head=_SHORTCUT_JS, js=_FORCE_LIGHT_JS) as demo:  # type: ignore[attr-defined]
         active_tab = gr.State(value="Screenshots")
         step_id = gr.State(value=StepId())
 
