@@ -62,6 +62,8 @@ class XRayState:
     _storage: FileStorage | None = field(default=None, repr=False)
     # Set to True once the background bulk-loading thread has finished
     _bg_loading_done: bool = field(default=True, repr=False)
+    # Agent name derived from experiment_config.json for backwards-compatibility backfill
+    _backfill_name: str | None = field(default=None, repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -71,12 +73,14 @@ class XRayState:
         stats (steps, tokens, cost) become available without requiring the user to click each seed.
 
         For backwards compatibility with trajectories that predate the agent_name metadata field,
-        reads experiment_config.json (if present) to derive the agent name and backfills it into
-        any stub that is missing the field.
+        reads experiment_config.json (if present) to derive the agent name and stores it as
+        _backfill_name so it is applied consistently to every trajectory loaded from disk.
         """
         self._storage = FileStorage(exp_dir)
         self.trajectories = self._storage.load_all_trajectory_metadata()
-        self._backfill_agent_name(exp_dir)
+        self._backfill_name = self._read_backfill_name(exp_dir)
+        for traj in self.trajectories:
+            self._maybe_backfill(traj)
         self.selected_agent_key = None
         self.selected_task_id = None
         self.current_trajectory = None
@@ -86,29 +90,27 @@ class XRayState:
         self._start_background_loading()
         return len(self.trajectories) > 0
 
-    def _backfill_agent_name(self, exp_dir: Path) -> None:
-        """Inject agent_name into stubs loaded from experiments that predate that metadata field.
+    def _read_backfill_name(self, exp_dir: Path) -> str | None:
+        """Read agent class name from experiment_config.json for backwards-compat backfill.
 
-        Reads experiment_config.json and extracts the agent class name from
-        agent_config._type (e.g. "agentlab2.agents.react.ReactAgentConfig" → "ReactAgentConfig").
-        Only fills in stubs where agent_name is not already present.
+        Returns the short class name (e.g. "ReactAgentConfig") or None if unavailable.
         """
         config_path = exp_dir / "experiment_config.json"
         if not config_path.exists():
-            return
+            return None
         try:
             with open(config_path) as f:
                 exp_cfg = json.load(f)
             agent_type = exp_cfg.get("agent_config", {}).get("_type", "")
-            # Take the last segment: "agentlab2.agents.react.ReactAgentConfig" → "ReactAgentConfig"
-            agent_name = agent_type.split(".")[-1] if agent_type else ""
-            if not agent_name:
-                return
-            for traj in self.trajectories:
-                if "agent_name" not in traj.metadata:
-                    traj.metadata["agent_name"] = agent_name
+            # "agentlab2.agents.react.ReactAgentConfig" → "ReactAgentConfig"
+            return agent_type.split(".")[-1] if agent_type else None
         except Exception:
-            pass  # malformed config — leave stubs as-is, viewer falls back to "unknown"
+            return None
+
+    def _maybe_backfill(self, traj: Trajectory) -> None:
+        """Inject _backfill_name into a trajectory's metadata if agent_name is absent."""
+        if self._backfill_name and "agent_name" not in traj.metadata:
+            traj.metadata["agent_name"] = self._backfill_name
 
     def _start_background_loading(self) -> None:
         """Spawn a daemon thread that loads all trajectory stubs into full trajectories.
@@ -128,23 +130,15 @@ class XRayState:
             return
 
         storage = self._storage  # capture to avoid closure over mutable self._storage
-        # Capture the backfill name now so freshly-loaded trajectories (which also lack
-        # agent_name on disk for old data) get the same treatment as the initial stubs.
-        backfill_name = next(
-            (t.metadata.get("agent_name") for t in self.trajectories if t.metadata.get("agent_name")),
-            None,
-        )
 
         def _load_all() -> None:
             for i, traj in enumerate(self.trajectories):
-                # Skip if already loaded (e.g. user clicked it first)
+                # Skip if already fully loaded (e.g. user clicked it first)
                 if traj.steps:
                     continue
                 try:
                     full = storage.load_trajectory(traj.id)
-                    # Backfill agent_name for old trajectories that don't have it on disk
-                    if backfill_name and "agent_name" not in full.metadata:
-                        full.metadata["agent_name"] = backfill_name
+                    self._maybe_backfill(full)
                     self.trajectories[i] = full
                     # Keep current_trajectory in sync if it was this stub
                     if self.current_trajectory is not None and self.current_trajectory.id == traj.id:
@@ -185,6 +179,7 @@ class XRayState:
         if not traj.steps and self._storage is not None:
             try:
                 traj = self._storage.load_trajectory(traj_id)
+                self._maybe_backfill(traj)
                 self.trajectories[idx] = traj
             except Exception:
                 pass  # keep stub; renders will show empty state gracefully
