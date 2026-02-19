@@ -70,6 +70,8 @@ class XRayState:
     # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
     _completed_ids: set[str] = field(default_factory=set, repr=False)
     _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
+    # Last rendered progress HTML — used to skip re-render when nothing changed
+    _last_progress_html: str = field(default="", repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -648,7 +650,12 @@ def run_xray(
         n_completed = len(state._completed_ids)
         n_total = len(state.trajectories)
         n_running = sum(1 for t in state.trajectories if t.end_time is None)
-        progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
+        new_progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
+        if new_progress_html != state._last_progress_html:
+            state._last_progress_html = new_progress_html
+            progress_html: str | type[gr.skip] = new_progress_html
+        else:
+            progress_html = gr.skip()
 
         still_active = not state._bg_loading_done or not state.is_experiment_complete()
         timer_update = gr.Timer(active=still_active)
