@@ -197,6 +197,50 @@ class FileStorage:
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
 
+    def load_trajectory_metadata(self, trajectory_id: str) -> Trajectory:
+        """Load only metadata (no steps) for fast experiment listing.
+
+        Returns a Trajectory stub with steps=[] — significantly faster than
+        load_trajectory() since it skips the JSONL file and all LLM call refs.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
+
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
+
+        with open(metadata_path) as f:
+            trajectory_data = json.load(f)
+
+        # TODO: remove legacy format support
+        if "metadata" not in trajectory_data:
+            trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
+
+        trajectory_data["steps"] = []
+        return Trajectory.model_validate(trajectory_data)
+
+    def load_all_trajectory_metadata(self) -> list[Trajectory]:
+        """Load metadata stubs for all trajectories (no steps).
+
+        Much faster than load_all_trajectories() — only reads *.metadata.json files.
+        Each returned Trajectory has steps=[] until select_trajectory() loads it on demand.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return []
+
+        trajectories = []
+        for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
+            trajectory_id = metadata_file.stem.replace(".metadata", "")
+            try:
+                trajectories.append(self.load_trajectory_metadata(trajectory_id))
+            except Exception as e:
+                logger.error(f"Failed to load trajectory metadata {trajectory_id}: {e}")
+
+        return trajectories
+
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.
 
