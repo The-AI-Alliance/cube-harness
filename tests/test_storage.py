@@ -728,3 +728,83 @@ class TestFileStorageOverwrite:
         # Should raise without explicit allow_overwrite=True
         with pytest.raises(FileExistsError):
             storage2.save_trajectory(traj)
+
+
+class TestLoadTrajectoryMetadata:
+    """Tests for the fast metadata-only loading methods."""
+
+    def test_load_metadata_returns_trajectory_with_no_steps(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t1", metadata={"agent_name": "agent_a", "task_id": "task_1"})
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=Observation.from_text("obs"))))
+        storage.save_trajectory(traj)
+
+        loaded = storage.load_trajectory_metadata("t1")
+
+        assert loaded.id == "t1"
+        assert loaded.metadata == {"agent_name": "agent_a", "task_id": "task_1"}
+        assert loaded.steps == []
+
+    def test_load_metadata_preserves_timing_and_reward_info(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t2", start_time=0.0, end_time=5.0, reward_info={"reward": 1.0})
+        storage.save_trajectory(traj)
+
+        loaded = storage.load_trajectory_metadata("t2")
+
+        assert loaded.start_time == 0.0
+        assert loaded.end_time == 5.0
+        assert loaded.reward_info == {"reward": 1.0}
+
+    def test_load_metadata_raises_for_missing_trajectory(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        with pytest.raises(FileNotFoundError, match="Trajectory metadata not found"):
+            storage.load_trajectory_metadata("nonexistent")
+
+    def test_load_all_metadata_returns_stubs_with_empty_steps(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        for i in range(3):
+            traj = Trajectory(id=f"traj_{i}", metadata={"task_id": f"task_{i}"})
+            traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=Observation.from_text("obs"))))
+            storage.save_trajectory(traj)
+
+        stubs = storage.load_all_trajectory_metadata()
+
+        assert len(stubs) == 3
+        assert all(t.steps == [] for t in stubs)
+        ids = {t.id for t in stubs}
+        assert ids == {"traj_0", "traj_1", "traj_2"}
+
+    def test_load_all_metadata_empty_directory(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        assert storage.load_all_trajectory_metadata() == []
+
+    def test_load_all_metadata_skips_archived_files(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t1", metadata={})
+        storage.save_trajectory(traj)
+        # Save again with overwrite to create an archived file
+        storage2 = FileStorage(tmp_dir)
+        storage2.save_trajectory(traj, allow_overwrite=True)
+
+        stubs = storage.load_all_trajectory_metadata()
+
+        # Only the current (non-archived) trajectory should be returned
+        assert len(stubs) == 1
+        assert stubs[0].id == "t1"
+
+    def test_metadata_stub_can_be_upgraded_to_full_trajectory(self, tmp_dir: Path) -> None:
+        """Full roundtrip: load stub, then load full trajectory by ID."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t1", metadata={"task_id": "task_1"})
+        obs = Observation.from_text("Goal: click the button")
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=1.0, done=True)))
+        storage.save_trajectory(traj)
+
+        stub = storage.load_trajectory_metadata("t1")
+        assert stub.steps == []
+
+        full = storage.load_trajectory("t1")
+        assert len(full.steps) == 1
+        assert isinstance(full.steps[0].output, EnvironmentOutput)
+        assert full.steps[0].output.reward == 1.0

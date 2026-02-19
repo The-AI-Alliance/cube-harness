@@ -127,12 +127,23 @@ class ReactAgent(Agent):
             short_tokens = self.token_counter(messages=self.history)
             logger.info(f"Compacted history from {tokens} to {short_tokens} tokens.")
 
+    def _get_role(self, msg: dict | Message) -> str:
+        if isinstance(msg, dict):
+            return msg.get("role", "")
+        return getattr(msg, "role", "")
+
     def compact_history(self):
         """
         Compact the history by summarizing the first half of messages with the LLM.
         Updates self.history in place by replacing the first half with the summary message.
         """
         midpoint = len(self.history) // 2
+        # Advance past any tool messages to avoid splitting tool_call/tool_result pairs
+        while midpoint < len(self.history) and self._get_role(self.history[midpoint]) == "tool":
+            midpoint += 1
+        if midpoint >= len(self.history):
+            logger.warning("compact_history: could not find a clean split point, skipping compaction.")
+            return
         first_half = self.history[:midpoint]
         second_half = self.history[midpoint:]
         messages = [
