@@ -47,14 +47,10 @@ extend-select = ["I"] # sort imports
 
 [project.scripts]
 al2-viewer = "agentlab2.viewer:main"
-al2-xray = "agentlab2.analyze.xray:main"
 
 [project.optional-dependencies]
 osworld = [
     "desktop-env>=1.0.0",
-]
-workarena = [
-    "browsergym-workarena>=0.5.2",
 ]
 
 [dependency-groups]
@@ -72,7 +68,6 @@ markers = [
 ]
 
 [tool.uv]
-constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 override-dependencies = ["gymnasium==0.29.0"]
 
 [tool.setuptools.packages.find]
