@@ -8,7 +8,6 @@ Mimics the UI of the original agentlab viewer but works with the new data struct
 import argparse
 import json
 from dataclasses import dataclass, field
-from os.path import expanduser
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +15,11 @@ import gradio as gr
 from PIL import Image
 
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
+from agentlab2.llm import LLMCall
 from agentlab2.storage import FileStorage
+
+# Standard experiment output base; viewer loads from here by default
+from agentlab2 import EXP_DIR
 
 
 @dataclass
@@ -35,6 +38,45 @@ class StepId:
     step: int = 0
 
 
+# Display unit: either obs0 only (env_idx,) or pair (agent_idx, env_idx or None)
+DisplayUnit = tuple[int, ...]
+
+
+def compute_display_units(trajectory: Trajectory) -> list[DisplayUnit]:
+    """
+    Build display units: [obs0, (step1+obs1), (step2+obs2), ...].
+    - Unit 0: first environment observation only.
+    - Unit 1..n: agent step + following env step as one pair.
+    """
+    units: list[DisplayUnit] = []
+    steps = trajectory.steps
+    i = 0
+    # Find first env step (obs0)
+    while i < len(steps):
+        if isinstance(steps[i].output, EnvironmentOutput):
+            units.append((i,))
+            i += 1
+            break
+        i += 1
+    # Pair agent + env for the rest
+    while i < len(steps):
+        if isinstance(steps[i].output, AgentOutput):
+            agent_idx = i
+            i += 1
+            env_idx: int | None = None
+            if i < len(steps) and isinstance(steps[i].output, EnvironmentOutput):
+                env_idx = i
+                i += 1
+            if env_idx is not None:
+                units.append((agent_idx, env_idx))
+            else:
+                # Trailing agent with no following env: show as agent-only unit
+                units.append((agent_idx,))
+        else:
+            i += 1
+    return units
+
+
 @dataclass
 class ViewerState:
     """State for the viewer application."""
@@ -43,7 +85,8 @@ class ViewerState:
     exp_dirs: list[Path] = field(default_factory=list)
     trajectories: dict[str, Trajectory] = field(default_factory=dict)
     current_trajectory: Trajectory | None = None
-    step: int = 0
+    step: int = 0  # display index (0 = obs0, 1 = first pair, ...)
+    display_units: list[DisplayUnit] = field(default_factory=list)
 
     def load_experiment(self, exp_dir: Path) -> dict[str, Any]:
         """Load all trajectories from an experiment directory."""
@@ -63,10 +106,46 @@ class ViewerState:
         return {"loaded": len(self.trajectories)}
 
     def select_trajectory(self, traj_id: str) -> None:
-        """Select a trajectory by ID."""
+        """Select a trajectory by ID and compute display units."""
         if traj_id in self.trajectories:
             self.current_trajectory = self.trajectories[traj_id]
             self.step = 0
+            self.display_units = (
+                compute_display_units(self.current_trajectory) if self.current_trajectory else []
+            )
+
+    def num_display_units(self) -> int:
+        """Number of display units (obs0 + pairs)."""
+        return len(self.display_units)
+
+    def get_env_step_index(self, display_index: int) -> int | None:
+        """Raw step index of the env (observation) for this display unit, or None."""
+        if not self.current_trajectory or not self.display_units or display_index < 0 or display_index >= len(self.display_units):
+            return None
+        unit = self.display_units[display_index]
+        if len(unit) == 1:
+            # obs0 or agent-only: single index is env only for obs0
+            idx = unit[0]
+            if isinstance(self.current_trajectory.steps[idx].output, EnvironmentOutput):
+                return idx
+            return None
+        if len(unit) >= 2:
+            return unit[1]  # pair: (agent_idx, env_idx)
+        return None
+
+    def get_agent_step_index(self, display_index: int) -> int | None:
+        """Raw step index of the agent step for this display unit, or None (obs0 has no agent)."""
+        if not self.display_units or display_index < 0 or display_index >= len(self.display_units):
+            return None
+        unit = self.display_units[display_index]
+        if len(unit) == 1 and self.current_trajectory:
+            idx = unit[0]
+            if isinstance(self.current_trajectory.steps[idx].output, AgentOutput):
+                return idx  # agent-only unit
+            return None  # obs0
+        if len(unit) >= 2:
+            return unit[0]  # pair: agent first
+        return None
 
     def get_env_steps(self) -> list[tuple[int, EnvironmentOutput]]:
         """Get all environment output steps with their indices."""
@@ -89,22 +168,36 @@ class ViewerState:
         ]
 
     def get_step_at(self, idx: int) -> EnvironmentOutput | AgentOutput | None:
-        """Get step at specific index."""
+        """Get step output at raw step index."""
         if not self.current_trajectory or idx < 0 or idx >= len(self.current_trajectory.steps):
             return None
         return self.current_trajectory.steps[idx].output
 
     def get_trajectory_step_at(self, idx: int) -> TrajectoryStep | None:
-        """Get full TrajectoryStep (with timing info) at specific index."""
+        """Get full TrajectoryStep (with timing info) at raw step index."""
         if not self.current_trajectory or idx < 0 or idx >= len(self.current_trajectory.steps):
             return None
         return self.current_trajectory.steps[idx]
 
     def total_steps(self) -> int:
-        """Total number of steps in current trajectory."""
-        if not self.current_trajectory:
-            return 0
-        return len(self.current_trajectory.steps)
+        """Total number of display units (obs0 + pairs)."""
+        return self.num_display_units()
+
+    def get_current_env_output(self) -> EnvironmentOutput | None:
+        """Get the environment output for the current display unit (for screenshot/obs)."""
+        raw = self.get_env_step_index(self.step)
+        if raw is None:
+            return None
+        out = self.get_step_at(raw)
+        return out if isinstance(out, EnvironmentOutput) else None
+
+    def get_current_agent_output(self) -> AgentOutput | None:
+        """Get the agent output for the current display unit, if any."""
+        raw = self.get_agent_step_index(self.step)
+        if raw is None:
+            return None
+        out = self.get_step_at(raw)
+        return out if isinstance(out, AgentOutput) else None
 
 
 # CSS styling
@@ -242,6 +335,72 @@ def format_duration(seconds: float) -> str:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         return f"{hours}h {minutes}m"
+
+
+def _message_content_to_markdown(content: Any) -> str:
+    """
+    Convert a single message's content to Markdown. Generic for various types:
+    - str: use as-is (may contain markdown).
+    - list (e.g. OpenAI multimodal): [{"type": "text", "text": "..."}, {"type": "image_url", ...}]
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                if item.get("type") == "text":
+                    parts.append((item.get("text") or "").strip())
+                elif item.get("type") == "image_url":
+                    parts.append("*[Image]*")
+                else:
+                    parts.append(f"*[{item.get('type', 'unknown')}]*")
+            else:
+                parts.append(str(item))
+        return "\n\n".join(p for p in parts if p)
+    return str(content)
+
+
+def _get_message_role(msg: dict | Any) -> str:
+    """Get role from a message (dict or object)."""
+    if isinstance(msg, dict):
+        return (msg.get("role") or "unknown").capitalize()
+    return getattr(msg, "role", "unknown").capitalize()
+
+
+def _get_message_content(msg: dict | Any) -> Any:
+    """Get content from a message (dict or object)."""
+    if isinstance(msg, dict):
+        return msg.get("content")
+    return getattr(msg, "content", None)
+
+
+def llm_conversation_to_markdown(llm_call: LLMCall) -> str:
+    """
+    Render LLM conversation (prompt messages + model output) as human-readable Markdown.
+    Generic enough to handle various message/observation types (text, multimodal, etc.).
+    """
+    sections: list[str] = []
+    prompt = llm_call.prompt
+    # Prompt messages
+    for i, msg in enumerate(prompt.messages):
+        role = _get_message_role(msg)
+        content = _get_message_content(msg)
+        body = _message_content_to_markdown(content)
+        if not body and isinstance(msg, dict) and msg.get("tool_calls"):
+            body = "*[Tool calls]*"
+        sections.append(f"### {role}\n\n{body or '(empty)'}\n")
+    # Model output (assistant response)
+    out = llm_call.output
+    out_role = _get_message_role(out)
+    out_content = _get_message_content(out)
+    out_body = _message_content_to_markdown(out_content)
+    if not out_body and (isinstance(out, dict) and out.get("tool_calls") or getattr(out, "tool_calls", None)):
+        out_body = "*[Tool calls]*"
+    sections.append(f"### {out_role}\n\n{out_body or '(empty)'}\n")
+    return "\n---\n\n".join(sections)
 
 
 def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, share: bool = False) -> None:
@@ -449,7 +608,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         return StepId(trajectory_id=traj_id, step=0)
 
     def navigate_prev(step_id: StepId) -> StepId:
-        """Navigate to previous step."""
+        """Navigate to previous display unit."""
         if step_id and step_id.step is not None:
             step = max(0, step_id.step - 1)
             state.step = step
@@ -457,51 +616,58 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         return step_id
 
     def navigate_next(step_id: StepId) -> StepId:
-        """Navigate to next step."""
+        """Navigate to next display unit."""
         if step_id and step_id.step is not None and state.current_trajectory:
-            step = min(state.total_steps() - 1, step_id.step + 1)
+            n = state.total_steps()
+            step = max(0, min(n - 1, step_id.step + 1)) if n > 0 else 0
             state.step = step
             return StepId(trajectory_id=step_id.trajectory_id, step=step)
         return step_id
 
     def update_screenshot() -> Image.Image | None:
-        """Update screenshot display for current step."""
-        step = state.get_step_at(state.step)
-        img = get_screenshot_from_step(step)
-
-        # If current step is AgentOutput, try to get screenshot from previous env step
-        if img is None and state.step > 0:
-            prev_step = state.get_step_at(state.step - 1)
-            img = get_screenshot_from_step(prev_step)
-
-        return img
+        """Screenshot for current display unit (from env/observation)."""
+        env_out = state.get_current_env_output()
+        return get_screenshot_from_step(env_out) if env_out else None
 
     def update_llm_tools() -> str:
-        """Get tools configuration from LLM calls."""
-        step = state.get_step_at(state.step)
-
-        if isinstance(step, AgentOutput) and step.llm_calls:
+        """Get tools configuration from LLM calls (agent step of current unit)."""
+        step = state.get_current_agent_output()
+        if step and step.llm_calls:
             llm_call = step.llm_calls[0]
             if llm_call.prompt.tools:
                 return json.dumps(llm_call.prompt.tools, indent=2)
         return "No tools in current step"
 
     def update_raw_json() -> str:
-        """Get raw JSON of current step."""
-        step = state.get_step_at(state.step)
+        """Get raw JSON of current unit (agent if pair, else env)."""
+        agent_out = state.get_current_agent_output()
+        env_out = state.get_current_env_output()
+        step = agent_out if agent_out else env_out
         if step:
             return step.model_dump_json(indent=2)
         return "No step selected"
 
     def update_llm_calls() -> str:
-        """Get LLM calls from current step."""
-        step = state.get_step_at(state.step)
+        """Get LLM calls from current unit's agent step."""
+        step = state.get_current_agent_output()
 
-        if isinstance(step, AgentOutput) and step.llm_calls:
+        if step and step.llm_calls:
             # Serialize all LLM calls
             calls_data = [call.model_dump() for call in step.llm_calls]
             return json.dumps(calls_data, indent=2, default=str)
         return "No LLM calls in current step"
+
+    def update_llm_conversation_md() -> str:
+        """Human-readable Markdown view of the LLM conversation (prompt + response)."""
+        step = state.get_current_agent_output()
+        if not step or not step.llm_calls:
+            return "No LLM conversation for this step."
+        parts: list[str] = []
+        for i, call in enumerate(step.llm_calls):
+            if i > 0:
+                parts.append("\n\n---\n\n**Next call**\n\n")
+            parts.append(llm_conversation_to_markdown(call))
+        return "".join(parts)
 
     def get_compact_header_info() -> str:
         """Get compact header info string."""
@@ -524,113 +690,102 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         return f"**{task_id}** │ {reward_emoji} Reward: {final_reward:.2f}"
 
     def get_step_counter() -> str:
-        """Get current step counter string."""
+        """Get current display unit counter (e.g. Step 1/5)."""
         if not state.current_trajectory:
             return "Step 0/0"
-        current_step = state.step + 1
         total = state.total_steps()
-        return f"Step {current_step}/{total}"
+        if total == 0:
+            return "Step 0/0"
+        current = state.step + 1
+        return f"Step {current}/{total}"
 
-    def get_step_details() -> str:
-        """Get context-aware step details based on step type."""
-        step = state.get_step_at(state.step)
-        traj_step = state.get_trajectory_step_at(state.step)
-
-        if step is None:
-            return "No step selected"
-
-        # Get step duration if available
+    def _format_env_output_md(step: EnvironmentOutput, traj_step: TrajectoryStep | None) -> str:
+        """Format environment output as markdown (for observation/left column)."""
         duration_info = ""
         if traj_step and traj_step.start_time is not None and traj_step.end_time is not None:
-            duration = traj_step.end_time - traj_step.start_time
-            duration_info = f" │ ⏱️ {format_duration(duration)}"
+            duration_info = f" │ ⏱️ {format_duration(traj_step.end_time - traj_step.start_time)}"
+        sections = [f"## 🌍 Observation{duration_info}\n"]
+        if step.done:
+            status = "✅ **Success**" if step.reward > 0 else "❌ **Failed**"
+            sections.append(f"**Status:** {status} │ **Reward:** {step.reward:.2f}\n")
+        else:
+            sections.append(f"**Reward:** {step.reward:.2f} │ **Done:** No\n")
+        for content in step.obs.contents:
+            if isinstance(content.data, str):
+                name = content.name or "Content"
+                data = content.data[:2000] + "..." if len(content.data) > 2000 else content.data
+                sections.append(f"### {name}\n```\n{data}\n```\n")
+            elif isinstance(content.data, Image.Image):
+                sections.append(f"**{content.name or 'Screenshot'}:** {content.data.size[0]}x{content.data.size[1]}\n")
+            elif isinstance(content.data, (dict, list)):
+                name = content.name or "Data"
+                data_str = json.dumps(content.data, indent=2)
+                data_str = data_str[:1000] + "..." if len(data_str) > 1000 else data_str
+                sections.append(f"### {name}\n```json\n{data_str}\n```\n")
+        if step.info.get("error"):
+            sections.append(f"\n### ⚠️ Error\n```\n{step.info['error']}\n```\n")
+        return "\n".join(sections)
 
-        if isinstance(step, EnvironmentOutput):
-            # Environment step: show observation details
-            sections = []
-            sections.append(f"## 🌍 Environment Output{duration_info}\n")
+    def _format_agent_output_md(step: AgentOutput, traj_step: TrajectoryStep | None) -> str:
+        """Format agent output as markdown (for right column)."""
+        duration_info = ""
+        if traj_step and traj_step.start_time is not None and traj_step.end_time is not None:
+            duration_info = f" │ ⏱️ {format_duration(traj_step.end_time - traj_step.start_time)}"
+        sections = [f"## 🤖 Agent Output{duration_info}\n"]
+        if step.llm_calls:
+            llm_call = step.llm_calls[0]
+            usage = llm_call.usage
+            if usage and usage.prompt_tokens > 0:
+                token_parts = [f"📊 **Tokens:** prompt: {usage.prompt_tokens:,}", f"completion: {usage.completion_tokens:,}"]
+                if usage.cached_tokens > 0:
+                    cache_pct = (usage.cached_tokens / usage.prompt_tokens * 100) if usage.prompt_tokens > 0 else 0
+                    token_parts.append(f"cached: {usage.cached_tokens:,} ({cache_pct:.0f}%)")
+                if usage.cache_creation_tokens > 0:
+                    token_parts.append(f"cache_created: {usage.cache_creation_tokens:,}")
+                if usage.cost > 0:
+                    token_parts.append(f"💰 **${usage.cost:.4f}**")
+                sections.append(" │ ".join(token_parts) + "\n")
+        if step.actions:
+            sections.append("### Actions\n")
+            for i, action in enumerate(step.actions):
+                args_str = json.dumps(action.arguments, indent=2)
+                sections.append(f"**{i + 1}. {action.name}**\n```json\n{args_str}\n```\n")
+        else:
+            sections.append("*No actions taken*\n")
+        if step.llm_calls:
+            llm_call = step.llm_calls[0]
+            if llm_call.output and hasattr(llm_call.output, "content") and llm_call.output.content:
+                reasoning = llm_call.output.content[:1500] + "..." if len(llm_call.output.content) > 1500 else llm_call.output.content
+                sections.append(f"### Agent Reasoning\n{reasoning}\n")
+        return "\n".join(sections)
 
-            # Status
-            if step.done:
-                status = "✅ **Success**" if step.reward > 0 else "❌ **Failed**"
-                sections.append(f"**Status:** {status} │ **Reward:** {step.reward:.2f}\n")
-            else:
-                sections.append(f"**Reward:** {step.reward:.2f} │ **Done:** No\n")
+    def get_observation_details() -> str:
+        """Left column: observation content for current display unit (env/screenshot context)."""
+        env_out = state.get_current_env_output()
+        if not env_out:
+            return "—"
+        raw_idx = state.get_env_step_index(state.step)
+        traj_step = state.get_trajectory_step_at(raw_idx) if raw_idx is not None else None
+        return _format_env_output_md(env_out, traj_step)
 
-            # Observation contents
-            for content in step.obs.contents:
-                if isinstance(content.data, str):
-                    name = content.name or "Content"
-                    # Truncate long content
-                    data = content.data[:2000] + "..." if len(content.data) > 2000 else content.data
-                    sections.append(f"### {name}\n```\n{data}\n```\n")
-                elif isinstance(content.data, Image.Image):
-                    sections.append(
-                        f"**{content.name or 'Screenshot'}:** {content.data.size[0]}x{content.data.size[1]}\n"
-                    )
-                elif isinstance(content.data, (dict, list)):
-                    name = content.name or "Data"
-                    data_str = json.dumps(content.data, indent=2)
-                    data_str = data_str[:1000] + "..." if len(data_str) > 1000 else data_str
-                    sections.append(f"### {name}\n```json\n{data_str}\n```\n")
-
-            # Error from info
-            if step.info.get("error"):
-                sections.append(f"\n### ⚠️ Error\n```\n{step.info['error']}\n```\n")
-
-            return "\n".join(sections)
-
-        elif isinstance(step, AgentOutput):
-            # Agent step: show actions and reasoning
-            sections = []
-            sections.append(f"## 🤖 Agent Output{duration_info}\n")
-
-            # Token usage (if available)
-            if step.llm_calls:
-                llm_call = step.llm_calls[0]
-                usage = llm_call.usage
-                if usage and usage.prompt_tokens > 0:
-                    token_parts = [f"📊 **Tokens:** prompt: {usage.prompt_tokens:,}"]
-                    token_parts.append(f"completion: {usage.completion_tokens:,}")
-                    if usage.cached_tokens > 0:
-                        cache_pct = (usage.cached_tokens / usage.prompt_tokens * 100) if usage.prompt_tokens > 0 else 0
-                        token_parts.append(f"cached: {usage.cached_tokens:,} ({cache_pct:.0f}%)")
-                    if usage.cache_creation_tokens > 0:
-                        token_parts.append(f"cache_created: {usage.cache_creation_tokens:,}")
-                    if usage.cost > 0:
-                        token_parts.append(f"💰 **${usage.cost:.4f}**")
-                    sections.append(" │ ".join(token_parts) + "\n")
-
-            # Actions
-            if step.actions:
-                sections.append("### Actions\n")
-                for i, action in enumerate(step.actions):
-                    args_str = json.dumps(action.arguments, indent=2)
-                    sections.append(f"**{i + 1}. {action.name}**\n```json\n{args_str}\n```\n")
-            else:
-                sections.append("*No actions taken*\n")
-
-            # LLM reasoning (if available)
-            if step.llm_calls:
-                llm_call = step.llm_calls[0]
-                if llm_call.output:
-                    msg = llm_call.output
-                    if hasattr(msg, "content") and msg.content:
-                        reasoning = msg.content[:1500] + "..." if len(msg.content) > 1500 else msg.content
-                        sections.append(f"### Agent Reasoning\n{reasoning}\n")
-
-            return "\n".join(sections)
-
-        return "Unknown step type"
+    def get_step_details() -> str:
+        """Right column: agent content for current display unit; or placeholder for obs0."""
+        agent_out = state.get_current_agent_output()
+        if not agent_out:
+            return "— *Initial observation (no agent action yet)*"
+        raw_idx = state.get_agent_step_index(state.step)
+        traj_step = state.get_trajectory_step_at(raw_idx) if raw_idx is not None else None
+        return _format_agent_output_md(agent_out, traj_step)
 
     def get_prev_screenshot() -> Image.Image | None:
-        """Get the previous environment screenshot."""
-        # Find previous EnvironmentOutput with screenshot
-        for i in range(state.step - 1, -1, -1):
-            step = state.get_step_at(i)
-            if isinstance(step, EnvironmentOutput):
-                return get_screenshot_from_step(step)
-        return None
+        """Get the previous display unit's env screenshot."""
+        if state.step <= 0:
+            return None
+        prev_env_idx = state.get_env_step_index(state.step - 1)
+        if prev_env_idx is None:
+            return None
+        step = state.get_step_at(prev_env_idx)
+        return get_screenshot_from_step(step) if isinstance(step, EnvironmentOutput) else None
 
     def update_trajectory_stats() -> str:
         """Update trajectory statistics as compact markdown."""
@@ -685,70 +840,66 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         return stats
 
     def generate_timeline_html() -> str:
-        """Generate an HTML timeline visualization of the trajectory."""
-        if not state.current_trajectory or not state.current_trajectory.steps:
+        """Generate timeline: one segment per display unit (obs0, step1+obs1, step2+obs2, ...)."""
+        if not state.current_trajectory or not state.display_units:
             return "<div style='padding: 10px; color: #666;'>No trajectory loaded</div>"
 
-        # Colors matching the original
-        env_color = "#a1c9f4"  # Light blue for env
-        agent_color = "#8de5a1"  # Light green for agent
-        current_highlight = "#ffd700"  # Gold for current step
+        env_color = "#a1c9f4"
+        pair_color = "#8de5a1"  # green for agent+obs pair
+        current_highlight = "#ffd700"
+        traj = state.current_trajectory
 
-        # Calculate durations for all steps
-        durations = []
-        for traj_step in state.current_trajectory.steps:
-            if traj_step.start_time is not None and traj_step.end_time is not None:
-                durations.append(traj_step.end_time - traj_step.start_time)
-            else:
-                durations.append(None)
+        # Duration per display unit (sum of raw step durations in the unit)
+        unit_durations: list[float | None] = []
+        for unit in state.display_units:
+            total = 0.0
+            has_any = False
+            for raw_idx in unit:
+                ts = state.get_trajectory_step_at(raw_idx)
+                if ts and ts.start_time is not None and ts.end_time is not None:
+                    total += ts.end_time - ts.start_time
+                    has_any = True
+            unit_durations.append(total if has_any else None)
 
-        # Calculate width scaling based on durations
-        valid_durations = [d for d in durations if d is not None and d > 0]
-        if valid_durations:
-            max_duration = max(valid_durations)
-            min_duration = min(valid_durations)
-        else:
-            max_duration = min_duration = 1.0
-
-        # Width range
-        min_width = 12
-        max_width = 240
+        valid = [d for d in unit_durations if d is not None and d > 0]
+        max_d, min_d = (max(valid), min(valid)) if valid else (1.0, 1.0)
+        min_width, max_width = 12, 240
 
         steps_html = []
-        for i, traj_step in enumerate(state.current_trajectory.steps):
-            step = traj_step.output
+        for i, unit in enumerate(state.display_units):
             is_current = i == state.step
-            is_env = isinstance(step, EnvironmentOutput)
+            is_obs0 = len(unit) == 1 and isinstance(traj.steps[unit[0]].output, EnvironmentOutput)
+            if is_obs0:
+                env_step = traj.steps[unit[0]].output
+                is_env = isinstance(env_step, EnvironmentOutput)
+            else:
+                is_env = False
 
-            # Calculate width based on duration
-            duration = durations[i]
-            if duration is not None and max_duration > min_duration:
-                # Normalize to 0-1 range, then scale to width range
-                normalized = (duration - min_duration) / (max_duration - min_duration)
-                width = int(min_width + normalized * (max_width - min_width))
+            duration = unit_durations[i]
+            if duration is not None and max_d > min_d:
+                norm = (duration - min_d) / (max_d - min_d)
+                width = int(min_width + norm * (max_width - min_width))
             else:
                 width = min_width
 
-            # Base styling
-            bg_color = env_color if is_env else agent_color
+            bg_color = env_color if is_obs0 else pair_color
             border = f"3px solid {current_highlight}" if is_current else "1px solid #ccc"
             box_shadow = "0 0 8px rgba(255, 215, 0, 0.8)" if is_current else "none"
-
-            # Done state border
             done_border = ""
-            if is_env and step.done:
-                done_color = "#32cd32" if step.reward > 0 else "#dc3545"
+            if is_obs0 and is_env and env_step.done:
+                done_color = "#32cd32" if env_step.reward > 0 else "#dc3545"
                 done_border = f"border-bottom: 4px solid {done_color};"
+            elif not is_obs0 and len(unit) >= 2:
+                env_step = traj.steps[unit[1]].output
+                if isinstance(env_step, EnvironmentOutput) and env_step.done:
+                    done_color = "#32cd32" if env_step.reward > 0 else "#dc3545"
+                    done_border = f"border-bottom: 4px solid {done_color};"
 
-            step_num = i + 1  # 1-based display
-            tooltip = f"Step {step_num}: {'Environment' if is_env else 'Agent'}"
+            step_num = i + 1
+            tooltip = "Initial observation" if is_obs0 else f"Step {step_num} (action + observation)"
             if duration is not None:
                 tooltip += f" ({format_duration(duration)})"
-            if is_env and step.done:
-                tooltip += f" - Done, reward: {step.reward:.2f}"
 
-            # onclick handler uses 0-based index internally
-            # Use native setter to properly trigger framework change detection, then dispatch events
             onclick_handler = f"const inp = document.querySelector('#timeline_click_input input'); if(inp) {{ const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; nativeSetter.call(inp, {i}); inp.dispatchEvent(new Event('input', {{ bubbles: true }})); inp.dispatchEvent(new Event('change', {{ bubbles: true }})); }}"
 
             step_html = f"""
@@ -774,16 +925,15 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             </div>"""
             steps_html.append(step_html)
 
-        # Legend
         legend_html = f"""
         <div style="display: flex; gap: 15px; margin-bottom: 8px; font-size: 12px; color: #666;">
             <div style="display: flex; align-items: center; gap: 4px;">
                 <div style="width: 16px; height: 16px; background: {env_color}; border-radius: 3px;"></div>
-                <span>Environment</span>
+                <span>Initial obs</span>
             </div>
             <div style="display: flex; align-items: center; gap: 4px;">
-                <div style="width: 16px; height: 16px; background: {agent_color}; border-radius: 3px;"></div>
-                <span>Agent</span>
+                <div style="width: 16px; height: 16px; background: {pair_color}; border-radius: 3px;"></div>
+                <span>Action + Observation</span>
             </div>
             <div style="display: flex; align-items: center; gap: 4px;">
                 <div style="width: 16px; height: 16px; border: 2px solid {current_highlight}; border-radius: 3px;"></div>
@@ -818,11 +968,10 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             </div>
         </div>
         """
-
         return timeline_html
 
     def handle_timeline_click(clicked_step: int, traj_id: TrajectoryId) -> StepId:
-        """Handle click on timeline step."""
+        """Handle click on timeline (clicked_step is display index)."""
         if clicked_step is not None and state.current_trajectory:
             clicked_step = int(clicked_step)
             clicked_step = max(0, min(clicked_step, state.total_steps() - 1))
@@ -844,8 +993,10 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
 1. **Select your experiment directory** from the dropdown.
 2. **Select a trajectory** from the table to view its steps.
-3. **Navigate steps** using the Previous/Next buttons or Ctrl/Cmd + Arrow keys.
-4. **View different data** by selecting tabs below.
+3. The **timeline** shows display units: the first segment is the initial observation (obs0); each following segment is an **action + observation** pair (agent step + resulting env step).
+4. **Left column** shows the observation (screenshot + observation text). **Right column** shows the agent output (actions + LLM reasoning) for the selected unit.
+5. **Navigate** using the Previous/Next buttons or Ctrl/Cmd + Arrow keys.
+6. **Debug tabs** below show raw JSON, LLM calls, and tools for the current unit.
 """
             )
 
@@ -892,9 +1043,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         with gr.Row(visible=True, elem_id="timeline_click_input"):
             timeline_click_input = gr.Number(show_label=False, container=False)
 
-        # Main two-column view
+        # Main two-column view: Left = observation (screenshot + obs text), Right = agent (actions + LLM)
         with gr.Row():
-            # Left column: Screenshots
+            # Left column: Observation (screenshot + observation text)
             with gr.Column(scale=1):
                 screenshot = gr.Image(
                     label="Current Screenshot",
@@ -902,6 +1053,10 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                     interactive=False,
                     show_download_button=False,
                     height=500,
+                )
+                observation_details = gr.Markdown(
+                    value="",
+                    elem_classes="step-details",
                 )
                 with gr.Accordion("📷 Previous Screenshot", open=False):
                     prev_screenshot = gr.Image(
@@ -911,7 +1066,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                         height=400,
                     )
 
-            # Right column: Step details
+            # Right column: Agent (actions + LLM reasoning)
             with gr.Column(scale=1):
                 step_details = gr.Markdown(
                     value="Select a trajectory to view step details",
@@ -921,6 +1076,11 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         # Debug section (collapsed)
         with gr.Accordion("🔧 Debug / Raw Data", open=False):
             with gr.Tabs():
+                with gr.Tab("Conversation"):
+                    llm_conversation_md = gr.Markdown(
+                        value="No LLM conversation for this step.",
+                        elem_classes="step-details",
+                    )
                 with gr.Tab("Raw JSON"):
                     raw_json = gr.Code(language="json", show_label=False)
                 with gr.Tab("LLM Calls"):
@@ -956,15 +1116,17 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         prev_btn.click(navigate_prev, inputs=[step_id], outputs=[step_id])
         next_btn.click(navigate_next, inputs=[step_id], outputs=[step_id])
 
-        # Step change updates - new simplified handlers
+        # Step change updates
         step_id.change(fn=get_compact_header_info, outputs=header_info)
         step_id.change(fn=get_step_counter, outputs=step_counter)
         step_id.change(fn=generate_timeline_html, outputs=timeline_html)
         step_id.change(fn=update_screenshot, outputs=screenshot)
+        step_id.change(fn=get_observation_details, outputs=observation_details)
         step_id.change(fn=get_prev_screenshot, outputs=prev_screenshot)
         step_id.change(fn=get_step_details, outputs=step_details)
         step_id.change(fn=update_trajectory_stats, outputs=stats_display)
         step_id.change(fn=update_raw_json, outputs=raw_json)
+        step_id.change(fn=update_llm_conversation_md, outputs=llm_conversation_md)
         step_id.change(fn=update_llm_calls, outputs=llm_calls)
         step_id.change(fn=update_llm_tools, outputs=llm_tools)
 
@@ -977,13 +1139,12 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
 def main():
     """Main entry point for the viewer."""
-    results_dir = expanduser("~/agentlab_results/al2")
     parser = argparse.ArgumentParser(description="AgentLab2 Experiment Viewer")
     parser.add_argument(
         "--results-dir",
         type=str,
-        default=results_dir,
-        help="Path to results directory containing experiments",
+        default=str(EXP_DIR),
+        help="Path to results directory containing experiments (default: agentlab2.EXP_DIR)",
     )
     parser.add_argument(
         "--debug",
