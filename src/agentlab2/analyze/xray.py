@@ -69,9 +69,14 @@ class XRayState:
         Only reads *.metadata.json files — steps are loaded lazily when a trajectory is selected.
         After returning, a background thread is started to load all full trajectories so that
         stats (steps, tokens, cost) become available without requiring the user to click each seed.
+
+        For backwards compatibility with trajectories that predate the agent_name metadata field,
+        reads experiment_config.json (if present) to derive the agent name and backfills it into
+        any stub that is missing the field.
         """
         self._storage = FileStorage(exp_dir)
         self.trajectories = self._storage.load_all_trajectory_metadata()
+        self._backfill_agent_name(exp_dir)
         self.selected_agent_key = None
         self.selected_task_id = None
         self.current_trajectory = None
@@ -80,6 +85,30 @@ class XRayState:
         self._bg_loading_done = False
         self._start_background_loading()
         return len(self.trajectories) > 0
+
+    def _backfill_agent_name(self, exp_dir: Path) -> None:
+        """Inject agent_name into stubs loaded from experiments that predate that metadata field.
+
+        Reads experiment_config.json and extracts the agent class name from
+        agent_config._type (e.g. "agentlab2.agents.react.ReactAgentConfig" → "ReactAgentConfig").
+        Only fills in stubs where agent_name is not already present.
+        """
+        config_path = exp_dir / "experiment_config.json"
+        if not config_path.exists():
+            return
+        try:
+            with open(config_path) as f:
+                exp_cfg = json.load(f)
+            agent_type = exp_cfg.get("agent_config", {}).get("_type", "")
+            # Take the last segment: "agentlab2.agents.react.ReactAgentConfig" → "ReactAgentConfig"
+            agent_name = agent_type.split(".")[-1] if agent_type else ""
+            if not agent_name:
+                return
+            for traj in self.trajectories:
+                if "agent_name" not in traj.metadata:
+                    traj.metadata["agent_name"] = agent_name
+        except Exception:
+            pass  # malformed config — leave stubs as-is, viewer falls back to "unknown"
 
     def _start_background_loading(self) -> None:
         """Spawn a daemon thread that loads all trajectory stubs into full trajectories.
