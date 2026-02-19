@@ -6,6 +6,7 @@ OSWorld tasks for desktop automation evaluation.
 
 import json
 import logging
+import os
 import random
 from copy import deepcopy
 from pathlib import Path
@@ -247,7 +248,8 @@ class OSWorldBenchmark(Benchmark):
             if "settings_file" in parameters:
                 # Prepend OSWorld repo path to settings_file
                 settings_file = parameters["settings_file"]
-                parameters["settings_file"] = str(OSWORLD_REPO_DIR / settings_file)
+                repo_dir = Path(os.environ.get("OSWORLD_REPO", str(OSWORLD_REPO_DIR)))
+                parameters["settings_file"] = str(repo_dir / settings_file)
 
         return updated_task
 
