@@ -8,9 +8,8 @@ This script:
 
 import logging
 import sys
-import time
-from pathlib import Path
 
+from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.benchmarks.miniwob.task import MiniWobTask
@@ -138,8 +137,7 @@ def main(interrupt_after: int = 3, resume: bool = True) -> None:
         interrupt_after: Number of tasks to complete before interruption
         resume: Whether to resume after interruption
     """
-    current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"resumption_demo_{current_datetime}"
+    output_dir = make_experiment_output_dir("react", "miniwob", tag="resumption_demo")
 
     logger.info("=" * 80)
     logger.info("EXPERIMENT RESUMPTION DEMONSTRATION")

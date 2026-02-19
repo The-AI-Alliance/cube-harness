@@ -1,7 +1,6 @@
 import sys
-import time
-from pathlib import Path
 
+from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
@@ -11,8 +10,7 @@ from agentlab2.tools.playwright import PlaywrightConfig
 
 
 def main(debug: bool):
-    current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"miniwob_{current_datetime}"
+    output_dir = make_experiment_output_dir("react", "miniwob")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)

@@ -1,6 +1,6 @@
 import logging
-from pathlib import Path
 
+from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.exp_runner import run_with_ray
@@ -23,7 +23,7 @@ def main() -> None:
 
     exp = Experiment(
         name="hello_world_study",
-        output_dir=Path("./hello_world_1"),
+        output_dir=make_experiment_output_dir("react", "miniwob", tag="hello_world_1"),
         agent_config=agent_config,
         benchmark=benchmark,
     )
