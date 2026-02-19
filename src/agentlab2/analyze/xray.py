@@ -14,6 +14,7 @@ import html as html_lib
 import json
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from os.path import expanduser
 from pathlib import Path
@@ -70,9 +71,8 @@ class XRayState:
     # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
     _completed_ids: set[str] = field(default_factory=set, repr=False)
     _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
-    # Last rendered values — used to skip re-render when nothing changed (prevents blinking)
-    _last_progress_html: str = field(default="", repr=False)
-    _last_exp_stats: str = field(default="", repr=False)
+    # Timestamp of last detected file change — used to stop polling stale experiments
+    _last_change_time: float = field(default=0.0, repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -97,6 +97,7 @@ class XRayState:
         self._env_step_indices = []
         self._completed_ids = {t.id for t in self.trajectories if t.end_time is not None}
         self._traj_mtimes = self._storage.list_trajectory_ids_with_mtime()
+        self._last_change_time = time.time()
         self._bg_loading_done = False
         self._start_background_loading()
         return len(self.trajectories) > 0
@@ -195,6 +196,7 @@ class XRayState:
                 self._maybe_backfill(full)
                 self._traj_mtimes[traj_id] = mtime
                 changed = True
+                self._last_change_time = time.time()
                 if traj_id in known_ids:
                     idx = next(i for i, t in enumerate(self.trajectories) if t.id == traj_id)
                     self.trajectories[idx] = full
@@ -214,6 +216,14 @@ class XRayState:
         if not self.trajectories:
             return False
         return all(t.id in self._completed_ids for t in self.trajectories)
+
+    def is_experiment_stale(self, timeout_s: float = 120.0) -> bool:
+        """Return True if no file changes have been detected for timeout_s seconds.
+
+        Used to stop polling when an experiment was killed and workers are no longer writing.
+        Only meaningful after bulk loading is done and the experiment is not yet complete.
+        """
+        return time.time() - self._last_change_time > timeout_s
 
     def select_agent(self, agent_key: str) -> None:
         """Select an agent; resets task, trajectory, and step."""
@@ -618,40 +628,16 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_tick_progress(flag: int) -> tuple[Any, gr.Timer, int]:
-        """Fast tick: updates progress bar, timer state, and signals table refresh when needed.
+    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
+        """Periodic refresh: bulk-loads stubs then live-polls for new/changed trajectories.
 
-        Outputs only [progress_bar, bg_timer, tables_update_flag] — tables are NOT in this
-        list, so Gradio's loading animation never touches them on every tick.
-        Tables update via tables_update_flag.change(), which only fires when the flag value
-        actually changes (i.e. when data has changed), not on every tick.
+        Stops polling when the experiment is complete or has been stale for 2 minutes
+        (no file changes detected — indicates the experiment was killed).
         """
         if state._bg_loading_done:
-            changed = state.refresh_experiment()
-        else:
-            changed = True  # bg thread still running — always refresh tables
+            state.refresh_experiment()
 
-        n_completed = len(state._completed_ids)
-        n_total = len(state.trajectories)
-        n_running = sum(1 for t in state.trajectories if t.end_time is None)
-        new_progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
-        if new_progress_html != state._last_progress_html:
-            state._last_progress_html = new_progress_html
-            progress_html: Any = new_progress_html
-        else:
-            progress_html = gr.skip()
-
-        still_active = not state._bg_loading_done or not state.is_experiment_complete()
-        new_flag = flag + 1 if changed else flag
-        return progress_html, gr.Timer(active=still_active), new_flag
-
-    def on_tables_update() -> tuple[Any, Any, Any, Any, gr.Tab, gr.Tab, gr.Tab]:
-        """Rebuild tables and stats. Triggered only when tables_update_flag changes value."""
-        new_exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
-        exp_stats: Any = new_exp_stats if new_exp_stats != state._last_exp_stats else gr.skip()
-        if new_exp_stats != state._last_exp_stats:
-            state._last_exp_stats = new_exp_stats
-
+        exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
         agent_key = state.selected_agent_key
         active_agent = agent_rows[0]["agent_name"] if (agent_rows and agent_key is None) else agent_key
@@ -669,8 +655,14 @@ def run_xray(
         traj_id = state.current_trajectory.id if state.current_trajectory else None
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
+        n_completed = len(state._completed_ids)
+        n_total = len(state.trajectories)
+        n_running = sum(1 for t in state.trajectories if t.end_time is None)
+        progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
+
+        done = state._bg_loading_done and (state.is_experiment_complete() or state.is_experiment_stale())
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, *tab_labels
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, gr.Timer(active=not done), *tab_labels
 
     def navigate_prev(step_id: StepId) -> StepId:
         step = max(0, step_id.step - 1)
@@ -906,6 +898,9 @@ def run_xray(
 
         with gr.Accordion("📂 Trajectory Hierarchy", open=True):
             with gr.Tabs():
+                with gr.Tab("Dashboard"):
+                    progress_bar = gr.HTML("")
+                    experiment_stats = gr.Markdown("")
                 with gr.Tab("Agents") as agents_tab:
                     agent_table = gr.DataFrame(
                         headers=["agent_name", "n_tasks", "n_trajs", "avg_reward", "total_cost"],
@@ -934,16 +929,10 @@ def run_xray(
                     agent_config_code = gr.Code(language="json", show_label=False)
                 with gr.Tab("Exp Config"):
                     exp_config_code = gr.Code(language="json", show_label=False)
-            progress_bar = gr.HTML("")
-            experiment_stats = gr.Markdown("")
-
-        # Hidden counter incremented by the timer when tables need refreshing.
-        # Wiring table updates to its .change() event means tables only re-render
-        # when data actually changed, not on every timer tick (which would cause blink).
-        tables_update_flag = gr.Number(value=0, visible=False)
 
         # Timer: ticks every 1s to bulk-load stubs and then live-poll for new/changed trajectories.
-        # Starts inactive; activated on experiment select; deactivates when experiment is complete.
+        # Starts inactive; activated on experiment select; deactivates when experiment is complete
+        # or when no file changes are detected for 2 minutes (killed experiment).
         bg_timer = gr.Timer(value=1.0, active=False)
 
         with gr.Row(variant="panel", elem_classes="compact-header"):
@@ -1047,14 +1036,8 @@ def run_xray(
         )
 
         bg_timer.tick(
-            fn=on_bg_tick_progress,
-            inputs=[tables_update_flag],
-            outputs=[progress_bar, bg_timer, tables_update_flag],
-            show_progress="hidden",
-        )
-        tables_update_flag.change(
-            fn=on_tables_update,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, agents_tab, tasks_tab, seeds_tab],
+            fn=on_bg_load_tick,
+            outputs=[experiment_stats, agent_table, task_table, seed_table, progress_bar, bg_timer, agents_tab, tasks_tab, seeds_tab],
             show_progress="hidden",
         )
 
