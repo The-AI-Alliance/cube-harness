@@ -12,9 +12,7 @@ dependencies = [
     "pydantic~=2.0",
     "litellm~=1.80.8",
     "playwright==1.44",
-    "Pillow~=11.0",
     "beautifulsoup4~=4.14",
-    "numpy~=2.3.5",
     "numpydoc~=1.10.0",
     "ray[default]>=2.52.1",
     "tenacity~=8.5.0",
@@ -22,7 +20,6 @@ dependencies = [
     "termcolor~=3.2",
     "miniwob>=1.0",
     "gradio~=5.49",
-    "matplotlib>=3.8",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
@@ -51,6 +48,11 @@ extend-select = ["I"] # sort imports
 [project.scripts]
 al2-viewer = "agentlab2.viewer:main"
 
+[project.optional-dependencies]
+osworld = [
+    "desktop-env>=1.0.0",
+]
+
 [dependency-groups]
 dev = [
     "ruff>=0.14.7",
@@ -64,6 +66,9 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')"
 ]
+
+[tool.uv]
+override-dependencies = ["gymnasium==0.29.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

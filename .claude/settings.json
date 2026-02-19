@@ -6,7 +6,6 @@
       "Bash(uv run python:*)",
       "Bash(uv pip show:*)",
       "Bash(python3:*)",
-      "Bash(uv pip list:*)"
     ]
   },
   "enabledPlugins": {
