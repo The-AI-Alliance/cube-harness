@@ -1048,6 +1048,7 @@ def run_xray(
         bg_timer.tick(
             fn=on_bg_load_tick,
             outputs=[experiment_stats, agent_table, task_table, seed_table, progress_bar, bg_timer, agents_tab, tasks_tab, seeds_tab],
+            show_progress="hidden",
         )
 
         agent_table.select(
