@@ -128,6 +128,12 @@ class XRayState:
             return
 
         storage = self._storage  # capture to avoid closure over mutable self._storage
+        # Capture the backfill name now so freshly-loaded trajectories (which also lack
+        # agent_name on disk for old data) get the same treatment as the initial stubs.
+        backfill_name = next(
+            (t.metadata.get("agent_name") for t in self.trajectories if t.metadata.get("agent_name")),
+            None,
+        )
 
         def _load_all() -> None:
             for i, traj in enumerate(self.trajectories):
@@ -136,6 +142,9 @@ class XRayState:
                     continue
                 try:
                     full = storage.load_trajectory(traj.id)
+                    # Backfill agent_name for old trajectories that don't have it on disk
+                    if backfill_name and "agent_name" not in full.metadata:
+                        full.metadata["agent_name"] = backfill_name
                     self.trajectories[i] = full
                     # Keep current_trajectory in sync if it was this stub
                     if self.current_trajectory is not None and self.current_trajectory.id == traj.id:
