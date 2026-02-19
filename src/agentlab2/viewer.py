@@ -15,7 +15,8 @@ from typing import Any
 import gradio as gr
 from PIL import Image
 
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
+from agentlab2.core import AgentOutput, EnvironmentOutput, StepError, Trajectory, TrajectoryStep
+from agentlab2.llm import LLMCall
 from agentlab2.storage import FileStorage
 
 
@@ -243,6 +244,71 @@ def format_duration(seconds: float) -> str:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         return f"{hours}h {minutes}m"
+
+
+def extract_content_by_name(step: EnvironmentOutput | AgentOutput | None, name: str) -> str | None:
+    if not isinstance(step, EnvironmentOutput):
+        return None
+    for content in step.obs.contents:
+        if content.name and name.lower() in content.name.lower() and isinstance(content.data, str):
+            return content.data
+    return None
+
+
+def extract_axtree(step: EnvironmentOutput | AgentOutput | None) -> str:
+    result = extract_content_by_name(step, "axtree")
+    return result if result else ""
+
+
+def extract_html_content(step: EnvironmentOutput | AgentOutput | None) -> str:
+    result = extract_content_by_name(step, "pruned_html")
+    if result:
+        return result
+    result = extract_content_by_name(step, "html")
+    return result if result else ""
+
+
+def format_llm_chat_messages(llm_calls: list[LLMCall]) -> str:
+    if not llm_calls:
+        return ""
+    sections = []
+    for call_idx, llm_call in enumerate(llm_calls):
+        if len(llm_calls) > 1:
+            sections.append(f"# LLM Call {call_idx + 1}\n")
+        for i, msg in enumerate(llm_call.prompt.messages):
+            role = msg.get("role", "unknown") if isinstance(msg, dict) else getattr(msg, "role", "unknown")
+            content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+            if isinstance(content, list):
+                text_parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+                    elif isinstance(part, dict) and part.get("type") == "image_url":
+                        text_parts.append("[image]")
+                    else:
+                        text_parts.append(str(part))
+                content = "\n".join(text_parts)
+            display = str(content)[:3000]
+            if len(str(content)) > 3000:
+                display += "\n... (truncated)"
+            sections.append(f"## [{i}] {role}\n\n{display}\n")
+    return "\n".join(sections)
+
+
+def format_step_errors(step: EnvironmentOutput | AgentOutput | None) -> str:
+    if step is None:
+        return ""
+    sections = []
+    error: StepError | None = step.error
+    if error:
+        step_type = "Environment" if isinstance(step, EnvironmentOutput) else "Agent"
+        sections.append(f"## {step_type} Error\n")
+        sections.append(f"**Type:** `{error.error_type}`\n")
+        sections.append(f"**Message:** {error.exception_str}\n")
+        sections.append(f"```\n{error.stack_trace}\n```\n")
+    if isinstance(step, EnvironmentOutput) and step.info.get("error"):
+        sections.append(f"## Info Error\n\n```\n{step.info['error']}\n```\n")
+    return "\n".join(sections)
 
 
 def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, share: bool = False) -> None:
@@ -497,8 +563,29 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             return storage.load_logs(traj_id)
         return f"No logs found for {traj_id}\nExpected at: {storage.get_log_path(traj_id)}"
 
+    def update_axtree() -> str:
+        step = state.get_step_at(state.step)
+        if isinstance(step, AgentOutput) and state.step > 0:
+            step = state.get_step_at(state.step - 1)
+        return extract_axtree(step)
+
+    def update_html_view() -> str:
+        step = state.get_step_at(state.step)
+        if isinstance(step, AgentOutput) and state.step > 0:
+            step = state.get_step_at(state.step - 1)
+        return extract_html_content(step)
+
+    def update_chat_messages() -> str:
+        step = state.get_step_at(state.step)
+        if isinstance(step, AgentOutput) and step.llm_calls:
+            return format_llm_chat_messages(step.llm_calls)
+        return ""
+
+    def update_task_error() -> str:
+        step = state.get_step_at(state.step)
+        return format_step_errors(step)
+
     def update_raw_json() -> str:
-        """Get raw JSON of current step."""
         step = state.get_step_at(state.step)
         if step:
             return step.model_dump_json(indent=2)
@@ -929,7 +1016,17 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                     elem_classes="step-details",
                 )
 
-        # Debug section (collapsed)
+        with gr.Accordion("🔍 Observation Data", open=True):
+            with gr.Tabs():
+                with gr.Tab("AXTree"):
+                    axtree_code = gr.Code(language=None, show_label=False)
+                with gr.Tab("HTML"):
+                    html_code = gr.Code(language="html", show_label=False)
+                with gr.Tab("Chat Messages"):
+                    chat_md = gr.Markdown("")
+                with gr.Tab("Task Error"):
+                    error_md = gr.Markdown("")
+
         with gr.Accordion("🔧 Debug / Raw Data", open=False):
             with gr.Tabs():
                 with gr.Tab("Raw JSON"):
@@ -977,6 +1074,10 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         step_id.change(fn=get_prev_screenshot, outputs=prev_screenshot)
         step_id.change(fn=get_step_details, outputs=step_details)
         step_id.change(fn=update_trajectory_stats, outputs=stats_display)
+        step_id.change(fn=update_axtree, outputs=axtree_code)
+        step_id.change(fn=update_html_view, outputs=html_code)
+        step_id.change(fn=update_chat_messages, outputs=chat_md)
+        step_id.change(fn=update_task_error, outputs=error_md)
         step_id.change(fn=update_raw_json, outputs=raw_json)
         step_id.change(fn=update_llm_calls, outputs=llm_calls)
         step_id.change(fn=update_llm_tools, outputs=llm_tools)
