@@ -36,10 +36,10 @@ class WorkArenaBenchmark(Benchmark):
     Example:
         ```python
         from agentlab2.benchmarks.workarena import WorkArenaBenchmark
-        from agentlab2.tools.browsergym import BrowsergymConfig
+        from agentlab2.tools.playwright import PlaywrightConfig
 
         benchmark = WorkArenaBenchmark(
-            tool_config=BrowsergymConfig(headless=False),
+            tool_config=PlaywrightConfig(headless=False),
             level="l1",
             n_seeds=5,
         )

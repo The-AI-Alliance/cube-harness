@@ -1,9 +1,10 @@
 """Example recipe for running WorkArena benchmark with AgentLab2.
 
-This recipe demonstrates how to run WorkArena tasks using the BrowserGym tool.
+This recipe demonstrates how to run WorkArena tasks using a Playwright tool.
 
 Prerequisites:
-    1. Install WorkArena: pip install browsergym-workarena
+    1. Install WorkArena locally:
+       uv add "browsergym-workarena @ /path/to/WorkArena" --optional workarena
     2. Configure ServiceNow credentials via environment variables:
        - SNOW_INSTANCE_URL: ServiceNow instance URL
        - SNOW_INSTANCE_UNAME: ServiceNow username
@@ -27,18 +28,11 @@ from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
-from agentlab2.tools.browsergym import BrowsergymConfig
-
-try:
-    from agentlab2.benchmarks.workarena import WorkArenaBenchmark
-except ImportError:
-    print(
-        "WorkArena benchmark requires 'browsergym-workarena'. Run `make install` to install all optional dependencies."
-    )
-    sys.exit(1)
+from agentlab2.tools.playwright import PlaywrightConfig
+from agentlab2.benchmarks.workarena import WorkArenaBenchmark
 
 
-def main(debug: bool):
+def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_l1_{current_datetime}"
 
@@ -50,9 +44,8 @@ def main(debug: bool):
         llm_config=llm_config,
     )
 
-    # Configure BrowserGym tool
-    # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
-    tool_config = BrowsergymConfig(
+    # Configure Playwright tool for browser interaction
+    tool_config = PlaywrightConfig(
         headless=not debug,  # Show browser in debug mode
         use_screenshot=True,
         use_axtree=True,

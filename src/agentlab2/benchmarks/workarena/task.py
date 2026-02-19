@@ -5,38 +5,42 @@ from typing import Any, Callable
 
 from termcolor import colored
 
-from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
+from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
-from agentlab2.tools.browsergym import BrowsergymTool
+from agentlab2.tools.base import BrowserTaskTool
 
 logger = logging.getLogger(__name__)
 
 
 class WorkArenaTask(Task):
-    """AgentLab2 Task wrapper for WorkArena BrowserGym tasks.
+    """AgentLab2 Task wrapper for WorkArena tasks.
 
     This task wraps a WorkArena task class (e.g., CreateUserTask, AllMenuTask)
-    and delegates setup and validation to the BrowserGym environment.
+    and calls the WorkArena task API directly via the Playwright page, without
+    routing through BrowserGym's BrowserEnv.
 
-    The task calls `tool.set_gym_task()` during setup to initialize the
-    BrowserGym environment with the correct WorkArena task.
+    WorkArena tasks expose a direct Playwright API:
+        - task.setup(page) -> (goal, info)
+        - task.validate(page, chat_messages) -> (reward, done, msg, info)
+        - task.teardown()
     """
 
     validate_per_step: bool = True
-    supported_actions: ActionSpace = ActionSpace(
-        BidBrowserActionSpace.browser_press_key,
-        BidBrowserActionSpace.browser_type,
-        BidBrowserActionSpace.browser_click,
-        BidBrowserActionSpace.browser_drag,
-        BidBrowserActionSpace.browser_hover,
-        BidBrowserActionSpace.browser_select_option,
-        BidBrowserActionSpace.browser_mouse_click_xy,
-        BidBrowserActionSpace.browser_wait,
-        BidBrowserActionSpace.browser_back,
-        BidBrowserActionSpace.browser_forward,
-        BidBrowserActionSpace.noop,
+    supported_actions = ActionSpace(
+        BrowserActionSpace.browser_press_key,
+        BrowserActionSpace.browser_type,
+        BrowserActionSpace.browser_click,
+        BrowserActionSpace.browser_drag,
+        BrowserActionSpace.browser_hover,
+        BrowserActionSpace.browser_select_option,
+        BrowserActionSpace.browser_mouse_click_xy,
+        BrowserActionSpace.browser_wait,
+        BrowserActionSpace.browser_back,
+        BrowserActionSpace.browser_forward,
+        BrowserActionSpace.noop,
     )
-    _tool: BrowsergymTool
+    _tool: BrowserTaskTool
+    _wa_task: Any
 
     def __init__(
         self,
@@ -57,17 +61,16 @@ class WorkArenaTask(Task):
         self.workarena_task_class = workarena_task_class
         self.seed = seed
         self.level = level
+        self._wa_task = None
 
-    def setup(self, tool: BrowsergymTool) -> tuple[Observation, dict]:
-        """Set up the WorkArena task by initializing the BrowserGym environment.
+    def setup(self, tool: BrowserTaskTool) -> tuple[Observation, dict]:
+        """Set up the WorkArena task by calling the task's setup() directly.
 
-        This method calls `tool.set_gym_task()` to create a new BrowserGym
-        environment with the WorkArena task configured. The WorkArena task
-        handles its own setup (user creation, navigation, etc.) during
-        the BrowserGym env.reset() call.
+        Instantiates the WorkArena task and calls its setup() with the
+        underlying Playwright page. No BrowserGym BrowserEnv is involved.
 
         Args:
-            tool: The BrowsergymTool instance to configure.
+            tool: A BrowserTaskTool instance (e.g., SyncPlaywrightTool).
 
         Returns:
             Tuple of (initial observation, task info dict).
@@ -75,84 +78,41 @@ class WorkArenaTask(Task):
         self._tool = tool
         logger.info(f"Setting up WorkArena task {self.id} with seed {self.seed}")
 
-        # Configure BrowserGym with the WorkArena task
-        # Note: seed is passed separately, not in task_kwargs, because
-        # BrowserGym's env.reset() passes seed to the task constructor
+        self._wa_task = self.workarena_task_class(seed=self.seed)
+
         try:
-            tool.set_gym_task(
-                task_entrypoint=self.workarena_task_class,
-                seed=self.seed,
-            )
+            goal, task_info = self._wa_task.setup(page=tool.page)
         except Exception as e:
-            logger.error(f"Error during set_gym_task: {e}", exc_info=True)
+            logger.error(f"Error during WorkArena task setup: {e}", exc_info=True)
             raise
 
-        # Debug: log page URL and state after setup
-        if tool.page:
-            logger.info(f"WorkArena page URL after setup: {tool.page.url}")
-            logger.info(f"WorkArena page title: {tool.page.title()}")
-
-        # Log the BrowserGym task state
-        if tool._env and tool._env.task:
-            logger.info(f"BrowserGym task class: {tool._env.task.__class__.__name__}")
-            if hasattr(tool._env.task, "start_url"):
-                logger.info(f"BrowserGym task start_url: {tool._env.task.start_url}")
-
-        # Get the goal from the BrowserGym task
-        goal = self._get_goal_from_env()
+        logger.info(f"WorkArena page URL after setup: {tool.page.url}")
         logger.info(colored(f"WorkArena task goal: {goal}", "green"))
 
-        # Build initial observation with goal and page state
-        obs = Observation.from_text(goal)
-        obs += tool.page_obs()
+        obs = Observation.from_text(goal) + tool.page_obs()
 
         info = {
             "task_id": self.id,
             "task_class": self.workarena_task_class.__name__,
             "seed": self.seed,
             "level": self.level,
+            **task_info,
         }
 
         return obs, info
 
-    def _get_goal_from_env(self) -> str:
-        """Extract the goal text from the BrowserGym environment."""
-        if self._tool._last_obs and "goal" in self._tool._last_obs:
-            goal = self._tool._last_obs["goal"]
-            if isinstance(goal, str):
-                return goal
-            elif isinstance(goal, list):
-                # Goal might be a list of message objects
-                goal_parts = []
-                for item in goal:
-                    if isinstance(item, dict) and "text" in item:
-                        goal_parts.append(item["text"])
-                    elif isinstance(item, str):
-                        goal_parts.append(item)
-                return "\n".join(goal_parts)
-        return f"Complete the WorkArena task: {self.id}"
-
     def validate_task(self, obs: Observation) -> tuple[float, dict]:
-        """Validate the task using BrowserGym's validation.
-
-        The reward and termination status are obtained from the last
-        BrowserGym step, which internally calls the WorkArena task's
-        validate() method.
+        """Validate the task by calling the WorkArena task's validate() directly.
 
         Args:
-            obs: Current observation (unused, validation uses tool state).
+            obs: Current observation (unused, validation uses the page directly).
 
         Returns:
             Tuple of (reward, info dict with done status).
         """
-        reward = self._tool.last_reward
-        done = self._tool.last_terminated
-
-        # Get additional task info from BrowserGym if available
-        task_info = {}
-        if self._tool._last_info and "task_info" in self._tool._last_info:
-            task_info = self._tool._last_info["task_info"]
-
+        reward, done, _msg, task_info = self._wa_task.validate(
+            page=self._tool.page, chat_messages=[]
+        )
         return reward, {"done": done, **task_info}
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
@@ -164,19 +124,15 @@ class WorkArenaTask(Task):
         Returns:
             Filtered list of actions supported for WorkArena.
         """
-        supported_action_names = {action.__name__ for action in self.supported_actions}
-        filtered = [a for a in actions if a.name in supported_action_names]
+        filtered = [a for a in actions if a.name in self.supported_actions.names]
         logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
         return filtered
 
-    def finished(self) -> bool:
-        """Check if the task is finished based on BrowserGym termination."""
-        return self._tool.last_terminated
-
     def teardown(self) -> None:
-        """Clean up after the task.
+        """Clean up the WorkArena task.
 
-        WorkArena tasks handle their own teardown (user deletion, etc.)
-        through the BrowserGym environment's close() method.
+        Calls the WorkArena task's teardown() to clean up resources
+        (user deletion, data cleanup, etc.).
         """
-        pass
+        if self._wa_task is not None:
+            self._wa_task.teardown()
