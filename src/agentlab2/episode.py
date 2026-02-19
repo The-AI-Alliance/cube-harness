@@ -125,10 +125,15 @@ class Episode:
             with tracer.episode(self.config.task_id, experiment=self.config.exp_name):
                 start_time = time.time()
                 env_output = env.setup()
+                agent_name = type(self.config.agent_config).__name__
                 trajectory = Trajectory(
                     id=f"{self.config.task_id}_ep{self.config.id}",
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
-                    metadata={"task_id": self.config.task_id, **env_output.info},
+                    metadata={
+                        "task_id": self.config.task_id,
+                        "agent_name": agent_name,
+                        **env_output.info,
+                    },
                     start_time=start_time,
                 )
                 self.storage.save_trajectory(trajectory, allow_overwrite=self.allow_overwrite)
