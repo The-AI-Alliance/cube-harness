@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv pip install:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv pip show:*)",
+      "Bash(python3:*)"
+    ]
+  },
   "enabledPlugins": {
     "code-review@claude-plugins-official": true
   }

@@ -6,12 +6,10 @@ Based on the Computer_13 action set with 15 actions for mouse, keyboard, and con
 
 from typing import List, Literal, Optional, Protocol
 
-from agentlab2.core import ActionSpace
-
 ButtonType = Literal["left", "right", "middle"]
 
 
-class ComputerActionSpace(ActionSpace, Protocol):
+class ComputerActionSpace(Protocol):
     """Computer use action space for desktop/VM interactions.
 
     Based on OSWorld's Computer_13 action set with 15 actions:

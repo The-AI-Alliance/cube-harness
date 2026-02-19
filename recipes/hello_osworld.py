@@ -60,6 +60,7 @@ def main(debug: bool):
         tasks_file="src/agentlab2/benchmarks/osworld/osworld_tasks.json",
         domain="all",  # or specific: "chrome", "os", "libreoffice"
         shuffle=True,
+        max_steps=15,  # Max steps per task (can also be set per task in osworld_tasks.json)
     )
 
     exp = Experiment(

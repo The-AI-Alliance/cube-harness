@@ -58,6 +58,7 @@ class OSWorldBenchmark(Benchmark):
     domain: str = "all"  # or specific domain like "chrome", "libreoffice", etc.
     shuffle: bool = True
     shuffle_seed: int = 42
+    max_steps: int = 50  # Maximum agent steps per task (overrides per-task max_turns)
 
     def setup(self) -> None:
         """Initialize benchmark.
@@ -142,7 +143,7 @@ class OSWorldBenchmark(Benchmark):
                 related_apps=task_data.get("related_apps", []),
                 config=task_data.get("config", []),
                 evaluator=task_data.get("evaluator", {}),
-                max_turns=task_data.get("max_turns", 50),
+                max_turns=self.max_steps,
             )
             tasks.append(task)
 
@@ -212,7 +213,7 @@ class OSWorldBenchmark(Benchmark):
                         related_apps=task_data.get("related_apps", []),
                         config=task_data.get("config", []),
                         evaluator=task_data.get("evaluator", {}),
-                        max_turns=50,
+                        max_turns=self.max_steps,
                     )
                     tasks.append(task)
 
