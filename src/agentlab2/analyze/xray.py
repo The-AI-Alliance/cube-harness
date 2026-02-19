@@ -217,7 +217,7 @@ class XRayState:
             return False
         return all(t.id in self._completed_ids for t in self.trajectories)
 
-    def is_experiment_stale(self, timeout_s: float = 120.0) -> bool:
+    def is_experiment_stale(self, timeout_s: float = 1200.0) -> bool:
         """Return True if no file changes have been detected for timeout_s seconds.
 
         Used to stop polling when an experiment was killed and workers are no longer writing.
