@@ -154,6 +154,39 @@ class TestFileStorageWithSteps:
             storage.save_step(TrajectoryStep(output=sample_env_output), "unknown_traj", 0)
 
 
+class TestFileStorageLogs:
+    """Tests for per-episode log helpers in FileStorage."""
+
+    def test_get_log_path(self, tmp_dir: Path) -> None:
+        """Test that log path uses logs/{trajectory_id}.log convention."""
+        storage = FileStorage(tmp_dir)
+
+        log_path = storage.get_log_path("task_a_ep3")
+
+        assert log_path == Path(tmp_dir) / "logs" / "task_a_ep3.log"
+
+    def test_load_logs_returns_full_file_contents(self, tmp_dir: Path) -> None:
+        """Test that load_logs returns complete log file content."""
+        storage = FileStorage(tmp_dir)
+        log_path = storage.get_log_path("task_b_ep1")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("line 1\nline 2\nline 3\n")
+
+        loaded = storage.load_logs("task_b_ep1")
+
+        assert loaded == "line 1\nline 2\nline 3\n"
+        assert storage.has_logs("task_b_ep1") is True
+
+    def test_load_logs_missing_file(self, tmp_dir: Path) -> None:
+        """Test missing log file handling."""
+        storage = FileStorage(tmp_dir)
+
+        loaded = storage.load_logs("missing_ep0")
+
+        assert loaded == ""
+        assert storage.has_logs("missing_ep0") is False
+
+
 class TestFileStorageWithLLMCalls:
     """Tests for FileStorage LLM call extraction."""
 
@@ -475,3 +508,303 @@ class TestFileStorageRoundtrip:
         assert isinstance(step2.output, EnvironmentOutput)
         assert step2.output.reward == 1.0
         assert step2.output.done is True
+
+
+class TestFileStorageEpisodeConfig:
+    """Tests for FileStorage episode config save/load functionality."""
+
+    def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test save_episode_config creates episode_configs directory."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+        episode_config = EpisodeConfig(
+            id=0,
+            task_id="test_task",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="test_exp",
+            output_dir=tmp_dir,
+            max_steps=100,
+        )
+
+        storage.save_episode_config(episode_config)
+
+        config_dir = Path(tmp_dir) / "episode_configs"
+        assert config_dir.exists()
+
+    def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test save_episode_config creates correct config file."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+        episode_config = EpisodeConfig(
+            id=5,
+            task_id="my_task_123",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="test_exp",
+            output_dir=tmp_dir,
+            max_steps=200,
+        )
+
+        storage.save_episode_config(episode_config)
+
+        config_path = Path(tmp_dir) / "episode_configs" / "episode_5_task_my_task_123.json"
+        assert config_path.exists()
+
+    def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test episode config save/load round-trip."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+
+        # Create and save config
+        original_config = EpisodeConfig(
+            id=42,
+            task_id="roundtrip_task",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="roundtrip_exp",
+            output_dir=tmp_dir,
+            max_steps=500,
+        )
+
+        storage.save_episode_config(original_config)
+
+        # Load config
+        config_path = Path(tmp_dir) / "episode_configs" / "episode_42_task_roundtrip_task.json"
+        loaded_config = storage.load_episode_config(config_path)
+
+        # Verify all fields match
+        assert loaded_config.id == original_config.id
+        assert loaded_config.task_id == original_config.task_id
+        assert loaded_config.exp_name == original_config.exp_name
+        assert loaded_config.max_steps == original_config.max_steps
+        assert loaded_config.output_dir == original_config.output_dir
+        assert loaded_config.agent_config == original_config.agent_config
+        assert loaded_config.tool_config == original_config.tool_config
+
+    def test_load_episode_config_not_found(self, tmp_dir):
+        """Test load_episode_config raises error for non-existent file."""
+        storage = FileStorage(tmp_dir)
+        config_path = Path(tmp_dir) / "episode_configs" / "nonexistent.json"
+
+        with pytest.raises(FileNotFoundError):
+            storage.load_episode_config(config_path)
+
+    def test_list_episode_configs(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test list_episode_configs returns all config files."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+
+        # Save multiple configs
+        for i in range(3):
+            config = EpisodeConfig(
+                id=i,
+                task_id=f"task_{i}",
+                agent_config=mock_agent_config,
+                tool_config=mock_tool_config,
+                exp_name="test_exp",
+                output_dir=tmp_dir,
+                max_steps=100,
+            )
+            storage.save_episode_config(config)
+
+        # List configs
+        config_files = storage.list_episode_configs()
+
+        assert len(config_files) == 3
+        # Verify all files exist and have correct naming pattern
+        for config_file in config_files:
+            assert config_file.exists()
+            assert config_file.name.startswith("episode_")
+            assert "_task_" in config_file.name
+            assert config_file.name.endswith(".json")
+
+    def test_list_episode_configs_empty_directory(self, tmp_dir):
+        """Test list_episode_configs returns empty list when no configs exist."""
+        storage = FileStorage(tmp_dir)
+        config_files = storage.list_episode_configs()
+
+        assert config_files == []
+
+    def test_episode_config_filename_parsing(self, tmp_dir, mock_agent_config, mock_tool_config):
+        """Test episode config filename format is correct for parsing."""
+        from agentlab2.episode import EpisodeConfig
+
+        storage = FileStorage(tmp_dir)
+
+        # Save config with task_id that contains underscores
+        config = EpisodeConfig(
+            id=10,
+            task_id="task_with_underscores_123",
+            agent_config=mock_agent_config,
+            tool_config=mock_tool_config,
+            exp_name="test_exp",
+            output_dir=tmp_dir,
+            max_steps=100,
+        )
+
+        storage.save_episode_config(config)
+
+        # Verify filename format
+        config_path = Path(tmp_dir) / "episode_configs" / "episode_10_task_task_with_underscores_123.json"
+        assert config_path.exists()
+
+        # Load it back
+        loaded = storage.load_episode_config(config_path)
+        assert loaded.id == 10
+        assert loaded.task_id == "task_with_underscores_123"
+
+
+class TestFileStorageOverwrite:
+    """Tests for save_trajectory overwrite / archive behavior."""
+
+    def test_save_trajectory_raises_on_duplicate(self, tmp_dir) -> None:
+        """Saving a trajectory with the same ID twice (different session) raises FileExistsError."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="dup_test", metadata={"task_id": "t1"})
+        storage.save_trajectory(traj)
+
+        # New storage instance (simulates a new session)
+        storage2 = FileStorage(tmp_dir)
+        with pytest.raises(FileExistsError, match="dup_test"):
+            storage2.save_trajectory(traj)
+
+    def test_save_trajectory_allows_resave_same_session(self, tmp_dir) -> None:
+        """Re-saving within the same session (e.g. end_time update) succeeds without allow_overwrite."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="resave_test", metadata={"task_id": "t1"})
+        storage.save_trajectory(traj)
+        # Second save in same session — should not raise
+        traj.end_time = 999.0
+        storage.save_trajectory(traj)
+
+    def test_save_trajectory_archives_on_overwrite(self, tmp_dir) -> None:
+        """With allow_overwrite=True, old trajectory files are archived before saving."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="archive_test", metadata={"task_id": "t1"})
+        obs = Observation.from_text("old data")
+        env_out = EnvironmentOutput(obs=obs, reward=0.5)
+        traj.steps.append(TrajectoryStep(output=env_out))
+        storage.save_trajectory(traj)
+
+        traj_dir = Path(tmp_dir) / "trajectories"
+
+        # New storage instance with allow_overwrite
+        storage2 = FileStorage(tmp_dir)
+        traj2 = Trajectory(id="archive_test", metadata={"task_id": "t1"})
+        storage2.save_trajectory(traj2, allow_overwrite=True)
+
+        # Archived files should exist
+        archived_metadata = list(traj_dir.glob("archive_test.archived_*.metadata.json"))
+        archived_jsonl = list(traj_dir.glob("archive_test.archived_*.jsonl"))
+        assert len(archived_metadata) == 1
+        assert len(archived_jsonl) == 1
+
+        # New files should also exist
+        assert (traj_dir / "archive_test.metadata.json").exists()
+        assert (traj_dir / "archive_test.jsonl").exists()
+
+        # Archived JSONL should contain the old step data
+        with open(archived_jsonl[0]) as f:
+            lines = f.readlines()
+        assert len(lines) == 1
+        assert "0.5" in lines[0]  # old reward
+
+        # New JSONL should be empty (no steps in traj2)
+        with open(traj_dir / "archive_test.jsonl") as f:
+            assert f.read() == ""
+
+    def test_save_trajectory_overwrite_false_is_default(self, tmp_dir) -> None:
+        """allow_overwrite defaults to False."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="default_test", metadata={"task_id": "t1"})
+        storage.save_trajectory(traj)
+
+        storage2 = FileStorage(tmp_dir)
+        # Should raise without explicit allow_overwrite=True
+        with pytest.raises(FileExistsError):
+            storage2.save_trajectory(traj)
+
+
+class TestLoadTrajectoryMetadata:
+    """Tests for the fast metadata-only loading methods."""
+
+    def test_load_metadata_returns_trajectory_with_no_steps(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t1", metadata={"agent_name": "agent_a", "task_id": "task_1"})
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=Observation.from_text("obs"))))
+        storage.save_trajectory(traj)
+
+        loaded = storage.load_trajectory_metadata("t1")
+
+        assert loaded.id == "t1"
+        assert loaded.metadata == {"agent_name": "agent_a", "task_id": "task_1"}
+        assert loaded.steps == []
+
+    def test_load_metadata_preserves_timing_and_reward_info(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t2", start_time=0.0, end_time=5.0, reward_info={"reward": 1.0})
+        storage.save_trajectory(traj)
+
+        loaded = storage.load_trajectory_metadata("t2")
+
+        assert loaded.start_time == 0.0
+        assert loaded.end_time == 5.0
+        assert loaded.reward_info == {"reward": 1.0}
+
+    def test_load_metadata_raises_for_missing_trajectory(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        with pytest.raises(FileNotFoundError, match="Trajectory metadata not found"):
+            storage.load_trajectory_metadata("nonexistent")
+
+    def test_load_all_metadata_returns_stubs_with_empty_steps(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        for i in range(3):
+            traj = Trajectory(id=f"traj_{i}", metadata={"task_id": f"task_{i}"})
+            traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=Observation.from_text("obs"))))
+            storage.save_trajectory(traj)
+
+        stubs = storage.load_all_trajectory_metadata()
+
+        assert len(stubs) == 3
+        assert all(t.steps == [] for t in stubs)
+        ids = {t.id for t in stubs}
+        assert ids == {"traj_0", "traj_1", "traj_2"}
+
+    def test_load_all_metadata_empty_directory(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        assert storage.load_all_trajectory_metadata() == []
+
+    def test_load_all_metadata_skips_archived_files(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t1", metadata={})
+        storage.save_trajectory(traj)
+        # Save again with overwrite to create an archived file
+        storage2 = FileStorage(tmp_dir)
+        storage2.save_trajectory(traj, allow_overwrite=True)
+
+        stubs = storage.load_all_trajectory_metadata()
+
+        # Only the current (non-archived) trajectory should be returned
+        assert len(stubs) == 1
+        assert stubs[0].id == "t1"
+
+    def test_metadata_stub_can_be_upgraded_to_full_trajectory(self, tmp_dir: Path) -> None:
+        """Full roundtrip: load stub, then load full trajectory by ID."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="t1", metadata={"task_id": "task_1"})
+        obs = Observation.from_text("Goal: click the button")
+        traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=1.0, done=True)))
+        storage.save_trajectory(traj)
+
+        stub = storage.load_trajectory_metadata("t1")
+        assert stub.steps == []
+
+        full = storage.load_trajectory("t1")
+        assert len(full.steps) == 1
+        assert isinstance(full.steps[0].output, EnvironmentOutput)
+        assert full.steps[0].output.reward == 1.0

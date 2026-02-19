@@ -1,4 +1,4 @@
-.PHONY: help install update format lint test coverage hello debug viewer
+.PHONY: help install update format lint test coverage hello debug viewer xray
 
 help:
 	@echo "make install    - Install dependencies in editable mode"
@@ -10,6 +10,7 @@ help:
 	@echo "make hello      - Run hello_miniwob recipe"
 	@echo "make debug      - Run hello_miniwob recipe in debug mode"
 	@echo "make viewer     - Run AL2 experiment viewer in debug mode"
+	@echo "make xray       - Run AL2 XRay viewer in debug mode"
 
 hello:
 	uv run recipes/hello_miniwob.py
@@ -19,6 +20,9 @@ debug:
 
 viewer:
 	uv run al2-viewer --debug
+
+xray:
+	uv run al2-xray --debug
 
 install:
 	uv sync --all-extras

@@ -8,7 +8,6 @@ Mimics the UI of the original agentlab viewer but works with the new data struct
 import argparse
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
 from os.path import expanduser
 from pathlib import Path
 from typing import Any
@@ -44,6 +43,7 @@ class ViewerState:
     exp_dirs: list[Path] = field(default_factory=list)
     trajectories: dict[str, Trajectory] = field(default_factory=dict)
     current_trajectory: Trajectory | None = None
+    current_exp_dir: Path | None = None
     step: int = 0
 
     def load_experiment(self, exp_dir: Path) -> dict[str, Any]:
@@ -266,33 +266,164 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         """Refresh the experiment directory dropdown."""
         return gr.Dropdown(choices=get_directory_contents(state.results_dir), value=current_choice)
 
-    def on_select_experiment(exp_name: str) -> tuple[list[list[Any]] | None, TrajectoryId | None]:
+    def _compute_experiment_stats(
+        finished_rewards: list[float],
+        finished_steps: list[int],
+        finished_durations: list[float],
+        n_failed: int,
+        token_stats: dict[str, int],
+    ) -> str:
+        """Compute experiment-level statistics and return as markdown string."""
+        n_finished = len(finished_rewards)
+        n_total = n_finished + n_failed
+
+        if n_total == 0:
+            return ""
+
+        stats_parts = [f"📊 **{n_total}** trajectories"]
+
+        # Show finished/failed counts
+        if n_failed > 0:
+            stats_parts.append(f"│ ✅ Finished: **{n_finished}** │ ❌ Failed: **{n_failed}**")
+        else:
+            stats_parts.append(f"│ ✅ All Finished: **{n_finished}**")
+
+        # Compute averages only from finished trajectories
+        if n_finished > 0:
+            avg_reward = sum(finished_rewards) / n_finished
+            avg_steps = sum(finished_steps) / n_finished
+            success_rate = sum(1 for r in finished_rewards if r > 0) / n_finished * 100
+
+            stats_parts.append(f"│ Avg Reward: **{avg_reward:.2f}**")
+            stats_parts.append(f"│ Success Rate: **{success_rate:.0f}%**")
+            stats_parts.append(f"│ Avg Steps: **{avg_steps:.1f}**")
+
+            if finished_durations:
+                avg_duration = sum(finished_durations) / len(finished_durations)
+                stats_parts.append(f"│ Avg Duration: **{format_duration(avg_duration)}**")
+
+        stats = " ".join(stats_parts)
+
+        # Add token stats on second line if available
+        total_prompt = token_stats.get("prompt", 0)
+        total_completion = token_stats.get("completion", 0)
+        total_cached = token_stats.get("cached", 0)
+        total_cache_created = token_stats.get("cache_created", 0)
+        total_cost = token_stats.get("cost", 0.0)
+
+        if total_prompt > 0:
+            token_parts = [f"📊 prompt: **{total_prompt:,}**"]
+            token_parts.append(f"completion: **{total_completion:,}**")
+            token_parts.append(f"total: **{total_prompt + total_completion:,}**")
+            if total_cached > 0:
+                cache_pct = total_cached / total_prompt * 100
+                token_parts.append(f"cached: **{total_cached:,}** ({cache_pct:.0f}%)")
+            if total_cache_created > 0:
+                token_parts.append(f"cache_created: **{total_cache_created:,}**")
+            if total_cost > 0:
+                token_parts.append(f"💰 **${total_cost:.4f}**")
+            stats += "\n\n" + " │ ".join(token_parts)
+
+        return stats
+
+    def on_select_experiment(exp_name: str) -> tuple[str, list[list[Any]] | None, TrajectoryId | None]:
         """Handle experiment selection."""
         if exp_name == "Select experiment directory" or not exp_name:
-            return None, None
+            return "", None, None
 
         # Extract directory name (remove trajectory count suffix)
         dir_name = exp_name.split(" (")[0]
         exp_dir = state.results_dir / dir_name
+        state.current_exp_dir = exp_dir
 
         result = state.load_experiment(exp_dir)
         if "error" in result:
-            return None, None
+            return "", None, None
 
-        # Create trajectory table
+        # Create trajectory table and collect stats
         traj_data = []
-        for traj in state.trajectories.values():
+        finished_rewards = []
+        finished_steps = []
+        finished_durations = []
+        n_failed = 0
+
+        # Aggregate token stats across all trajectories
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        total_cached_tokens = 0
+        total_cache_creation_tokens = 0
+        total_cost = 0.0
+
+        # Sort trajectories by start_time ascending (None values go to the end)
+        sorted_trajectories = sorted(
+            state.trajectories.values(),
+            key=lambda t: (t.start_time is None, t.start_time or 0),
+        )
+
+        for traj in sorted_trajectories:
             n_steps = len(traj.steps)
-            final_reward = 0.0
-            for step in reversed(traj.steps):
-                if isinstance(step.output, EnvironmentOutput):
-                    final_reward = step.output.reward
-                    break
+
+            if traj.reward_info:
+                final_reward = traj.reward_info.get("reward", 0.0)
+                final_message = traj.reward_info.get("message", "")
+            else:
+                # Fallback: find last reward from steps (for older trajectories without reward_info)
+                final_reward = 0.0
+                final_message = ""
+                for step in reversed(traj.steps):
+                    if isinstance(step.output, EnvironmentOutput):
+                        final_reward = step.output.reward
+                        final_message = step.output.info.get("message", "")
+                        break
+
+            # Collect token stats from agent steps (per-trajectory and totals)
+            traj_tokens = 0
+            traj_cost = 0.0
+            for traj_step in traj.steps:
+                if isinstance(traj_step.output, AgentOutput):
+                    for llm_call in traj_step.output.llm_calls:
+                        if llm_call.usage:
+                            traj_tokens += llm_call.usage.prompt_tokens + llm_call.usage.completion_tokens
+                            traj_cost += llm_call.usage.cost
+                            total_prompt_tokens += llm_call.usage.prompt_tokens
+                            total_completion_tokens += llm_call.usage.completion_tokens
+                            total_cached_tokens += llm_call.usage.cached_tokens
+                            total_cache_creation_tokens += llm_call.usage.cache_creation_tokens
+                            total_cost += llm_call.usage.cost
+
             task_id = traj.metadata.get("task_id", "unknown")
-            duration_str = "-"
-            if traj.start_time is not None and traj.end_time is not None:
-                duration_str = format_duration(traj.end_time - traj.start_time)
-            traj_data.append([traj.id, task_id, n_steps, f"{final_reward:.2f}", duration_str])
+
+            # Trajectory is considered finished only if it has timing data
+            is_finished = traj.start_time is not None and traj.end_time is not None
+            if is_finished:
+                duration = traj.end_time - traj.start_time
+                duration_str = format_duration(duration)
+                finished_rewards.append(final_reward)
+                finished_steps.append(n_steps)
+                finished_durations.append(duration)
+            else:
+                duration_str = "-"
+                n_failed += 1
+
+            # Format tokens and cost for display
+            tokens_str = f"{traj_tokens:,}" if traj_tokens > 0 else "-"
+            cost_str = f"${traj_cost:.4f}" if traj_cost > 0 else "-"
+
+            traj_data.append(
+                [traj.id, task_id, n_steps, f"{final_reward:.2f}", final_message, duration_str, tokens_str, cost_str]
+            )
+
+        # Calculate experiment statistics
+        token_stats = {
+            "prompt": total_prompt_tokens,
+            "completion": total_completion_tokens,
+            "cached": total_cached_tokens,
+            "cache_created": total_cache_creation_tokens,
+            "cost": total_cost,
+        }
+        exp_stats = _compute_experiment_stats(
+            finished_rewards, finished_steps, finished_durations, n_failed, token_stats
+        )
 
         # Select first trajectory by default
         first_traj = None
@@ -301,19 +432,19 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             state.select_trajectory(first_id)
             first_traj = TrajectoryId(exp_dir=str(exp_dir), trajectory_name=first_id)
 
-        return traj_data, first_traj
+        return exp_stats, traj_data, first_traj
 
-    def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> StepId | None:
+    def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> TrajectoryId | None:
         """Handle trajectory selection from table."""
         if traj_table is None or len(traj_table) == 0:
             return None
 
         row = evt.index[0]
-        traj_id = traj_table.iloc[row, 0]
-        state.select_trajectory(traj_id)
-        return StepId(trajectory_id=TrajectoryId(trajectory_name=traj_id), step=0)
+        traj_name = traj_table.iloc[row, 0]
+        state.select_trajectory(traj_name)
+        return TrajectoryId(exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name)
 
-    def new_trajectory(traj_id: TrajectoryId) -> StepId:
+    def new_trajectory(traj_id: TrajectoryId | None) -> StepId:
         """Handle new trajectory selection."""
         if traj_id and traj_id.trajectory_name:
             state.select_trajectory(traj_id.trajectory_name)
@@ -356,6 +487,15 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             if llm_call.prompt.tools:
                 return json.dumps(llm_call.prompt.tools, indent=2)
         return "No tools in current step"
+
+    def update_episode_logs() -> str:
+        if not state.current_trajectory or not state.current_exp_dir:
+            return "No trajectory selected"
+        storage = FileStorage(state.current_exp_dir)
+        traj_id = state.current_trajectory.id
+        if storage.has_logs(traj_id):
+            return storage.load_logs(traj_id)
+        return f"No logs found for {traj_id}\nExpected at: {storage.get_log_path(traj_id)}"
 
     def update_raw_json() -> str:
         """Get raw JSON of current step."""
@@ -456,6 +596,22 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             sections = []
             sections.append(f"## 🤖 Agent Output{duration_info}\n")
 
+            # Token usage (if available)
+            if step.llm_calls:
+                llm_call = step.llm_calls[0]
+                usage = llm_call.usage
+                if usage and usage.prompt_tokens > 0:
+                    token_parts = [f"📊 **Tokens:** prompt: {usage.prompt_tokens:,}"]
+                    token_parts.append(f"completion: {usage.completion_tokens:,}")
+                    if usage.cached_tokens > 0:
+                        cache_pct = (usage.cached_tokens / usage.prompt_tokens * 100) if usage.prompt_tokens > 0 else 0
+                        token_parts.append(f"cached: {usage.cached_tokens:,} ({cache_pct:.0f}%)")
+                    if usage.cache_creation_tokens > 0:
+                        token_parts.append(f"cache_created: {usage.cache_creation_tokens:,}")
+                    if usage.cost > 0:
+                        token_parts.append(f"💰 **${usage.cost:.4f}**")
+                    sections.append(" │ ".join(token_parts) + "\n")
+
             # Actions
             if step.actions:
                 sections.append("### Actions\n")
@@ -499,20 +655,44 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         # Count total actions
         total_actions = sum(len(step.actions) for _, step in state.get_agent_steps())
 
-        # Count total LLM calls
-        total_llm_calls = sum(len(step.llm_calls) for _, step in state.get_agent_steps())
+        # Count total LLM calls and aggregate token usage
+        total_llm_calls = 0
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        total_cached_tokens = 0
+        total_cache_creation_tokens = 0
+        total_cost = 0.0
 
+        for _, step in state.get_agent_steps():
+            total_llm_calls += len(step.llm_calls)
+            for llm_call in step.llm_calls:
+                if llm_call.usage:
+                    total_prompt_tokens += llm_call.usage.prompt_tokens
+                    total_completion_tokens += llm_call.usage.completion_tokens
+                    total_cached_tokens += llm_call.usage.cached_tokens
+                    total_cache_creation_tokens += llm_call.usage.cache_creation_tokens
+                    total_cost += llm_call.usage.cost
+
+        # Line 1: Steps, actions, LLM calls, timing
         stats = f"🌍 Env Steps: **{n_env}** │ 🤖 Agent Steps: **{n_agent}** │ ⚡ Actions: **{total_actions}** │ 💬 LLM Calls: **{total_llm_calls}**"
 
-        # Add timing info
-        if traj.start_time is not None:
-            start_dt = datetime.fromtimestamp(traj.start_time)
-            start_str = start_dt.strftime("%H:%M:%S")
-            stats += f" │ 🕐 Start: **{start_str}**"
+        # Add timing info to line 1
+        if traj.start_time is not None and traj.end_time is not None:
+            duration = traj.end_time - traj.start_time
+            stats += f" │ ⏱️ **{format_duration(duration)}**"
 
-            if traj.end_time is not None:
-                duration = traj.end_time - traj.start_time
-                stats += f" │ ⏱️ Duration: **{format_duration(duration)}**"
+        # Line 2: Token usage stats (if available)
+        if total_prompt_tokens > 0:
+            token_stats = f"📊 prompt: **{total_prompt_tokens:,}** │ completion: **{total_completion_tokens:,}** │ total: **{total_prompt_tokens + total_completion_tokens:,}**"
+            if total_cached_tokens > 0:
+                cache_pct = total_cached_tokens / total_prompt_tokens * 100
+                token_stats += f" │ cached: **{total_cached_tokens:,}** ({cache_pct:.0f}%)"
+            if total_cache_creation_tokens > 0:
+                token_stats += f" │ cache_created: **{total_cache_creation_tokens:,}**"
+            if total_cost > 0:
+                token_stats += f" │ 💰 **${total_cost:.4f}**"
+            stats += f"\n\n{token_stats}"
+
         return stats
 
     def generate_timeline_html() -> str:
@@ -693,8 +873,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         # Trajectory selection (collapsible after selection)
         with gr.Accordion("📂 Trajectories", open=True):
+            experiment_stats = gr.Markdown("", elem_id="experiment_stats")
             trajectory_table = gr.DataFrame(
-                headers=["Name", "Task ID", "Steps", "Reward", "Duration"],
+                headers=["Name", "Task ID", "Steps", "Reward", "Message", "Duration", "Tokens", "Cost"],
                 max_height=300,
                 show_label=False,
                 interactive=False,
@@ -757,6 +938,8 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                     llm_calls = gr.Code(language="json", show_label=False)
                 with gr.Tab("LLM Tools"):
                     llm_tools = gr.Code(language="json", show_label=False)
+                with gr.Tab("Episode Logs"):
+                    episode_logs = gr.Code(language=None, show_label=False)
 
         # Event handlers
         refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
@@ -764,13 +947,13 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         exp_dir_choice.change(
             fn=on_select_experiment,
             inputs=exp_dir_choice,
-            outputs=[trajectory_table, traj_id],
+            outputs=[experiment_stats, trajectory_table, traj_id],
         )
 
         trajectory_table.select(
             fn=on_select_trajectory,
             inputs=trajectory_table,
-            outputs=step_id,
+            outputs=traj_id,
         )
 
         traj_id.change(fn=new_trajectory, inputs=traj_id, outputs=step_id)
@@ -797,6 +980,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         step_id.change(fn=update_raw_json, outputs=raw_json)
         step_id.change(fn=update_llm_calls, outputs=llm_calls)
         step_id.change(fn=update_llm_tools, outputs=llm_tools)
+        traj_id.change(fn=update_episode_logs, outputs=episode_logs)
 
         # Initial load
         demo.load(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)

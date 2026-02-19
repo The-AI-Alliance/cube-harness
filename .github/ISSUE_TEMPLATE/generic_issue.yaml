@@ -1,7 +1,7 @@
 name: Task/Feature Suggestion or Other Issue
 description: Use to request a feature, etc.
 title: "[Task/Feature/Issue] "  
-assignees: [deanwampler,hughesthe1st,jolson-ibm]
+assignees: [recursix,deanwampler,adampingel]
 projects: [The-AI-Alliance/47]
 body:
 - type: checkboxes
