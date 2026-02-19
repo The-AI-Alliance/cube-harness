@@ -70,8 +70,9 @@ class XRayState:
     # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
     _completed_ids: set[str] = field(default_factory=set, repr=False)
     _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
-    # Last rendered progress HTML — used to skip re-render when nothing changed
+    # Last rendered values — used to skip re-render when nothing changed (prevents blinking)
     _last_progress_html: str = field(default="", repr=False)
+    _last_exp_stats: str = field(default="", repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -617,7 +618,7 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, str, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
+    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
         """Periodic refresh handler: bulk-loads stubs, then live-polls for new/changed trajectories.
 
         Two phases share a single timer:
@@ -625,11 +626,26 @@ def run_xray(
         2. Once _bg_loading_done is True: calls refresh_experiment() to pick up new or
            changed trajectory files written by a running experiment. Timer deactivates only
            when is_experiment_complete() returns True (all trajectories have end_time set).
+
+        All table/stats outputs use gr.skip() when nothing has changed to avoid
+        unnecessary DOM re-renders (which cause visible blinking).
         """
         if state._bg_loading_done:
-            state.refresh_experiment()
+            changed = state.refresh_experiment()
+        else:
+            changed = True  # bg thread still running — always refresh tables
 
-        exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
+        still_active = not state._bg_loading_done or not state.is_experiment_complete()
+        timer_update = gr.Timer(active=still_active)
+
+        if not changed:
+            return gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), timer_update, gr.skip(), gr.skip(), gr.skip()
+
+        new_exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
+        exp_stats: Any = new_exp_stats if new_exp_stats != state._last_exp_stats else gr.skip()
+        if new_exp_stats != state._last_exp_stats:
+            state._last_exp_stats = new_exp_stats
+
         agent_rows = xray_utils.build_agent_table(state.trajectories)
         agent_key = state.selected_agent_key
         active_agent = agent_rows[0]["agent_name"] if (agent_rows and agent_key is None) else agent_key
@@ -653,12 +669,10 @@ def run_xray(
         new_progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
         if new_progress_html != state._last_progress_html:
             state._last_progress_html = new_progress_html
-            progress_html: str | type[gr.skip] = new_progress_html
+            progress_html: Any = new_progress_html
         else:
             progress_html = gr.skip()
 
-        still_active = not state._bg_loading_done or not state.is_experiment_complete()
-        timer_update = gr.Timer(active=still_active)
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
         return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
 
