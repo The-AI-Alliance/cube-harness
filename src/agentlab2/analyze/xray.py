@@ -618,12 +618,19 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_tick_progress() -> tuple[str, gr.Timer]:
-        """Fast tick: updates only the progress bar and timer state.
+    def on_bg_tick_progress(flag: int) -> tuple[Any, gr.Timer, int]:
+        """Fast tick: updates progress bar, timer state, and signals table refresh when needed.
 
-        This handler has a minimal outputs list (progress_bar + bg_timer) so Gradio's
-        loading animation never touches the tables or stats widgets, eliminating blink.
+        Outputs only [progress_bar, bg_timer, tables_update_flag] — tables are NOT in this
+        list, so Gradio's loading animation never touches them on every tick.
+        Tables update via tables_update_flag.change(), which only fires when the flag value
+        actually changes (i.e. when data has changed), not on every tick.
         """
+        if state._bg_loading_done:
+            changed = state.refresh_experiment()
+        else:
+            changed = True  # bg thread still running — always refresh tables
+
         n_completed = len(state._completed_ids)
         n_total = len(state.trajectories)
         n_running = sum(1 for t in state.trajectories if t.end_time is None)
@@ -635,23 +642,11 @@ def run_xray(
             progress_html = gr.skip()
 
         still_active = not state._bg_loading_done or not state.is_experiment_complete()
-        return progress_html, gr.Timer(active=still_active)
+        new_flag = flag + 1 if changed else flag
+        return progress_html, gr.Timer(active=still_active), new_flag
 
-    def on_bg_tick_tables() -> tuple[Any, Any, Any, Any, gr.Tab, gr.Tab, gr.Tab]:
-        """Slow tick: updates tables and stats only when data has actually changed.
-
-        During bulk loading (_bg_loading_done is False) this fires every tick.
-        After loading, it calls refresh_experiment() and only updates when files change.
-        Returns gr.skip() for all outputs when nothing has changed.
-        """
-        if state._bg_loading_done:
-            changed = state.refresh_experiment()
-        else:
-            changed = True  # bg thread still running — always refresh tables
-
-        if not changed:
-            return gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip(), gr.skip()
-
+    def on_tables_update() -> tuple[Any, Any, Any, Any, gr.Tab, gr.Tab, gr.Tab]:
+        """Rebuild tables and stats. Triggered only when tables_update_flag changes value."""
         new_exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         exp_stats: Any = new_exp_stats if new_exp_stats != state._last_exp_stats else gr.skip()
         if new_exp_stats != state._last_exp_stats:
@@ -942,6 +937,11 @@ def run_xray(
             progress_bar = gr.HTML("")
             experiment_stats = gr.Markdown("")
 
+        # Hidden counter incremented by the timer when tables need refreshing.
+        # Wiring table updates to its .change() event means tables only re-render
+        # when data actually changed, not on every timer tick (which would cause blink).
+        tables_update_flag = gr.Number(value=0, visible=False)
+
         # Timer: ticks every 1s to bulk-load stubs and then live-poll for new/changed trajectories.
         # Starts inactive; activated on experiment select; deactivates when experiment is complete.
         bg_timer = gr.Timer(value=1.0, active=False)
@@ -1048,11 +1048,12 @@ def run_xray(
 
         bg_timer.tick(
             fn=on_bg_tick_progress,
-            outputs=[progress_bar, bg_timer],
+            inputs=[tables_update_flag],
+            outputs=[progress_bar, bg_timer, tables_update_flag],
             show_progress="hidden",
         )
-        bg_timer.tick(
-            fn=on_bg_tick_tables,
+        tables_update_flag.change(
+            fn=on_tables_update,
             outputs=[experiment_stats, agent_table, task_table, seed_table, agents_tab, tasks_tab, seeds_tab],
             show_progress="hidden",
         )
