@@ -2,7 +2,7 @@
 
 help:
 	@echo "make install         - Install dependencies in editable mode"
-	@echo "make install-osworld - Install desktop-env for OSWorld (skips numpy conflict)"
+	@echo "make install-osworld - Install OSWorld optional dependencies (desktop-env)"
 	@echo "make update          - Update dependencies"
 	@echo "make format          - Format code"
 	@echo "make lint            - Lint and auto-fix"
@@ -31,7 +31,7 @@ install:
 	uv run playwright install chromium
 
 install-osworld:
-	uv pip install desktop-env==1.0.2 --no-deps
+	uv sync --extra osworld
 
 update:
 	uv sync --all-extras --update

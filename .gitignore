@@ -9,8 +9,6 @@ temp/
 # Local development files (not for commit)
 cache/
 migrate_osworld.py
-uv.lock
-pyproject.toml
 
 # Releases
 releases/*.temp
@@ -288,5 +286,3 @@ node_modules
 
 # LSF license
 pac.entitlement
-
-Makefile
