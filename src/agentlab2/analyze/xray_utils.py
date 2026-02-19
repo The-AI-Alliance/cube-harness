@@ -573,6 +573,7 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
     finished_rewards: list[float] = []
     finished_steps: list[int] = []
     finished_durations: list[float] = []
+    n_running = 0
     n_failed = 0
 
     total_prompt = 0
@@ -583,13 +584,15 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
 
     for traj in trajectories:
         stats = compute_trajectory_stats(traj)
-        is_finished = traj.start_time is not None and traj.end_time is not None
+        status = trajectory_status(traj)
 
-        if is_finished:
+        if status in ("success", "completed"):
             finished_rewards.append(stats["final_reward"])
             finished_steps.append(stats["n_env_steps"])
             finished_durations.append(stats["duration"])
-        else:
+        elif status == "running":
+            n_running += 1
+        else:  # error
             n_failed += 1
 
         total_prompt += stats["prompt_tokens"]
@@ -599,11 +602,16 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         total_cost += stats["cost"]
 
     n_finished = len(finished_rewards)
-    n_total = n_finished + n_failed
+    n_total = n_finished + n_running + n_failed
 
     stats_parts = [f"📊 **{n_total}** trajectories"]
-    if n_failed > 0:
-        stats_parts.append(f"│ ✅ Finished: **{n_finished}** │ ❌ Failed: **{n_failed}**")
+    if n_running > 0 or n_failed > 0:
+        parts = [f"✅ Finished: **{n_finished}**"]
+        if n_running > 0:
+            parts.append(f"⏳ Running: **{n_running}**")
+        if n_failed > 0:
+            parts.append(f"❌ Failed: **{n_failed}**")
+        stats_parts.append("│ " + " │ ".join(parts))
     else:
         stats_parts.append(f"│ ✅ All Finished: **{n_finished}**")
 

@@ -1,6 +1,7 @@
 """Tests for agentlab2.analyze.xray_utils module."""
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -439,9 +440,25 @@ class TestComputeExperimentStats:
         assert "1" in result
         assert "Finished" in result
 
+    def test_counts_running_trajectories(self) -> None:
+        # Trajectory without end_time (not yet finished) is counted as running
+        running_traj = Trajectory(id="running")
+        result = xray_utils.compute_experiment_stats([running_traj])
+        assert "Running" in result
+        assert "Failed" not in result
+
     def test_counts_failed_trajectories(self) -> None:
-        # Trajectory without start/end time is considered "failed"
-        failed_traj = Trajectory(id="failed")
+        # Trajectory with end_time but an error step is counted as failed
+        error_step = TrajectoryStep(
+            output=EnvironmentOutput(
+                obs=Observation(contents=[]),
+                reward=0.0,
+                done=True,
+                info={},
+                error=StepError(error_type="RuntimeError", exception_str="oops", stack_trace=""),
+            )
+        )
+        failed_traj = Trajectory(id="failed", steps=[error_step], start_time=time.time(), end_time=time.time())
         result = xray_utils.compute_experiment_stats([failed_traj])
         assert "Failed" in result
 
