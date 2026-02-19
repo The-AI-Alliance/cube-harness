@@ -79,7 +79,6 @@ class Experiment(TypedBaseModel):
                 agent_config=self.agent_config,
                 env_config=env_config,
                 exp_name=self.name,
-                max_steps=env_config.task.max_turns,
             )
             for i, env_config in enumerate(self.benchmark.env_configs())
         ]

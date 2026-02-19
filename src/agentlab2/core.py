@@ -225,7 +225,6 @@ class Task(ABC):
 
     id: str
     validate_per_step: bool = False
-    max_turns: int = 1000  # Maximum agent steps; subclasses and benchmarks can lower this
     _tool: Any  # access to the environment tool, initialized in setup()
 
     @abstractmethod

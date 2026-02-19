@@ -49,7 +49,7 @@ class OSWorldTask(Task):
         related_apps: Optional[List[str]] = None,
         config: Optional[List[dict]] = None,
         evaluator: Optional[dict] = None,
-        max_turns: int = 30,
+        max_turns: int = 15,
     ) -> None:
         self.id = id
         self.desc = desc
