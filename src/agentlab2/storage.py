@@ -241,7 +241,40 @@ class FileStorage:
                 logger.error(f"Failed to load trajectory metadata {trajectory_id}: {e}")
 
         return trajectories
-      
+
+    def list_trajectory_ids(self) -> list[str]:
+        """List all non-archived trajectory IDs in the output directory."""
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return []
+        return [
+            f.stem.replace(".metadata", "")
+            for f in traj_dir.glob("*.metadata.json")
+            if ".archived_" not in f.name
+        ]
+
+    def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
+        """List trajectory IDs mapped to their latest file modification time.
+
+        Returns the max mtime across the .metadata.json and .jsonl files for each
+        trajectory — cheap stat() calls only, no file reads. Used for change detection
+        in live polling to avoid reloading trajectories that haven't changed.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return {}
+        result: dict[str, float] = {}
+        for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
+            traj_id = metadata_file.stem.replace(".metadata", "")
+            mtime = metadata_file.stat().st_mtime
+            jsonl_path = traj_dir / f"{traj_id}.jsonl"
+            if jsonl_path.exists():
+                mtime = max(mtime, jsonl_path.stat().st_mtime)
+            result[traj_id] = mtime
+        return result
+
     def get_log_path(self, trajectory_id: str) -> Path:
         return get_episode_log_path(self.output_dir, trajectory_id)
 

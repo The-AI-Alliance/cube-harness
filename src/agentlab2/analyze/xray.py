@@ -67,6 +67,9 @@ class XRayState:
     # JSON strings for the Config tabs (set on experiment load, None if unavailable)
     _agent_config_json: str | None = field(default=None, repr=False)
     _exp_config_json: str | None = field(default=None, repr=False)
+    # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
+    _completed_ids: set[str] = field(default_factory=set, repr=False)
+    _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -89,6 +92,8 @@ class XRayState:
         self.current_trajectory = None
         self.step = 0
         self._env_step_indices = []
+        self._completed_ids = {t.id for t in self.trajectories if t.end_time is not None}
+        self._traj_mtimes = self._storage.list_trajectory_ids_with_mtime()
         self._bg_loading_done = False
         self._start_background_loading()
         return len(self.trajectories) > 0
@@ -162,6 +167,50 @@ class XRayState:
 
         thread = threading.Thread(target=_load_all, daemon=True)
         thread.start()
+
+    def refresh_experiment(self) -> bool:
+        """Incrementally reload new or changed trajectories from disk. Returns True if anything changed.
+
+        Uses mtime-based change detection: only trajectories whose files have changed since the
+        last check are reloaded. Completed trajectories (end_time set) are skipped entirely.
+        Called on each bg_timer tick while the experiment is still running.
+        """
+        if self._storage is None:
+            return False
+        id_mtimes = self._storage.list_trajectory_ids_with_mtime()
+        changed = False
+        known_ids = {t.id for t in self.trajectories}
+
+        for traj_id, mtime in id_mtimes.items():
+            if traj_id in self._completed_ids:
+                continue
+            prev_mtime = self._traj_mtimes.get(traj_id, 0.0)
+            if mtime <= prev_mtime and traj_id in known_ids:
+                continue
+            try:
+                full = self._storage.load_trajectory(traj_id)
+                self._maybe_backfill(full)
+                self._traj_mtimes[traj_id] = mtime
+                changed = True
+                if traj_id in known_ids:
+                    idx = next(i for i, t in enumerate(self.trajectories) if t.id == traj_id)
+                    self.trajectories[idx] = full
+                    if self.current_trajectory is not None and self.current_trajectory.id == traj_id:
+                        self.current_trajectory = full
+                        self._env_step_indices = self._build_env_indices()
+                else:
+                    self.trajectories.append(full)
+                if full.end_time is not None:
+                    self._completed_ids.add(traj_id)
+            except Exception:
+                pass
+        return changed
+
+    def is_experiment_complete(self) -> bool:
+        """Return True when every known trajectory has finished (end_time is set)."""
+        if not self.trajectories:
+            return False
+        return all(t.id in self._completed_ids for t in self.trajectories)
 
     def select_agent(self, agent_key: str) -> None:
         """Select an agent; resets task, trajectory, and step."""
@@ -558,7 +607,7 @@ def run_xray(
         if seed_df is None or len(seed_df) == 0:
             return [], StepId(step=0)
         row = evt.index[0]
-        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 0]))
+        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 1]))  # col 0 is status emoji
         state.select_trajectory(traj_id)
         if state.selected_agent_key is None or state.selected_task_id is None:
             return [], StepId(step=0)
@@ -566,13 +615,18 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
-        """Periodic refresh handler called by gr.Timer while background loading is in progress.
+    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, str, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
+        """Periodic refresh handler: bulk-loads stubs, then live-polls for new/changed trajectories.
 
-        Rebuilds hierarchy tables and experiment stats from the current (partially-loaded)
-        state.trajectories list.  When loading finishes, returns an active=False timer update
-        to stop further polling.
+        Two phases share a single timer:
+        1. While _bg_loading_done is False: background thread is still bulk-loading stubs.
+        2. Once _bg_loading_done is True: calls refresh_experiment() to pick up new or
+           changed trajectory files written by a running experiment. Timer deactivates only
+           when is_experiment_complete() returns True (all trajectories have end_time set).
         """
+        if state._bg_loading_done:
+            state.refresh_experiment()
+
         exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
         agent_key = state.selected_agent_key
@@ -591,9 +645,15 @@ def run_xray(
         traj_id = state.current_trajectory.id if state.current_trajectory else None
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
-        timer_update = gr.Timer(active=not state._bg_loading_done)
+        n_completed = len(state._completed_ids)
+        n_total = len(state.trajectories)
+        n_running = sum(1 for t in state.trajectories if t.end_time is None)
+        progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
+
+        still_active = not state._bg_loading_done or not state.is_experiment_complete()
+        timer_update = gr.Timer(active=still_active)
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, timer_update, *tab_labels
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
 
     def navigate_prev(step_id: StepId) -> StepId:
         step = max(0, step_id.step - 1)
@@ -847,7 +907,7 @@ def run_xray(
                     )
                 with gr.Tab("Seeds") as seeds_tab:
                     seed_table = gr.DataFrame(
-                        headers=["traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
+                        headers=["status", "traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
                         datatype="html",
                         max_height=260,
                         show_label=False,
@@ -857,10 +917,11 @@ def run_xray(
                     agent_config_code = gr.Code(language="json", show_label=False)
                 with gr.Tab("Exp Config"):
                     exp_config_code = gr.Code(language="json", show_label=False)
+            progress_bar = gr.HTML("")
             experiment_stats = gr.Markdown("")
 
-        # Background-loading timer: ticks every 1s to refresh tables while stubs are being loaded.
-        # Starts inactive; activated when an experiment is selected, deactivated when loading ends.
+        # Timer: ticks every 1s to bulk-load stubs and then live-poll for new/changed trajectories.
+        # Starts inactive; activated on experiment select; deactivates when experiment is complete.
         bg_timer = gr.Timer(value=1.0, active=False)
 
         with gr.Row(variant="panel", elem_classes="compact-header"):
@@ -965,7 +1026,7 @@ def run_xray(
 
         bg_timer.tick(
             fn=on_bg_load_tick,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, bg_timer, agents_tab, tasks_tab, seeds_tab],
+            outputs=[experiment_stats, agent_table, task_table, seed_table, progress_bar, bg_timer, agents_tab, tasks_tab, seeds_tab],
         )
 
         agent_table.select(

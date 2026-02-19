@@ -38,6 +38,41 @@ def format_duration(seconds: float) -> str:
         return f"{hours}h {minutes}m"
 
 
+def trajectory_status(traj: Trajectory) -> str:
+    """Return status string for a trajectory: 'running', 'success', 'error', or 'completed'."""
+    if traj.end_time is None:
+        return "running"
+    if traj.reward_info and traj.reward_info.get("reward", 0) > 0:
+        return "success"
+    for step in traj.steps:
+        if hasattr(step.output, "error") and step.output.error is not None:
+            return "error"
+    return "completed"
+
+
+_STATUS_EMOJI: dict[str, str] = {
+    "running": "⏳",
+    "success": "✅",
+    "error": "❌",
+    "completed": "⬜",
+}
+
+
+def build_progress_html(n_completed: int, n_total: int, n_running: int) -> str:
+    """Return an HTML progress bar + label for experiment completion status."""
+    pct = (n_completed / n_total * 100) if n_total > 0 else 0
+    bar = (
+        f'<div style="background:#e5e7eb;border-radius:6px;height:14px;overflow:hidden;margin-bottom:4px;">'
+        f'<div style="background:linear-gradient(90deg,#22c55e,#16a34a);height:100%;width:{pct:.1f}%;'
+        f'transition:width 0.5s;"></div></div>'
+    )
+    label = f'<div style="font-size:12px;color:#555;">{n_completed}/{n_total} episodes completed'
+    if n_running > 0:
+        label += f", {n_running} running ⏳"
+    label += "</div>"
+    return bar + label
+
+
 def get_directory_contents(results_dir: Path) -> list[str]:
     """Return sorted list of experiment directory names with trajectory counts.
 
@@ -719,7 +754,7 @@ def build_seed_table(
     """Build one row per trajectory (seed) for a selected agent + task.
 
     Filters trajectories by agent_key and task_id.
-    Columns: traj_id, reward, n_steps, duration, tokens, cost
+    Columns: status, traj_id, reward, n_steps, duration, tokens, cost
     """
     filtered = [
         t
@@ -735,9 +770,11 @@ def build_seed_table(
         tokens_str = f"{total_tokens:,}" if total_tokens > 0 else "-"
         cost_str = f"${float(stats['cost']):.4f}" if float(stats["cost"]) > 0 else "-"
         n_steps = stats["n_env_steps"]
+        status = trajectory_status(traj)
 
         rows.append(
             {
+                "status": _STATUS_EMOJI[status],
                 "traj_id": traj.id,
                 "reward": round(stats["final_reward"], 3),
                 "n_steps": n_steps,
