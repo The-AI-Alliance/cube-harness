@@ -552,7 +552,7 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
 
         if is_finished:
             finished_rewards.append(stats["final_reward"])
-            finished_steps.append(stats["n_env_steps"] + stats["n_agent_steps"])
+            finished_steps.append(stats["n_env_steps"])
             finished_durations.append(stats["duration"])
         else:
             n_failed += 1
@@ -685,7 +685,7 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
         ]
         avg_duration_str = format_duration(sum(durations) / len(durations)) if durations else "-"
 
-        n_steps_list = [s["n_env_steps"] + s["n_agent_steps"] for s in all_stats]
+        n_steps_list = [s["n_env_steps"] for s in all_stats]
         avg_steps = sum(n_steps_list) / len(n_steps_list) if n_steps_list else 0
         avg_steps_str = f"{avg_steps:.1f}" if any(n > 0 for n in n_steps_list) else "-"
 
@@ -734,7 +734,7 @@ def build_seed_table(
         total_tokens = int(stats["prompt_tokens"]) + int(stats["completion_tokens"])
         tokens_str = f"{total_tokens:,}" if total_tokens > 0 else "-"
         cost_str = f"${float(stats['cost']):.4f}" if float(stats["cost"]) > 0 else "-"
-        n_steps = stats["n_env_steps"] + stats["n_agent_steps"]
+        n_steps = stats["n_env_steps"]
 
         rows.append(
             {

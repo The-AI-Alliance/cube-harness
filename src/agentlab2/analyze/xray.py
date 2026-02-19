@@ -64,6 +64,9 @@ class XRayState:
     _bg_loading_done: bool = field(default=True, repr=False)
     # Agent name derived from experiment_config.json for backwards-compatibility backfill
     _backfill_name: str | None = field(default=None, repr=False)
+    # JSON strings for the Config tabs (set on experiment load, None if unavailable)
+    _agent_config_json: str | None = field(default=None, repr=False)
+    _exp_config_json: str | None = field(default=None, repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -78,7 +81,7 @@ class XRayState:
         """
         self._storage = FileStorage(exp_dir)
         self.trajectories = self._storage.load_all_trajectory_metadata()
-        self._backfill_name = self._read_backfill_name(exp_dir)
+        self._load_experiment_config(exp_dir)
         for traj in self.trajectories:
             self._maybe_backfill(traj)
         self.selected_agent_key = None
@@ -90,22 +93,31 @@ class XRayState:
         self._start_background_loading()
         return len(self.trajectories) > 0
 
-    def _read_backfill_name(self, exp_dir: Path) -> str | None:
-        """Read agent class name from experiment_config.json for backwards-compat backfill.
+    def _load_experiment_config(self, exp_dir: Path) -> None:
+        """Read experiment_config.json and populate config fields.
 
-        Returns the short class name (e.g. "ReactAgentConfig") or None if unavailable.
+        Sets _backfill_name (agent class short name for backwards compat),
+        _agent_config_json (pretty JSON for the Agent Config tab), and
+        _exp_config_json (pretty JSON for the Experiment Config tab, with
+        agent_config replaced by a placeholder to avoid duplication).
         """
+        self._backfill_name = None
+        self._agent_config_json = None
+        self._exp_config_json = None
         config_path = exp_dir / "experiment_config.json"
         if not config_path.exists():
-            return None
+            return
         try:
             with open(config_path) as f:
                 exp_cfg = json.load(f)
-            agent_type = exp_cfg.get("agent_config", {}).get("_type", "")
-            # "agentlab2.agents.react.ReactAgentConfig" → "ReactAgentConfig"
-            return agent_type.split(".")[-1] if agent_type else None
+            agent_cfg = exp_cfg.get("agent_config", {})
+            agent_type = agent_cfg.get("_type", "")
+            self._backfill_name = agent_type.split(".")[-1] if agent_type else None
+            self._agent_config_json = json.dumps(agent_cfg, indent=2)
+            exp_cfg_display = {**exp_cfg, "agent_config": "(see Agent Config tab)"}
+            self._exp_config_json = json.dumps(exp_cfg_display, indent=2)
         except Exception:
-            return None
+            pass
 
     def _maybe_backfill(self, traj: Trajectory) -> None:
         """Inject _backfill_name into a trajectory's metadata if agent_name is absent."""
@@ -448,9 +460,16 @@ def run_xray(
     def refresh_exp_dir_choices(current_choice: str) -> gr.Dropdown:
         return gr.Dropdown(choices=xray_utils.get_directory_contents(state.results_dir), value=current_choice)
 
-    def on_select_experiment(exp_name: str) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
+    def _config_jsons() -> tuple[str, str]:
+        """Return (agent_config_json, exp_config_json) from current state, with empty fallback."""
+        return (
+            state._agent_config_json or "",
+            state._exp_config_json or "",
+        )
+
+    def on_select_experiment(exp_name: str) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
         if exp_name in ("Select experiment directory", "") or not exp_name:
-            return "", None, None, None, StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
+            return "", None, None, None, StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)"), "", ""
         dir_name = exp_name.split(" (")[0]
         exp_dir = state.results_dir / dir_name
         state.load_experiment(exp_dir)
@@ -462,7 +481,7 @@ def run_xray(
             seed_rows: list[dict[str, Any]] = []
             task_rows: list[dict[str, Any]] = []
             tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels
+            return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels, *_config_jsons()
         first_agent_key = agent_rows[0]["agent_name"]
         state.select_agent(first_agent_key)
         agent_table_data = _rows_to_table(agent_rows, first_agent_key, "agent_name")
@@ -471,7 +490,7 @@ def run_xray(
         task_rows = xray_utils.build_task_table(state.trajectories, first_agent_key)
         if not task_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, [])
-            return exp_stats, agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels
+            return exp_stats, agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels, *_config_jsons()
         first_task_id = task_rows[0]["task_id"]
         state.select_task(first_task_id)
         task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
@@ -480,13 +499,13 @@ def run_xray(
         seed_rows = xray_utils.build_seed_table(state.trajectories, first_agent_key, first_task_id)
         if not seed_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return exp_stats, agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels
+            return exp_stats, agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels, *_config_jsons()
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
 
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels, *_config_jsons()
 
     def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
         if agent_df is None or len(agent_df) == 0:
@@ -834,6 +853,10 @@ def run_xray(
                         show_label=False,
                         interactive=False,
                     )
+                with gr.Tab("Agent Config"):
+                    agent_config_code = gr.Code(language="json", show_label=False)
+                with gr.Tab("Exp Config"):
+                    exp_config_code = gr.Code(language="json", show_label=False)
             experiment_stats = gr.Markdown("")
 
         # Background-loading timer: ticks every 1s to refresh tables while stubs are being loaded.
@@ -927,7 +950,7 @@ def run_xray(
 
         def on_select_experiment_with_timer(
             exp_name: str,
-        ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, gr.Timer]:
+        ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
             """Wrap on_select_experiment to also activate the background-loading timer."""
             result = on_select_experiment(exp_name)
             # Activate timer only if background loading was actually started (trajectories exist)
@@ -937,7 +960,7 @@ def run_xray(
         exp_dir_choice.change(
             fn=on_select_experiment_with_timer,
             inputs=exp_dir_choice,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, bg_timer],
+            outputs=[experiment_stats, agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, agent_config_code, exp_config_code, bg_timer],
         )
 
         bg_timer.tick(
