@@ -442,12 +442,24 @@ def run_xray(
     # Handler functions (closures capturing `state`)
     # ------------------------------------------------------------------
 
+    def _make_tab_labels(
+        agent_rows: list[dict[str, Any]],
+        task_rows: list[dict[str, Any]],
+        seed_rows: list[dict[str, Any]],
+    ) -> tuple[gr.Tab, gr.Tab, gr.Tab]:
+        """Return gr.Tab updates with counts embedded in labels."""
+        return (
+            gr.Tab(label=f"Agents ({len(agent_rows)})"),
+            gr.Tab(label=f"Tasks ({len(task_rows)})"),
+            gr.Tab(label=f"Seeds ({len(seed_rows)})"),
+        )
+
     def refresh_exp_dir_choices(current_choice: str) -> gr.Dropdown:
         return gr.Dropdown(choices=xray_utils.get_directory_contents(state.results_dir), value=current_choice)
 
-    def on_select_experiment(exp_name: str) -> tuple[str, Any, Any, Any, StepId]:
+    def on_select_experiment(exp_name: str) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
         if exp_name in ("Select experiment directory", "") or not exp_name:
-            return "", None, None, None, StepId()
+            return "", None, None, None, StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
         dir_name = exp_name.split(" (")[0]
         exp_dir = state.results_dir / dir_name
         state.load_experiment(exp_dir)
@@ -456,7 +468,10 @@ def run_xray(
 
         # Auto-select first agent
         if not agent_rows:
-            return exp_stats, _rows_to_table(agent_rows), [], [], StepId()
+            seed_rows: list[dict[str, Any]] = []
+            task_rows: list[dict[str, Any]] = []
+            tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+            return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels
         first_agent_key = agent_rows[0]["agent_name"]
         state.select_agent(first_agent_key)
         agent_table_data = _rows_to_table(agent_rows, first_agent_key, "agent_name")
@@ -464,7 +479,8 @@ def run_xray(
         # Auto-select first task
         task_rows = xray_utils.build_task_table(state.trajectories, first_agent_key)
         if not task_rows:
-            return exp_stats, agent_table_data, _rows_to_table(task_rows), [], StepId()
+            tab_labels = _make_tab_labels(agent_rows, task_rows, [])
+            return exp_stats, agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels
         first_task_id = task_rows[0]["task_id"]
         state.select_task(first_task_id)
         task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
@@ -472,16 +488,18 @@ def run_xray(
         # Auto-select first seed/trajectory
         seed_rows = xray_utils.build_seed_table(state.trajectories, first_agent_key, first_task_id)
         if not seed_rows:
-            return exp_stats, agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId()
+            tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+            return exp_stats, agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
 
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0)
+        tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
 
-    def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId]:
+    def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
         if agent_df is None or len(agent_df) == 0:
-            return [], [], [], StepId()
+            return [], [], [], StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         # Strip HTML tags to get the raw key value
         agent_key = re.sub(r"<[^>]+>", "", str(agent_df.iloc[row, 0]))
@@ -490,37 +508,41 @@ def run_xray(
         agent_table_data = _rows_to_table(agent_rows, agent_key, "agent_name")
         task_rows = xray_utils.build_task_table(state.trajectories, agent_key)
         if not task_rows:
-            return agent_table_data, _rows_to_table(task_rows), [], StepId()
+            tab_labels = _make_tab_labels(agent_rows, task_rows, [])
+            return agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels
         # Auto-select first task and first seed
         first_task_id = task_rows[0]["task_id"]
         state.select_task(first_task_id)
         task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
         seed_rows = xray_utils.build_seed_table(state.trajectories, agent_key, first_task_id)
         if not seed_rows:
-            return agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId()
+            tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+            return agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
-        return agent_table_data, task_table_data, seed_table_data, StepId(step=0)
+        tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+        return agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
 
-    def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId]:
+    def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
         if task_df is None or len(task_df) == 0:
-            return [], [], StepId()
+            return [], [], StepId(), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 0]))
         state.select_task(task_id)
         if state.selected_agent_key is None:
-            return [], [], StepId()
+            return [], [], StepId(), gr.Tab(label="Seeds (0)")
         task_rows = xray_utils.build_task_table(state.trajectories, state.selected_agent_key)
         task_table_data = _rows_to_table(task_rows, task_id, "task_id")
         seed_rows = xray_utils.build_seed_table(state.trajectories, state.selected_agent_key, task_id)
+        seeds_tab_update = gr.Tab(label=f"Seeds ({len(seed_rows)})")
         if not seed_rows:
-            return task_table_data, _rows_to_table(seed_rows), StepId()
+            return task_table_data, _rows_to_table(seed_rows), StepId(), seeds_tab_update
         # Auto-select first seed
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
-        return task_table_data, seed_table_data, StepId(step=0)
+        return task_table_data, seed_table_data, StepId(step=0), seeds_tab_update
 
     def on_select_seed(evt: gr.SelectData, seed_df: Any) -> tuple[Any, StepId]:
         if seed_df is None or len(seed_df) == 0:
@@ -534,7 +556,7 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, gr.Timer]:
+    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
         """Periodic refresh handler called by gr.Timer while background loading is in progress.
 
         Rebuilds hierarchy tables and experiment stats from the current (partially-loaded)
@@ -560,7 +582,8 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
         timer_update = gr.Timer(active=not state._bg_loading_done)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, timer_update
+        tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, timer_update, *tab_labels
 
     def navigate_prev(step_id: StepId) -> StepId:
         step = max(0, step_id.step - 1)
@@ -794,9 +817,9 @@ def run_xray(
             )
             refresh_button = gr.Button("↺ Refresh", scale=0, size="sm")
 
-        with gr.Accordion("📂 Hierarchy", open=True):
+        with gr.Accordion("📂 Trajectory Hierarchy", open=True):
             with gr.Tabs():
-                with gr.Tab("Agents"):
+                with gr.Tab("Agents") as agents_tab:
                     agent_table = gr.DataFrame(
                         headers=["agent_name", "n_tasks", "n_trajs", "avg_reward", "total_cost"],
                         datatype="html",
@@ -804,7 +827,7 @@ def run_xray(
                         show_label=False,
                         interactive=False,
                     )
-                with gr.Tab("Tasks"):
+                with gr.Tab("Tasks") as tasks_tab:
                     task_table = gr.DataFrame(
                         headers=["task_id", "n_seeds", "avg_reward", "avg_steps", "avg_duration", "avg_tokens", "avg_cost"],
                         datatype="html",
@@ -812,7 +835,7 @@ def run_xray(
                         show_label=False,
                         interactive=False,
                     )
-                with gr.Tab("Seeds"):
+                with gr.Tab("Seeds") as seeds_tab:
                     seed_table = gr.DataFrame(
                         headers=["traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
                         datatype="html",
@@ -911,7 +934,9 @@ def run_xray(
 
         refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
 
-        def on_select_experiment_with_timer(exp_name: str) -> tuple[str, Any, Any, Any, StepId, gr.Timer]:
+        def on_select_experiment_with_timer(
+            exp_name: str,
+        ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, gr.Timer]:
             """Wrap on_select_experiment to also activate the background-loading timer."""
             result = on_select_experiment(exp_name)
             # Activate timer only if background loading was actually started (trajectories exist)
@@ -921,16 +946,20 @@ def run_xray(
         exp_dir_choice.change(
             fn=on_select_experiment_with_timer,
             inputs=exp_dir_choice,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, step_id, bg_timer],
+            outputs=[experiment_stats, agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, bg_timer],
         )
 
         bg_timer.tick(
             fn=on_bg_load_tick,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, bg_timer],
+            outputs=[experiment_stats, agent_table, task_table, seed_table, bg_timer, agents_tab, tasks_tab, seeds_tab],
         )
 
-        agent_table.select(fn=on_select_agent, inputs=agent_table, outputs=[agent_table, task_table, seed_table, step_id])
-        task_table.select(fn=on_select_task, inputs=task_table, outputs=[task_table, seed_table, step_id])
+        agent_table.select(
+            fn=on_select_agent,
+            inputs=agent_table,
+            outputs=[agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab],
+        )
+        task_table.select(fn=on_select_task, inputs=task_table, outputs=[task_table, seed_table, step_id, seeds_tab])
         seed_table.select(fn=on_select_seed, inputs=seed_table, outputs=[seed_table, step_id])
 
         # Timeline click
