@@ -23,7 +23,7 @@ def main() -> None:
 
     exp = Experiment(
         name="hello_world_study",
-        output_dir=make_experiment_output_dir("react", "miniwob", tag="hello_world_1"),
+        output_dir=make_experiment_output_dir("react", "miniwob", tag="otel_metrics"),
         agent_config=agent_config,
         benchmark=benchmark,
     )
