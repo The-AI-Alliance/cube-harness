@@ -311,13 +311,12 @@ class TestGetChatMessagesMarkdown:
         assert "42" in result
 
     def test_long_content_collapses(self, sample_llm_call: LLMCall) -> None:
-        long_content = "x" * 1000
+        long_content = "x" * (xray_utils._COLLAPSE_THRESHOLD + 1)
         sample_llm_call.prompt.messages[1] = {"role": "user", "content": long_content}
         step = AgentOutput(llm_calls=[sample_llm_call])
         result = xray_utils.get_chat_messages_html(step)
-        # Long content should use <details> without the "open" attribute (collapsed by default)
-        assert "<details>" in result
-        assert long_content[:100] in result
+        assert "<details>" in result  # collapsed block has no "open" attribute
+        assert long_content[:50] in result  # content is still present
 
     def test_handles_list_content_with_image(self, sample_llm_call: LLMCall) -> None:
         sample_llm_call.prompt.messages[1] = {
