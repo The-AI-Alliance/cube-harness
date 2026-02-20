@@ -12,7 +12,7 @@ from typing import Any
 from PIL import Image
 from pydantic import BaseModel
 
-from agentlab2.core import AgentOutput, Content, EnvironmentOutput, Trajectory, TrajectoryStep
+from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 
 
 # ---------------------------------------------------------------------------
@@ -175,19 +175,68 @@ def _details_block(label: str, body: str, icon: str = "📄") -> str:
     )
 
 
-def _render_content_items(content: str | list | None) -> str:
-    """Render message content (str or multimodal list) as HTML.
+def _render_text_content(text: str) -> str:
+    """Render a plain text content string.
 
-    Uses Content.parse_message_content() as the canonical decoder so this stays
-    in sync with Content.to_message() encoding without duplicating logic.
+    Handles the '##name\\nbody' convention used by Content.to_message() for named
+    text/dict content, but also works for any plain string.
     """
-    name, text_body, image_url = Content.parse_message_content(content or "")
-    if image_url:
-        label = name or "screenshot"
-        img_html = f"<img src='{image_url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
-        return f"<details><summary>📷 <strong>{html_lib.escape(label)}</strong></summary>{img_html}</details>\n"
-    body = text_body or ""
-    return _details_block(name or "text", body)
+    if text.startswith("##"):
+        newline = text.find("\n")
+        if newline != -1:
+            name = text[2:newline].strip()
+            body = text[newline + 1:]
+            return _details_block(name, body)
+    return _details_block("text", text)
+
+
+def _render_content_items(content: str | list | None) -> str:
+    """Render a message's content field as HTML.
+
+    Handles the common content types found in LLM message dicts:
+      - str:            plain text or '##name\\nbody' encoded text
+      - list of items:  multimodal content list with typed items:
+          {"type": "text",      "text": ...}
+          {"type": "image_url", "image_url": {"url": ...}}
+          {"type": "image",     "url": ...}          # alternate image format
+          {"type": "audio",     ...}                 # future / other modalities
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return _render_text_content(content)
+
+    # Multimodal list — iterate items, grouping a text label with a following image
+    parts: list[str] = []
+    items = [i for i in content if isinstance(i, dict)]
+    idx = 0
+    while idx < len(items):
+        item = items[idx]
+        item_type = item.get("type", "")
+        next_item = items[idx + 1] if idx + 1 < len(items) else None
+
+        if item_type == "text":
+            text = item.get("text", "")
+            # If the next item is an image, this text is a label for it
+            if next_item is not None and next_item.get("type") in ("image_url", "image"):
+                url = next_item.get("image_url", {}).get("url", "") or next_item.get("url", "")
+                img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
+                parts.append(f"<details><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n")
+                idx += 2
+            else:
+                parts.append(_render_text_content(text))
+                idx += 1
+        elif item_type in ("image_url", "image"):
+            url = item.get("image_url", {}).get("url", "") or item.get("url", "")
+            img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
+            parts.append(f"<details><summary>📷 <strong>screenshot</strong></summary>{img}</details>\n")
+            idx += 1
+        else:
+            # Unknown / future type — show type name as a placeholder
+            parts.append(f"<em>[{html_lib.escape(item_type)}]</em>\n")
+            idx += 1
+
+    return "".join(parts)
 
 
 def _render_assistant_content(msg: dict) -> str:
