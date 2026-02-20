@@ -731,9 +731,9 @@ def run_xray(
 
     def _render_chat() -> str:
         agent_out = state.get_agent_output()
-        result = xray_utils.get_chat_messages_markdown(agent_out)
+        result = xray_utils.get_chat_messages_html(agent_out)
         if not result:
-            return "No agent action follows this observation (terminal step)."
+            return "<em>No agent action follows this observation (terminal step).</em>"
         return result
 
     def _render_error() -> str:
@@ -925,7 +925,7 @@ def run_xray(
                 axtree_code = gr.Code(language=None, show_label=False, max_lines=40)
 
             with gr.Tab("Chat Messages") as chat_tab:
-                chat_md = gr.Markdown()
+                chat_md = gr.HTML()
 
             with gr.Tab("Task Error") as error_tab:
                 error_md = gr.Markdown()
