@@ -508,7 +508,7 @@ def run_xray(
         return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels, *_config_jsons()
 
     def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
-        if agent_df is None or len(agent_df) == 0:
+        if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
             return [], [], [], StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         # Strip HTML tags to get the raw key value
@@ -535,7 +535,7 @@ def run_xray(
         return agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
 
     def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
-        if task_df is None or len(task_df) == 0:
+        if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
             return [], [], StepId(), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 0]))
@@ -555,7 +555,7 @@ def run_xray(
         return task_table_data, seed_table_data, StepId(step=0), seeds_tab_update
 
     def on_select_seed(evt: gr.SelectData, seed_df: Any) -> tuple[Any, StepId]:
-        if seed_df is None or len(seed_df) == 0:
+        if evt is None or evt.index is None or seed_df is None or len(seed_df) == 0:
             return [], StepId(step=0)
         row = evt.index[0]
         traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 0]))
