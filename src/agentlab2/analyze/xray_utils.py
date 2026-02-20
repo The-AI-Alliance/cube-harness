@@ -221,7 +221,7 @@ def _render_content_items(content: str | list | None) -> str:
             if next_item is not None and next_item.get("type") in ("image_url", "image"):
                 url = next_item.get("image_url", {}).get("url", "") or next_item.get("url", "")
                 img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
-                parts.append(f"<details><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n")
+                parts.append(f"<details open><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n")
                 idx += 2
             else:
                 parts.append(_render_text_content(text))
@@ -229,7 +229,7 @@ def _render_content_items(content: str | list | None) -> str:
         elif item_type in ("image_url", "image"):
             url = item.get("image_url", {}).get("url", "") or item.get("url", "")
             img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
-            parts.append(f"<details><summary>📷 <strong>screenshot</strong></summary>{img}</details>\n")
+            parts.append(f"<details open><summary>📷 <strong>screenshot</strong></summary>{img}</details>\n")
             idx += 1
         else:
             # Unknown / future type — show type name as a placeholder
