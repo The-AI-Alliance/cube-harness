@@ -4,6 +4,7 @@ All functions in this module are pure (or near-pure) — no Gradio imports, no g
 This makes them independently testable without any UI framework.
 """
 
+import html as html_lib
 import json
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,41 @@ def format_duration(seconds: float) -> str:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         return f"{hours}h {minutes}m"
+
+
+def trajectory_status(traj: Trajectory) -> str:
+    """Return status string for a trajectory: 'running', 'success', 'error', or 'completed'."""
+    if traj.end_time is None:
+        return "running"
+    if traj.reward_info and traj.reward_info.get("reward", 0) > 0:
+        return "success"
+    for step in traj.steps:
+        if hasattr(step.output, "error") and step.output.error is not None:
+            return "error"
+    return "completed"
+
+
+_STATUS_EMOJI: dict[str, str] = {
+    "running": "⏳",
+    "success": "✅",
+    "error": "❌",
+    "completed": "⬜",
+}
+
+
+def build_progress_html(n_completed: int, n_total: int, n_running: int) -> str:
+    """Return an HTML progress bar + label for experiment completion status."""
+    pct = (n_completed / n_total * 100) if n_total > 0 else 0
+    bar = (
+        f'<div style="background:#e5e7eb;border-radius:6px;height:14px;overflow:hidden;margin-bottom:4px;">'
+        f'<div style="background:linear-gradient(90deg,#22c55e,#16a34a);height:100%;width:{pct:.1f}%;'
+        f'transition:width 0.5s;"></div></div>'
+    )
+    label = f'<div style="font-size:12px;color:#555;">{n_completed}/{n_total} episodes completed'
+    if n_running > 0:
+        label += f", {n_running} running ⏳"
+    label += "</div>"
+    return bar + label
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
@@ -94,15 +130,6 @@ def get_current_screenshot(
     return img
 
 
-def get_all_screenshots(trajectory: Trajectory) -> list[tuple[int, Image.Image]]:
-    """Collect all (step_index, Image) pairs from all EnvironmentOutputs in a trajectory."""
-    result = []
-    for i, traj_step in enumerate(trajectory.steps):
-        img = get_screenshot_from_step(traj_step.output)
-        if img is not None:
-            result.append((i, img))
-    return result
-
 
 # ---------------------------------------------------------------------------
 # Content extraction
@@ -134,59 +161,175 @@ def extract_obs_content(step: EnvironmentOutput | None, name_pattern: str) -> st
 # ---------------------------------------------------------------------------
 
 
-def get_chat_messages_markdown(step: EnvironmentOutput | AgentOutput | None) -> str:
-    """Format LLM prompt messages from the first LLMCall of an AgentOutput as markdown.
+_COLLAPSE_THRESHOLD = 2000  # chars (~20 lines) — messages longer than this start collapsed
 
-    Renders each message as: ## [N] role\\n<content> (truncated at 3000 chars).
+
+def _msg_to_dict(msg: object) -> dict:
+    """Normalise a message to a plain dict."""
+    if isinstance(msg, dict):
+        return msg
+    if hasattr(msg, "model_dump"):
+        return msg.model_dump()
+    if hasattr(msg, "__dict__"):
+        return dict(msg.__dict__)
+    return {"role": "unknown", "content": str(msg)}
+
+
+def _preview(text: str, max_chars: int = 80) -> str:
+    """Return first non-empty line of text, truncated to max_chars."""
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return line[:max_chars] + ("…" if len(line) > max_chars else "")
+    return ""
+
+
+def _details_block(label: str, body: str, icon: str = "📄") -> str:
+    """Wrap body in a <details> block. Short content is open by default.
+
+    Summary shows: icon + label + first-line preview (when collapsed).
+    """
+    open_attr = " open" if len(body) <= _COLLAPSE_THRESHOLD else ""
+    preview = _preview(body)
+    preview_html = f" <span style='color:#888;font-weight:normal'>{html_lib.escape(preview)}</span>" if preview and not open_attr else ""
+    escaped = html_lib.escape(body)
+    return (
+        f"<details{open_attr}>"
+        f"<summary>{icon} <strong>{html_lib.escape(label)}</strong>{preview_html}</summary>"
+        f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{escaped}</pre>"
+        f"</details>\n"
+    )
+
+
+def _render_text_content(text: str) -> str:
+    """Render a plain text content string.
+
+    Handles the '##name\\nbody' convention used by Content.to_message() for named
+    text/dict content, but also works for any plain string.
+    """
+    if text.startswith("##"):
+        newline = text.find("\n")
+        if newline != -1:
+            name = text[2:newline].strip()
+            body = text[newline + 1:]
+            return _details_block(name, body)
+    return _details_block("text", text)
+
+
+def _render_content_items(content: str | list | None) -> str:
+    """Render a message's content field as HTML.
+
+    Handles the common content types found in LLM message dicts:
+      - str:            plain text or '##name\\nbody' encoded text
+      - list of items:  multimodal content list with typed items:
+          {"type": "text",      "text": ...}
+          {"type": "image_url", "image_url": {"url": ...}}
+          {"type": "image",     "url": ...}          # alternate image format
+          {"type": "audio",     ...}                 # future / other modalities
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return _render_text_content(content)
+
+    # Multimodal list — iterate items, grouping a text label with a following image
+    parts: list[str] = []
+    items = [i for i in content if isinstance(i, dict)]
+    idx = 0
+    while idx < len(items):
+        item = items[idx]
+        item_type = item.get("type", "")
+        next_item = items[idx + 1] if idx + 1 < len(items) else None
+
+        if item_type == "text":
+            text = item.get("text", "")
+            # If the next item is an image, this text is a label for it
+            if next_item is not None and next_item.get("type") in ("image_url", "image"):
+                url = next_item.get("image_url", {}).get("url", "") or next_item.get("url", "")
+                img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
+                parts.append(f"<details open><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n")
+                idx += 2
+            else:
+                parts.append(_render_text_content(text))
+                idx += 1
+        elif item_type in ("image_url", "image"):
+            url = item.get("image_url", {}).get("url", "") or item.get("url", "")
+            img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
+            parts.append(f"<details open><summary>📷 <strong>screenshot</strong></summary>{img}</details>\n")
+            idx += 1
+        else:
+            # Unknown / future type — show type name as a placeholder
+            parts.append(f"<em>[{html_lib.escape(item_type)}]</em>\n")
+            idx += 1
+
+    return "".join(parts)
+
+
+def _render_assistant_content(msg: dict) -> str:
+    """Render assistant message: text content + tool calls as HTML."""
+    parts: list[str] = []
+    content = msg.get("content") or ""
+    if content:
+        parts.append(_details_block("reasoning", str(content), icon="💭"))
+    tool_calls = msg.get("tool_calls") or []
+    for tc in tool_calls:
+        if not isinstance(tc, dict):
+            tc = tc.model_dump() if hasattr(tc, "model_dump") else vars(tc)
+        fn = tc.get("function", {})
+        name = fn.get("name", "?")
+        args = fn.get("arguments", "")
+        if isinstance(args, str):
+            try:
+                args = json.dumps(json.loads(args), indent=2)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        parts.append(_details_block(f"tool call: {name}", str(args), icon="🔧"))
+    return "".join(parts)
+
+
+_ROLE_STYLE = {
+    "system": "background:#f0f4ff;border-left:3px solid #6c8ebf",
+    "user": "background:#f5f5f5;border-left:3px solid #aaa",
+    "tool": "background:#fff8e7;border-left:3px solid #e6a817",
+    "assistant": "background:#f0fff4;border-left:3px solid #5cb85c",
+}
+
+
+def get_chat_messages_html(step: EnvironmentOutput | AgentOutput | None) -> str:
+    """Render the full LLM conversation (prompt + response) as HTML for one agent step.
+
+    Each message is a collapsible <details> block — short content is expanded by default,
+    long content (axtree, HTML) starts collapsed. Screenshots render as inline images.
     Returns empty string for non-AgentOutput steps or steps with no llm_calls.
     """
     if not isinstance(step, AgentOutput) or not step.llm_calls:
         return ""
 
     llm_call = step.llm_calls[0]
-    messages = llm_call.prompt.messages
-    parts = []
+    messages = list(llm_call.prompt.messages) + [llm_call.output]
+    blocks: list[str] = []
 
     for i, msg in enumerate(messages):
-        # Normalize to dict
-        if hasattr(msg, "model_dump"):
-            msg_dict = msg.model_dump()
-        elif hasattr(msg, "__dict__"):
-            msg_dict = dict(msg)
-        else:
-            msg_dict = msg if isinstance(msg, dict) else {"role": "unknown", "content": str(msg)}
-
+        msg_dict = _msg_to_dict(msg)
         role = msg_dict.get("role", "unknown")
-        content = msg_dict.get("content", "")
-        tool_call_id = msg_dict.get("tool_call_id", None)
+        tool_call_id = msg_dict.get("tool_call_id")
 
-        role_label = f"**[{i + 1}] {role}**"
+        label = f"[{i + 1}] {role}"
         if tool_call_id:
-            role_label += f" *(tool_call_id: {tool_call_id})*"
-        parts.append(f"## {role_label}\n")
+            label += f" · tool_result for {tool_call_id}"
 
-        if isinstance(content, list):
-            # Multimodal content list
-            for item in content:
-                if isinstance(item, dict):
-                    item_type = item.get("type", "")
-                    if item_type == "text":
-                        text = item.get("text", "")
-                        text = _truncate(text, 300000)
-                        parts.append(f"```\n{text}\n```\n")
-                    elif item_type in ("image_url", "image"):
-                        parts.append("*[Image]*\n")
-                    else:
-                        parts.append(f"*[{item_type}]*\n")
-                else:
-                    parts.append(f"*[{type(item).__name__}]*\n")
-        elif content:
-            content = _truncate(str(content), 300000)
-            parts.append(f"```\n{content}\n```\n")
+        if role == "assistant":
+            body_html = _render_assistant_content(msg_dict)
+        else:
+            body_html = _render_content_items(msg_dict.get("content"))
 
-        parts.append("\n")
+        style = _ROLE_STYLE.get(role, "background:#fafafa;border-left:3px solid #ccc")
+        blocks.append(
+            f"<div style='margin:6px 0;padding:8px 12px;border-radius:4px;{style}'>"
+            f"<strong>{html_lib.escape(label)}</strong><br>{body_html}</div>\n"
+        )
 
-    return "\n".join(parts)
+    return "".join(blocks)
 
 
 def _truncate(text: str, max_len: int) -> str:
@@ -528,17 +671,15 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
 
 
 def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
-    """Aggregate statistics across all trajectories and return as markdown.
-
-    A trajectory is considered finished if it has both start_time and end_time set.
-    """
+    """Aggregate statistics across all trajectories and return as markdown."""
     if not trajectories:
         return ""
 
     finished_rewards: list[float] = []
     finished_steps: list[int] = []
     finished_durations: list[float] = []
-    n_failed = 0
+    n_running = 0
+    n_errored = 0
 
     total_prompt = 0
     total_completion = 0
@@ -548,14 +689,16 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
 
     for traj in trajectories:
         stats = compute_trajectory_stats(traj)
-        is_finished = traj.start_time is not None and traj.end_time is not None
+        status = trajectory_status(traj)
 
-        if is_finished:
+        if status in ("success", "completed"):
             finished_rewards.append(stats["final_reward"])
             finished_steps.append(stats["n_env_steps"])
             finished_durations.append(stats["duration"])
+        elif status == "running":
+            n_running += 1
         else:
-            n_failed += 1
+            n_errored += 1
 
         total_prompt += stats["prompt_tokens"]
         total_completion += stats["completion_tokens"]
@@ -564,11 +707,16 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         total_cost += stats["cost"]
 
     n_finished = len(finished_rewards)
-    n_total = n_finished + n_failed
+    n_total = n_finished + n_running + n_errored
 
     stats_parts = [f"📊 **{n_total}** trajectories"]
-    if n_failed > 0:
-        stats_parts.append(f"│ ✅ Finished: **{n_finished}** │ ❌ Failed: **{n_failed}**")
+    if n_running > 0 or n_errored > 0:
+        parts = [f"✅ Finished: **{n_finished}**"]
+        if n_running > 0:
+            parts.append(f"⏳ Running: **{n_running}**")
+        if n_errored > 0:
+            parts.append(f"❌ Failed: **{n_errored}**")
+        stats_parts.append("│ " + " │ ".join(parts))
     else:
         stats_parts.append(f"│ ✅ All Finished: **{n_finished}**")
 
@@ -719,7 +867,7 @@ def build_seed_table(
     """Build one row per trajectory (seed) for a selected agent + task.
 
     Filters trajectories by agent_key and task_id.
-    Columns: traj_id, reward, n_steps, duration, tokens, cost
+    Columns: status, traj_id, reward, n_steps, duration, tokens, cost
     """
     filtered = [
         t
@@ -735,9 +883,11 @@ def build_seed_table(
         tokens_str = f"{total_tokens:,}" if total_tokens > 0 else "-"
         cost_str = f"${float(stats['cost']):.4f}" if float(stats["cost"]) > 0 else "-"
         n_steps = stats["n_env_steps"]
+        status = trajectory_status(traj)
 
         rows.append(
             {
+                "status": _STATUS_EMOJI[status],
                 "traj_id": traj.id,
                 "reward": round(stats["final_reward"], 3),
                 "n_steps": n_steps,

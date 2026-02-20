@@ -272,31 +272,51 @@ class TestExtractObsContent:
 
 class TestGetChatMessagesMarkdown:
     def test_returns_empty_for_env_step(self, env_step_with_axtree: EnvironmentOutput) -> None:
-        assert xray_utils.get_chat_messages_markdown(env_step_with_axtree) == ""
+        assert xray_utils.get_chat_messages_html(env_step_with_axtree) == ""
 
     def test_returns_empty_for_none(self) -> None:
-        assert xray_utils.get_chat_messages_markdown(None) == ""
+        assert xray_utils.get_chat_messages_html(None) == ""
 
     def test_returns_empty_when_no_llm_calls(self) -> None:
         step = AgentOutput(actions=[], llm_calls=[])
-        assert xray_utils.get_chat_messages_markdown(step) == ""
+        assert xray_utils.get_chat_messages_html(step) == ""
 
     def test_contains_role_headers(self, agent_step_with_llm_call: AgentOutput) -> None:
-        result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
+        result = xray_utils.get_chat_messages_html(agent_step_with_llm_call)
         assert "system" in result
         assert "user" in result
+        assert "assistant" in result
 
     def test_contains_message_content(self, agent_step_with_llm_call: AgentOutput) -> None:
-        result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
+        result = xray_utils.get_chat_messages_html(agent_step_with_llm_call)
         assert "You are a helpful assistant." in result
         assert "Click the button." in result
 
-    def test_truncates_long_content(self, sample_llm_call: LLMCall) -> None:
-        long_content = "x" * 400000
+    def test_contains_llm_response(self, agent_step_with_llm_call: AgentOutput) -> None:
+        result = xray_utils.get_chat_messages_html(agent_step_with_llm_call)
+        assert "I will click the button." in result
+
+    def test_renders_tool_calls_in_assistant_response(self, sample_llm_call: LLMCall) -> None:
+        from litellm import Message
+        from litellm.types.utils import ChatCompletionMessageToolCall, Function
+
+        sample_llm_call.output = Message(
+            role="assistant",
+            content=None,
+            tool_calls=[ChatCompletionMessageToolCall(id="tc1", function=Function(name="browser_click", arguments='{"bid": "42"}'), type="function")],
+        )
+        step = AgentOutput(llm_calls=[sample_llm_call])
+        result = xray_utils.get_chat_messages_html(step)
+        assert "browser_click" in result
+        assert "42" in result
+
+    def test_long_content_collapses(self, sample_llm_call: LLMCall) -> None:
+        long_content = "x" * (xray_utils._COLLAPSE_THRESHOLD + 1)
         sample_llm_call.prompt.messages[1] = {"role": "user", "content": long_content}
         step = AgentOutput(llm_calls=[sample_llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
-        assert "[truncated]" in result
+        result = xray_utils.get_chat_messages_html(step)
+        assert "<details>" in result  # collapsed block has no "open" attribute
+        assert long_content[:50] in result  # content is still present
 
     def test_handles_list_content_with_image(self, sample_llm_call: LLMCall) -> None:
         sample_llm_call.prompt.messages[1] = {
@@ -307,9 +327,10 @@ class TestGetChatMessagesMarkdown:
             ],
         }
         step = AgentOutput(llm_calls=[sample_llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "Here is a screenshot:" in result
-        assert "[Image]" in result
+        assert "data:image/png;base64,abc" in result
+        assert "<img" in result
 
 
 # ---------------------------------------------------------------------------
@@ -440,10 +461,18 @@ class TestComputeExperimentStats:
         assert "Finished" in result
 
     def test_counts_failed_trajectories(self) -> None:
-        # Trajectory without start/end time is considered "failed"
-        failed_traj = Trajectory(id="failed")
+        # A trajectory with end_time set and an error step is considered "error"
+        error_step = TrajectoryStep(output=AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace="")))
+        failed_traj = Trajectory(id="failed", start_time=1.0, end_time=2.0, steps=[error_step])
         result = xray_utils.compute_experiment_stats([failed_traj])
         assert "Failed" in result
+
+    def test_counts_running_trajectories(self) -> None:
+        # A trajectory with start_time but no end_time and no error steps is "running"
+        running_traj = Trajectory(id="running", start_time=1.0)
+        result = xray_utils.compute_experiment_stats([running_traj])
+        assert "Running" in result
+        assert "Failed" not in result
 
     def test_computes_success_rate(self, timed_trajectory: Trajectory) -> None:
         result = xray_utils.compute_experiment_stats([timed_trajectory])
@@ -961,7 +990,7 @@ class TestGetChatMessagesMarkdownWithMessageObjects:
         output_msg = Message(role="assistant", content="ok")
         llm_call = LLMCall(id="test", llm_config=config, prompt=prompt, output=output_msg, usage=Usage())
         step = AgentOutput(llm_calls=[llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "user" in result
         assert "Use a Message object" in result
 
@@ -973,7 +1002,7 @@ class TestGetChatMessagesMarkdownWithMessageObjects:
         output_msg = Message(role="assistant", content="ok")
         llm_call = LLMCall(id="test2", llm_config=config, prompt=prompt, output=output_msg, usage=Usage())
         step = AgentOutput(llm_calls=[llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "system" in result
         assert "System prompt from Message" in result
         assert "User dict message" in result
