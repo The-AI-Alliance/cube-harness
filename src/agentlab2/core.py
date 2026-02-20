@@ -126,33 +126,6 @@ class Content(TypedBaseModel):
             return img
         return v  # Return original value if not a string (e.g., already an Image object)
 
-    @staticmethod
-    def parse_message_content(msg_content: str | list) -> tuple[str | None, str | None, str | None]:
-        """Inverse of to_message() encoding.  Returns (name, text_body, image_url).
-
-        Mirrors the three encoding cases in to_message():
-          - Image:      list [{"type":"text","text":name}, {"type":"image_url",...}]
-                        → (name, None, url)
-          - Text/dict:  "##name\\nbody"  → (name, body, None)
-                        "body"           → (None, body, None)
-        """
-        if isinstance(msg_content, list):
-            name: str | None = None
-            url: str | None = None
-            for item in msg_content:
-                if not isinstance(item, dict):
-                    continue
-                if item.get("type") == "text":
-                    name = item.get("text")
-                elif item.get("type") in ("image_url", "image"):
-                    url = item.get("image_url", {}).get("url") or item.get("url")
-            return name, None, url
-        if isinstance(msg_content, str) and msg_content.startswith("##"):
-            newline = msg_content.find("\n")
-            if newline != -1:
-                return msg_content[2:newline].strip(), msg_content[newline + 1 :], None
-        return None, msg_content if isinstance(msg_content, str) else None, None
-
     def to_message(self) -> dict:
         """Convert content to a message dict for LLM input."""
         if isinstance(self.data, Image.Image):
