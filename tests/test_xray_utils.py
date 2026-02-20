@@ -461,10 +461,18 @@ class TestComputeExperimentStats:
         assert "Finished" in result
 
     def test_counts_failed_trajectories(self) -> None:
-        # Trajectory without start/end time is considered "failed"
-        failed_traj = Trajectory(id="failed")
+        # A trajectory with an error step is considered "errored"
+        error_step = TrajectoryStep(output=AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace="")))
+        failed_traj = Trajectory(id="failed", start_time=1.0, steps=[error_step])
         result = xray_utils.compute_experiment_stats([failed_traj])
         assert "Failed" in result
+
+    def test_counts_running_trajectories(self) -> None:
+        # A trajectory with start_time but no end_time and no error steps is "running"
+        running_traj = Trajectory(id="running", start_time=1.0)
+        result = xray_utils.compute_experiment_stats([running_traj])
+        assert "Running" in result
+        assert "Failed" not in result
 
     def test_computes_success_rate(self, timed_trajectory: Trajectory) -> None:
         result = xray_utils.compute_experiment_stats([timed_trajectory])
