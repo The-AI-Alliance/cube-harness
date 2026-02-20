@@ -134,55 +134,88 @@ def extract_obs_content(step: EnvironmentOutput | None, name_pattern: str) -> st
 # ---------------------------------------------------------------------------
 
 
-def get_chat_messages_markdown(step: EnvironmentOutput | AgentOutput | None) -> str:
-    """Format LLM prompt messages from the first LLMCall of an AgentOutput as markdown.
+def _render_message_content(content: str | list | None, parts: list[str]) -> None:
+    """Render a message's content (str or multimodal list) into parts."""
+    if isinstance(content, list):
+        for item in content:
+            if not isinstance(item, dict):
+                parts.append(f"*[{type(item).__name__}]*\n")
+                continue
+            item_type = item.get("type", "")
+            if item_type == "text":
+                parts.append(f"```\n{_truncate(item.get('text', ''), 300000)}\n```\n")
+            elif item_type in ("image_url", "image"):
+                url = item.get("image_url", {}).get("url", "") or item.get("url", "")
+                if url:
+                    parts.append(f"![screenshot]({url})\n")
+                else:
+                    parts.append("*[Image — no URL]*\n")
+            else:
+                parts.append(f"*[{item_type}]*\n")
+    elif content:
+        parts.append(f"```\n{_truncate(str(content), 300000)}\n```\n")
 
-    Renders each message as: ## [N] role\\n<content> (truncated at 3000 chars).
+
+def _render_assistant_output(msg: dict, parts: list[str]) -> None:
+    """Render an assistant message: text content + tool_calls."""
+    content = msg.get("content") or ""
+    if content:
+        parts.append(f"```\n{_truncate(str(content), 300000)}\n```\n")
+    tool_calls = msg.get("tool_calls") or []
+    for tc in tool_calls:
+        if not isinstance(tc, dict):
+            tc = tc.model_dump() if hasattr(tc, "model_dump") else vars(tc)
+        fn = tc.get("function", {})
+        name = fn.get("name", "?")
+        args = fn.get("arguments", "")
+        if isinstance(args, str):
+            try:
+                args = json.dumps(json.loads(args), indent=2)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        parts.append(f"**🔧 tool call:** `{name}`\n```json\n{args}\n```\n")
+
+
+def _msg_to_dict(msg: object) -> dict:
+    """Normalise a message to a plain dict."""
+    if isinstance(msg, dict):
+        return msg
+    if hasattr(msg, "model_dump"):
+        return msg.model_dump()
+    if hasattr(msg, "__dict__"):
+        return dict(msg.__dict__)
+    return {"role": "unknown", "content": str(msg)}
+
+
+def get_chat_messages_markdown(step: EnvironmentOutput | AgentOutput | None) -> str:
+    """Render the full LLM conversation (prompt + response) for one agent step.
+
+    Shows every message in the prompt followed by the LLM's response, including
+    inline screenshots, chain-of-thought text, and tool calls.
     Returns empty string for non-AgentOutput steps or steps with no llm_calls.
     """
     if not isinstance(step, AgentOutput) or not step.llm_calls:
         return ""
 
     llm_call = step.llm_calls[0]
-    messages = llm_call.prompt.messages
+    # All prompt messages plus the LLM response appended at the end
+    messages = list(llm_call.prompt.messages) + [llm_call.output]
     parts = []
 
     for i, msg in enumerate(messages):
-        # Normalize to dict
-        if hasattr(msg, "model_dump"):
-            msg_dict = msg.model_dump()
-        elif hasattr(msg, "__dict__"):
-            msg_dict = dict(msg)
-        else:
-            msg_dict = msg if isinstance(msg, dict) else {"role": "unknown", "content": str(msg)}
-
+        msg_dict = _msg_to_dict(msg)
         role = msg_dict.get("role", "unknown")
-        content = msg_dict.get("content", "")
-        tool_call_id = msg_dict.get("tool_call_id", None)
+        tool_call_id = msg_dict.get("tool_call_id")
 
         role_label = f"**[{i + 1}] {role}**"
         if tool_call_id:
-            role_label += f" *(tool_call_id: {tool_call_id})*"
+            role_label += f" *(tool_result for: {tool_call_id})*"
         parts.append(f"## {role_label}\n")
 
-        if isinstance(content, list):
-            # Multimodal content list
-            for item in content:
-                if isinstance(item, dict):
-                    item_type = item.get("type", "")
-                    if item_type == "text":
-                        text = item.get("text", "")
-                        text = _truncate(text, 300000)
-                        parts.append(f"```\n{text}\n```\n")
-                    elif item_type in ("image_url", "image"):
-                        parts.append("*[Image]*\n")
-                    else:
-                        parts.append(f"*[{item_type}]*\n")
-                else:
-                    parts.append(f"*[{type(item).__name__}]*\n")
-        elif content:
-            content = _truncate(str(content), 300000)
-            parts.append(f"```\n{content}\n```\n")
+        if role == "assistant":
+            _render_assistant_output(msg_dict, parts)
+        else:
+            _render_message_content(msg_dict.get("content"), parts)
 
         parts.append("\n")
 
