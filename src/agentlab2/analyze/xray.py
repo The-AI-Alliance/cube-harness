@@ -14,6 +14,7 @@ import html as html_lib
 import json
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from os.path import expanduser
 from pathlib import Path
@@ -67,6 +68,11 @@ class XRayState:
     # JSON strings for the Config tabs (set on experiment load, None if unavailable)
     _agent_config_json: str | None = field(default=None, repr=False)
     _exp_config_json: str | None = field(default=None, repr=False)
+    # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
+    _completed_ids: set[str] = field(default_factory=set, repr=False)
+    _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
+    # Timestamp of last detected file change — used for stale experiment detection
+    _last_change_time: float = field(default=0.0, repr=False)
 
     def load_experiment(self, exp_dir: Path) -> bool:
         """Load trajectory metadata stubs from an experiment directory. Returns True on success.
@@ -89,6 +95,9 @@ class XRayState:
         self.current_trajectory = None
         self.step = 0
         self._env_step_indices = []
+        self._completed_ids = {t.id for t in self.trajectories if t.end_time is not None}
+        self._traj_mtimes = self._storage.list_trajectory_ids_with_mtime()
+        self._last_change_time = time.time()
         self._bg_loading_done = False
         self._start_background_loading()
         return len(self.trajectories) > 0
@@ -162,6 +171,61 @@ class XRayState:
 
         thread = threading.Thread(target=_load_all, daemon=True)
         thread.start()
+
+    def refresh_experiment(self) -> bool:
+        """Incrementally reload new or changed trajectories from disk. Returns True if anything changed.
+
+        Uses mtime-based change detection: only trajectories whose files have changed since the
+        last check are reloaded. Completed trajectories (end_time set) are skipped entirely.
+        Called on each bg_timer tick while the experiment is still running.
+        """
+        if self._storage is None:
+            return False
+        id_mtimes = self._storage.list_trajectory_ids_with_mtime()
+        changed = False
+        known_ids = {t.id for t in self.trajectories}
+
+        for traj_id, mtime in id_mtimes.items():
+            if traj_id in self._completed_ids:
+                continue
+            prev_mtime = self._traj_mtimes.get(traj_id, 0.0)
+            if mtime <= prev_mtime and traj_id in known_ids:
+                continue
+            try:
+                full = self._storage.load_trajectory(traj_id)
+                self._maybe_backfill(full)
+                self._traj_mtimes[traj_id] = mtime
+                changed = True
+                if traj_id in known_ids:
+                    idx = next(i for i, t in enumerate(self.trajectories) if t.id == traj_id)
+                    self.trajectories[idx] = full
+                    if self.current_trajectory is not None and self.current_trajectory.id == traj_id:
+                        self.current_trajectory = full
+                        self._env_step_indices = self._build_env_indices()
+                else:
+                    self.trajectories.append(full)
+                if full.end_time is not None:
+                    self._completed_ids.add(traj_id)
+            except Exception:
+                pass
+        if changed:
+            self._last_change_time = time.time()
+        return changed
+
+    def is_experiment_complete(self) -> bool:
+        """Return True when every known trajectory has finished (end_time is set)."""
+        if not self.trajectories:
+            return False
+        return all(t.id in self._completed_ids for t in self.trajectories)
+
+    def is_experiment_stale(self, timeout_s: float = 1200.0) -> bool:
+        """Return True if no file changes have been detected for timeout_s seconds.
+
+        Used to stop the live-polling timer when an experiment appears to have stalled
+        (e.g., the runner crashed without setting end_time on every trajectory).
+        Default timeout is 20 minutes.
+        """
+        return time.time() - self._last_change_time > timeout_s
 
     def select_agent(self, agent_key: str) -> None:
         """Select an agent; resets task, trajectory, and step."""
@@ -367,13 +431,12 @@ function shortcuts(e) {
         case "button":
             return;
         default:
-            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (e.metaKey || e.ctrlKey)) {
+            if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
-                if (e.key === 'ArrowLeft') {
-                    document.getElementById("xray_prev_btn").click();
-                } else {
-                    document.getElementById("xray_next_btn").click();
-                }
+                document.getElementById("xray_prev_btn").click();
+            } else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                document.getElementById("xray_next_btn").click();
             }
     }
 }
@@ -508,7 +571,7 @@ def run_xray(
         return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels, *_config_jsons()
 
     def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
-        if agent_df is None or len(agent_df) == 0:
+        if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
             return [], [], [], StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         # Strip HTML tags to get the raw key value
@@ -535,7 +598,7 @@ def run_xray(
         return agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
 
     def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
-        if task_df is None or len(task_df) == 0:
+        if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
             return [], [], StepId(), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 0]))
@@ -555,10 +618,10 @@ def run_xray(
         return task_table_data, seed_table_data, StepId(step=0), seeds_tab_update
 
     def on_select_seed(evt: gr.SelectData, seed_df: Any) -> tuple[Any, StepId]:
-        if seed_df is None or len(seed_df) == 0:
+        if evt is None or evt.index is None or seed_df is None or len(seed_df) == 0:
             return [], StepId(step=0)
         row = evt.index[0]
-        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 0]))
+        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 1]))  # col 0 is status emoji
         state.select_trajectory(traj_id)
         if state.selected_agent_key is None or state.selected_task_id is None:
             return [], StepId(step=0)
@@ -566,13 +629,18 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
-        """Periodic refresh handler called by gr.Timer while background loading is in progress.
+    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, str, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
+        """Periodic refresh handler: bulk-loads stubs, then live-polls for new/changed trajectories.
 
-        Rebuilds hierarchy tables and experiment stats from the current (partially-loaded)
-        state.trajectories list.  When loading finishes, returns an active=False timer update
-        to stop further polling.
+        Two phases share a single timer:
+        1. While _bg_loading_done is False: background thread is still bulk-loading stubs.
+        2. Once _bg_loading_done is True: calls refresh_experiment() to pick up new or
+           changed trajectory files written by a running experiment. Timer deactivates only
+           when is_experiment_complete() returns True (all trajectories have end_time set).
         """
+        if state._bg_loading_done:
+            state.refresh_experiment()
+
         exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
         agent_key = state.selected_agent_key
@@ -591,9 +659,16 @@ def run_xray(
         traj_id = state.current_trajectory.id if state.current_trajectory else None
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
-        timer_update = gr.Timer(active=not state._bg_loading_done)
+        n_completed = len(state._completed_ids)
+        n_total = len(state.trajectories)
+        n_running = sum(1 for t in state.trajectories if t.end_time is None)
+        progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running)
+
+        experiment_done = state.is_experiment_complete() or state.is_experiment_stale()
+        still_active = not state._bg_loading_done or not experiment_done
+        timer_update = gr.Timer(active=still_active)
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, timer_update, *tab_labels
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
 
     def navigate_prev(step_id: StepId) -> StepId:
         step = max(0, step_id.step - 1)
@@ -636,12 +711,8 @@ def run_xray(
                     done = traj_step.output.done
                     break
         reward_emoji = "✅" if reward > 0 and done else "❌" if done else "⏳"
-        return header + f" │ {reward_emoji} Reward: {reward:.2f}"
-
-    def get_step_counter() -> str:
-        if not state.current_trajectory:
-            return "Step 0/0"
-        return f"Step {state.step + 1}/{state.total_ui_steps()}"
+        step_info = f"Step {state.step + 1}/{state.total_ui_steps()}"
+        return header + f" │ {reward_emoji} Reward: {reward:.2f} │ {step_info}"
 
     def update_timeline() -> str:
         return xray_utils.generate_timeline_html(state.current_trajectory, state.step)
@@ -650,17 +721,10 @@ def run_xray(
         if not state.current_trajectory:
             return ""
         stats = xray_utils.compute_trajectory_stats(state.current_trajectory)
-        n_env = stats["n_env_steps"]
-        n_agent = stats["n_agent_steps"]
-        total_actions = stats["total_actions"]
-        total_llm_calls = stats["total_llm_calls"]
 
-        line1 = (
-            f"🌍 Env Steps: **{n_env}** │ 🤖 Agent Steps: **{n_agent}**"
-            f" │ ⚡ Actions: **{total_actions}** │ 💬 LLM Calls: **{total_llm_calls}**"
-        )
+        parts: list[str] = []
         if stats["duration"] is not None:
-            line1 += f" │ ⏱️ **{xray_utils.format_duration(stats['duration'])}**"
+            parts.append(f"⏱️ **{xray_utils.format_duration(stats['duration'])}**")
 
         prompt_tokens = int(stats["prompt_tokens"])
         completion_tokens = int(stats["completion_tokens"])
@@ -669,19 +733,18 @@ def run_xray(
         cost = float(stats["cost"])
 
         if prompt_tokens > 0:
-            token_parts = [f"📊 prompt: **{prompt_tokens:,}**"]
-            token_parts.append(f"completion: **{completion_tokens:,}**")
-            token_parts.append(f"total: **{prompt_tokens + completion_tokens:,}**")
+            parts.append(f"📊 prompt: **{prompt_tokens:,}**")
+            parts.append(f"completion: **{completion_tokens:,}**")
+            parts.append(f"total: **{prompt_tokens + completion_tokens:,}**")
             if cached_tokens > 0:
                 cache_pct = cached_tokens / prompt_tokens * 100
-                token_parts.append(f"cached: **{cached_tokens:,}** ({cache_pct:.0f}%)")
+                parts.append(f"cached: **{cached_tokens:,}** ({cache_pct:.0f}%)")
             if cache_creation_tokens > 0:
-                token_parts.append(f"cache_created: **{cache_creation_tokens:,}**")
-            if cost > 0:
-                token_parts.append(f"💰 **${cost:.4f}**")
-            return line1 + "\n\n" + " │ ".join(token_parts)
+                parts.append(f"cache_created: **{cache_creation_tokens:,}**")
+        if cost > 0:
+            parts.append(f"💰 **${cost:.4f}**")
 
-        return line1
+        return " │ ".join(parts)
 
     def get_task_goal() -> str:
         """Return the task goal as a rendered HTML panel."""
@@ -707,12 +770,6 @@ def run_xray(
             prev_img = xray_utils.get_screenshot_from_step(prev_ts.output)
         return current_img, prev_img
 
-    def _render_gallery() -> list[tuple[Image.Image, str]]:
-        if not state.current_trajectory:
-            return []
-        screenshots = xray_utils.get_all_screenshots(state.current_trajectory)
-        return [(img, f"Step {i + 1}") for i, img in screenshots]
-
     def _render_step_details() -> str:
         env_out = state.get_env_output()
         agent_out = state.get_agent_output()
@@ -731,9 +788,9 @@ def run_xray(
 
     def _render_chat() -> str:
         agent_out = state.get_agent_output()
-        result = xray_utils.get_chat_messages_markdown(agent_out)
+        result = xray_utils.get_chat_messages_html(agent_out)
         if not result:
-            return "No agent action follows this observation (terminal step)."
+            return "<em>No agent action follows this observation (terminal step).</em>"
         return result
 
     def _render_error() -> str:
@@ -775,9 +832,6 @@ def run_xray(
     def _activate_screenshots() -> str:
         return "Screenshots"
 
-    def _activate_gallery() -> str:
-        return "Screenshot Gallery"
-
     def _activate_step_details() -> str:
         return "Step Details"
 
@@ -801,7 +855,7 @@ def run_xray(
     # ------------------------------------------------------------------
 
     with gr.Blocks(theme=gr.themes.Soft(), css=_CSS, head=_SHORTCUT_JS, js=_FORCE_LIGHT_JS) as demo:  # type: ignore[attr-defined]
-        active_tab = gr.State(value="Screenshots")
+        active_tab = gr.State(value="Chat Messages")
         step_id = gr.State(value=StepId())
 
         with gr.Accordion("Help", open=False):
@@ -829,6 +883,9 @@ def run_xray(
 
         with gr.Accordion("📂 Trajectory Hierarchy", open=True):
             with gr.Tabs():
+                with gr.Tab("Dashboard"):
+                    progress_bar = gr.HTML("")
+                    experiment_stats = gr.Markdown("")
                 with gr.Tab("Agents") as agents_tab:
                     agent_table = gr.DataFrame(
                         headers=["agent_name", "n_tasks", "n_trajs", "avg_reward", "total_cost"],
@@ -847,7 +904,7 @@ def run_xray(
                     )
                 with gr.Tab("Seeds") as seeds_tab:
                     seed_table = gr.DataFrame(
-                        headers=["traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
+                        headers=["status", "traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
                         datatype="html",
                         max_height=260,
                         show_label=False,
@@ -857,10 +914,9 @@ def run_xray(
                     agent_config_code = gr.Code(language="json", show_label=False)
                 with gr.Tab("Exp Config"):
                     exp_config_code = gr.Code(language="json", show_label=False)
-            experiment_stats = gr.Markdown("")
 
-        # Background-loading timer: ticks every 1s to refresh tables while stubs are being loaded.
-        # Starts inactive; activated when an experiment is selected, deactivated when loading ends.
+        # Timer: ticks every 1s to bulk-load stubs and then live-poll for new/changed trajectories.
+        # Starts inactive; activated on experiment select; deactivates when experiment is complete.
         bg_timer = gr.Timer(value=1.0, active=False)
 
         with gr.Row(variant="panel", elem_classes="compact-header"):
@@ -870,14 +926,12 @@ def run_xray(
                 stats_display = gr.Markdown("")
 
         with gr.Row():
-            with gr.Column(scale=0, min_width=90):
-                prev_btn = gr.Button("◀ Prev", size="sm", elem_id="xray_prev_btn", min_width=80)
-            with gr.Column(scale=0, min_width=110):
-                step_counter = gr.Markdown("Step 0/0")
+            with gr.Column(scale=0, min_width=40):
+                prev_btn = gr.Button("◀", size="sm", elem_id="xray_prev_btn", min_width=36)
             with gr.Column(scale=1):
                 timeline_html = gr.HTML(label="Timeline")
-            with gr.Column(scale=0, min_width=90):
-                next_btn = gr.Button("Next ▶", size="sm", elem_id="xray_next_btn", min_width=80)
+            with gr.Column(scale=0, min_width=40):
+                next_btn = gr.Button("▶", size="sm", elem_id="xray_next_btn", min_width=36)
 
         with gr.Row(visible=True, elem_id="timeline_click_input"):
             timeline_click_input = gr.Number(show_label=False, container=False)
@@ -890,6 +944,9 @@ def run_xray(
                 agent_action_md = gr.HTML(value="")
 
         with gr.Tabs() as main_tabs:
+            with gr.Tab("Chat Messages") as chat_tab:
+                chat_md = gr.HTML()
+
             with gr.Tab("Screenshots") as screenshots_tab:
                 screenshot = gr.Image(
                     label="Current Screenshot",
@@ -906,15 +963,6 @@ def run_xray(
                         height=400,
                     )
 
-            with gr.Tab("Screenshot Gallery") as gallery_tab:
-                screenshot_gallery = gr.Gallery(
-                    columns=2,
-                    show_download_button=False,
-                    show_label=False,
-                    object_fit="contain",
-                    preview=True,
-                )
-
             with gr.Tab("Step Details") as step_details_tab:
                 step_details = gr.Markdown(
                     value="Select a trajectory to view step details",
@@ -923,9 +971,6 @@ def run_xray(
 
             with gr.Tab("AXTree") as axtree_tab:
                 axtree_code = gr.Code(language=None, show_label=False, max_lines=40)
-
-            with gr.Tab("Chat Messages") as chat_tab:
-                chat_md = gr.Markdown()
 
             with gr.Tab("Task Error") as error_tab:
                 error_md = gr.Markdown()
@@ -965,7 +1010,7 @@ def run_xray(
 
         bg_timer.tick(
             fn=on_bg_load_tick,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, bg_timer, agents_tab, tasks_tab, seeds_tab],
+            outputs=[experiment_stats, agent_table, task_table, seed_table, progress_bar, bg_timer, agents_tab, tasks_tab, seeds_tab],
         )
 
         agent_table.select(
@@ -985,7 +1030,6 @@ def run_xray(
 
         # Always-rendered on step change
         step_id.change(fn=get_compact_header_info, outputs=header_info)
-        step_id.change(fn=get_step_counter, outputs=step_counter)
         step_id.change(fn=update_timeline, outputs=timeline_html)
         step_id.change(fn=update_trajectory_stats, outputs=stats_display)
         step_id.change(fn=get_task_goal, outputs=task_goal_md)
@@ -996,11 +1040,6 @@ def run_xray(
             fn=if_active("Screenshots", 2)(_render_screenshots),
             inputs=[active_tab, step_id],
             outputs=[screenshot, prev_screenshot],
-        )
-        step_id.change(
-            fn=if_active("Screenshot Gallery")(_render_gallery),
-            inputs=[active_tab, step_id],
-            outputs=screenshot_gallery,
         )
         step_id.change(
             fn=if_active("Step Details")(_render_step_details),
@@ -1037,9 +1076,6 @@ def run_xray(
         # Tab .select fires with no extra inputs — handlers take no arguments.
         screenshots_tab.select(fn=_activate_screenshots, outputs=active_tab)
         screenshots_tab.select(fn=_render_screenshots, outputs=[screenshot, prev_screenshot])
-
-        gallery_tab.select(fn=_activate_gallery, outputs=active_tab)
-        gallery_tab.select(fn=_render_gallery, outputs=screenshot_gallery)
 
         step_details_tab.select(fn=_activate_step_details, outputs=active_tab)
         step_details_tab.select(fn=_render_step_details, outputs=step_details)
