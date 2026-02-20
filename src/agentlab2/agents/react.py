@@ -18,7 +18,7 @@ class ReactAgentConfig(AgentConfig):
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
     max_history_tokens: int = 120000  # compact history if it exceeds N tokens
-    render_last_n_steps: int = -1  # include last N steps in prompt, if -1 - include all. For tasks with long obs.
+    render_last_n_obs: int = -1  # include last N observations in prompt, if -1 - include all
     system_prompt: str = """
 You are an expert AI Agent trained to assist users with complex web tasks.
 Your role is to understand the goal, perform actions until the goal is accomplished and respond in a helpful and accurate manner.
@@ -61,6 +61,10 @@ class ReactAgent(Agent):
             self.tools.append(STOP_ACTION.as_dict())
 
         self.history: list[dict | Message] = []
+        # Cumulative message index after each observation was appended.
+        # _obs_end_indices[i] = len(history) after the i-th observation was added.
+        # Used by choose_steps_to_render to slice by observation count, not raw messages.
+        self._obs_end_indices: list[int] = []
         self._actions_cnt = 0
 
     def step(self, obs: Observation) -> AgentOutput:
@@ -68,6 +72,7 @@ class ReactAgent(Agent):
             logger.info("Max actions reached, issuing STOP action.")
             return AgentOutput(actions=[Action(id="stop", name=STOP_ACTION.name, arguments={})])
         self.history += obs.to_llm_messages()
+        self._obs_end_indices.append(len(self.history))
         self.maybe_compact_history()
         messages = self.choose_steps_to_render(self.history)
         prompt = Prompt(messages=messages, tools=self.tools)
@@ -92,14 +97,31 @@ class ReactAgent(Agent):
         return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
 
     def choose_steps_to_render(self, history: list[dict | Message]) -> list[dict | Message]:
-        """Select which parts of history to include in the prompt based on length."""
-        # goal + last N messages
+        """Return the prompt messages for the next LLM call.
+
+        Includes the system prompt, the first message (goal), the last
+        render_last_n_obs observations (all their messages), and the ReAct
+        instruction. When render_last_n_obs is -1 the full history is included.
+        """
+        tail = self._get_last_n_obs_messages(history)
         return [
             dict(role="system", content=self.config.system_prompt),
-            self.history[0],  # goal
-            *self.history[-self.config.render_last_n_steps :],
+            history[0],  # goal (first user message)
+            *tail,
             dict(role="user", content=self.config.react_prompt),
         ]
+
+    def _get_last_n_obs_messages(self, history: list[dict | Message]) -> list[dict | Message]:
+        """Return the slice of history that covers the last render_last_n_obs observations.
+
+        Falls back to the full history when render_last_n_obs is -1 or there are
+        fewer recorded observations than requested.
+        """
+        n = self.config.render_last_n_obs
+        if n == -1 or n >= len(self._obs_end_indices):
+            return history
+        start = self._obs_end_indices[-n - 1] if n < len(self._obs_end_indices) else 0
+        return history[start:]
 
     def _parse_actions(self, llm_output: Message) -> list[Action]:
         actions = []
