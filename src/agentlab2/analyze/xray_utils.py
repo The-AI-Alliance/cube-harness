@@ -130,15 +130,6 @@ def get_current_screenshot(
     return img
 
 
-def get_all_screenshots(trajectory: Trajectory) -> list[tuple[int, Image.Image]]:
-    """Collect all (step_index, Image) pairs from all EnvironmentOutputs in a trajectory."""
-    result = []
-    for i, traj_step in enumerate(trajectory.steps):
-        img = get_screenshot_from_step(traj_step.output)
-        if img is not None:
-            result.append((i, img))
-    return result
-
 
 # ---------------------------------------------------------------------------
 # Content extraction

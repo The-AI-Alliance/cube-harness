@@ -770,12 +770,6 @@ def run_xray(
             prev_img = xray_utils.get_screenshot_from_step(prev_ts.output)
         return current_img, prev_img
 
-    def _render_gallery() -> list[tuple[Image.Image, str]]:
-        if not state.current_trajectory:
-            return []
-        screenshots = xray_utils.get_all_screenshots(state.current_trajectory)
-        return [(img, f"Step {i + 1}") for i, img in screenshots]
-
     def _render_step_details() -> str:
         env_out = state.get_env_output()
         agent_out = state.get_agent_output()
@@ -838,9 +832,6 @@ def run_xray(
     def _activate_screenshots() -> str:
         return "Screenshots"
 
-    def _activate_gallery() -> str:
-        return "Screenshot Gallery"
-
     def _activate_step_details() -> str:
         return "Step Details"
 
@@ -864,7 +855,7 @@ def run_xray(
     # ------------------------------------------------------------------
 
     with gr.Blocks(theme=gr.themes.Soft(), css=_CSS, head=_SHORTCUT_JS, js=_FORCE_LIGHT_JS) as demo:  # type: ignore[attr-defined]
-        active_tab = gr.State(value="Screenshots")
+        active_tab = gr.State(value="Chat Messages")
         step_id = gr.State(value=StepId())
 
         with gr.Accordion("Help", open=False):
@@ -953,6 +944,9 @@ def run_xray(
                 agent_action_md = gr.HTML(value="")
 
         with gr.Tabs() as main_tabs:
+            with gr.Tab("Chat Messages") as chat_tab:
+                chat_md = gr.HTML()
+
             with gr.Tab("Screenshots") as screenshots_tab:
                 screenshot = gr.Image(
                     label="Current Screenshot",
@@ -969,15 +963,6 @@ def run_xray(
                         height=400,
                     )
 
-            with gr.Tab("Screenshot Gallery") as gallery_tab:
-                screenshot_gallery = gr.Gallery(
-                    columns=2,
-                    show_download_button=False,
-                    show_label=False,
-                    object_fit="contain",
-                    preview=True,
-                )
-
             with gr.Tab("Step Details") as step_details_tab:
                 step_details = gr.Markdown(
                     value="Select a trajectory to view step details",
@@ -986,9 +971,6 @@ def run_xray(
 
             with gr.Tab("AXTree") as axtree_tab:
                 axtree_code = gr.Code(language=None, show_label=False, max_lines=40)
-
-            with gr.Tab("Chat Messages") as chat_tab:
-                chat_md = gr.HTML()
 
             with gr.Tab("Task Error") as error_tab:
                 error_md = gr.Markdown()
@@ -1060,11 +1042,6 @@ def run_xray(
             outputs=[screenshot, prev_screenshot],
         )
         step_id.change(
-            fn=if_active("Screenshot Gallery")(_render_gallery),
-            inputs=[active_tab, step_id],
-            outputs=screenshot_gallery,
-        )
-        step_id.change(
             fn=if_active("Step Details")(_render_step_details),
             inputs=[active_tab, step_id],
             outputs=step_details,
@@ -1099,9 +1076,6 @@ def run_xray(
         # Tab .select fires with no extra inputs — handlers take no arguments.
         screenshots_tab.select(fn=_activate_screenshots, outputs=active_tab)
         screenshots_tab.select(fn=_render_screenshots, outputs=[screenshot, prev_screenshot])
-
-        gallery_tab.select(fn=_activate_gallery, outputs=active_tab)
-        gallery_tab.select(fn=_render_gallery, outputs=screenshot_gallery)
 
         step_details_tab.select(fn=_activate_step_details, outputs=active_tab)
         step_details_tab.select(fn=_render_step_details, outputs=step_details)
