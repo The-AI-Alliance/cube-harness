@@ -149,34 +149,81 @@ def _msg_to_dict(msg: object) -> dict:
     return {"role": "unknown", "content": str(msg)}
 
 
-def _details_block(summary: str, body: str) -> str:
-    """Wrap body in a <details> block, open by default for short content."""
+def _extract_name_and_body(text: str) -> tuple[str, str]:
+    """Split '##name\\nbody' into (name, body). Returns ('', text) if no prefix."""
+    if text.startswith("##"):
+        newline = text.find("\n")
+        if newline != -1:
+            return text[2:newline].strip(), text[newline + 1 :]
+    return "", text
+
+
+def _preview(text: str, max_chars: int = 80) -> str:
+    """Return first non-empty line of text, truncated to max_chars."""
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return line[:max_chars] + ("…" if len(line) > max_chars else "")
+    return ""
+
+
+def _details_block(label: str, body: str, icon: str = "📄") -> str:
+    """Wrap body in a <details> block. Short content is open by default.
+
+    Summary shows: icon + label + first-line preview (when collapsed).
+    """
     open_attr = " open" if len(body) <= _COLLAPSE_THRESHOLD else ""
+    preview = _preview(body)
+    preview_html = f" <span style='color:#888;font-weight:normal'>{html_lib.escape(preview)}</span>" if preview and not open_attr else ""
     escaped = html_lib.escape(body)
-    return f"<details{open_attr}><summary>{summary}</summary><pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{escaped}</pre></details>\n"
+    return (
+        f"<details{open_attr}>"
+        f"<summary>{icon} <strong>{html_lib.escape(label)}</strong>{preview_html}</summary>"
+        f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{escaped}</pre>"
+        f"</details>\n"
+    )
 
 
 def _render_content_items(content: str | list | None) -> str:
     """Render message content (str or multimodal list) as HTML."""
     parts: list[str] = []
     if isinstance(content, list):
-        for item in content:
-            if not isinstance(item, dict):
-                parts.append(f"<em>[{html_lib.escape(type(item).__name__)}]</em>")
-                continue
+        # When a text item is immediately followed by an image, treat them as one screenshot block
+        items = [i for i in content if isinstance(i, dict)]
+        idx = 0
+        while idx < len(items):
+            item = items[idx]
             item_type = item.get("type", "")
-            if item_type == "text":
-                parts.append(_details_block("📄 text", item.get("text", "")))
+            next_item = items[idx + 1] if idx + 1 < len(items) else None
+            next_is_image = next_item is not None and next_item.get("type") in ("image_url", "image")
+
+            if item_type == "text" and next_is_image:
+                # Name label before an image — render as labelled screenshot
+                label = item.get("text", "").strip()
+                url = next_item.get("image_url", {}).get("url", "") or next_item.get("url", "")  # type: ignore[union-attr]
+                img_html = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>" if url else "<em>[Image — no URL]</em>"
+                parts.append(
+                    f"<details><summary>📷 <strong>{html_lib.escape(label) or 'screenshot'}</strong></summary>"
+                    f"{img_html}</details>\n"
+                )
+                idx += 2
+            elif item_type == "text":
+                text = item.get("text", "")
+                name, body = _extract_name_and_body(text)
+                parts.append(_details_block(name or "text", body or text))
+                idx += 1
             elif item_type in ("image_url", "image"):
                 url = item.get("image_url", {}).get("url", "") or item.get("url", "")
-                if url:
-                    parts.append(f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'><br>\n")
-                else:
-                    parts.append("<em>[Image — no URL]</em>")
+                img_html = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>" if url else "<em>[Image — no URL]</em>"
+                parts.append(f"<details><summary>📷 <strong>screenshot</strong></summary>{img_html}</details>\n")
+                idx += 1
             else:
                 parts.append(f"<em>[{html_lib.escape(item_type)}]</em>")
+                idx += 1
     elif content:
-        parts.append(_details_block("📄 text", str(content)))
+        text = str(content)
+        name, body = _extract_name_and_body(text)
+        parts.append(_details_block(name or "text", body or text))
     return "".join(parts)
 
 
@@ -185,7 +232,7 @@ def _render_assistant_content(msg: dict) -> str:
     parts: list[str] = []
     content = msg.get("content") or ""
     if content:
-        parts.append(_details_block("💭 reasoning", str(content)))
+        parts.append(_details_block("reasoning", str(content), icon="💭"))
     tool_calls = msg.get("tool_calls") or []
     for tc in tool_calls:
         if not isinstance(tc, dict):
@@ -198,7 +245,7 @@ def _render_assistant_content(msg: dict) -> str:
                 args = json.dumps(json.loads(args), indent=2)
             except (json.JSONDecodeError, ValueError):
                 pass
-        parts.append(_details_block(f"🔧 tool call: <code>{html_lib.escape(name)}</code>", str(args)))
+        parts.append(_details_block(f"tool call: {name}", str(args), icon="🔧"))
     return "".join(parts)
 
 
