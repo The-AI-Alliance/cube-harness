@@ -272,28 +272,28 @@ class TestExtractObsContent:
 
 class TestGetChatMessagesMarkdown:
     def test_returns_empty_for_env_step(self, env_step_with_axtree: EnvironmentOutput) -> None:
-        assert xray_utils.get_chat_messages_markdown(env_step_with_axtree) == ""
+        assert xray_utils.get_chat_messages_html(env_step_with_axtree) == ""
 
     def test_returns_empty_for_none(self) -> None:
-        assert xray_utils.get_chat_messages_markdown(None) == ""
+        assert xray_utils.get_chat_messages_html(None) == ""
 
     def test_returns_empty_when_no_llm_calls(self) -> None:
         step = AgentOutput(actions=[], llm_calls=[])
-        assert xray_utils.get_chat_messages_markdown(step) == ""
+        assert xray_utils.get_chat_messages_html(step) == ""
 
     def test_contains_role_headers(self, agent_step_with_llm_call: AgentOutput) -> None:
-        result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
+        result = xray_utils.get_chat_messages_html(agent_step_with_llm_call)
         assert "system" in result
         assert "user" in result
         assert "assistant" in result
 
     def test_contains_message_content(self, agent_step_with_llm_call: AgentOutput) -> None:
-        result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
+        result = xray_utils.get_chat_messages_html(agent_step_with_llm_call)
         assert "You are a helpful assistant." in result
         assert "Click the button." in result
 
     def test_contains_llm_response(self, agent_step_with_llm_call: AgentOutput) -> None:
-        result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
+        result = xray_utils.get_chat_messages_html(agent_step_with_llm_call)
         assert "I will click the button." in result
 
     def test_renders_tool_calls_in_assistant_response(self, sample_llm_call: LLMCall) -> None:
@@ -306,16 +306,18 @@ class TestGetChatMessagesMarkdown:
             tool_calls=[ChatCompletionMessageToolCall(id="tc1", function=Function(name="browser_click", arguments='{"bid": "42"}'), type="function")],
         )
         step = AgentOutput(llm_calls=[sample_llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "browser_click" in result
         assert "42" in result
 
-    def test_truncates_long_content(self, sample_llm_call: LLMCall) -> None:
-        long_content = "x" * 400000
+    def test_long_content_collapses(self, sample_llm_call: LLMCall) -> None:
+        long_content = "x" * 1000
         sample_llm_call.prompt.messages[1] = {"role": "user", "content": long_content}
         step = AgentOutput(llm_calls=[sample_llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
-        assert "[truncated]" in result
+        result = xray_utils.get_chat_messages_html(step)
+        # Long content should use <details> without the "open" attribute (collapsed by default)
+        assert "<details>" in result
+        assert long_content[:100] in result
 
     def test_handles_list_content_with_image(self, sample_llm_call: LLMCall) -> None:
         sample_llm_call.prompt.messages[1] = {
@@ -326,9 +328,10 @@ class TestGetChatMessagesMarkdown:
             ],
         }
         step = AgentOutput(llm_calls=[sample_llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "Here is a screenshot:" in result
-        assert "![screenshot](data:image/png;base64,abc)" in result
+        assert "data:image/png;base64,abc" in result
+        assert "<img" in result
 
 
 # ---------------------------------------------------------------------------
@@ -980,7 +983,7 @@ class TestGetChatMessagesMarkdownWithMessageObjects:
         output_msg = Message(role="assistant", content="ok")
         llm_call = LLMCall(id="test", llm_config=config, prompt=prompt, output=output_msg, usage=Usage())
         step = AgentOutput(llm_calls=[llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "user" in result
         assert "Use a Message object" in result
 
@@ -992,7 +995,7 @@ class TestGetChatMessagesMarkdownWithMessageObjects:
         output_msg = Message(role="assistant", content="ok")
         llm_call = LLMCall(id="test2", llm_config=config, prompt=prompt, output=output_msg, usage=Usage())
         step = AgentOutput(llm_calls=[llm_call])
-        result = xray_utils.get_chat_messages_markdown(step)
+        result = xray_utils.get_chat_messages_html(step)
         assert "system" in result
         assert "System prompt from Message" in result
         assert "User dict message" in result

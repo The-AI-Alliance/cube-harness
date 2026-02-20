@@ -4,6 +4,7 @@ All functions in this module are pure (or near-pure) — no Gradio imports, no g
 This makes them independently testable without any UI framework.
 """
 
+import html as html_lib
 import json
 from pathlib import Path
 from typing import Any
@@ -134,46 +135,7 @@ def extract_obs_content(step: EnvironmentOutput | None, name_pattern: str) -> st
 # ---------------------------------------------------------------------------
 
 
-def _render_message_content(content: str | list | None, parts: list[str]) -> None:
-    """Render a message's content (str or multimodal list) into parts."""
-    if isinstance(content, list):
-        for item in content:
-            if not isinstance(item, dict):
-                parts.append(f"*[{type(item).__name__}]*\n")
-                continue
-            item_type = item.get("type", "")
-            if item_type == "text":
-                parts.append(f"```\n{_truncate(item.get('text', ''), 300000)}\n```\n")
-            elif item_type in ("image_url", "image"):
-                url = item.get("image_url", {}).get("url", "") or item.get("url", "")
-                if url:
-                    parts.append(f"![screenshot]({url})\n")
-                else:
-                    parts.append("*[Image — no URL]*\n")
-            else:
-                parts.append(f"*[{item_type}]*\n")
-    elif content:
-        parts.append(f"```\n{_truncate(str(content), 300000)}\n```\n")
-
-
-def _render_assistant_output(msg: dict, parts: list[str]) -> None:
-    """Render an assistant message: text content + tool_calls."""
-    content = msg.get("content") or ""
-    if content:
-        parts.append(f"```\n{_truncate(str(content), 300000)}\n```\n")
-    tool_calls = msg.get("tool_calls") or []
-    for tc in tool_calls:
-        if not isinstance(tc, dict):
-            tc = tc.model_dump() if hasattr(tc, "model_dump") else vars(tc)
-        fn = tc.get("function", {})
-        name = fn.get("name", "?")
-        args = fn.get("arguments", "")
-        if isinstance(args, str):
-            try:
-                args = json.dumps(json.loads(args), indent=2)
-            except (json.JSONDecodeError, ValueError):
-                pass
-        parts.append(f"**🔧 tool call:** `{name}`\n```json\n{args}\n```\n")
+_COLLAPSE_THRESHOLD = 500  # chars — messages longer than this start collapsed
 
 
 def _msg_to_dict(msg: object) -> dict:
@@ -187,39 +149,102 @@ def _msg_to_dict(msg: object) -> dict:
     return {"role": "unknown", "content": str(msg)}
 
 
-def get_chat_messages_markdown(step: EnvironmentOutput | AgentOutput | None) -> str:
-    """Render the full LLM conversation (prompt + response) for one agent step.
+def _details_block(summary: str, body: str) -> str:
+    """Wrap body in a <details> block, open by default for short content."""
+    open_attr = " open" if len(body) <= _COLLAPSE_THRESHOLD else ""
+    escaped = html_lib.escape(body)
+    return f"<details{open_attr}><summary>{summary}</summary><pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{escaped}</pre></details>\n"
 
-    Shows every message in the prompt followed by the LLM's response, including
-    inline screenshots, chain-of-thought text, and tool calls.
+
+def _render_content_items(content: str | list | None) -> str:
+    """Render message content (str or multimodal list) as HTML."""
+    parts: list[str] = []
+    if isinstance(content, list):
+        for item in content:
+            if not isinstance(item, dict):
+                parts.append(f"<em>[{html_lib.escape(type(item).__name__)}]</em>")
+                continue
+            item_type = item.get("type", "")
+            if item_type == "text":
+                parts.append(_details_block("📄 text", item.get("text", "")))
+            elif item_type in ("image_url", "image"):
+                url = item.get("image_url", {}).get("url", "") or item.get("url", "")
+                if url:
+                    parts.append(f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'><br>\n")
+                else:
+                    parts.append("<em>[Image — no URL]</em>")
+            else:
+                parts.append(f"<em>[{html_lib.escape(item_type)}]</em>")
+    elif content:
+        parts.append(_details_block("📄 text", str(content)))
+    return "".join(parts)
+
+
+def _render_assistant_content(msg: dict) -> str:
+    """Render assistant message: text content + tool calls as HTML."""
+    parts: list[str] = []
+    content = msg.get("content") or ""
+    if content:
+        parts.append(_details_block("💭 reasoning", str(content)))
+    tool_calls = msg.get("tool_calls") or []
+    for tc in tool_calls:
+        if not isinstance(tc, dict):
+            tc = tc.model_dump() if hasattr(tc, "model_dump") else vars(tc)
+        fn = tc.get("function", {})
+        name = fn.get("name", "?")
+        args = fn.get("arguments", "")
+        if isinstance(args, str):
+            try:
+                args = json.dumps(json.loads(args), indent=2)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        parts.append(_details_block(f"🔧 tool call: <code>{html_lib.escape(name)}</code>", str(args)))
+    return "".join(parts)
+
+
+_ROLE_STYLE = {
+    "system": "background:#f0f4ff;border-left:3px solid #6c8ebf",
+    "user": "background:#f5f5f5;border-left:3px solid #aaa",
+    "tool": "background:#fff8e7;border-left:3px solid #e6a817",
+    "assistant": "background:#f0fff4;border-left:3px solid #5cb85c",
+}
+
+
+def get_chat_messages_html(step: EnvironmentOutput | AgentOutput | None) -> str:
+    """Render the full LLM conversation (prompt + response) as HTML for one agent step.
+
+    Each message is a collapsible <details> block — short content is expanded by default,
+    long content (axtree, HTML) starts collapsed. Screenshots render as inline images.
     Returns empty string for non-AgentOutput steps or steps with no llm_calls.
     """
     if not isinstance(step, AgentOutput) or not step.llm_calls:
         return ""
 
     llm_call = step.llm_calls[0]
-    # All prompt messages plus the LLM response appended at the end
     messages = list(llm_call.prompt.messages) + [llm_call.output]
-    parts = []
+    blocks: list[str] = []
 
     for i, msg in enumerate(messages):
         msg_dict = _msg_to_dict(msg)
         role = msg_dict.get("role", "unknown")
         tool_call_id = msg_dict.get("tool_call_id")
 
-        role_label = f"**[{i + 1}] {role}**"
+        label = f"[{i + 1}] {role}"
         if tool_call_id:
-            role_label += f" *(tool_result for: {tool_call_id})*"
-        parts.append(f"## {role_label}\n")
+            label += f" · tool_result for {tool_call_id}"
 
         if role == "assistant":
-            _render_assistant_output(msg_dict, parts)
+            body_html = _render_assistant_content(msg_dict)
         else:
-            _render_message_content(msg_dict.get("content"), parts)
+            body_html = _render_content_items(msg_dict.get("content"))
 
-        parts.append("\n")
+        style = _ROLE_STYLE.get(role, "background:#fafafa;border-left:3px solid #ccc")
+        blocks.append(
+            f"<div style='margin:6px 0;padding:8px 12px;border-radius:4px;{style}'>"
+            f"<strong>{html_lib.escape(label)}</strong><br>{body_html}</div>\n"
+        )
 
-    return "\n".join(parts)
+    return "".join(blocks)
 
 
 def _truncate(text: str, max_len: int) -> str:
