@@ -285,11 +285,30 @@ class TestGetChatMessagesMarkdown:
         result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
         assert "system" in result
         assert "user" in result
+        assert "assistant" in result
 
     def test_contains_message_content(self, agent_step_with_llm_call: AgentOutput) -> None:
         result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
         assert "You are a helpful assistant." in result
         assert "Click the button." in result
+
+    def test_contains_llm_response(self, agent_step_with_llm_call: AgentOutput) -> None:
+        result = xray_utils.get_chat_messages_markdown(agent_step_with_llm_call)
+        assert "I will click the button." in result
+
+    def test_renders_tool_calls_in_assistant_response(self, sample_llm_call: LLMCall) -> None:
+        from litellm import Message
+        from litellm.types.utils import ChatCompletionMessageToolCall, Function
+
+        sample_llm_call.output = Message(
+            role="assistant",
+            content=None,
+            tool_calls=[ChatCompletionMessageToolCall(id="tc1", function=Function(name="browser_click", arguments='{"bid": "42"}'), type="function")],
+        )
+        step = AgentOutput(llm_calls=[sample_llm_call])
+        result = xray_utils.get_chat_messages_markdown(step)
+        assert "browser_click" in result
+        assert "42" in result
 
     def test_truncates_long_content(self, sample_llm_call: LLMCall) -> None:
         long_content = "x" * 400000
@@ -309,7 +328,7 @@ class TestGetChatMessagesMarkdown:
         step = AgentOutput(llm_calls=[sample_llm_call])
         result = xray_utils.get_chat_messages_markdown(step)
         assert "Here is a screenshot:" in result
-        assert "[Image]" in result
+        assert "![screenshot](data:image/png;base64,abc)" in result
 
 
 # ---------------------------------------------------------------------------
