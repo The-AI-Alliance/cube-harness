@@ -670,23 +670,6 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
     }
 
 
-def trajectory_status(traj: Trajectory) -> str:
-    """Return 'finished', 'running', or 'errored' for a trajectory.
-
-    - finished: both start_time and end_time are set
-    - errored:  any step has a non-None error field
-    - running:  start_time set, no end_time, no error steps
-    """
-    for step in traj.steps:
-        if step.output is not None and step.output.error is not None:
-            return "errored"
-    if traj.start_time is not None and traj.end_time is not None:
-        return "finished"
-    if traj.start_time is not None:
-        return "running"
-    return "errored"
-
-
 def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
     """Aggregate statistics across all trajectories and return as markdown."""
     if not trajectories:
@@ -708,7 +691,7 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         stats = compute_trajectory_stats(traj)
         status = trajectory_status(traj)
 
-        if status == "finished":
+        if status in ("success", "completed"):
             finished_rewards.append(stats["final_reward"])
             finished_steps.append(stats["n_env_steps"])
             finished_durations.append(stats["duration"])

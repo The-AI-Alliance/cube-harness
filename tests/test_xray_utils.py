@@ -461,9 +461,9 @@ class TestComputeExperimentStats:
         assert "Finished" in result
 
     def test_counts_failed_trajectories(self) -> None:
-        # A trajectory with an error step is considered "errored"
+        # A trajectory with end_time set and an error step is considered "error"
         error_step = TrajectoryStep(output=AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace="")))
-        failed_traj = Trajectory(id="failed", start_time=1.0, steps=[error_step])
+        failed_traj = Trajectory(id="failed", start_time=1.0, end_time=2.0, steps=[error_step])
         result = xray_utils.compute_experiment_stats([failed_traj])
         assert "Failed" in result
 
