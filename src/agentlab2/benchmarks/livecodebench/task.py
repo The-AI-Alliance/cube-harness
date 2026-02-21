@@ -1,10 +1,7 @@
 """LiveCodeBench task implementation."""
 
-import base64
 import json
 import logging
-import pickle
-import zlib
 from typing import Any
 
 from agentlab2.action_spaces.swe_action_space import SWEActionSpace
@@ -102,23 +99,29 @@ Your task:
 The solution should read from stdin and print to stdout."""
 
     def _parse_test_cases(self, test_cases_str: str) -> list[dict[str, Any]]:
-        """Parse test cases from plain JSON or encoded (base64 -> zlib -> pickle) format."""
+        """Parse test cases from JSON-only format."""
         if not test_cases_str:
             return []
-        # Try plain JSON first (public test cases)
+
         try:
-            return json.loads(test_cases_str)
+            parsed = json.loads(test_cases_str)
         except json.JSONDecodeError:
-            pass
-        # Try encoded format (private test cases): base64 -> zlib -> pickle -> json
-        try:
-            decoded = base64.b64decode(test_cases_str)
-            decompressed = zlib.decompress(decoded)
-            unpickled = pickle.loads(decompressed)
-            return json.loads(unpickled)
-        except Exception as e:
-            logger.warning(f"Failed to decode test cases: {e}")
+            logger.warning("Failed to parse test cases as JSON; encoded pickle payloads are not supported for safety")
             return []
+
+        # Some datasets may JSON-wrap the list as a string; parse one additional layer.
+        if isinstance(parsed, str):
+            try:
+                parsed = json.loads(parsed)
+            except json.JSONDecodeError:
+                logger.warning("Parsed test cases JSON string does not contain a valid JSON payload")
+                return []
+
+        if not isinstance(parsed, list):
+            logger.warning("Test cases payload is not a JSON list")
+            return []
+
+        return [case for case in parsed if isinstance(case, dict)]
 
     def _extract_stdout(self, bash_output: str) -> str:
         """Extract stdout from structured bash output, ignoring stderr and metadata."""

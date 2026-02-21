@@ -32,6 +32,19 @@ _retry_poll = retry(
 )
 
 
+def _truncate_output(output: str, max_output_bytes: int) -> str:
+    """Truncate command output to a maximum UTF-8 byte length."""
+    if max_output_bytes <= 0:
+        return output
+
+    output_bytes = output.encode("utf-8")
+    if len(output_bytes) <= max_output_bytes:
+        return output
+
+    truncated = output_bytes[:max_output_bytes].decode("utf-8", errors="ignore")
+    return f"{truncated}\n[truncated at {max_output_bytes} bytes]"
+
+
 class DaytonaSWEToolConfig(ToolConfig):
     """Config for Daytona SWE tool."""
 
@@ -40,6 +53,7 @@ class DaytonaSWEToolConfig(ToolConfig):
     cpus: int = 2
     memory_gb: int = 4
     disk_gb: int = 10
+    max_output_bytes: int = 100_000
     ephemeral: bool = True
     auto_stop_minutes: int = 10  # Auto-stop after N minutes of inactivity (safety net)
     auto_delete_minutes: int = 5  # Auto-delete N minutes after stopping
@@ -80,7 +94,6 @@ class DaytonaSWETool(Tool, SWEActionSpace):
             ephemeral=self.config.ephemeral,
         )
         sandbox = self._client.create(params)
-        logger.info(f"Daytona sandbox SSH URL: `{sandbox.create_ssh_access().ssh_command}`")
         return sandbox
 
     @_retry_poll
@@ -142,9 +155,11 @@ class DaytonaSWETool(Tool, SWEActionSpace):
             if cmd.exit_code != 0:
                 parts.append(f"[exit_code: {cmd.exit_code}]")
 
-            return "\n".join(parts) if parts else "(no output)"
+            result = "\n".join(parts) if parts else "(no output)"
+            return _truncate_output(result, self.config.max_output_bytes)
 
         except Exception as e:
+            logger.warning("Daytona bash command execution failed", exc_info=True)
             return f"[error] {e}"
 
     def read_file(self, path: str) -> str:

@@ -127,8 +127,7 @@ class TerminalBenchBenchmark(Benchmark):
         dataset_path = Path(self.dataset_path)
         if not dataset_path.exists():
             raise FileNotFoundError(
-                f"Terminal-Bench dataset not found at {self.dataset_path}. "
-                "Run benchmark.install() to download it."
+                f"Terminal-Bench dataset not found at {self.dataset_path}. Run benchmark.install() to download it."
             )
 
         try:
@@ -221,7 +220,10 @@ class TerminalBenchBenchmark(Benchmark):
                 cpus=task.cpus,
                 memory_gb=_parse_memory_str(task.memory),
                 disk_gb=_parse_storage_str(task.storage),
+                max_output_bytes=base_config.max_output_bytes,
                 ephemeral=base_config.ephemeral,
+                auto_stop_minutes=base_config.auto_stop_minutes,
+                auto_delete_minutes=base_config.auto_delete_minutes,
             )
         elif isinstance(base_config, DockerSWEToolConfig):
             return DockerSWEToolConfig(
@@ -231,6 +233,10 @@ class TerminalBenchBenchmark(Benchmark):
                 disk_gb=_parse_storage_str(task.storage),
                 working_dir=base_config.working_dir,
                 network_mode=base_config.network_mode,
+                user=base_config.user,
+                enforce_disk_quota=base_config.enforce_disk_quota,
+                writable_tmpfs_dirs=base_config.writable_tmpfs_dirs,
+                max_output_bytes=base_config.max_output_bytes,
                 remove_on_close=base_config.remove_on_close,
                 pull_policy=base_config.pull_policy,
             )
@@ -252,8 +258,16 @@ class TerminalBenchBenchmark(Benchmark):
 
             logger.info("Cloning laude-institute/terminal-bench-2...")
             subprocess.run(
-                ["git", "clone", "--depth", "1", "https://github.com/laude-institute/terminal-bench-2.git", str(repo_dir)],
+                [
+                    "git",
+                    "clone",
+                    "--depth",
+                    "1",
+                    "https://github.com/laude-institute/terminal-bench-2.git",
+                    str(repo_dir),
+                ],
                 check=True,
+                timeout=300,
             )
 
             tasks = []
@@ -262,7 +276,9 @@ class TerminalBenchBenchmark(Benchmark):
                     task = _load_task_from_repo(item)
                     if task:
                         tasks.append(task)
-                        logger.info(f"  Loaded task: {task['task_id']} ({task['difficulty']}, image: {task['docker_image']})")
+                        logger.info(
+                            f"  Loaded task: {task['task_id']} ({task['difficulty']}, image: {task['docker_image']})"
+                        )
 
             logger.info(f"Loaded {len(tasks)} tasks from Terminal-Bench")
 

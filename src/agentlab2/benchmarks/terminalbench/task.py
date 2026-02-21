@@ -4,6 +4,7 @@ import base64
 import io
 import logging
 import re
+import shlex
 import tarfile
 import tempfile
 from pathlib import Path
@@ -124,7 +125,7 @@ class TerminalBenchTask(Task):
 
     def _upload_directory(self, local_dir: Path, remote_dir: str) -> None:
         """Recursively upload a directory to the sandbox."""
-        self._tool.bash(f"mkdir -p {remote_dir}")
+        self._tool.bash(f"mkdir -p {shlex.quote(remote_dir)}")
 
         for item in local_dir.rglob("*"):
             if item.is_file():
@@ -132,7 +133,7 @@ class TerminalBenchTask(Task):
                 remote_path = f"{remote_dir}/{relative}"
                 # Ensure parent directory exists
                 remote_parent = str(Path(remote_path).parent)
-                self._tool.bash(f"mkdir -p {remote_parent}")
+                self._tool.bash(f"mkdir -p {shlex.quote(remote_parent)}")
                 # Read and upload file
                 try:
                     content = item.read_text(encoding="utf-8")
@@ -146,7 +147,9 @@ class TerminalBenchTask(Task):
         """Upload a binary file using base64 encoding."""
         content = local_path.read_bytes()
         b64_content = base64.b64encode(content).decode("ascii")
-        self._tool.bash(f"echo '{b64_content}' | base64 -d > {remote_path}")
+        quoted_b64_content = shlex.quote(b64_content)
+        quoted_remote_path = shlex.quote(remote_path)
+        self._tool.bash(f"printf %s {quoted_b64_content} | base64 -d > {quoted_remote_path}")
 
     def setup(self, tool: DaytonaSWETool) -> tuple[Observation, dict]:
         """Initialize the task environment.

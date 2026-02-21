@@ -11,7 +11,7 @@ import tarfile
 from pathlib import Path
 
 import docker
-from docker.errors import ImageNotFound, NotFound
+from docker.errors import APIError, ImageNotFound, NotFound
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_exponential
 
 from agentlab2.action_spaces.swe_action_space import SWEActionSpace
@@ -34,6 +34,46 @@ _retry_io = retry(
 )
 
 
+def _truncate_output(output: str, max_output_bytes: int) -> str:
+    """Truncate command output to a maximum UTF-8 byte length."""
+    if max_output_bytes <= 0:
+        return output
+
+    output_bytes = output.encode("utf-8")
+    if len(output_bytes) <= max_output_bytes:
+        return output
+
+    truncated = output_bytes[:max_output_bytes].decode("utf-8", errors="ignore")
+    return f"{truncated}\n[truncated at {max_output_bytes} bytes]"
+
+
+def _is_storage_opt_unsupported(exc: APIError) -> bool:
+    """Return True when the Docker daemon reports storage quota options are unsupported."""
+    message = str(exc).lower()
+    unsupported_markers = (
+        "storage-opt",
+        "storage option",
+        "per-container storage limit",
+        "invalid option: size",
+        "supported only for overlay",
+        "not supported",
+        "unsupported",
+    )
+    return "storage" in message and any(marker in message for marker in unsupported_markers)
+
+
+def _is_tmpfs_unsupported(exc: APIError) -> bool:
+    """Return True when the Docker daemon reports tmpfs options are unsupported."""
+    message = str(exc).lower()
+    unsupported_markers = (
+        "tmpfs",
+        "invalid mount config",
+        "unsupported",
+        "not supported",
+    )
+    return any(marker in message for marker in unsupported_markers)
+
+
 class DockerSWEToolConfig(ToolConfig):
     """Config for Docker SWE tool.
 
@@ -43,9 +83,13 @@ class DockerSWEToolConfig(ToolConfig):
     image: str = "python:3.13"
     cpus: int = 2
     memory_gb: int = 4
-    disk_gb: int = 10  # Not enforced locally, kept for interface compatibility
+    disk_gb: int = 10
     working_dir: str = "/app"
-    network_mode: str = "bridge"  # or "none" for isolated containers
+    network_mode: str = "none"
+    user: str = "1000:1000"
+    enforce_disk_quota: bool = True
+    writable_tmpfs_dirs: list[str] = ["/tests", "/logs", "/workspace", "/solution"]
+    max_output_bytes: int = 100_000
     remove_on_close: bool = True
     pull_policy: str = "missing"  # "always", "missing", or "never"
 
@@ -89,17 +133,42 @@ class DockerSWETool(Tool, SWEActionSpace):
         mem_limit = f"{self.config.memory_gb}g"
         nano_cpus = int(self.config.cpus * 1e9)  # Docker uses nano CPUs
 
-        container = self._client.containers.run(
-            image,
-            command="sleep infinity",  # Keep container running
-            detach=True,
-            working_dir=self.config.working_dir,
-            mem_limit=mem_limit,
-            nano_cpus=nano_cpus,
-            network_mode=self.config.network_mode,
-            stdin_open=True,
-            tty=True,
-        )
+        run_kwargs = {
+            "command": "sleep infinity",
+            "detach": True,
+            "working_dir": self.config.working_dir,
+            "mem_limit": mem_limit,
+            "nano_cpus": nano_cpus,
+            "network_mode": self.config.network_mode,
+            "stdin_open": True,
+            "tty": True,
+            "user": self.config.user,
+        }
+
+        if self.config.enforce_disk_quota:
+            run_kwargs["storage_opt"] = {"size": f"{self.config.disk_gb}G"}
+        if self.config.writable_tmpfs_dirs:
+            run_kwargs["tmpfs"] = {path: "rw,exec,nosuid,nodev,mode=1777" for path in self.config.writable_tmpfs_dirs}
+
+        try:
+            container = self._client.containers.run(image, **run_kwargs)
+        except APIError as e:
+            should_retry = False
+            if self.config.enforce_disk_quota and "storage_opt" in run_kwargs and _is_storage_opt_unsupported(e):
+                logger.warning("Docker storage quota is unsupported on this host; continuing without disk limit")
+                run_kwargs.pop("storage_opt", None)
+                should_retry = True
+            if "tmpfs" in run_kwargs and _is_tmpfs_unsupported(e):
+                logger.warning(
+                    "Docker tmpfs mount options are unsupported on this host; continuing without tmpfs mounts"
+                )
+                run_kwargs.pop("tmpfs", None)
+                should_retry = True
+
+            if not should_retry:
+                raise
+
+            container = self._client.containers.run(image, **run_kwargs)
 
         logger.info(f"Docker container created: {container.short_id}")
         return container
@@ -127,9 +196,11 @@ class DockerSWETool(Tool, SWEActionSpace):
             elif exit_code != 0:
                 parts.append(f"[exit_code: {exit_code}]")
 
-            return "\n".join(parts) if parts else "(no output)"
+            result = "\n".join(parts) if parts else "(no output)"
+            return _truncate_output(result, self.config.max_output_bytes)
 
         except Exception as e:
+            logger.warning("Docker bash command execution failed", exc_info=True)
             return f"[error] {e}"
 
     @_retry_io
