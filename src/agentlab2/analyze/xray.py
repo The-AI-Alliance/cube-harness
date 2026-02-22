@@ -509,6 +509,16 @@ _FORCE_LIGHT_JS = "() => { document.body.classList.remove('dark'); }"
 
 _SHORTCUT_JS = """
 <script>
+function _xray_nudge(elem_id) {
+    // Write an incrementing value to a hidden gr.Number and dispatch an input event.
+    // Gradio picks this up as a user-driven change and fires the registered handler
+    // with the component's value — without losing state like element.click() does.
+    const el = document.querySelector('#' + elem_id + ' input[type="number"]');
+    if (el) {
+        el.value = (parseFloat(el.value) || 0) + 1;
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+    }
+}
 function shortcuts(e) {
     switch (e.target.tagName.toLowerCase()) {
         case "input":
@@ -519,10 +529,10 @@ function shortcuts(e) {
         default:
             if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
-                document.getElementById("xray_prev_btn").click();
+                _xray_nudge('xray_key_prev');
             } else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
-                document.getElementById("xray_next_btn").click();
+                _xray_nudge('xray_key_next');
             }
     }
 }
@@ -821,6 +831,14 @@ def run_xray(
         state.step = step
         return StepId(step=step)
 
+    def navigate_prev_kbd(_: float) -> StepId:
+        """Keyboard shortcut variant — reads state.step directly, no gr.State input needed."""
+        return navigate_prev(StepId(step=state.step))
+
+    def navigate_next_kbd(_: float) -> StepId:
+        """Keyboard shortcut variant — reads state.step directly, no gr.State input needed."""
+        return navigate_next(StepId(step=state.step))
+
     def handle_timeline_click(clicked_step: int | None) -> StepId:
         if clicked_step is not None and state.current_trajectory:
             step = int(max(0, min(clicked_step, state.total_ui_steps() - 1)))
@@ -1092,6 +1110,11 @@ def run_xray(
         with gr.Row(visible=True, elem_id="timeline_click_input"):
             timeline_click_input = gr.Number(show_label=False, container=False)
 
+        # Hidden triggers for keyboard navigation (incremented by JS; change → navigate).
+        # Using gr.Number instead of button.click() so Gradio doesn't lose the state input.
+        key_prev_num = gr.Number(value=0, visible=False, elem_id="xray_key_prev")
+        key_next_num = gr.Number(value=0, visible=False, elem_id="xray_key_next")
+
         # Always-visible panels: task goal (stable per trajectory) + agent action (per step)
         with gr.Row():
             with gr.Column(scale=2):
@@ -1161,7 +1184,7 @@ def run_xray(
 
         _hierarchy_outputs = [experiment_stats, agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, agent_config_code, exp_config_code, bg_timer]
 
-        exp_table.change(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
+        exp_table.input(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
         exp_refresh_btn.click(fn=_exp_table_value, outputs=exp_table)
         exp_archive_btn.click(fn=on_archive_selected, outputs=[exp_table, *_hierarchy_outputs])
 
@@ -1181,9 +1204,13 @@ def run_xray(
         # Timeline click
         timeline_click_input.change(fn=handle_timeline_click, inputs=timeline_click_input, outputs=step_id)
 
-        # Navigation buttons
+        # Navigation buttons (mouse click — Gradio sends step_id state normally)
         prev_btn.click(fn=navigate_prev, inputs=step_id, outputs=step_id)
         next_btn.click(fn=navigate_next, inputs=step_id, outputs=step_id)
+
+        # Keyboard shortcuts — JS increments a hidden Number; handler reads state.step directly
+        key_prev_num.change(fn=navigate_prev_kbd, inputs=key_prev_num, outputs=step_id)
+        key_next_num.change(fn=navigate_next_kbd, inputs=key_next_num, outputs=step_id)
 
         # Always-rendered on step change
         step_id.change(fn=get_compact_header_info, outputs=header_info)
