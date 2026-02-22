@@ -563,6 +563,8 @@ def _render_action_panel(text: str) -> str:
     """Render the agent action as a styled HTML panel with a fixed title bar."""
     safe = html_lib.escape(text)
     safe = safe.replace("\n", "<br>")
+    # --- separators (rationale / action divider) → <hr>
+    safe = re.sub(r"(<br>)+---(<br>)+", "<hr>", safe)
     # Convert escaped backtick spans back to <code> tags
     safe = re.sub(r"`([^`]+)`", r"<code>\1</code>", safe)
     # Replace *italic* markers (used in placeholder messages like *Terminal step*)
