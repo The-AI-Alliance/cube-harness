@@ -11,6 +11,7 @@ from agentlab2.episode import Episode
 from agentlab2.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from agentlab2.experiment import Experiment, ExpResult
 from agentlab2.metrics.tracer import get_trace_env_vars, get_tracer
+from agentlab2.summary_info import get_global_accumulator
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
         ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
         results = _poll_ray(exp, ref_to_id, ray_poll_timeout)
+        get_global_accumulator().flush(exp.output_dir)
         exp.print_stats(results)
         return results
     finally:
@@ -97,6 +99,7 @@ def _poll_ray(exp: Experiment, ref_to_id: dict[ray.ObjectRef, str], ray_poll_tim
                 traj: Trajectory = ray.get(task_ref)
                 logger.info(f"Completed trajectory for task {task_id} with {len(traj.steps)} steps")
                 results.trajectories[task_id] = traj
+                get_global_accumulator().update(exp.output_dir, traj)
             except Exception as e:
                 logger.exception(f"Run failed with exception: {e}")
                 results.failures[task_id] = str(e)
@@ -135,8 +138,10 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
             episodes = episodes[:debug_limit]
+        acc = get_global_accumulator()
         trajectories = []
         for episode in episodes:
+            episode.on_step_saved = lambda out_dir, traj: acc.update(out_dir, traj)
             trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
             log_file = get_log_path(exp.output_dir, trajectory_id)
             with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
@@ -147,6 +152,7 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
             config=exp.config,
             exp_id=f"{exp.name}_{uuid4().hex}",
         )
+        acc.flush(exp.output_dir)
         exp.print_stats(results)
         return results
     finally:

@@ -1,7 +1,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Self
+from typing import Callable, Self
 
 from opentelemetry.trace import Span, StatusCode
 from termcolor import colored
@@ -56,6 +56,7 @@ class Episode:
         self.env_config = env_config
         self.storage = storage or FileStorage(output_dir)
         self.allow_overwrite = False
+        self.on_step_saved: Callable[[Path, Trajectory], None] | None = None
 
     @classmethod
     def load_episode_from_config(cls, config_path: Path, benchmark) -> Self:
@@ -137,6 +138,8 @@ class Episode:
                     start_time=start_time,
                 )
                 self.storage.save_trajectory(trajectory, allow_overwrite=self.allow_overwrite)
+                if self.on_step_saved is not None:
+                    self.on_step_saved(self.config.output_dir, trajectory)
                 logger.info(colored(f"Start env output: {env_output}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
@@ -150,12 +153,16 @@ class Episode:
                             agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
                             self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                             trajectory.steps.append(agent_step)
+                            if self.on_step_saved is not None:
+                                self.on_step_saved(self.config.output_dir, trajectory)
                             raise e
 
                         self.log_agent_output(turns, agent_output)
                         agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
                         self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(agent_step)
+                        if self.on_step_saved is not None:
+                            self.on_step_saved(self.config.output_dir, trajectory)
 
                         env_ts = time.time()
                         try:
@@ -167,17 +174,23 @@ class Episode:
                             env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                             self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                             trajectory.steps.append(env_step)
+                            if self.on_step_saved is not None:
+                                self.on_step_saved(self.config.output_dir, trajectory)
                             raise e
 
                         logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(env_step)
+                        if self.on_step_saved is not None:
+                            self.on_step_saved(self.config.output_dir, trajectory)
                         self._record_step_attributes(span, agent_output, env_output)
                         turns += 1
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
                 self.storage.save_trajectory(trajectory)
+                if self.on_step_saved is not None:
+                    self.on_step_saved(self.config.output_dir, trajectory)
                 logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
                 final_reward = trajectory.last_env_step().reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
