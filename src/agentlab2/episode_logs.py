@@ -31,8 +31,8 @@ def trajectory_log_id(task_id: str, episode_id: int) -> str:
 
 
 def get_log_path(output_dir: str | Path, trajectory_id: str) -> Path:
-    """Return log file path for a trajectory."""
-    return Path(output_dir) / "logs" / f"{trajectory_id}.log"
+    """Return log file path for a trajectory (same directory as other experiment files)."""
+    return Path(output_dir) / f"{trajectory_id}.log"
 
 
 @contextmanager

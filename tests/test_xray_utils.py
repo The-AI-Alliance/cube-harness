@@ -159,6 +159,7 @@ class TestGetDirectoryContents:
     def test_returns_dirs_with_trajectories_subdir(self, tmp_path: Path) -> None:
         exp_dir = tmp_path / "my_exp"
         (exp_dir / "trajectories").mkdir(parents=True)
+        (exp_dir / "trajectories" / "run0.metadata.json").write_text("{}")
         result = xray_utils.get_directory_contents(tmp_path)
         assert any("my_exp" in entry for entry in result)
 
@@ -167,12 +168,12 @@ class TestGetDirectoryContents:
         result = xray_utils.get_directory_contents(tmp_path)
         assert not any("no_traj_dir" in entry for entry in result)
 
-    def test_count_is_based_on_jsonl_files(self, tmp_path: Path) -> None:
+    def test_count_is_based_on_metadata_files(self, tmp_path: Path) -> None:
         exp_dir = tmp_path / "exp"
         traj_dir = exp_dir / "trajectories"
         traj_dir.mkdir(parents=True)
-        (traj_dir / "a.jsonl").write_text("{}")
-        (traj_dir / "b.jsonl").write_text("{}")
+        (traj_dir / "a.metadata.json").write_text("{}")
+        (traj_dir / "b.metadata.json").write_text("{}")
         result = xray_utils.get_directory_contents(tmp_path)
         assert any("2 trajectories" in entry for entry in result)
 
@@ -183,9 +184,19 @@ class TestGetDirectoryContents:
     def test_sorted_reverse_order(self, tmp_path: Path) -> None:
         for name in ["aaa_exp", "zzz_exp"]:
             (tmp_path / name / "trajectories").mkdir(parents=True)
+            (tmp_path / name / "trajectories" / "x.metadata.json").write_text("{}")
         result = xray_utils.get_directory_contents(tmp_path)
         names = [e.split(" ")[0] for e in result[1:]]
         assert names == sorted(names, reverse=True)
+
+    def test_returns_dirs_with_flat_layout(self, tmp_path: Path) -> None:
+        """Experiment dir with *.metadata.json in same dir (no trajectories/ subdir)."""
+        exp_dir = tmp_path / "flat_exp"
+        exp_dir.mkdir()
+        (exp_dir / "run0_task_foo.metadata.json").write_text("{}")
+        (exp_dir / "run1_task_bar.metadata.json").write_text("{}")
+        result = xray_utils.get_directory_contents(tmp_path)
+        assert any("flat_exp" in entry and "2 trajectories" in entry for entry in result)
 
 
 # ---------------------------------------------------------------------------

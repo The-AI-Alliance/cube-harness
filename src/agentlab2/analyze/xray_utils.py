@@ -78,20 +78,27 @@ def get_directory_contents(results_dir: Path) -> list[str]:
     """Return sorted list of experiment directory names with trajectory counts.
 
     Returns ["Select experiment directory"] + names sorted most-recent first.
-    Only includes directories that contain a 'trajectories/' subdirectory.
+    Includes directories that have trajectory files in the same dir (flat layout)
+    or in a 'trajectories/' subdir (legacy).
     """
     sentinel = "Select experiment directory"
     if not results_dir or not results_dir.exists():
         return [sentinel]
 
+    def count_trajectories(d: Path) -> int:
+        return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
+
     exp_descriptions = []
     for dir_path in results_dir.iterdir():
         if not dir_path.is_dir():
             continue
-        traj_dir = dir_path / "trajectories"
-        if not traj_dir.exists():
+        n_trajs = count_trajectories(dir_path)
+        if n_trajs == 0:
+            traj_dir = dir_path / "trajectories"
+            if traj_dir.exists():
+                n_trajs = count_trajectories(traj_dir)
+        if n_trajs == 0:
             continue
-        n_trajs = len(list(traj_dir.glob("*.jsonl")))
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return [sentinel] + sorted(exp_descriptions, reverse=True)

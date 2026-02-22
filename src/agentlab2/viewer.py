@@ -51,9 +51,8 @@ class ViewerState:
         self.exp_dirs = [exp_dir]
         self.trajectories = {}
 
-        traj_dir = exp_dir / "trajectories"
-        if not traj_dir.exists():
-            return {"error": f"No trajectories directory found in {exp_dir}"}
+        if not exp_dir.exists():
+            return {"error": f"Experiment directory not found: {exp_dir}"}
 
         storage = FileStorage(exp_dir)
         trajectories = storage.load_all_trajectories()
@@ -195,7 +194,11 @@ document.addEventListener('keydown', shortcuts, false);
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
-    """Get list of experiment directories with summary info."""
+    """Get list of experiment directories with summary info.
+
+    Treats a directory as an experiment if it has *.metadata.json (flat layout)
+    or a trajectories/ subdir (legacy).
+    """
     if not results_dir or not results_dir.exists():
         return ["Select experiment directory"]
 
@@ -204,15 +207,19 @@ def get_directory_contents(results_dir: Path) -> list[str]:
         if not dir_path.is_dir():
             continue
 
-        # Check if it has trajectories
-        traj_dir = dir_path / "trajectories"
-        if not traj_dir.exists():
+        # Flat: *.metadata.json in dir; legacy: trajectories/*.metadata.json
+        def count_metadata(d: Path) -> int:
+            return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
+
+        n_trajs = count_metadata(dir_path)
+        if n_trajs == 0:
+            traj_dir = dir_path / "trajectories"
+            if traj_dir.exists():
+                n_trajs = count_metadata(traj_dir)
+        if n_trajs == 0:
             continue
 
-        exp_desc = dir_path.name
-        n_trajs = len(list(traj_dir.glob("*.jsonl")))
-        exp_desc += f" ({n_trajs} trajectories)"
-        exp_descriptions.append(exp_desc)
+        exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return ["Select experiment directory"] + sorted(exp_descriptions, reverse=True)
 
