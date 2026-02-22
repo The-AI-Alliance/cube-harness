@@ -576,3 +576,27 @@ class TestStep:
         result = agent.step(Observation.from_text("obs"))
         assert len(result.actions) == 1
         assert result.actions[0].name == "final_step"
+
+    def test_action_rationale_is_summary_when_summarize_enabled(self) -> None:
+        """action_rationale captures the summarize-pass COT, before the action is appended."""
+        agent = _make_agent(enable_summarize=True)
+        agent.llm = MagicMock(return_value=_mock_llm_response("act text"))
+        agent.summarize_llm = MagicMock(return_value=_mock_llm_response("my cot reasoning"))
+        result = agent.step(Observation.from_text("goal text"))
+        assert result.action_rationale == "my cot reasoning"
+        # The stored summary has the action appended, but the rationale is the raw COT.
+        assert "Action:" not in result.action_rationale
+
+    def test_action_rationale_is_inline_content_when_summarize_disabled(self) -> None:
+        """action_rationale captures the act-pass inline content when no summarize pass."""
+        agent = _make_agent(enable_summarize=False)
+        agent.llm = MagicMock(return_value=_mock_llm_response("I think therefore I act"))
+        result = agent.step(Observation.from_text("goal text"))
+        assert result.action_rationale == "I think therefore I act"
+
+    def test_action_rationale_is_none_when_no_content(self) -> None:
+        """action_rationale is None when the LLM returns no text content."""
+        agent = _make_agent(enable_summarize=False)
+        agent.llm = MagicMock(return_value=_mock_llm_response(""))
+        result = agent.step(Observation.from_text("goal text"))
+        assert result.action_rationale is None
