@@ -48,7 +48,7 @@ class Experiment(TypedBaseModel):
         storage = FileStorage(self.output_dir)
         config_files = storage.list_episode_configs()
         if not config_files:
-            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}, creating from scratch")
+            logger.warning(f"No episode configs found in {self.output_dir}, creating from scratch")
             return self._create_all_episodes()
 
         started_ids = self._load_started_trajectory_ids()
@@ -149,16 +149,13 @@ class Experiment(TypedBaseModel):
             Set of trajectory IDs that completed successfully.
         """
         successful = set()
-        traj_dir = self.output_dir / "trajectories"
-        if traj_dir.exists():
-            for metadata_file in traj_dir.glob("*.metadata.json"):
-                trajectory_id = metadata_file.stem.replace(".metadata", "")
-                try:
-                    trajectory = storage.load_trajectory(trajectory_id)
-                    if self._is_trajectory_successful(trajectory):
-                        successful.add(trajectory_id)
-                except Exception as e:
-                    logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
+        for trajectory_id in storage.list_trajectory_ids():
+            try:
+                trajectory = storage.load_trajectory(trajectory_id)
+                if self._is_trajectory_successful(trajectory):
+                    successful.add(trajectory_id)
+            except Exception as e:
+                logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
         return successful
 
     def _load_started_trajectory_ids(self) -> set[str]:
@@ -167,12 +164,8 @@ class Experiment(TypedBaseModel):
         Returns:
             Set of trajectory IDs that have metadata files on disk.
         """
-        started = set()
-        traj_dir = self.output_dir / "trajectories"
-        if traj_dir.exists():
-            for metadata_file in traj_dir.glob("*.metadata.json"):
-                started.add(metadata_file.stem.replace(".metadata", ""))
-        return started
+        storage = FileStorage(self.output_dir)
+        return set(storage.list_trajectory_ids())
 
     def _find_episodes_to_relaunch(
         self, config_files: list[Path], filter_trajectory_ids: set[str], include: bool = True

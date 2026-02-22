@@ -69,8 +69,10 @@ class Episode:
         Returns:
             Episode instance ready to run
         """
-        # Infer output_dir from config_path structure: {output_dir}/episode_configs/episode_*.json
-        output_dir = config_path.parent.parent
+        # Infer output_dir: config is either in output_dir (flat) or output_dir/episode_configs/
+        output_dir = config_path.parent
+        if output_dir.name == "episode_configs":
+            output_dir = output_dir.parent
         storage = FileStorage(output_dir)
         episode_config = storage.load_episode_config(config_path)
 

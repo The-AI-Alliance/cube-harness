@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../cube-standard"
+		}
+	],
+	"settings": {
+		"notebook.defaultFormatter": "charliermarsh.ruff"
+	}
+}

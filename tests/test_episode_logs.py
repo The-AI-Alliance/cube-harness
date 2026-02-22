@@ -15,7 +15,7 @@ def test_trajectory_log_id() -> None:
 
 def test_get_log_path(tmp_path: Path) -> None:
     """Test log path construction."""
-    assert get_log_path(tmp_path, "traj_1") == tmp_path / "logs" / "traj_1.log"
+    assert get_log_path(tmp_path, "traj_1") == tmp_path / "traj_1.log"
 
 
 def test_redirect_output_to_log_restores_logging_on_exception(
