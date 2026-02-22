@@ -578,6 +578,9 @@ def _format_agent_step_details(step: AgentOutput, duration_info: str) -> str:
                 token_parts.append(f"💰 **${usage.cost:.4f}**")
             sections.append(" │ ".join(token_parts) + "\n")
 
+    if step.action_rationale:
+        sections.append(f"### Rationale\n{_truncate(step.action_rationale, 150000)}\n")
+
     if step.actions:
         sections.append("### Actions\n")
         for i, action in enumerate(step.actions):
