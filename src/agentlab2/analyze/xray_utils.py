@@ -603,24 +603,31 @@ def get_agent_action_markdown(agent_out: AgentOutput | None) -> str:
 
     Renders each action as: `name(key="value", key2=123)`
     Long string values are truncated to 200 chars.
+    If action_rationale is set, it appears above the action calls, separated by ---.
     Returns a placeholder for terminal steps.
     """
     if agent_out is None:
         return "*Terminal step — no agent action*"
-    if not agent_out.actions:
-        return "*No actions taken*"
     parts = []
-    for action in agent_out.actions:
-        args_parts = []
-        for k, v in (action.arguments or {}).items():
-            if isinstance(v, str):
-                v_display = v if len(v) <= 200 else v[:200] + "…"
-                args_parts.append(f'{k}="{v_display}"')
-            else:
-                args_parts.append(f"{k}={v!r}")
-        call_str = f"{action.name}({', '.join(args_parts)})"
-        parts.append(f"`{call_str}`")
-    return "\n\n".join(parts)
+    if agent_out.action_rationale:
+        rationale = agent_out.action_rationale.strip()
+        if len(rationale) > 500:
+            rationale = rationale[:500] + "…"
+        parts.append(rationale)
+    if not agent_out.actions:
+        parts.append("*No actions taken*")
+    else:
+        for action in agent_out.actions:
+            args_parts = []
+            for k, v in (action.arguments or {}).items():
+                if isinstance(v, str):
+                    v_display = v if len(v) <= 200 else v[:200] + "…"
+                    args_parts.append(f'{k}="{v_display}"')
+                else:
+                    args_parts.append(f"{k}={v!r}")
+            call_str = f"{action.name}({', '.join(args_parts)})"
+            parts.append(f"`{call_str}`")
+    return "\n\n---\n\n".join(parts) if len(parts) > 1 else parts[0] if parts else ""
 
 
 # ---------------------------------------------------------------------------
