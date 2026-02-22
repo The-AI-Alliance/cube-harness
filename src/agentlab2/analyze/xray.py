@@ -560,13 +560,13 @@ def _render_goal_panel(text: str) -> str:
 
 
 def _render_rationale_panel(text: str) -> str:
-    """Render the action rationale as a styled HTML panel (amber/warm tone)."""
+    """Render the action rationale as a styled HTML panel (same green as action, small bottom gap)."""
     safe = html_lib.escape(text)
     safe = safe.replace("\n", "<br>")
     safe = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", safe)
     return (
-        '<div class="info-panel" style="background:#fffbeb; border-color:#fde68a;">'
-        '<div class="info-panel-title" style="background:#fef3c7; color:#92400e;">💭 Rationale</div>'
+        '<div class="info-panel" style="background:#f0fdf4; border-color:#bbf7d0; margin-bottom:6px;">'
+        '<div class="info-panel-title" style="background:#dcfce7; color:#15803d;">💭 Rationale</div>'
         f'<div class="info-panel-body">{safe}</div>'
         "</div>"
     )
