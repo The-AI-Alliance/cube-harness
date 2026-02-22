@@ -83,10 +83,14 @@ class StepError(TypedBaseModel):
 class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
     llm_calls: list[LLMCall] = Field(default_factory=list)
+    other_llm_calls: dict[str, list[LLMCall]] = Field(default_factory=dict)
     error: StepError | None = None
+    # Maps label → (start_time, end_time) as absolute Unix timestamps.
+    # Used by the XRay viewer to render a profiling breakdown inside each timeline segment.
+    profiling: dict[str, tuple[float, float]] = Field(default_factory=dict)
 
     def __str__(self) -> str:
-        return self.model_dump_json(exclude={"llm_calls"})
+        return self.model_dump_json(exclude={"llm_calls", "other_llm_calls"})
 
 
 _image_prefix = "data:image/png;base64,"
