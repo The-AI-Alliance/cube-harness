@@ -559,12 +559,23 @@ def _render_goal_panel(text: str) -> str:
     )
 
 
+def _render_rationale_panel(text: str) -> str:
+    """Render the action rationale as a styled HTML panel (amber/warm tone)."""
+    safe = html_lib.escape(text)
+    safe = safe.replace("\n", "<br>")
+    safe = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", safe)
+    return (
+        '<div class="info-panel" style="background:#fffbeb; border-color:#fde68a;">'
+        '<div class="info-panel-title" style="background:#fef3c7; color:#92400e;">💭 Rationale</div>'
+        f'<div class="info-panel-body">{safe}</div>'
+        "</div>"
+    )
+
+
 def _render_action_panel(text: str) -> str:
     """Render the agent action as a styled HTML panel with a fixed title bar."""
     safe = html_lib.escape(text)
     safe = safe.replace("\n", "<br>")
-    # --- separators (rationale / action divider) → <hr>
-    safe = re.sub(r"(<br>)+---(<br>)+", "<hr>", safe)
     # Convert escaped backtick spans back to <code> tags
     safe = re.sub(r"`([^`]+)`", r"<code>\1</code>", safe)
     # Replace *italic* markers (used in placeholder messages like *Terminal step*)
@@ -912,8 +923,16 @@ def run_xray(
         return _render_goal_panel(xray_utils.get_task_goal(state.current_trajectory))
 
     def get_agent_action_md() -> str:
-        """Return the current step's agent action as a rendered HTML panel."""
-        return _render_action_panel(xray_utils.get_agent_action_markdown(state.get_agent_output()))
+        """Return the current step's rationale (if any) and action as stacked HTML panels."""
+        agent_out = state.get_agent_output()
+        panels = []
+        if agent_out and agent_out.action_rationale:
+            rationale = agent_out.action_rationale.strip()
+            if len(rationale) > 500:
+                rationale = rationale[:500] + "…"
+            panels.append(_render_rationale_panel(rationale))
+        panels.append(_render_action_panel(xray_utils.get_agent_action_markdown(agent_out)))
+        return "\n".join(panels)
 
     # ------------------------------------------------------------------
     # Lazy tab render handlers (only run when their tab is active).
