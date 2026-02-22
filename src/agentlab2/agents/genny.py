@@ -12,6 +12,7 @@ Context layout per act call:
 import json
 import logging
 import re
+import time
 from typing import Protocol
 
 from litellm import Message
@@ -19,6 +20,7 @@ from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
 from agentlab2.core import Action, ActionSchema, AgentOutput, Observation
+from agentlab2.environment import STOP_ACTION
 from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt
 
 logger = logging.getLogger(__name__)
@@ -40,23 +42,45 @@ Think step by step:
 3. What is the best next action?
 Then call the appropriate function."""
 
-_DEFAULT_SUMMARIZE_VERBOSE_SYSTEM_PROMPT = """\
-You are a summarization assistant for an AI agent.
-Given a goal, prior summaries, and the latest observation, produce a structured summary."""
-
-_DEFAULT_SUMMARIZE_COT_SYSTEM_PROMPT = """\
-You are a reasoning assistant for an AI agent.
-Given a goal, prior summaries, and the latest observation, briefly reason about what happened and what it means."""
+_DEFAULT_ACT_PROMPT = """\
+Based on the reasoning above, call the appropriate function to perform the next action."""
 
 _DEFAULT_SUMMARIZE_VERBOSE_PROMPT = """\
 Summarize the latest observation concisely. Include:
 - What was observed (key changes, current state, errors)
 - Progress toward the goal
 
-Then add a '## Key Facts' section with durable facts worth preserving across compactions."""
+Then add a '## Key Facts' section with durable facts worth preserving across compactions.
+
+Respond with text only — do not call any tools or functions."""
 
 _DEFAULT_SUMMARIZE_COT_PROMPT = """\
-In 2-3 sentences, reason about the latest observation: what happened, what it means for the goal, and what to do next."""
+In 2-3 sentences, reason about the latest observation: what happened, what it means for the goal, and what to do next.
+
+Respond with text only — do not call any tools or functions."""
+
+
+# ---------------------------------------------------------------------------
+# Message sanitization
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_for_summarize(messages: list[dict]) -> list[dict]:
+    """Convert tool-role messages so the prompt is valid for the summarize LLM.
+
+    Converts role='tool' → role='user' and removes tool_call_id so the prompt
+    is valid for any LLM that enforces tool_call/tool_result pairing.
+    Multimodal content (images) is preserved so vision-capable summarize LLMs
+    can see the full observation.
+    """
+    sanitized = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role == "tool":
+            role = "user"
+        sanitized.append({"role": role, "content": content})
+    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +121,42 @@ def _format_tools_as_text(tools: list[ActionSchema]) -> str:
     return "\n".join(lines)
 
 
+def _format_summaries_block(summaries: list[str]) -> str:
+    """Combine past-step summaries into a single assistant message with step headers."""
+    parts = ["## Summary of past interactions"]
+    for i, summary in enumerate(summaries, 1):
+        parts.append(f"### Step {i}\n\n{summary}")
+    return "\n\n".join(parts)
+
+
+def _obs_section_header(n: int | None) -> str:
+    """User-message header that precedes the windowed observation history."""
+    if n is None:
+        return "## Most recent observations"
+    return f"## {n} most recent observations"
+
+
+def _format_action_list(actions: "list[Action]") -> str:
+    """Format a list of actions as a compact text string."""
+    parts = [f"{a.name}({', '.join(f'{k}={v!r}' for k, v in a.arguments.items())})" for a in actions]
+    return ", ".join(parts) if parts else "no action"
+
+
+def _extract_act_summary(response: "Message", actions: "list[Action]") -> str:
+    """Build a step summary from an act-pass response for use as a rolling COT entry.
+
+    Combines the LLM's reasoning text (extended thinking or inline content) with a
+    formatted description of the action(s) taken. Used when enable_summarize=False so
+    that prior reasoning is visible in future steps via self.summaries.
+    """
+    cot = getattr(response, "reasoning_content", None) or (response.content or "")
+    parts = []
+    if cot:
+        parts.append(cot.strip())
+    parts.append(f"Action: {_format_action_list(actions)}")
+    return "\n\n".join(parts)
+
+
 def _truncate_message(msg: dict, max_chars: int) -> dict:
     content = msg.get("content", "")
     if isinstance(content, str) and len(content) > max_chars:
@@ -110,7 +170,9 @@ def _truncate_message(msg: dict, max_chars: int) -> dict:
 
 
 class ToolAdapter(Protocol):
-    def encode(self, tools: list[ActionSchema], messages: list[dict | Message]) -> tuple[list[dict], list[dict | Message]]:
+    def encode(
+        self, tools: list[ActionSchema], messages: list[dict | Message]
+    ) -> tuple[list[dict], list[dict | Message]]:
         """Return (api_tools, api_messages). api_tools is empty when baked into messages."""
         ...
 
@@ -122,7 +184,9 @@ class ToolAdapter(Protocol):
 class NativeToolAdapter:
     """Passes tools natively via the LLM API tool_use interface."""
 
-    def encode(self, tools: list[ActionSchema], messages: list[dict | Message]) -> tuple[list[dict], list[dict | Message]]:
+    def encode(
+        self, tools: list[ActionSchema], messages: list[dict | Message]
+    ) -> tuple[list[dict], list[dict | Message]]:
         return [t.as_dict() for t in tools], messages
 
     def decode(self, response: Message) -> list[Action]:
@@ -139,7 +203,9 @@ class NativeToolAdapter:
 class TextToolAdapter:
     """Injects function signatures into the system prompt; parses <tool_call> XML tags."""
 
-    def encode(self, tools: list[ActionSchema], messages: list[dict | Message]) -> tuple[list[dict], list[dict | Message]]:
+    def encode(
+        self, tools: list[ActionSchema], messages: list[dict | Message]
+    ) -> tuple[list[dict], list[dict | Message]]:
         if not tools:
             return [], list(messages)
         sigs = _format_tools_as_text(tools)
@@ -169,21 +235,22 @@ class TextToolAdapter:
 # ---------------------------------------------------------------------------
 
 
-class GennyAgentConfig(AgentConfig):
+class GennyConfig(AgentConfig):
     # Core
     llm_config: LLMConfig
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
+    # react_prompt: reason-then-act, used when enable_summarize=False (COT embedded in act call)
     react_prompt: str = _DEFAULT_REACT_PROMPT
+    # act_prompt: action-only, used when enable_summarize=True (reasoning done in summarize pass)
+    act_prompt: str = _DEFAULT_ACT_PROMPT
 
     # Tool interface
     tools_as_text: bool = False  # True = fn sigs in system prompt + <tool_call> parsing
 
     # Summarize pass
-    enable_summarize: bool = False  # False = skip summarize pass entirely
+    enable_summarize: bool = False  # False = extract COT from act pass; True = separate summarize LLM call
     summarize_cot_only: bool = False  # True = concise CoT; False = verbose + Key Facts
     summarize_llm_config: LLMConfig | None = None  # None = reuse llm_config
-    summarize_verbose_system_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_SYSTEM_PROMPT
-    summarize_cot_system_prompt: str = _DEFAULT_SUMMARIZE_COT_SYSTEM_PROMPT
     summarize_verbose_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
     summarize_cot_prompt: str = _DEFAULT_SUMMARIZE_COT_PROMPT
 
@@ -198,8 +265,8 @@ class GennyAgentConfig(AgentConfig):
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
 
-    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "GennyAgent":
-        return GennyAgent(config=self, action_schemas=action_set or [])
+    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Genny":
+        return Genny(config=self, action_schemas=action_set or [])
 
 
 # ---------------------------------------------------------------------------
@@ -207,16 +274,21 @@ class GennyAgentConfig(AgentConfig):
 # ---------------------------------------------------------------------------
 
 
-class GennyAgent(Agent):
+class Genny(Agent):
     name: str = "genny"
     description: str = "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
     input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
     output_content_types: list[str] = ["application/json"]
 
-    def __init__(self, config: GennyAgentConfig, action_schemas: list[ActionSchema]):
+    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema]):
         self.config = config
         self.llm: LLM = config.llm_config.make()
-        self.summarize_llm: LLM = (config.summarize_llm_config or config.llm_config).make()
+        # Summarize LLM uses the same config as the act LLM (including tool_choice) so the
+        # full request — messages, tools, and parameters — is identical between the two passes
+        # → prompt-cache hit on the shared prefix. tool_choice is intentionally NOT overridden
+        # to "none" because Azure/OpenAI include it in the cache key.
+        self._summarize_llm_config = config.summarize_llm_config or config.llm_config
+        self.summarize_llm: LLM = self._summarize_llm_config.make()
         self.token_counter = config.llm_config.make_counter()
         self.action_schemas: list[ActionSchema] = action_schemas
         self.tool_adapter: ToolAdapter = TextToolAdapter() if config.tools_as_text else NativeToolAdapter()
@@ -227,26 +299,53 @@ class GennyAgent(Agent):
 
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
-            logger.info("Max actions reached, returning empty action.")
-            return AgentOutput(actions=[])
+            logger.info("Max actions reached, issuing STOP action.")
+            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
+        t_context_start = time.time()
         obs_messages = self._obs_to_messages(obs)
         self._ingest_obs(obs_messages)
-
-        llm_calls: list[LLMCall] = []
-        if self.config.enable_summarize:
-            summary, sum_call = self._summarize_pass(obs_messages)
-            self.summaries.append(summary)
-            llm_calls.append(sum_call)
-            self._maybe_compress_summaries()
-
+        # Compact BEFORE summarize so both _summarize_past and _act_pass see the same
+        # windowed history → byte-for-byte identical shared prefix → prompt-cache hit.
         self._maybe_compact_history()
+        t_context_end = time.time()
 
+        other_llm_calls: dict[str, list[LLMCall]] = {}
+        profiling: dict[str, tuple[float, float]] = {"context": (t_context_start, t_context_end)}
+        if self.config.enable_summarize:
+            # Summarize the current obs (already in history via _ingest_obs).
+            t_summarize_start = time.time()
+            summary, sum_call = self._summarize_past()
+            t_summarize_end = time.time()
+            self.summaries.append(summary)
+            other_llm_calls["summary"] = [sum_call]
+            profiling["summarize"] = (t_summarize_start, t_summarize_end)
+            # NOTE: _maybe_compress_summaries() is intentionally called AFTER _act_pass.
+            # Compressing summaries here would mutate self.summaries between the two passes,
+            # making their BLOCK content differ → cache miss.
+
+        t_act_start = time.time()
         response, act_call = self._act_pass()
-        llm_calls.append(act_call)
+        t_act_end = time.time()
+        profiling["act"] = (t_act_start, t_act_end)
+        actions = self.tool_adapter.decode(response)
+
+        if self.config.enable_summarize:
+            # Append the decided action to the current step's summary so the
+            # summaries block alternates reasoning → action, matching the COT mode format.
+            self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
+            # Compress only after both passes are done — summaries are now stable.
+            self._maybe_compress_summaries()
+        else:
+            # No explicit summarize LLM — extract COT from the act response for rolling context.
+            step_summary = _extract_act_summary(response, actions)
+            if step_summary:
+                self.summaries.append(step_summary)
+                self._maybe_compress_summaries()
+
         self.history.append([response])
         self._actions_cnt += 1
-        return AgentOutput(actions=self.tool_adapter.decode(response), llm_calls=llm_calls)
+        return AgentOutput(actions=actions, llm_calls=[act_call], other_llm_calls=other_llm_calls, profiling=profiling)
 
     def _obs_to_messages(self, obs: Observation) -> list[dict]:
         messages = obs.to_llm_messages()
@@ -263,26 +362,43 @@ class GennyAgent(Agent):
         else:
             self.history.append(obs_messages)
 
-    def _summarize_pass(self, obs_messages: list[dict]) -> tuple[str, LLMCall]:
-        """Call summarize LLM on goal + prior summaries + latest obs."""
-        if self.config.summarize_cot_only:
-            system = self.config.summarize_cot_system_prompt
-            user_prompt = self.config.summarize_cot_prompt
-        else:
-            system = self.config.summarize_verbose_system_prompt
-            user_prompt = self.config.summarize_verbose_prompt
-        prior_summary_msgs = [{"role": "assistant", "content": s} for s in self.summaries]
-        messages: list[dict | Message] = [
-            {"role": "system", "content": system},
-            *self.goal,
-            *prior_summary_msgs,
-            *obs_messages,
-            {"role": "user", "content": user_prompt},
-        ]
-        prompt = Prompt(messages=messages)
+    def _build_base_prompt(self, exclude_last_summary: bool = False) -> list[dict | Message]:
+        """Build the shared prompt prefix used by both _summarize_past and _choose_context.
+
+        Both passes extend this prefix with their specific final instruction, ensuring the
+        [system, goal, summaries_block, obs_header, windowed_history] prefix is byte-for-byte
+        identical → prompt-cache hit on the entire prefix.
+
+        When exclude_last_summary=True the last entry in self.summaries is omitted from the
+        collapsed block so it can be placed after the obs (used by _choose_context when
+        enable_summarize=True).
+        """
+        messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
+        messages.extend(self.goal)
+        past_summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else list(self.summaries)
+        if past_summaries:
+            messages.append({"role": "assistant", "content": _format_summaries_block(past_summaries)})
+        windowed = self._windowed_history()
+        if windowed:
+            messages.append({"role": "user", "content": _obs_section_header(self.config.render_last_n_obs)})
+            messages.extend(windowed)
+        return messages
+
+    def _summarize_past(self) -> tuple[str, LLMCall]:
+        """Extend the shared base prompt with the summarize instruction.
+
+        Uses _build_base_prompt() + tool_adapter.encode() so the system prompt
+        transformation and tool definitions are byte-for-byte identical to the act pass
+        → prompt-cache hit on the full shared prefix (system, tools, goal, summaries, obs).
+        The summarize LLM has tool_choice="none" so it responds with text, not tool calls.
+        """
+        user_prompt = self.config.summarize_cot_prompt if self.config.summarize_cot_only else self.config.summarize_verbose_prompt
+        messages = self._build_base_prompt()
+        messages.append({"role": "user", "content": user_prompt})
+        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
+        prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
-        llm_config = self.config.summarize_llm_config or self.config.llm_config
-        llm_call = LLMCall(llm_config=llm_config, prompt=prompt, output=response.message, usage=response.usage)
+        llm_call = LLMCall(llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage)
         return response.message.content or "", llm_call
 
     def _maybe_compress_summaries(self) -> None:
@@ -297,7 +413,10 @@ class GennyAgent(Agent):
         midpoint = max(1, len(self.summaries) // 2)
         combined = "\n\n---\n\n".join(self.summaries[:midpoint])
         messages: list[dict] = [
-            {"role": "system", "content": "Compress these summaries into a single concise summary preserving all key facts."},
+            {
+                "role": "system",
+                "content": "Compress these summaries into a single concise summary preserving all key facts.",
+            },
             {"role": "user", "content": combined},
         ]
         prompt = Prompt(messages=messages)
@@ -339,17 +458,26 @@ class GennyAgent(Agent):
             f"LLM usage — prompt: {response.usage.prompt_tokens}, "
             f"completion: {response.usage.completion_tokens}, cost: ${response.usage.cost:.4f}"
         )
-        llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage)
+        llm_call = LLMCall(
+            llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
+        )
         return response.message, llm_call
 
     def _choose_context(self) -> list[dict | Message]:
-        """Assemble the full context window for the act pass."""
-        messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
-        messages.extend(self.goal)
-        for summary in self.summaries:
-            messages.append({"role": "assistant", "content": summary})
-        messages.extend(self._windowed_history())
-        messages.append({"role": "user", "content": self.config.react_prompt})
+        """Extend the shared base prompt with the act instruction.
+
+        When enable_summarize=True, self.summaries[-1] is the current step's reasoning
+        (from _summarize_past). It is excluded from the collapsed block and placed *after*
+        the obs window so the LLM sees obs → reasoning → act_prompt.
+
+        When enable_summarize=False, all summaries (COT extracted from prior act passes)
+        go into the collapsed block; react_prompt instructs the LLM to reason inline.
+        """
+        messages = self._build_base_prompt(exclude_last_summary=self.config.enable_summarize)
+        if self.config.enable_summarize and self.summaries:
+            messages.append({"role": "assistant", "content": self.summaries[-1]})
+        final_prompt = self.config.act_prompt if self.config.enable_summarize else self.config.react_prompt
+        messages.append({"role": "user", "content": final_prompt})
         return messages
 
     def _windowed_history(self) -> list[dict | Message]:

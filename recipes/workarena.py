@@ -13,17 +13,18 @@ Prerequisites:
 
 Usage:
     # Debug mode (2 tasks, sequential)
-    uv run recipes/hello_workarena.py debug
+    uv run recipes/workarena.py debug
 
     # Full run (parallel with Ray)
-    uv run recipes/hello_workarena.py
+    uv run recipes/workarena.py
 """
 
 import sys
 import time
 from pathlib import Path
 
-from agentlab2.agents.react import ReactAgentConfig
+from agentlab2.agents.genny import GennyConfig
+from agentlab2.agents.react import ReactAgentConfig  # noqa: F401
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
@@ -38,17 +39,27 @@ except ImportError:
     sys.exit(1)
 
 
-def main(debug: bool):
+def main(debug: bool) -> None:
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_l1_{current_datetime}"
 
     # Configure LLM
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
-    agent_config = ReactAgentConfig(
-        render_last_n_steps=2,
-        max_actions=20,
+
+    # --- Choose agent (uncomment one) ---
+    agent_config = GennyConfig(
         llm_config=llm_config,
+        max_actions=20,
+        render_last_n_obs=2,
+        enable_summarize=True,
+        summarize_cot_only=True,
+        max_history_tokens=80000,
+        max_summaries_tokens=20000,
     )
+    # agent_config = ReactAgentConfig(
+    #     llm_config=llm_config,
+    #     max_actions=20,
+    # )
 
     # Configure BrowserGym tool
     # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
@@ -60,11 +71,7 @@ def main(debug: bool):
     )
 
     # Configure WorkArena benchmark
-    benchmark = WorkArenaBenchmark(
-        tool_config=tool_config,
-        level="l1",
-        n_seeds_l1=2 if debug else 5,  # Fewer seeds in debug mode
-    )
+    benchmark = WorkArenaBenchmark(tool_config=tool_config, level="l1", n_seeds_l1=1)
 
     # Create experiment
     exp = Experiment(
@@ -78,7 +85,7 @@ def main(debug: bool):
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=1)
+        run_with_ray(exp, n_cpus=4)
 
 
 if __name__ == "__main__":
