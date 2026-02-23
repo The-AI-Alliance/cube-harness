@@ -13,7 +13,9 @@ import json
 import logging
 import re
 import time
-from typing import Protocol
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Protocol, cast
 
 from litellm import Message
 from termcolor import colored
@@ -24,6 +26,23 @@ from agentlab2.environment import STOP_ACTION
 from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt
 
 logger = logging.getLogger(__name__)
+
+
+class Profiler:
+    """Records named wall-clock spans; call as a context manager to record each span."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, tuple[float, float]] = {}
+
+    @contextmanager
+    def __call__(self, name: str) -> Generator[None, None, None]:
+        t_start = time.time()
+        yield
+        self._data[name] = (t_start, time.time())
+
+    @property
+    def data(self) -> dict[str, tuple[float, float]]:
+        return self._data
 
 
 # ---------------------------------------------------------------------------
@@ -58,29 +77,6 @@ _DEFAULT_SUMMARIZE_COT_PROMPT = """\
 In 2-3 sentences, reason about the latest observation: what happened, what it means for the goal, and what to do next.
 
 Respond with text only — do not call any tools or functions."""
-
-
-# ---------------------------------------------------------------------------
-# Message sanitization
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_for_summarize(messages: list[dict]) -> list[dict]:
-    """Convert tool-role messages so the prompt is valid for the summarize LLM.
-
-    Converts role='tool' → role='user' and removes tool_call_id so the prompt
-    is valid for any LLM that enforces tool_call/tool_result pairing.
-    Multimodal content (images) is preserved so vision-capable summarize LLMs
-    can see the full observation.
-    """
-    sanitized = []
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if role == "tool":
-            role = "user"
-        sanitized.append({"role": role, "content": content})
-    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -257,10 +253,6 @@ class GennyConfig(AgentConfig):
     # Observation window
     render_last_n_obs: int | None = None  # None = all
 
-    # Compaction
-    max_history_tokens: int | None = None  # None = disabled; drops old groups when exceeded
-    max_summaries_tokens: int | None = None  # None = disabled; LLM-compresses old summaries
-
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
@@ -302,67 +294,55 @@ class Genny(Agent):
             logger.info("Max actions reached, issuing STOP action.")
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
-        t_context_start = time.time()
-        obs_messages = self._obs_to_messages(obs)
-        self._ingest_obs(obs_messages)
-        # Compact BEFORE summarize so both _summarize_past and _act_pass see the same
-        # windowed history → byte-for-byte identical shared prefix → prompt-cache hit.
-        self._maybe_compact_history()
-        t_context_end = time.time()
-
+        profiler = Profiler()
         other_llm_calls: dict[str, list[LLMCall]] = {}
-        profiling: dict[str, tuple[float, float]] = {"context": (t_context_start, t_context_end)}
+
+        with profiler("context"):
+            obs_messages = self._obs_to_messages(obs)
+            self._ingest_obs(obs_messages)
+
         rationale: str | None = None
         if self.config.enable_summarize:
             # Summarize the current obs (already in history via _ingest_obs).
-            t_summarize_start = time.time()
-            summary, sum_call = self._summarize_past()
-            t_summarize_end = time.time()
+            with profiler("summarize"):
+                summary, sum_call = self._summarize_past()
             rationale = summary  # capture before action is appended below
             self.summaries.append(summary)
             other_llm_calls["summary"] = [sum_call]
-            profiling["summarize"] = (t_summarize_start, t_summarize_end)
-            # NOTE: _maybe_compress_summaries() is intentionally called AFTER _act_pass.
-            # Compressing summaries here would mutate self.summaries between the two passes,
-            # making their BLOCK content differ → cache miss.
 
-        t_act_start = time.time()
-        response, act_call = self._act_pass()
-        t_act_end = time.time()
-        profiling["act"] = (t_act_start, t_act_end)
+        with profiler("act"):
+            response, act_call = self._act()
         actions = self.tool_adapter.decode(response)
 
         if self.config.enable_summarize:
             # Append the decided action to the current step's summary so the
             # summaries block alternates reasoning → action, matching the COT mode format.
             self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
-            # Compress only after both passes are done — summaries are now stable.
-            self._maybe_compress_summaries()
         else:
             # No explicit summarize LLM — extract COT from the act response for rolling context.
             rationale = getattr(response, "reasoning_content", None) or response.content or None
             step_summary = _extract_act_summary(response, actions)
             if step_summary:
                 self.summaries.append(step_summary)
-                self._maybe_compress_summaries()
 
-        self.history.append([response])
+        asst_group: list[dict | Message] = [response]
+        self.history.append(asst_group)
         self._actions_cnt += 1
         return AgentOutput(
             actions=actions,
             llm_calls=[act_call],
             other_llm_calls=other_llm_calls,
-            profiling=profiling,
+            profiling=profiler.data,
             action_rationale=rationale or None,
         )
 
-    def _obs_to_messages(self, obs: Observation) -> list[dict]:
-        messages = obs.to_llm_messages()
+    def _obs_to_messages(self, obs: Observation) -> list[dict | Message]:
+        messages = cast(list[dict | Message], obs.to_llm_messages())
         if self.config.max_obs_chars is not None:
-            messages = [_truncate_message(m, self.config.max_obs_chars) for m in messages]
+            messages = cast(list[dict | Message], [_truncate_message(m, self.config.max_obs_chars) for m in messages])
         return messages
 
-    def _ingest_obs(self, obs_messages: list[dict]) -> None:
+    def _ingest_obs(self, obs_messages: list[dict | Message]) -> None:
         """On step 0 extract goal; on subsequent steps append obs group to history."""
         if not self.goal:
             self.goal = [obs_messages[0]]
@@ -401,58 +381,20 @@ class Genny(Agent):
         → prompt-cache hit on the full shared prefix (system, tools, goal, summaries, obs).
         The summarize LLM has tool_choice="none" so it responds with text, not tool calls.
         """
-        user_prompt = self.config.summarize_cot_prompt if self.config.summarize_cot_only else self.config.summarize_verbose_prompt
+        user_prompt = (
+            self.config.summarize_cot_prompt if self.config.summarize_cot_only else self.config.summarize_verbose_prompt
+        )
         messages = self._build_base_prompt()
         messages.append({"role": "user", "content": user_prompt})
         api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
-        llm_call = LLMCall(llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage)
+        llm_call = LLMCall(
+            llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage
+        )
         return response.message.content or "", llm_call
 
-    def _maybe_compress_summaries(self) -> None:
-        if self.config.max_summaries_tokens is None or len(self.summaries) < 2:
-            return
-        summary_msgs = [{"role": "assistant", "content": s} for s in self.summaries]
-        if self.token_counter(messages=summary_msgs) > self.config.max_summaries_tokens:
-            self._compress_summaries()
-
-    def _compress_summaries(self) -> None:
-        """LLM-merge the first half of summaries into one to stay within token budget."""
-        midpoint = max(1, len(self.summaries) // 2)
-        combined = "\n\n---\n\n".join(self.summaries[:midpoint])
-        messages: list[dict] = [
-            {
-                "role": "system",
-                "content": "Compress these summaries into a single concise summary preserving all key facts.",
-            },
-            {"role": "user", "content": combined},
-        ]
-        prompt = Prompt(messages=messages)
-        response = self.summarize_llm(prompt)
-        compressed = response.message.content or combined
-        logger.info(f"Compressed {midpoint} summaries into one.")
-        self.summaries = [compressed, *self.summaries[midpoint:]]
-
-    def _maybe_compact_history(self) -> None:
-        """Drop old history groups when raw history exceeds max_history_tokens."""
-        if self.config.max_history_tokens is None:
-            return
-        flat = [msg for group in self.history for msg in group]
-        if self.token_counter(messages=flat) > self.config.max_history_tokens:
-            self._drop_old_history()
-
-    def _drop_old_history(self) -> None:
-        """Remove the first half of history groups (covered by summaries)."""
-        midpoint = len(self.history) // 2
-        if midpoint % 2 == 1:
-            midpoint += 1  # keep group boundaries aligned (obs/asst pairs)
-        if midpoint == 0 or midpoint >= len(self.history):
-            return
-        logger.info(f"Dropping {midpoint} history groups (covered by summaries).")
-        self.history = self.history[midpoint:]
-
-    def _act_pass(self) -> tuple[Message, LLMCall]:
+    def _act(self) -> tuple[Message, LLMCall]:
         """Build context, encode tools, call act LLM, return (response_message, llm_call)."""
         messages = self._choose_context()
         api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
@@ -490,11 +432,28 @@ class Genny(Agent):
         return messages
 
     def _windowed_history(self) -> list[dict | Message]:
-        """Return flattened history groups, limited to last render_last_n_obs observations."""
+        """Return flattened history groups, limited to last render_last_n_obs observations.
+
+        When render_last_n_obs is set, only obs groups are included (not their preceding asst
+        groups). Leading tool-role messages are stripped from each obs group so the prompt stays
+        structurally valid — the paired tool_calls live in the dropped asst groups, but those
+        actions are already captured in self.summaries, making the tool results redundant.
+        """
+        if self.config.render_last_n_obs is None:
+            return [msg for group in self.history for msg in group]
         n = self.config.render_last_n_obs
-        if n is None:
-            groups = self.history
-        else:
-            tail_len = n * 2  # n obs groups + n asst groups
-            groups = self.history[-tail_len:] if tail_len < len(self.history) else self.history
-        return [msg for group in groups for msg in group]
+        # Obs groups start with role 'user'/'tool'; asst groups start with role 'assistant'.
+        obs_groups = [
+            g
+            for g in self.history
+            if g and (g[0].role if isinstance(g[0], Message) else g[0].get("role", "")) != "assistant"
+        ]
+        selected = obs_groups[-n:] if n < len(obs_groups) else obs_groups
+        result: list[dict | Message] = []
+        for group in selected:
+            # Drop leading tool-role messages (their paired tool_calls are in dropped asst groups)
+            start = next(
+                (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")), len(group)
+            )
+            result.extend(group[start:])
+        return result

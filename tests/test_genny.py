@@ -19,7 +19,6 @@ from agentlab2.agents.genny import (
     _format_tools_as_text,
     _json_type_to_python,
     _obs_section_header,
-    _sanitize_for_summarize,
     _truncate_message,
 )
 from agentlab2.core import Action, ActionSchema, Observation
@@ -50,8 +49,6 @@ def _make_agent(
     render_last_n_obs: int | None = None,
     enable_summarize: bool = False,
     summarize_cot_only: bool = False,
-    max_history_tokens: int | None = None,
-    max_summaries_tokens: int | None = None,
     tools_as_text: bool = False,
 ) -> Genny:
     config = GennyConfig(
@@ -59,8 +56,6 @@ def _make_agent(
         render_last_n_obs=render_last_n_obs,
         enable_summarize=enable_summarize,
         summarize_cot_only=summarize_cot_only,
-        max_history_tokens=max_history_tokens,
-        max_summaries_tokens=max_summaries_tokens,
         tools_as_text=tools_as_text,
     )
     return Genny(config=config, action_schemas=[_make_schema()])
@@ -90,34 +85,6 @@ class TestJsonTypeToPython:
 
     def test_unknown_falls_back_to_any(self) -> None:
         assert _json_type_to_python("unknown") == "Any"
-
-
-class TestSanitizeForSummarize:
-    def test_converts_tool_role_to_user(self) -> None:
-        msgs = [{"role": "tool", "content": "result", "tool_call_id": "call_1"}]
-        result = _sanitize_for_summarize(msgs)
-        assert result[0]["role"] == "user"
-        assert "tool_call_id" not in result[0]
-
-    def test_user_role_unchanged(self) -> None:
-        msgs = [{"role": "user", "content": "hello"}]
-        assert _sanitize_for_summarize(msgs) == [{"role": "user", "content": "hello"}]
-
-    def test_image_content_preserved(self) -> None:
-        """Images are passed through so vision-capable summarize LLMs can see the full observation."""
-        image_content = [{"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}}]
-        msgs = [{"role": "user", "content": image_content}]
-        result = _sanitize_for_summarize(msgs)
-        assert result[0]["content"] == image_content
-
-    def test_mixed_text_and_image_preserved(self) -> None:
-        content = [
-            {"type": "text", "text": "screenshot"},
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-        ]
-        msgs = [{"role": "user", "content": content}]
-        result = _sanitize_for_summarize(msgs)
-        assert result[0]["content"] == content
 
 
 class TestFormatSummariesBlock:
@@ -335,24 +302,38 @@ class TestWindowedHistory:
         agent = _make_agent(render_last_n_obs=1)
         _simulate_steps(agent, n_steps=3)
         flat = agent._windowed_history()
-        # last 2 groups: [asst_2, obs_3]
-        assert len(flat) == 2
-        assert flat[-1]["content"] == "obs_3"
+        # Only the last obs group — no preceding asst group (its action is in summaries)
+        assert len(flat) == 1
+        assert flat[0]["content"] == "obs_3"
 
     def test_render_last_2_obs(self) -> None:
         agent = _make_agent(render_last_n_obs=2)
         _simulate_steps(agent, n_steps=3)
         flat = agent._windowed_history()
-        # last 4 groups: [obs_2, asst_2, obs_3] — but 4 groups = asst_1 + obs_2 + asst_2 + obs_3
-        assert flat[-1]["content"] == "obs_3"
-        assert len(flat) == 4
+        # Only the last 2 obs groups — asst groups excluded
+        assert len(flat) == 2
+        assert flat[0]["content"] == "obs_2"
+        assert flat[1]["content"] == "obs_3"
 
-    def test_window_larger_than_history_returns_all(self) -> None:
+    def test_window_larger_than_history_returns_all_obs(self) -> None:
         agent = _make_agent(render_last_n_obs=100)
         _simulate_steps(agent, n_steps=2)
-        all_agent = _make_agent(render_last_n_obs=None)
-        _simulate_steps(all_agent, n_steps=2)
-        assert agent._windowed_history() == all_agent._windowed_history()
+        flat = agent._windowed_history()
+        # All obs groups (obs_0, obs_1, obs_2) — asst groups excluded
+        obs_groups = [g for g in agent.history if g and g[0].get("role") != "assistant"]
+        assert flat == [msg for group in obs_groups for msg in group]
+
+    def test_tool_messages_stripped_from_windowed_obs(self) -> None:
+        agent = _make_agent(render_last_n_obs=1)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        # Simulate: one completed step (obs with tool result + user content) + asst + pending obs
+        agent.history.append([{"role": "tool", "content": "Success", "tool_call_id": "c1"}, {"role": "user", "content": "axtree"}])
+        agent.history.append([{"role": "assistant", "content": "act", "tool_calls": [{"id": "c1"}]}])
+        agent.history.append([{"role": "tool", "content": "Success", "tool_call_id": "c2"}, {"role": "user", "content": "current_axtree"}])
+        flat = agent._windowed_history()
+        # Tool message stripped; only the user content from the latest obs remains
+        assert all(m.get("role") != "tool" for m in flat)
+        assert flat[0]["content"] == "current_axtree"
 
 
 class TestChooseContext:
@@ -412,22 +393,6 @@ class TestChooseContext:
         _simulate_steps(agent, n_steps=1)
         messages = agent._choose_context()
         assert messages[-1]["content"] == agent.config.act_prompt
-
-
-class TestDropOldHistory:
-    def test_drops_first_half(self) -> None:
-        agent = _make_agent()
-        _simulate_steps(agent, n_steps=4)
-        original_len = len(agent.history)
-        agent._drop_old_history()
-        assert len(agent.history) < original_len
-
-    def test_skips_when_too_few_groups(self) -> None:
-        agent = _make_agent()
-        agent.goal = [{"role": "user", "content": "goal"}]
-        agent.history = [[{"role": "user", "content": "only_obs"}]]
-        agent._drop_old_history()
-        assert len(agent.history) == 1
 
 
 # ---------------------------------------------------------------------------
