@@ -50,11 +50,10 @@ def main(debug: bool) -> None:
     agent_config = GennyConfig(
         llm_config=llm_config,
         max_actions=20,
-        render_last_n_obs=2,
-        enable_summarize=True,
+        render_last_n_obs=1,
+        tools_as_text=False,
+        enable_summarize=False,
         summarize_cot_only=True,
-        max_history_tokens=80000,
-        max_summaries_tokens=20000,
     )
     # agent_config = ReactAgentConfig(
     #     llm_config=llm_config,
