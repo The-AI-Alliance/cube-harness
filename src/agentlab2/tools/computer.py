@@ -27,21 +27,10 @@ logger = logging.getLogger(__name__)
 spec = importlib.util.find_spec("desktop_env")
 if spec is not None:
     from desktop_env.desktop_env import DesktopEnv
-
-    # Override desktop_env's default VM download directory to use AgentLab2 data dir
-    try:
-        from pathlib import Path
-
-        import desktop_env.providers.docker.manager as docker_manager
-
-        AGENTLAB2_VM_DIR = Path.home() / ".agentlab2" / "benchmarks" / "osworld" / "vm_data"
-        AGENTLAB2_VM_DIR.mkdir(parents=True, exist_ok=True)
-        docker_manager.VMS_DIR = str(AGENTLAB2_VM_DIR)
-        logger.info(f"Desktop_env will download VMs to: {AGENTLAB2_VM_DIR}")
-    except Exception as e:
-        logger.warning(f"Could not override desktop_env VM directory: {e}")
+    import desktop_env.providers.docker.manager as docker_manager
 else:
     DesktopEnv = None
+    docker_manager = None
 
 
 class ComputerConfig(ToolConfig):
@@ -53,6 +42,7 @@ class ComputerConfig(ToolConfig):
     snapshot_name: str = "init_state"
     action_space: str = "computer_13"
     cache_dir: str = str(Path.home() / ".agentlab2" / "benchmarks" / "osworld" / "cache")
+    vm_dir: str = str(Path.home() / ".agentlab2" / "benchmarks" / "osworld" / "vm_data")
     screen_size: tuple[int, int] = (1920, 1080)
     headless: bool = True
     require_a11y_tree: bool = True
@@ -94,6 +84,12 @@ class Computer(Tool, ComputerActionSpace):
                 "desktop_env is not installed. Please install it to use Computer tool.\n"
                 "You can install it with: pip install desktop-env"
             )
+
+        if docker_manager is not None:
+            vm_dir = Path(config.vm_dir)
+            vm_dir.mkdir(parents=True, exist_ok=True)
+            docker_manager.VMS_DIR = str(vm_dir)
+            logger.info(f"Desktop_env will download VMs to: {vm_dir}")
 
         self._env = DesktopEnv(
             action_space=config.action_space,
