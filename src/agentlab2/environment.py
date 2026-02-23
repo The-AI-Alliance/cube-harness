@@ -79,7 +79,10 @@ class Environment(AbstractEnvironment):
                 done = True
                 break
             tool_results.append(self.tool.execute_action(action))
-        obs = Observation(contents=[c for o in tool_results for c in o.contents])
+        obs = Observation(
+            contents=[c for o in tool_results for c in o.contents],
+            has_error=any(o.has_error for o in tool_results),
+        )
         done = done or self.task.finished()
         if self.task.validate_per_step or done:
             reward, info = self.task.validate_task(obs)

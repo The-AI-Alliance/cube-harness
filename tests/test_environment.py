@@ -98,12 +98,13 @@ class TestToolboxEnv:
         assert mock_tool.click_count == 0  # Click should not have executed
 
     def test_toolbox_env_step_unsupported_action(self, mock_tool_env):
-        """Test stepping with unsupported action raises error."""
+        """Test stepping with unsupported action returns error observation."""
         mock_tool_env.setup()
 
         action = Action(name="nonexistent_action", arguments={})
-        with pytest.raises(ValueError, match="is not a part of"):
-            mock_tool_env.step(action)
+        env_output = mock_tool_env.step(action)
+        assert env_output.obs.has_error is True
+        assert "nonexistent_action" in env_output.obs.contents[0].data
 
     def test_toolbox_env_step_validates_when_done(self, mock_tool_env, mock_task):
         """Test that validation is called when done."""

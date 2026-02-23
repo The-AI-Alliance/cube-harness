@@ -154,6 +154,7 @@ class Observation(TypedBaseModel):
     """Represents an observation from the environment."""
 
     contents: list[Content] = Field(default_factory=list)
+    has_error: bool = False
 
     @classmethod
     def from_text(cls, text: str) -> Self:
