@@ -32,26 +32,26 @@ def red_image() -> Image.Image:
 
 @pytest.fixture
 def env_step_with_screenshot(red_image: Image.Image) -> EnvironmentOutput:
-    obs = Observation(contents=[Content(data=red_image, name="screenshot")])
+    obs = Observation(contents=[Content.from_data(red_image, name="screenshot")])
     return EnvironmentOutput(obs=obs, reward=0.0, done=False)
 
 
 @pytest.fixture
 def env_step_with_axtree() -> EnvironmentOutput:
     axtree_text = "RootWebArea 'Example'\n  button 'Submit'"
-    obs = Observation(contents=[Content(data=axtree_text, name="axtree_txt")])
+    obs = Observation(contents=[Content.from_data(axtree_text, name="axtree_txt")])
     return EnvironmentOutput(obs=obs, reward=0.0, done=False)
 
 
 @pytest.fixture
 def env_step_done_success() -> EnvironmentOutput:
-    obs = Observation(contents=[Content(data="Done!", name="goal")])
+    obs = Observation(contents=[Content.from_data("Done!", name="goal")])
     return EnvironmentOutput(obs=obs, reward=1.0, done=True)
 
 
 @pytest.fixture
 def env_step_done_failure() -> EnvironmentOutput:
-    obs = Observation(contents=[Content(data="Failed", name="goal")])
+    obs = Observation(contents=[Content.from_data("Failed", name="goal")])
     return EnvironmentOutput(obs=obs, reward=0.0, done=True)
 
 
@@ -744,8 +744,8 @@ class TestGetStepDetailsMarkdown:
     def test_env_step_shows_content_names(self) -> None:
         obs = Observation(
             contents=[
-                Content(data="goal text", name="goal"),
-                Content(data="some html", name="html_content"),
+                Content.from_data("goal text", name="goal"),
+                Content.from_data("some html", name="html_content"),
             ]
         )
         env_step = EnvironmentOutput(obs=obs)
@@ -770,7 +770,7 @@ class TestGetTaskGoal:
         assert "No goal text found" in result
 
     def test_extracts_first_text_from_first_env_step(self) -> None:
-        obs = Observation(contents=[Content(data="Buy 3 apples", name="goal")])
+        obs = Observation(contents=[Content.from_data("Buy 3 apples", name="goal")])
         env_out = EnvironmentOutput(obs=obs)
         traj = Trajectory(id="t1")
         traj.steps.append(TrajectoryStep(output=env_out))
@@ -779,7 +779,7 @@ class TestGetTaskGoal:
 
     def test_skips_agent_steps_at_start(self) -> None:
         agent_out = AgentOutput(actions=[])
-        obs = Observation(contents=[Content(data="Real goal")])
+        obs = Observation(contents=[Content.from_data("Real goal")])
         env_out = EnvironmentOutput(obs=obs)
         traj = Trajectory(id="t1")
         traj.steps.append(TrajectoryStep(output=agent_out))
@@ -790,8 +790,8 @@ class TestGetTaskGoal:
     def test_skips_image_contents(self, red_image: Image.Image) -> None:
         obs = Observation(
             contents=[
-                Content(data=red_image, name="screenshot"),
-                Content(data="Goal text after image"),
+                Content.from_data(red_image, name="screenshot"),
+                Content.from_data("Goal text after image"),
             ]
         )
         env_out = EnvironmentOutput(obs=obs)
@@ -803,8 +803,8 @@ class TestGetTaskGoal:
     def test_skips_whitespace_only_content(self) -> None:
         obs = Observation(
             contents=[
-                Content(data="   \n  "),
-                Content(data="Actual goal"),
+                Content.from_data("   \n  "),
+                Content.from_data("Actual goal"),
             ]
         )
         env_out = EnvironmentOutput(obs=obs)

@@ -4,9 +4,9 @@ from typing import Any, Callable, List
 
 from typing_extensions import get_protocol_members
 
-# from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
 from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
-from cube.core import Action, ActionSchema, Content, Observation, TypedBaseModel
+from cube.core import Action, ActionSchema, Content, TypedBaseModel
+from agentlab2.core import Observation
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class Tool(AbstractTool):
 
             span.set_attribute(GEN_AI_TOOL_CALL_RESULT, str(action_result))
 
-        return Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
+        return Observation(contents=[Content.from_data(action_result, tool_call_id=action.id)])
 
     @property
     def action_set(self) -> List[ActionSchema]:

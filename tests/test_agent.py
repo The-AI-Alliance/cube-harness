@@ -85,7 +85,7 @@ class TestAgent:
     def test_agent_with_image_observation(self, mock_agent):
         """Test Agent handling observation with image."""
         img = Image.new("RGB", (100, 100), color="red")
-        obs = Observation(contents=[Content(data="Click the red area"), Content(data=img, name="screenshot")])
+        obs = Observation(contents=[Content.from_data("Click the red area"), Content.from_data(img, name="screenshot")])
 
         output = mock_agent.step(obs)
         assert isinstance(output, AgentOutput)
@@ -119,9 +119,9 @@ class TestAgent:
         """Test Agent step with observation containing tool call results."""
         obs = Observation(
             contents=[
-                Content(data="Initial instruction"),
-                Content(data="Tool result 1", tool_call_id="call_1"),
-                Content(data="Tool result 2", tool_call_id="call_2"),
+                Content.from_data("Initial instruction"),
+                Content.from_data("Tool result 1", tool_call_id="call_1"),
+                Content.from_data("Tool result 2", tool_call_id="call_2"),
             ]
         )
 

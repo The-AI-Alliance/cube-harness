@@ -139,13 +139,13 @@ class SyncPlaywrightTool(Tool, BrowserActionSpace):
         if self.config.use_html:
             html = self.page_html()
             if self.config.prune_html:
-                obs.contents.append(Content(data=prune_html(html), name="pruned_html"))
+                obs.contents.append(Content.from_data(prune_html(html), name="pruned_html"))
             else:
-                obs.contents.append(Content(data=html, name="html"))
+                obs.contents.append(Content.from_data(html, name="html"))
         if self.config.use_axtree:
-            obs.contents.append(Content(data=self.page_axtree(), name="axtree_txt"))
+            obs.contents.append(Content.from_data(self.page_axtree(), name="axtree_txt"))
         if self.config.use_screenshot:
-            obs.contents.append(Content(data=self.page_screenshot(), name="screenshot"))
+            obs.contents.append(Content.from_data(self.page_screenshot(), name="screenshot"))
         return obs
 
     def reset(self):
@@ -182,7 +182,7 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
         except Exception as e:
             action_result = f"Error executing action {action.name}: {e}"
             logger.exception(action_result)
-        action_obs = Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
+        action_obs = Observation(contents=[Content.from_data(action_result, tool_call_id=action.id)])
         action_obs += await self.page_obs()
         return action_obs
 
@@ -260,13 +260,13 @@ class AsyncPlaywrightTool(Tool, BrowserActionSpace):
         if self.config.use_html:
             html = await self.page_html()
             if self.config.prune_html:
-                obs.contents.append(Content(data=prune_html(html), name="pruned_html"))
+                obs.contents.append(Content.from_data(prune_html(html), name="pruned_html"))
             else:
-                obs.contents.append(Content(data=html, name="html"))
+                obs.contents.append(Content.from_data(html, name="html"))
         if self.config.use_axtree:
-            obs.contents.append(Content(data=await self.page_axtree(), name="axtree_txt"))
+            obs.contents.append(Content.from_data(await self.page_axtree(), name="axtree_txt"))
         if self.config.use_screenshot:
-            obs.contents.append(Content(data=await self.page_screenshot(), name="screenshot"))
+            obs.contents.append(Content.from_data(await self.page_screenshot(), name="screenshot"))
         return obs
 
     async def close(self):
