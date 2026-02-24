@@ -64,7 +64,7 @@ def main(debug: bool):
     output_dir_base = os.environ.get("OUTPUT_DIR", str(__import__("pathlib").Path.home() / "agentlab_results" / "al2"))
     output_dir = __import__("pathlib").Path(output_dir_base) / f"osworld_eval_{current_datetime}"
 
-    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", "0.50"))
+    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", "0.10"))
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
