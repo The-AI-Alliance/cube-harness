@@ -144,7 +144,8 @@ class LLM:
 class LLMCall(TypedBaseModel):
     """Represents a call to an LLM model."""
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: str = Field(default_factory=lambda: uuid4().hex)  # globally unique, used as storage key
+    tag: str = ""  # human-readable label for the call type (e.g. "act", "summary"); used as tab name in XRay
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     llm_config: LLMConfig
     prompt: Prompt

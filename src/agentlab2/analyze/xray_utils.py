@@ -424,8 +424,14 @@ _ROLE_STYLE = {
 
 def _render_llm_call_html(llm_call: LLMCall) -> str:
     """Render a single LLM call (prompt + response) as HTML message blocks."""
+    config_json = html_lib.escape(llm_call.llm_config.model_dump_json(indent=2))
+    config_html = (
+        f"<details><summary>⚙️ <strong>llm_config</strong></summary>"
+        f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{config_json}</pre>"
+        f"</details>\n"
+    )
     messages = list(llm_call.prompt.messages) + [llm_call.output]
-    blocks: list[str] = []
+    blocks: list[str] = [config_html]
 
     for i, msg in enumerate(messages):
         msg_dict = _msg_to_dict(msg)
@@ -451,14 +457,14 @@ def _render_llm_call_html(llm_call: LLMCall) -> str:
 
 
 def get_chat_branches(step: EnvironmentOutput | AgentOutput | None) -> dict[str, str]:
-    """Return {call.id: html} for each LLMCall in an agent step.
+    """Return {label: html} for each LLMCall in an agent step.
 
-    One tab per LLMCall; the tab label is call.id (e.g. "act", "summary").
+    The tab label is call.tag when set, otherwise call.id.
     Returns empty dict for non-AgentOutput steps or steps with no llm_calls.
     """
     if not isinstance(step, AgentOutput):
         return {}
-    return {call.id: _render_llm_call_html(call) for call in step.llm_calls}
+    return {(call.tag or call.id): _render_llm_call_html(call) for call in step.llm_calls}
 
 
 def _truncate(text: str, max_len: int) -> str:
@@ -545,6 +551,9 @@ def _format_agent_step_details(step: AgentOutput, duration_info: str) -> str:
             if usage.cost > 0:
                 token_parts.append(f"💰 **${usage.cost:.4f}**")
             sections.append(" │ ".join(token_parts) + "\n")
+
+    if step.action_rationale:
+        sections.append(f"### Rationale\n{_truncate(step.action_rationale, 150000)}\n")
 
     if step.actions:
         sections.append("### Actions\n")
