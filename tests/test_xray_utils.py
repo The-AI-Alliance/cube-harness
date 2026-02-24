@@ -67,7 +67,7 @@ def sample_llm_call() -> LLMCall:
     )
     msg = Message(role="assistant", content="I will click the button.")
     usage = Usage(prompt_tokens=100, completion_tokens=20, cost=0.001)
-    return LLMCall(id="test_call", llm_config=config, prompt=prompt, output=msg, usage=usage)
+    return LLMCall(tag="test_call", llm_config=config, prompt=prompt, output=msg, usage=usage)
 
 
 @pytest.fixture
@@ -283,33 +283,41 @@ class TestGetChatBranches:
 
     def test_one_tab_per_call(self, sample_llm_call: LLMCall) -> None:
         step = AgentOutput(llm_calls=[sample_llm_call])
-        assert list(xray_utils.get_chat_branches(step).keys()) == [sample_llm_call.id]
+        assert list(xray_utils.get_chat_branches(step).keys()) == [sample_llm_call.tag]
 
-    def test_tab_name_is_call_id(self, agent_step_with_llm_call: AgentOutput, sample_llm_call: LLMCall) -> None:
+    def test_tab_name_is_call_tag(self, agent_step_with_llm_call: AgentOutput, sample_llm_call: LLMCall) -> None:
         branches = xray_utils.get_chat_branches(agent_step_with_llm_call)
-        assert sample_llm_call.id in branches
+        assert sample_llm_call.tag in branches
+
+    def test_falls_back_to_id_when_tag_empty(self) -> None:
+        config = LLMConfig(model_name="gpt-test")
+        prompt = Prompt(messages=[{"role": "user", "content": "x"}], tools=[])
+        call = LLMCall(llm_config=config, prompt=prompt, output=Message(role="assistant", content="a"), usage=Usage())
+        assert call.tag == ""
+        step = AgentOutput(llm_calls=[call])
+        assert list(xray_utils.get_chat_branches(step).keys()) == [call.id]
 
     def test_multiple_calls_get_separate_tabs(self) -> None:
         config = LLMConfig(model_name="gpt-test")
         prompt = Prompt(messages=[{"role": "user", "content": "x"}], tools=[])
-        call1 = LLMCall(id="act", llm_config=config, prompt=prompt, output=Message(role="assistant", content="a"), usage=Usage())
-        call2 = LLMCall(id="summary", llm_config=config, prompt=prompt, output=Message(role="assistant", content="s"), usage=Usage())
+        call1 = LLMCall(tag="act", llm_config=config, prompt=prompt, output=Message(role="assistant", content="a"), usage=Usage())
+        call2 = LLMCall(tag="summary", llm_config=config, prompt=prompt, output=Message(role="assistant", content="s"), usage=Usage())
         step = AgentOutput(llm_calls=[call1, call2])
         assert list(xray_utils.get_chat_branches(step).keys()) == ["act", "summary"]
 
     def test_contains_role_headers(self, agent_step_with_llm_call: AgentOutput, sample_llm_call: LLMCall) -> None:
-        html = xray_utils.get_chat_branches(agent_step_with_llm_call)[sample_llm_call.id]
+        html = xray_utils.get_chat_branches(agent_step_with_llm_call)[sample_llm_call.tag]
         assert "system" in html
         assert "user" in html
         assert "assistant" in html
 
     def test_contains_message_content(self, agent_step_with_llm_call: AgentOutput, sample_llm_call: LLMCall) -> None:
-        html = xray_utils.get_chat_branches(agent_step_with_llm_call)[sample_llm_call.id]
+        html = xray_utils.get_chat_branches(agent_step_with_llm_call)[sample_llm_call.tag]
         assert "You are a helpful assistant." in html
         assert "Click the button." in html
 
     def test_contains_llm_response(self, agent_step_with_llm_call: AgentOutput, sample_llm_call: LLMCall) -> None:
-        html = xray_utils.get_chat_branches(agent_step_with_llm_call)[sample_llm_call.id]
+        html = xray_utils.get_chat_branches(agent_step_with_llm_call)[sample_llm_call.tag]
         assert "I will click the button." in html
 
     def test_renders_tool_calls_in_assistant_response(self, sample_llm_call: LLMCall) -> None:
@@ -321,7 +329,7 @@ class TestGetChatBranches:
             tool_calls=[ChatCompletionMessageToolCall(id="tc1", function=Function(name="browser_click", arguments='{"bid": "42"}'), type="function")],
         )
         step = AgentOutput(llm_calls=[sample_llm_call])
-        html = xray_utils.get_chat_branches(step)[sample_llm_call.id]
+        html = xray_utils.get_chat_branches(step)[sample_llm_call.tag]
         assert "browser_click" in html
         assert "42" in html
 
@@ -329,7 +337,7 @@ class TestGetChatBranches:
         long_content = "x" * (xray_utils._COLLAPSE_THRESHOLD + 1)
         sample_llm_call.prompt.messages[1] = {"role": "user", "content": long_content}
         step = AgentOutput(llm_calls=[sample_llm_call])
-        html = xray_utils.get_chat_branches(step)[sample_llm_call.id]
+        html = xray_utils.get_chat_branches(step)[sample_llm_call.tag]
         assert "<details>" in html  # collapsed block has no "open" attribute
         assert long_content[:50] in html  # content is still present
 
@@ -342,7 +350,7 @@ class TestGetChatBranches:
             ],
         }
         step = AgentOutput(llm_calls=[sample_llm_call])
-        html = xray_utils.get_chat_branches(step)[sample_llm_call.id]
+        html = xray_utils.get_chat_branches(step)[sample_llm_call.tag]
         assert "Here is a screenshot:" in html
         assert "data:image/png;base64,abc" in html
         assert "<img" in html
@@ -1001,7 +1009,7 @@ class TestGetChatBranchesWithMessageObjects:
         """LLMCall.output is a Message object; prompts can also contain Message objects."""
         config = LLMConfig(model_name="gpt-test")
         prompt = Prompt(messages=[Message(role="user", content="Use a Message object")], tools=[])
-        llm_call = LLMCall(id="test", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage())
+        llm_call = LLMCall(tag="test", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage())
         step = AgentOutput(llm_calls=[llm_call])
         html = xray_utils.get_chat_branches(step)["test"]
         assert "user" in html
@@ -1010,7 +1018,7 @@ class TestGetChatBranchesWithMessageObjects:
     def test_handles_mixed_dict_and_message_in_messages(self) -> None:
         config = LLMConfig(model_name="gpt-test")
         prompt = Prompt(messages=[Message(role="system", content="System prompt from Message"), {"role": "user", "content": "User dict message"}], tools=[])
-        llm_call = LLMCall(id="test2", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage())
+        llm_call = LLMCall(tag="test2", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage())
         step = AgentOutput(llm_calls=[llm_call])
         html = xray_utils.get_chat_branches(step)["test2"]
         assert "system" in html
