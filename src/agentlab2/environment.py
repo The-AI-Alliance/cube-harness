@@ -64,7 +64,6 @@ class Environment(AbstractEnvironment):
     def setup(self) -> EnvironmentOutput:
         """Prepare tool and set up the task."""
         obs, info = self.task.setup(self.tool)
-        obs = self.task.obs_postprocess(obs)
         return EnvironmentOutput(obs=obs, info=info)
 
     def step(self, action: Action | list[Action]) -> EnvironmentOutput:

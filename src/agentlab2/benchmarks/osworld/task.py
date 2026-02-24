@@ -94,6 +94,7 @@ class OSWorldTask(Task):
 
         # Setup VM (includes 60s wait and initial observation)
         obs = self._tool.setup_task(task_config)
+        obs = self.obs_postprocess(obs)
 
         # Prepend instruction as text observation
         goal = self.instruction or self.desc
