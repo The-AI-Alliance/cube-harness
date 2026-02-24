@@ -390,7 +390,7 @@ class Genny(Agent):
         prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
         llm_call = LLMCall(
-            id="summary", llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage
+            tag="summary", llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage
         )
         return response.message.content or "", llm_call
 
@@ -410,7 +410,7 @@ class Genny(Agent):
             f"completion: {response.usage.completion_tokens}, cost: ${response.usage.cost:.4f}"
         )
         llm_call = LLMCall(
-            id="act", llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
+            tag="act", llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
         )
         return response.message, llm_call
 
