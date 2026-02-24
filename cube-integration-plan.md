@@ -17,15 +17,15 @@ Make `cube-standard` a dependency of `AgentLab2` and remove AL2 classes that are
 | `Action` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `StepError` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `STOP_ACTION` | `cube.task` | ~~defined in `agentlab2.environment`~~ | ✅ |
-| `Content` (+ subclasses) | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 
-All six are now imported from `cube` in AL2. `base.py` has been deleted.
+All five are now imported from `cube` in AL2. `base.py` has been deleted.
 
 ### ⚠️ Partially Aligned — TODO
 
 | Concept | CUBE | AL2 | Delta |
 | --- | --- | --- | --- |
-| `Observation` | `cube.core` | defined in `agentlab2.core` | Content done — migrate `Observation` next, then `EnvironmentOutput` follows |
+| `Content` (+ subclasses) | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ Done — all call sites use `Content.from_data()` / `to_llm_message()` |
+| `Observation` | `cube.core` | defined in `agentlab2.core` | Migrate `Observation` next, then `EnvironmentOutput` follows |
 | `EnvironmentOutput` | has `truncated` field | missing `truncated` | Blocked on `Observation` migration; import from cube once `Observation` is done |
 | `AbstractTool` | no `close()` method | has `close()` | Add `close()` to cube's `AbstractTool`, then import from cube |
 | `ToolConfig` | `make(container=None)` | `make()` | Update `BrowsergymConfig.make()` signature, then import from cube |
