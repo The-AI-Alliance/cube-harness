@@ -931,17 +931,17 @@ def run_xray(
 
     def _render_chat() -> tuple:
         agent_out = state.get_agent_output()
-        branches = xray_utils.get_chat_branches(agent_out)
+        items = list(xray_utils.get_chat_branches(agent_out).items())
 
-        main_html = branches.get("main", "<em>No agent action follows this observation (terminal step).</em>")
-        extra_names = [n for n in branches if n != "main"]
+        main_html = items[0][1] if items else "<em>No agent action follows this observation (terminal step).</em>"
+        extra_items = items[1:]
 
         results: list = [main_html]
         for i in range(_MAX_EXTRA_CHAT_BRANCHES):
-            if i < len(extra_names):
-                name = extra_names[i]
+            if i < len(extra_items):
+                name, html = extra_items[i]
                 results.append(gr.Tab(label=name.capitalize(), visible=True))
-                results.append(branches[name])
+                results.append(html)
             else:
                 results.append(gr.Tab(visible=False))
                 results.append("")
