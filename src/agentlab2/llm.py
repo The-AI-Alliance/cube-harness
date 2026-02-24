@@ -10,7 +10,7 @@ from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
 from pydantic import Field
 
-from agentlab2.base import TypedBaseModel
+from cube.core import TypedBaseModel
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter

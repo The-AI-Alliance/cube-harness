@@ -1,84 +1,14 @@
 import base64
 import io
 import json
-import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Self
+from typing import Any, Callable, Self
 
-import litellm.utils
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-from agentlab2.base import TypedBaseModel
 from agentlab2.llm import LLMCall
-
-
-class ActionSchema(TypedBaseModel):
-    """
-    Represents a function specification with a type, name, description and arguments.
-    Compatible with OAI, Anthropic and VLLM definitions.
-
-    Attributes:
-        type (Literal["function"]): The type of the tool, which is always "function".
-        name (str): The name of the function.
-        description (str): A brief description of the function.
-        parameters (dict): A dictionary containing the parameters of the function.
-    """
-
-    name: str
-    description: str
-    parameters: dict = Field(default_factory=dict)
-    # examples: str | None = None # Maybe to-add
-
-    @classmethod
-    def from_function(cls, func: Callable) -> Self:
-        """Create tool object from python function."""
-        schema = litellm.utils.function_to_dict(func)
-        return cls(**schema)
-
-    def as_dict(self) -> dict[str, Any]:
-        """Produce dict that could be passed as tool schema into LLM api."""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
-        }
-
-
-class Action(TypedBaseModel):
-    """
-    A class representing a function call.
-
-    Attributes:
-        id (str): The identifier for the tool call.
-        name (str): The name of the function being called.
-        arguments (Any): The arguments to be passed to the function.
-    """
-
-    id: str | None = None
-    name: str
-    arguments: Dict[str, Any] = Field(default_factory=dict)
-
-
-class StepError(TypedBaseModel):
-    """Represents an error that occurred during a step execution."""
-
-    error_type: str
-    exception_str: str
-    stack_trace: str
-
-    @classmethod
-    def from_exception(cls, exc: Exception) -> "StepError":
-        """Create a StepError from an exception object."""
-        return cls(
-            error_type=type(exc).__name__,
-            exception_str=str(exc),
-            stack_trace="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
-        )
-
+from cube.core import Action, ActionSchema, StepError, TypedBaseModel
 
 class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
