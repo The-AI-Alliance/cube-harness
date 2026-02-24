@@ -295,20 +295,19 @@ class Genny(Agent):
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
-        llm_calls: list[LLMCall] = []
 
         with profiler("context"):
             obs_messages = self._obs_to_messages(obs)
             self._ingest_obs(obs_messages)
 
         rationale: str | None = None
+        sum_call: LLMCall | None = None
         if self.config.enable_summarize:
             # Summarize the current obs (already in history via _ingest_obs).
             with profiler("summarize"):
                 summary, sum_call = self._summarize_past()
             rationale = summary  # capture before action is appended below
             self.summaries.append(summary)
-            llm_calls.append(sum_call)
 
         with profiler("act"):
             response, act_call = self._act()
@@ -325,7 +324,8 @@ class Genny(Agent):
             if step_summary:
                 self.summaries.append(step_summary)
 
-        llm_calls.append(act_call)
+        # act first so the primary tab is always "act"; summary follows when present.
+        llm_calls: list[LLMCall] = [act_call] + ([sum_call] if sum_call is not None else [])
         asst_group: list[dict | Message] = [response]
         self.history.append(asst_group)
         self._actions_cnt += 1
