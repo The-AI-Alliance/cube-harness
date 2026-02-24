@@ -178,7 +178,7 @@ class TestToolboxEnv:
         class PostprocessTask(type(mock_task)):
             def obs_postprocess(self, obs: Observation) -> Observation:
                 # Add a marker to observation
-                obs.contents.append(Content(data="postprocessed"))
+                obs.contents.append(Content.from_data("postprocessed"))
                 return obs
 
         task = PostprocessTask()

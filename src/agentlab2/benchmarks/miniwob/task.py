@@ -181,7 +181,7 @@ return core.getUtterance();
             if content.name == "screenshot" and isinstance(content.data, Image.Image):
                 # crop to 332x214 because this is the viewport size for MiniWob
                 cropped_image = content.data.crop((0, 0, 332, 214))
-                contents.append(Content(name=content.name, data=cropped_image))
+                contents.append(Content.from_data(cropped_image, name=content.name))
             else:
                 contents.append(content)
         obs.contents = contents

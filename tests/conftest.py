@@ -58,20 +58,20 @@ def sample_action() -> Action:
 @pytest.fixture
 def sample_content() -> Content:
     """Sample text content."""
-    return Content(data="Hello, world!", name="greeting")
+    return Content.from_data("Hello, world!", name="greeting")
 
 
 @pytest.fixture
 def sample_image_content() -> Content:
     """Sample image content."""
     img = Image.new("RGB", (100, 100), color="red")
-    return Content(data=img, name="screenshot")
+    return Content.from_data(img, name="screenshot")
 
 
 @pytest.fixture
 def sample_observation() -> Observation:
     """Sample observation with text content."""
-    return Observation(contents=[Content(data="Task: Click the button")])
+    return Observation(contents=[Content.from_data("Task: Click the button")])
 
 
 @pytest.fixture

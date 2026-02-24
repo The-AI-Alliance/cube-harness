@@ -417,23 +417,23 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             if self.config.prune_html:
                 html_str = prune_html(html_str)
             # BrowserGym's flatten_dom_to_str already provides a pruned representation
-            obs.contents.append(Content(data=html_str, name="pruned_html"))
+            obs.contents.append(Content.from_data(html_str, name="pruned_html"))
 
         # Add accessibility tree if configured
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
                 axtree_str = flatten_axtree_to_str(axtree_obj)
-                obs.contents.append(Content(data=axtree_str, name="axtree_txt"))
+                obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
         # Add screenshot if configured (convert numpy array to PIL Image)
         if self.config.use_screenshot and "screenshot" in bgym_obs:
             screenshot = bgym_obs["screenshot"]
             if isinstance(screenshot, Image.Image):
-                obs.contents.append(Content(data=screenshot, name="screenshot"))
+                obs.contents.append(Content.from_data(screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
                 screenshot_img = Image.fromarray(screenshot)
-                obs.contents.append(Content(data=screenshot_img, name="screenshot"))
+                obs.contents.append(Content.from_data(screenshot_img, name="screenshot"))
 
         return obs
 
