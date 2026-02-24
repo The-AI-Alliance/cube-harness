@@ -295,7 +295,7 @@ class Genny(Agent):
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
-        other_llm_calls: dict[str, list[LLMCall]] = {}
+        llm_calls: list[LLMCall] = []
 
         with profiler("context"):
             obs_messages = self._obs_to_messages(obs)
@@ -308,7 +308,7 @@ class Genny(Agent):
                 summary, sum_call = self._summarize_past()
             rationale = summary  # capture before action is appended below
             self.summaries.append(summary)
-            other_llm_calls["summary"] = [sum_call]
+            llm_calls.append(sum_call)
 
         with profiler("act"):
             response, act_call = self._act()
@@ -325,13 +325,13 @@ class Genny(Agent):
             if step_summary:
                 self.summaries.append(step_summary)
 
+        llm_calls.append(act_call)
         asst_group: list[dict | Message] = [response]
         self.history.append(asst_group)
         self._actions_cnt += 1
         return AgentOutput(
             actions=actions,
-            llm_calls=[act_call],
-            other_llm_calls=other_llm_calls,
+            llm_calls=llm_calls,
             profiling=profiler.data,
             action_rationale=rationale or None,
         )
@@ -390,7 +390,7 @@ class Genny(Agent):
         prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
         llm_call = LLMCall(
-            llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage
+            id="summary", llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage
         )
         return response.message.content or "", llm_call
 
@@ -410,7 +410,7 @@ class Genny(Agent):
             f"completion: {response.usage.completion_tokens}, cost: ${response.usage.cost:.4f}"
         )
         llm_call = LLMCall(
-            llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
+            id="act", llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
         )
         return response.message, llm_call
 
