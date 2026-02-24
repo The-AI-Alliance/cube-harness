@@ -50,7 +50,7 @@ def main(debug: bool):
         headless=True,
         require_a11y_tree=True,
         screen_size=(1920, 1080),
-        observe_after_action=True,  # Default Fase, set to True for debugging/visualization (adds ~1-2s per action)
+        observe_after_action=True,
     )
 
     # Configure OSWorld benchmark

@@ -74,7 +74,7 @@ def main(debug: bool):
         headless=True,
         require_a11y_tree=True,
         screen_size=(1920, 1080),
-        observe_after_action=False,
+        observe_after_action=True,
     )
 
     benchmark = SampledOSWorldBenchmark(
