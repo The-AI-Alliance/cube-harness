@@ -17,25 +17,25 @@ Make `cube-standard` a dependency of `AgentLab2` and remove AL2 classes that are
 | `Action` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `StepError` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `STOP_ACTION` | `cube.task` | ~~defined in `agentlab2.environment`~~ | ✅ |
+| `Content` (+ subclasses) | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 
-All five are now imported from `cube` in `agentlab2/core.py`, `agentlab2/llm.py`, `agentlab2/episode.py`, and `agentlab2/environment.py`. `base.py` has been deleted.
+All six are now imported from `cube` in AL2. `base.py` has been deleted.
 
 ### ⚠️ Partially Aligned — TODO
 
 | Concept | CUBE | AL2 | Delta |
 | --- | --- | --- | --- |
-| `Observation` | `cube.core` | defined in `agentlab2.core` | Tightly coupled to Content — migrate together with Content system |
-| `EnvironmentOutput` | has `truncated` field | missing `truncated` | Import from cube (backward-compatible default), update `Environment.step()` to set it |
+| `Observation` | `cube.core` | defined in `agentlab2.core` | Content done — migrate `Observation` next, then `EnvironmentOutput` follows |
+| `EnvironmentOutput` | has `truncated` field | missing `truncated` | Blocked on `Observation` migration; import from cube once `Observation` is done |
 | `AbstractTool` | no `close()` method | has `close()` | Add `close()` to cube's `AbstractTool`, then import from cube |
 | `ToolConfig` | `make(container=None)` | `make()` | Update `BrowsergymConfig.make()` signature, then import from cube |
 | `tool_action` decorator | `cube.tool` | not present in AL2 | Used when migrating `Tool` and `BrowsergymTool` |
 
 ### ❌ Diverged — TODO (major rework)
 
-#### 1. Content system
-- **CUBE**: `Content` is an ABC with multiple concrete subclasses — `TextContent`, `StructuredContent`, `ImageContent`, `AudioContent`, `VideoContent`. Each has `to_markdown()` and `to_llm_message()`. Factory method `Content.from_data()` dispatches by type.
-- **AL2**: Single `Content` class with a union `data: str | dict | list | BaseModel | Image`. Single `to_message()` method (note: different name from cube's `to_llm_message()`).
-- **Change**: Replace AL2's `Content` with cube's polymorphic hierarchy. Update all call sites that construct `Content(data=...)` directly to use `Content.from_data()` or the appropriate subclass. Then `Observation` and `EnvironmentOutput` can also be imported from cube.
+#### 1. ~~Content system~~ — DONE
+
+AL2's `Content` class removed and replaced by cube's polymorphic hierarchy (`TextContent`, `StructuredContent`, `ImageContent`, …). All call sites use `Content.from_data()` and `to_llm_message()`.
 
 #### 2. Task / Environment split → unified Task
 - **CUBE**: Single `Task(ABC)` owns `tool_config: ToolConfig`, creates its own tool in `model_post_init`, exposes `reset() → (Observation, dict)` and `step(action) → EnvironmentOutput` and `evaluate(obs) → (float, dict)`.
@@ -116,7 +116,12 @@ Same changes as MiniWob apply.
 | `src/agentlab2/llm.py` | Import `TypedBaseModel` from `cube.core` | ✅ Done |
 | `src/agentlab2/episode.py` | Import `TypedBaseModel` from `cube.core` | ✅ Done |
 | `src/agentlab2/environment.py` | Import `STOP_ACTION` from `cube.task` | ✅ Done |
-| `src/agentlab2/core.py` | Remove `Content`, `Observation`, `EnvironmentOutput`; import from cube | TODO (after Content migration) |
+| `src/agentlab2/core.py` | Remove `Content`; import from `cube.core` | ✅ Done |
+| `src/agentlab2/tool.py` | Use `Content.from_data()` | ✅ Done |
+| `src/agentlab2/tools/browsergym.py` | Use `Content.from_data()` | ✅ Done |
+| `src/agentlab2/tools/playwright.py` | Use `Content.from_data()` | ✅ Done |
+| `src/agentlab2/benchmarks/miniwob/task.py` | Use `Content.from_data()` (obs_postprocess) | ✅ Done |
+| `src/agentlab2/core.py` | Remove `Observation`, `EnvironmentOutput`; import from cube | TODO (after Observation migration) |
 | `src/agentlab2/tool.py` | Import `AbstractTool`, `ToolConfig`, `tool_action`, `Tool` from cube; update `make()` sig; add `close()` to cube's `AbstractTool` | TODO |
 | `src/agentlab2/environment.py` | Delete entirely (merged into cube's Task) | TODO (after Task migration) |
 | `src/agentlab2/benchmark.py` | Refactor to cube's ClassVar pattern | TODO |
