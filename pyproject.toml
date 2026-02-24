@@ -10,6 +10,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "cube-standard",
     "pydantic~=2.0",
     "litellm~=1.80.8",
     "playwright==1.44",
@@ -43,6 +44,9 @@ build-backend = "uv_build"
 
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
+
+[tool.uv.sources]
+cube-standard = { path = "../cube-standard", editable = true }
 
 [tool.ruff]
 fix = true
