@@ -297,6 +297,14 @@ class OSWorldBenchmark(Benchmark):
         logger.info(f"  VM data: {OSWORLD_VM_DIR}")
         logger.info("\nVM images will be downloaded automatically on first use.")
         logger.info("Make sure desktop_env is installed: pip install desktop-env")
+        logger.warning(
+            "\n"
+            "⚠️  IMPORTANT: Google Chrome setup required for accurate results!\n"
+            "   Chrome tasks will fail or produce incorrect scores without this step.\n"
+            f"   Follow the Chrome configuration instructions in the OSWorld README:\n"
+            f"   {OSWORLD_REPO_DIR / 'README.md'}\n"
+            "   (search for 'Google Chrome' in that file)"
+        )
 
     def uninstall(self) -> None:
         """Remove OSWorld resources.
