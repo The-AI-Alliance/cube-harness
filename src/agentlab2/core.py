@@ -82,8 +82,7 @@ class StepError(TypedBaseModel):
 
 class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
-    # All LLM calls made during this step. Set LLMCall.tag to a human-readable label
-    # (e.g. "act", "summary"); the XRay viewer uses tag as the tab name.
+    # All LLM calls made during this step. Set LLMCall.tag to label each call (e.g. "act", "summary").
     llm_calls: list[LLMCall] = Field(default_factory=list)
     error: StepError | None = None
     # Maps label → (start_time, end_time) as absolute Unix timestamps.
