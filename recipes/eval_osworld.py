@@ -41,6 +41,7 @@ class SampledOSWorldBenchmark(OSWorldBenchmark):
 
     def load_tasks(self) -> list[OSWorldTask]:
         all_tasks = super().load_tasks()
+        all_tasks = [t for t in all_tasks if t.domain != "chrome"]
 
         # Group by domain
         by_domain: dict[str, list[OSWorldTask]] = defaultdict(list)
