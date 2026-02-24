@@ -3,10 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from cube.task import STOP_ACTION
+
 from agentlab2.core import Action, ActionSchema, EnvironmentOutput, Observation, Task
 from agentlab2.tool import AbstractTool, ToolConfig
-
-STOP_ACTION = ActionSchema(name="final_step", description="Stop the task execution.")
 
 
 class EnvConfig:
