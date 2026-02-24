@@ -67,7 +67,7 @@ class ComputerConfig(ToolConfig):
     require_terminal: bool = False
     os_type: str = "Ubuntu"
     enable_proxy: bool = False
-    observe_after_action: bool = False  # Get full observation after each action (adds ~1-2s per action)
+    observe_after_action: bool = True  # Get full observation after each action (adds ~1-2s per action)
 
     def make(self) -> "Computer":
         """Create a Computer tool instance."""
