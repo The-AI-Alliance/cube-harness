@@ -450,47 +450,15 @@ def _render_llm_call_html(llm_call: LLMCall) -> str:
     return "".join(blocks)
 
 
-def _render_llm_track_html(llm_calls: list[LLMCall]) -> str:
-    """Render a full LLM track (list of calls) as HTML.
-
-    When there are multiple calls in the track, each is headed by a call index marker.
-    """
-    if not llm_calls:
-        return ""
-    if len(llm_calls) == 1:
-        return _render_llm_call_html(llm_calls[0])
-    parts: list[str] = []
-    for i, llm_call in enumerate(llm_calls):
-        header = f"<h4 style='margin:12px 0 4px;color:#555'>Call {i + 1} / {len(llm_calls)}</h4>"
-        parts.append(header + _render_llm_call_html(llm_call))
-    return "".join(parts)
-
-
-def get_chat_messages_html(step: EnvironmentOutput | AgentOutput | None) -> str:
-    """Render the main LLM track (llm_calls) as HTML for one agent step.
-
-    Returns empty string for non-AgentOutput steps or steps with no llm_calls.
-    """
-    if not isinstance(step, AgentOutput) or not step.llm_calls:
-        return ""
-    return _render_llm_track_html(step.llm_calls)
-
-
 def get_chat_branches(step: EnvironmentOutput | AgentOutput | None) -> dict[str, str]:
-    """Return all LLM tracks for a step as {track_name: html}.
+    """Return {call.id: html} for each LLMCall in an agent step.
 
-    The main track (llm_calls) is keyed as "main".
-    Auxiliary tracks from other_llm_calls are included under their own keys.
-    Returns empty dict for non-AgentOutput steps.
+    One tab per LLMCall; the tab label is call.id (e.g. "act", "summary").
+    Returns empty dict for non-AgentOutput steps or steps with no llm_calls.
     """
     if not isinstance(step, AgentOutput):
         return {}
-    result: dict[str, str] = {}
-    if step.llm_calls:
-        result["main"] = _render_llm_track_html(step.llm_calls)
-    for name, calls in step.other_llm_calls.items():
-        result[name] = _render_llm_track_html(calls)
-    return result
+    return {call.id: _render_llm_call_html(call) for call in step.llm_calls}
 
 
 def _truncate(text: str, max_len: int) -> str:
