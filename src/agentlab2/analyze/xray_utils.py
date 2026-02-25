@@ -18,7 +18,6 @@ from pydantic import BaseModel
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.llm import LLMCall
 
-
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
@@ -138,11 +137,7 @@ def archive_experiment(results_dir: Path, exp_name: str) -> None:
 
 def _is_experiment_dir(dir_path: Path) -> bool:
     """Return True if dir_path is a valid (non-archived) experiment directory."""
-    return (
-        dir_path.is_dir()
-        and not dir_path.name.startswith("_")
-        and (dir_path / "trajectories").exists()
-    )
+    return dir_path.is_dir() and not dir_path.name.startswith("_") and (dir_path / "trajectories").exists()
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
@@ -257,7 +252,6 @@ def get_current_screenshot(
     return img
 
 
-
 # ---------------------------------------------------------------------------
 # Content extraction
 # ---------------------------------------------------------------------------
@@ -318,7 +312,11 @@ def _details_block(label: str, body: str, icon: str = "📄") -> str:
     """
     open_attr = " open" if len(body) <= _COLLAPSE_THRESHOLD else ""
     preview = _preview(body)
-    preview_html = f" <span style='color:#888;font-weight:normal'>{html_lib.escape(preview)}</span>" if preview and not open_attr else ""
+    preview_html = (
+        f" <span style='color:#888;font-weight:normal'>{html_lib.escape(preview)}</span>"
+        if preview and not open_attr
+        else ""
+    )
     escaped = html_lib.escape(body)
     return (
         f"<details{open_attr}>"
@@ -338,7 +336,7 @@ def _render_text_content(text: str) -> str:
         newline = text.find("\n")
         if newline != -1:
             name = text[2:newline].strip()
-            body = text[newline + 1:]
+            body = text[newline + 1 :]
             return _details_block(name, body)
     return _details_block("text", text)
 
@@ -374,7 +372,9 @@ def _render_content_items(content: str | list | None) -> str:
             if next_item is not None and next_item.get("type") in ("image_url", "image"):
                 url = next_item.get("image_url", {}).get("url", "") or next_item.get("url", "")
                 img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
-                parts.append(f"<details open><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n")
+                parts.append(
+                    f"<details open><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n"
+                )
                 idx += 2
             else:
                 parts.append(_render_text_content(text))
@@ -965,9 +965,7 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
         avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
 
         durations = [
-            t.end_time - t.start_time
-            for t in task_trajs
-            if t.start_time is not None and t.end_time is not None
+            t.end_time - t.start_time for t in task_trajs if t.start_time is not None and t.end_time is not None
         ]
         avg_duration_str = format_duration(sum(durations) / len(durations)) if durations else "-"
 
@@ -1168,8 +1166,10 @@ def _build_segment_html(
 
     step_num = step_idx + 1
     env_pct = int(env_frac * 100)
-    gradient = _ENV_COLOR if env_pct == 100 else (
-        f"linear-gradient(to right, {_ENV_COLOR} {env_pct}%, {_AGENT_COLOR} {env_pct}%)"
+    gradient = (
+        _ENV_COLOR
+        if env_pct == 100
+        else (f"linear-gradient(to right, {_ENV_COLOR} {env_pct}%, {_AGENT_COLOR} {env_pct}%)")
     )
 
     strip_html = ""
@@ -1311,8 +1311,14 @@ def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> 
 
         steps_html.append(
             _build_segment_html(
-                ui_idx, is_current, total_width, tooltip, env_frac,
-                env_out.done, env_out.reward, profiling_strip_css,
+                ui_idx,
+                is_current,
+                total_width,
+                tooltip,
+                env_frac,
+                env_out.done,
+                env_out.reward,
+                profiling_strip_css,
             )
         )
 
@@ -1334,7 +1340,7 @@ def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> 
         f"<span>Failure</span></div>",
     ]
     legend_html = (
-        f'<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; font-size: 12px; color: #666;">'
+        '<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; font-size: 12px; color: #666;">'
         + "".join(row1_parts)
         + "</div>"
     )
@@ -1348,10 +1354,8 @@ def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> 
             for lbl in profiling_labels
         ]
         legend_html += (
-            f'<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; font-size: 12px; color: #666;">'
-            f'<span style="color:#999;">Agent profiling:</span>'
-            + "".join(row2_parts)
-            + "</div>"
+            '<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; font-size: 12px; color: #666;">'
+            '<span style="color:#999;">Agent profiling:</span>' + "".join(row2_parts) + "</div>"
         )
 
     return (
