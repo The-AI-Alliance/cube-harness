@@ -7,13 +7,10 @@ import pytest
 from PIL import Image
 
 from agentlab2.analyze import xray_utils
+from cube.core import Action, Content, EnvironmentOutput, Observation, StepError
+
 from agentlab2.core import (
-    Action,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
-    StepError,
     Trajectory,
     TrajectoryStep,
 )

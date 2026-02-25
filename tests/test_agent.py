@@ -5,7 +5,9 @@ import json
 from PIL import Image
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import Action, AgentOutput, Content, Observation
+from cube.core import Action, Content, Observation
+
+from agentlab2.core import AgentOutput
 
 
 class TestAgentConfig:

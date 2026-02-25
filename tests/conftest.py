@@ -9,13 +9,10 @@ from PIL import Image
 
 from agentlab2.agent import Agent, AgentConfig
 from agentlab2.benchmark import Benchmark
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+
 from agentlab2.core import (
-    Action,
-    ActionSchema,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
     Task,
     Trajectory,
     TrajectoryStep,

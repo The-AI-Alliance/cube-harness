@@ -3,7 +3,9 @@ import logging
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import ActionSchema, ActionSpace, Content, Observation, Task
+from cube.core import ActionSchema, Content, Observation
+
+from agentlab2.core import ActionSpace, Task
 from agentlab2.tools.base import BrowserTaskTool
 
 logger = logging.getLogger(__name__)

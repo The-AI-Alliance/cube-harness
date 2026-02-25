@@ -6,12 +6,10 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from cube.core import Action, Content, EnvironmentOutput, Observation
+
 from agentlab2.core import (
-    Action,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
     Trajectory,
     TrajectoryStep,
 )

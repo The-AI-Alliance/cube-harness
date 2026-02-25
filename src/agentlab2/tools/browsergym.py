@@ -11,7 +11,7 @@ from playwright.sync_api import Frame, Page
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
-from agentlab2.core import Action, Content, Observation
+from cube.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
 
 logger = logging.getLogger(__name__)

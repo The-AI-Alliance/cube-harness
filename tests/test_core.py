@@ -5,14 +5,10 @@ import json
 import pytest
 from PIL import Image
 
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation, StepError
+
 from agentlab2.core import (
-    Action,
-    ActionSchema,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
-    StepError,
     TrajectoryStep,
 )
 

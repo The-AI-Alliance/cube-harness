@@ -7,8 +7,8 @@ from opentelemetry.trace import Span, StatusCode
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from cube.core import TypedBaseModel
-from agentlab2.core import AgentOutput, EnvironmentOutput, StepError, Trajectory, TrajectoryStep
+from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.environment import EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage

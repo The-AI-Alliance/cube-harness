@@ -10,7 +10,7 @@ from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import Action, Content, Observation
+from cube.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
 from agentlab2.utils import prune_html
 

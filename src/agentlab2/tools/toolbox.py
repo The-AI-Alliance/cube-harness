@@ -1,6 +1,6 @@
 from typing import TypeVar
 
-from agentlab2.core import Action, ActionSchema, Observation
+from cube.core import Action, ActionSchema, Observation
 from agentlab2.tool import AbstractTool, Tool, ToolConfig
 
 

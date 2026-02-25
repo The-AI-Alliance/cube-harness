@@ -15,7 +15,9 @@ from typing import Any
 import gradio as gr
 from PIL import Image
 
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
+from cube.core import EnvironmentOutput
+
+from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
 
 
