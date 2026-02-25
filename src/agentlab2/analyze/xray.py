@@ -933,8 +933,8 @@ def run_xray(
         """Return the current step's rationale (if any) and action as stacked HTML panels."""
         agent_out = state.get_agent_output()
         panels = []
-        if agent_out and agent_out.action_rationale:
-            rationale = agent_out.action_rationale.strip()
+        if agent_out and agent_out.thoughts:
+            rationale = agent_out.thoughts.strip()
             if len(rationale) > 500:
                 rationale = rationale[:500] + "…"
             panels.append(_render_rationale_panel(rationale))

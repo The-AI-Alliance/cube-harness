@@ -96,7 +96,12 @@ def _json_type_to_python(json_type: str) -> str:
 
 
 def _format_tools_as_text(tools: list[ActionSchema]) -> str:
-    """Format action schemas as Python-style function signatures for text-mode injection."""
+    """Format action schemas as Python-style function signatures for text-mode injection.
+
+    Used by TextToolAdapter for ablation studies vs. native tool calling. Parameters with
+    complex JSON schemas (e.g. nested objects, $ref) render as 'Any' — best-effort display.
+    If ablation shows no benefit over native tool calling, this adapter will be removed.
+    """
     lines = ["## Available Functions"]
     for tool in tools:
         props = tool.parameters.get("properties", {})
@@ -138,6 +143,21 @@ def _format_action_list(actions: "list[Action]") -> str:
     return ", ".join(parts) if parts else "no action"
 
 
+def _get_reasoning(response: "Message") -> str:
+    """Extract reasoning text from a response, checking all known fields across providers.
+
+    Checks reasoning_content (OpenAI o-series / Anthropic streaming),
+    then thinking_blocks (Anthropic extended thinking), then falls back to content.
+    """
+    if rc := getattr(response, "reasoning_content", None):
+        return rc
+    blocks = getattr(response, "thinking_blocks", None) or []
+    block_text = " ".join(b.get("thinking", "") for b in blocks if isinstance(b, dict))
+    if block_text:
+        return block_text
+    return response.content or ""
+
+
 def _extract_act_summary(response: "Message", actions: "list[Action]") -> str:
     """Build a step summary from an act-pass response for use as a rolling COT entry.
 
@@ -145,7 +165,7 @@ def _extract_act_summary(response: "Message", actions: "list[Action]") -> str:
     formatted description of the action(s) taken. Used when enable_summarize=False so
     that prior reasoning is visible in future steps via self.summaries.
     """
-    cot = getattr(response, "reasoning_content", None) or (response.content or "")
+    cot = _get_reasoning(response)
     parts = []
     if cot:
         parts.append(cot.strip())
@@ -240,8 +260,10 @@ class GennyConfig(AgentConfig):
     # act_prompt: action-only, used when enable_summarize=True (reasoning done in summarize pass)
     act_prompt: str = _DEFAULT_ACT_PROMPT
 
-    # Tool interface
-    tools_as_text: bool = False  # True = fn sigs in system prompt + <tool_call> parsing
+    # Tool interface: False = native API tool_use (default); True = fn sigs in system prompt
+    # + <tool_call> XML parsing (TextToolAdapter). Both modes are supported; tools_as_text
+    # exists for ablation studies — if it shows no benefit it will be removed.
+    tools_as_text: bool = False
 
     # Summarize pass
     enable_summarize: bool = False  # False = extract COT from act pass; True = separate summarize LLM call
@@ -267,6 +289,18 @@ class GennyConfig(AgentConfig):
 
 
 class Genny(Agent):
+    """ReAct-style agent with explicit context management.
+
+    Each step builds a prompt from: system prompt, goal (step 0 obs), collapsed summaries
+    (rolling COT or separate summarize pass), and a windowed obs history. Tools are passed
+    natively or injected as text signatures for ablation studies (see tools_as_text).
+
+    With enable_summarize=True: a separate summarize LLM call reasons about the obs
+    before the act call, sharing the same prompt prefix for cache efficiency.
+    With enable_summarize=False: COT is extracted from the act response and rolled
+    into summaries for future steps.
+    """
+
     name: str = "genny"
     description: str = "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
     input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
@@ -319,7 +353,7 @@ class Genny(Agent):
             self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
         else:
             # No explicit summarize LLM — extract COT from the act response for rolling context.
-            rationale = getattr(response, "reasoning_content", None) or response.content or None
+            rationale = _get_reasoning(response) or None
             step_summary = _extract_act_summary(response, actions)
             if step_summary:
                 self.summaries.append(step_summary)
@@ -333,7 +367,7 @@ class Genny(Agent):
             actions=actions,
             llm_calls=llm_calls,
             profiling=profiler.data,
-            action_rationale=rationale or None,
+            thoughts=rationale or None,
         )
 
     def _obs_to_messages(self, obs: Observation) -> list[dict | Message]:
@@ -390,7 +424,11 @@ class Genny(Agent):
         prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
         llm_call = LLMCall(
-            tag="summary", llm_config=self._summarize_llm_config, prompt=prompt, output=response.message, usage=response.usage
+            tag="summary",
+            llm_config=self._summarize_llm_config,
+            prompt=prompt,
+            output=response.message,
+            usage=response.usage,
         )
         return response.message.content or "", llm_call
 
