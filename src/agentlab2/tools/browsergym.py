@@ -238,6 +238,34 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         self.page.go_forward()
         self._last_info = {"action": "browser_forward"}
 
+    def browser_scroll(self, delta_x: float, delta_y: float) -> None:
+        self.page.mouse.wheel(delta_x, delta_y)
+        self._last_info = {"action": "browser_scroll", "delta_x": delta_x, "delta_y": delta_y}
+
+    def browser_dbclick(self, bid: str) -> None:
+        frame = self._get_frame_for_bid(bid)
+        frame.get_by_test_id(bid).dblclick(timeout=3000)
+        self._last_info = {"action": "browser_dbclick", "bid": bid}
+
+    def browser_press(self, bid: str, comb: str) -> None:
+        frame = self._get_frame_for_bid(bid)
+        frame.get_by_test_id(bid).press(comb)
+        self._last_info = {"action": "browser_press", "bid": bid, "comb": comb}
+
+    def browser_clear(self, bid: str) -> None:
+        frame = self._get_frame_for_bid(bid)
+        frame.get_by_test_id(bid).clear()
+        self._last_info = {"action": "browser_clear", "bid": bid}
+
+    def browser_focus(self, bid: str) -> None:
+        frame = self._get_frame_for_bid(bid)
+        frame.get_by_test_id(bid).focus()
+        self._last_info = {"action": "browser_focus", "bid": bid}
+    
+    def browser_goto(self, url: str) -> None:
+        self.goto(url)
+        self._last_info = {"action": "browser_goto", "url": url}
+
     def noop(self) -> None:
         self._last_info = {"action": "noop"}
 
@@ -377,8 +405,6 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
     # === BrowserTaskTool utility methods ===
 
-    def goto(self, url: str) -> None:
-        self.page.goto(url)
 
     def evaluate_js(self, js: str) -> Any:
         return self.page.evaluate(js)

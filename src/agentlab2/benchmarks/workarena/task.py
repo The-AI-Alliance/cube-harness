@@ -25,6 +25,12 @@ class WorkArenaTask(Task):
         BidBrowserActionSpace.browser_wait,
         BidBrowserActionSpace.browser_back,
         BidBrowserActionSpace.browser_forward,
+        BidBrowserActionSpace.browser_scroll,
+        BidBrowserActionSpace.browser_dbclick,
+        BidBrowserActionSpace.browser_press,
+        BidBrowserActionSpace.browser_clear,
+        BidBrowserActionSpace.browser_goto,
+        BidBrowserActionSpace.browser_focus,
         BidBrowserActionSpace.noop,
     )
     _tool: BrowsergymTool

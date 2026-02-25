@@ -78,7 +78,7 @@ def main(debug: bool):
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=1)
+        run_with_ray(exp, n_cpus=8)
 
 
 if __name__ == "__main__":
