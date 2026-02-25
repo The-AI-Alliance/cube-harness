@@ -8,13 +8,13 @@ Mimics the UI of the original agentlab viewer but works with the new data struct
 import argparse
 import json
 from dataclasses import dataclass, field
-from os.path import expanduser
 from pathlib import Path
 from typing import Any
 
 import gradio as gr
 from PIL import Image
 
+from agentlab2 import EXP_DIR
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
 
@@ -1011,13 +1011,12 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
 def main():
     """Main entry point for the viewer."""
-    results_dir = expanduser("~/agentlab_results/al2")
     parser = argparse.ArgumentParser(description="AgentLab2 Experiment Viewer")
     parser.add_argument(
         "--results-dir",
         type=str,
-        default=results_dir,
-        help="Path to results directory containing experiments",
+        default=str(EXP_DIR),
+        help="Path to results directory containing experiments (default: agentlab2.EXP_DIR)",
     )
     parser.add_argument(
         "--debug",
