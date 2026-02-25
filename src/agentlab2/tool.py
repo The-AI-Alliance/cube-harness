@@ -6,34 +6,9 @@ from typing_extensions import get_protocol_members
 
 from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
 from cube.core import Action, ActionSchema, Content, Observation, TypedBaseModel
+from cube.tool import AbstractTool
 
 logger = logging.getLogger(__name__)
-
-
-class AbstractTool(ABC):
-    """
-    Abstract interface for objects that can react on a list of actions.
-    List defined by the Protocol that tool inherits.
-    """
-
-    def reset(self) -> None:
-        """Optional reset the environment to its initial state."""
-        pass
-
-    @abstractmethod
-    def execute_action(self, action: Action) -> Any:
-        """Execute a single action and return the result."""
-        pass
-
-    @property
-    @abstractmethod
-    def action_set(self) -> List[ActionSchema]:
-        """Returns list of actions supported by that tool."""
-        pass
-
-    def close(self) -> None:
-        """Optional clean up environment resources."""
-        pass
 
 
 class ToolConfig(TypedBaseModel, ABC):

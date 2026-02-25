@@ -1,7 +1,9 @@
 from typing import TypeVar
 
 from cube.core import Action, ActionSchema, Observation
-from agentlab2.tool import AbstractTool, Tool, ToolConfig
+from cube.tool import AbstractTool
+
+from agentlab2.tool import Tool, ToolConfig
 
 
 class ToolboxConfig(ToolConfig):

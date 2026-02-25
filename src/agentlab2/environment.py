@@ -6,8 +6,10 @@ from typing import List
 from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
 from cube.task import STOP_ACTION
 
+from cube.tool import AbstractTool
+
 from agentlab2.core import Task
-from agentlab2.tool import AbstractTool, ToolConfig
+from agentlab2.tool import ToolConfig
 
 
 class EnvConfig:
