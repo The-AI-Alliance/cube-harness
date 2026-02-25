@@ -40,6 +40,10 @@ format:
 lint:
 	uv run ruff check --fix .
 
+lint-check:
+	uvx ruff check --diff ./src
+	uvx ruff format --check ./src
+
 test: install
 	uv run pytest -n 10 tests/ -v
 
