@@ -375,6 +375,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                 duration_str = "-"
                 n_failed += 1
 
+            # Steps/tokens/cost require full trajectory parsing; only metadata is loaded here
             traj_data.append(
                 [traj.id, task_id, "-", f"{final_reward:.2f}", final_message, duration_str, "-", "-"]
             )
