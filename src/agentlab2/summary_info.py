@@ -182,62 +182,96 @@ def save_summary_info_sync(output_dir: Path, summary: dict) -> None:
         json.dump(summary, f, indent=4)
 
 
+def save_summary_to_path(path: Path, summary: dict) -> None:
+    """Write summary dict to a specific path (blocking). Used for trajectory-level files."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(summary, f, indent=4)
+
+
+def write_trajectory_summary(output_dir: Path, trajectory: Trajectory) -> None:
+    """Write a single trajectory's cumulative summary to output_dir/summary_info_{id}.json.
+
+    Overwrites the file each call so the file always reflects current cumulative stats.
+    Lightweight, one file per trajectory (AL2-95).
+    """
+    summary = build_summary_info([trajectory])
+    path = Path(output_dir) / f"summary_info_{trajectory.id}.json"
+    save_summary_to_path(path, summary)
+
+
 class SummaryAccumulator:
-    """Maintains cumulative stats per output_dir and writes summary_info.json non-blocking."""
+    """Maintains cumulative stats per output_dir and writes summary files non-blocking.
+
+    Queues two kinds of writes:
+    - Experiment-level: summary_info.json (all trajectories in output_dir).
+    - Trajectory-level: summary_info_{trajectory_id}.json (single trajectory, overwritten each step).
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._trajectories_by_dir: dict[Path, list[Trajectory]] = {}
-        self._write_queue: Queue[tuple[Path, list[Trajectory]]] = Queue()
+        # Queue items: (Path, list[Trajectory]) for exp-level, (Path, Trajectory) for traj-level
+        self._write_queue: Queue[tuple[Path, list[Trajectory] | Trajectory]] = Queue()
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
 
     def update(self, output_dir: Path, trajectory: Trajectory) -> None:
-        """Record the current state of this trajectory and queue a non-blocking write.
+        """Record the current state of this trajectory and queue non-blocking writes.
 
-        Call this after each save_step or save_trajectory. We merge this trajectory
-        into the in-memory list for this output_dir (by id), then enqueue a write.
+        Queues (1) trajectory-level summary_info_{id}.json and (2) experiment-level
+        summary_info.json. Call after each save_step or save_trajectory.
         """
         output_dir = Path(output_dir).resolve()
         with self._lock:
             if output_dir not in self._trajectories_by_dir:
                 self._trajectories_by_dir[output_dir] = []
             trajs = self._trajectories_by_dir[output_dir]
-            # Replace or append by trajectory id
             existing_ids = {t.id for t in trajs}
             if trajectory.id in existing_ids:
                 trajs = [t if t.id != trajectory.id else trajectory for t in trajs]
             else:
                 trajs = list(trajs) + [trajectory]
             self._trajectories_by_dir[output_dir] = trajs
-            self._write_queue.put((output_dir, list(trajs)))
+            self._write_queue.put((output_dir, trajectory))  # trajectory-level first
+            self._write_queue.put((output_dir, list(trajs)))  # experiment-level
 
     def _worker_loop(self) -> None:
         while True:
             try:
-                output_dir, trajectories = self._write_queue.get(timeout=1.0)
+                output_dir, payload = self._write_queue.get(timeout=1.0)
             except Empty:
                 continue
             try:
-                summary = build_summary_info(trajectories)
-                save_summary_info_sync(output_dir, summary)
-                logger.debug(f"Wrote {SUMMARY_FILENAME} to {output_dir}")
+                if isinstance(payload, Trajectory):
+                    summary = build_summary_info([payload])
+                    path = output_dir / f"summary_info_{payload.id}.json"
+                    save_summary_to_path(path, summary)
+                    logger.debug(f"Wrote summary_info_{payload.id}.json to {output_dir}")
+                else:
+                    summary = build_summary_info(payload)
+                    save_summary_info_sync(output_dir, summary)
+                    logger.debug(f"Wrote {SUMMARY_FILENAME} to {output_dir}")
             except Exception as e:
                 logger.warning(f"Failed to write summary_info: {e}")
 
     def flush(self, output_dir: Path | None = None) -> None:
         """Drain the write queue for the given dir (or all). Blocking."""
-        to_flush: list[tuple[Path, list[Trajectory]]] = []
+        to_flush: list[tuple[Path, list[Trajectory] | Trajectory]] = []
         while True:
             try:
-                d, t = self._write_queue.get_nowait()
+                d, payload = self._write_queue.get_nowait()
                 if output_dir is None or Path(d).resolve() == Path(output_dir).resolve():
-                    to_flush.append((d, t))
+                    to_flush.append((d, payload))
             except Empty:
                 break
-        for d, t in to_flush:
+        for d, payload in to_flush:
             try:
-                save_summary_info_sync(d, build_summary_info(t))
+                if isinstance(payload, Trajectory):
+                    save_summary_to_path(d / f"summary_info_{payload.id}.json", build_summary_info([payload]))
+                else:
+                    save_summary_info_sync(d, build_summary_info(payload))
             except Exception as e:
                 logger.warning(f"Failed to write summary_info: {e}")
 

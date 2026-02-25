@@ -11,6 +11,8 @@ from agentlab2.summary_info import (
     build_summary_info,
     extract_step_stats,
     save_summary_info_sync,
+    save_summary_to_path,
+    write_trajectory_summary,
 )
 
 
@@ -82,4 +84,33 @@ def test_save_summary_info_sync(tmp_path: Path) -> None:
     import json
     data = json.loads(path.read_text())
     assert data["n_steps"] == 1
+    assert data["cum_reward"] == 0.5
+
+
+def test_save_summary_to_path(tmp_path: Path) -> None:
+    summary = {"n_steps": 2, "cum_reward": 1.0}
+    path = tmp_path / "custom_summary.json"
+    save_summary_to_path(path, summary)
+    assert path.exists()
+    import json
+    data = json.loads(path.read_text())
+    assert data["n_steps"] == 2
+    assert data["cum_reward"] == 1.0
+
+
+def test_write_trajectory_summary(tmp_path: Path) -> None:
+    obs = Observation.from_text("x")
+    env_out = EnvironmentOutput(obs=obs, reward=0.5, done=False)
+    traj = Trajectory(
+        id="task1_ep0",
+        steps=[TrajectoryStep(output=env_out)],
+        metadata={"task_id": "task1"},
+    )
+    write_trajectory_summary(tmp_path, traj)
+    path = tmp_path / "summary_info_task1_ep0.json"
+    assert path.exists()
+    import json
+    data = json.loads(path.read_text())
+    assert data["n_steps"] == 1
+    assert data["n_trajectories"] == 1
     assert data["cum_reward"] == 0.5

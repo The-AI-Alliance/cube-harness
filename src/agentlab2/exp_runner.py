@@ -11,7 +11,7 @@ from agentlab2.episode import Episode
 from agentlab2.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from agentlab2.experiment import Experiment, ExpResult
 from agentlab2.metrics.tracer import get_trace_env_vars, get_tracer
-from agentlab2.summary_info import get_global_accumulator
+from agentlab2.summary_info import get_global_accumulator, write_trajectory_summary
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -69,6 +69,8 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
     exp.benchmark.setup()
     try:
         episodes = exp.get_episodes_to_run()
+        for episode in episodes:
+            episode.on_step_saved = write_trajectory_summary
         ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
         results = _poll_ray(exp, ref_to_id, ray_poll_timeout)
