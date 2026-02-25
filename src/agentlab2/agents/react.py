@@ -1,4 +1,3 @@
-import json
 import logging
 
 from cube.core import Action, ActionSchema, Observation
@@ -6,9 +5,10 @@ from litellm import Message
 from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import AgentOutput
+from agentlab2.core import AgentOutput, LLMCall
 from agentlab2.environment import STOP_ACTION
-from agentlab2.llm import LLMCall, LLMConfig, Prompt
+from agentlab2.llm import LLMConfig, Prompt
+from agentlab2.utils import parse_actions
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class ReactAgent(Agent):
         self.history.append(llm_output)
         self._actions_cnt += 1
         llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output, usage=usage)
-        return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
+        return AgentOutput(actions=parse_actions(llm_output), llm_calls=[llm_call])
 
     def choose_steps_to_render(self, history: list[dict | Message]) -> list[dict | Message]:
         """Select which parts of history to include in the prompt based on length."""
@@ -101,21 +101,6 @@ class ReactAgent(Agent):
             *self.history[-self.config.render_last_n_steps :],
             dict(role="user", content=self.config.react_prompt),
         ]
-
-    def _parse_actions(self, llm_output: Message) -> list[Action]:
-        actions = []
-        if hasattr(llm_output, "tool_calls") and llm_output.tool_calls:
-            for tc in llm_output.tool_calls:
-                arguments = tc.function.arguments
-                if isinstance(arguments, str):
-                    try:
-                        arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        raise ValueError(f"Invalid JSON arguments in tool call: {arguments}")
-                if tc.function.name is None:
-                    raise ValueError("Tool call must have a function name.")
-                actions.append(Action(id=tc.id, name=tc.function.name, arguments=arguments))
-        return actions
 
     def max_actions_reached(self) -> bool:
         return self._actions_cnt >= self.config.max_actions

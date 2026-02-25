@@ -247,11 +247,7 @@ class FileStorage:
         traj_dir = self.output_dir / "trajectories"
         if not traj_dir.exists():
             return []
-        return [
-            f.stem.replace(".metadata", "")
-            for f in traj_dir.glob("*.metadata.json")
-            if ".archived_" not in f.name
-        ]
+        return [f.stem.replace(".metadata", "") for f in traj_dir.glob("*.metadata.json") if ".archived_" not in f.name]
 
     def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
         """List trajectory IDs mapped to their latest file modification time.

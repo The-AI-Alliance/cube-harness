@@ -247,6 +247,60 @@ class TestBrowsergymToolObservationConversion:
         content_names = {c.name for c in obs.contents}
         assert content_names == {"pruned_html", "axtree_txt", "screenshot"}
 
+    def test_focused_element_observation(self) -> None:
+        """Test conversion of focused_element_bid observation field."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"focused_element_bid": "a123"}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 1
+        assert obs.contents[0].name == "focused_element"
+        assert obs.contents[0].data == "a123"
+
+    def test_focused_element_observation_empty(self) -> None:
+        """Test that empty focused_element_bid is not added."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"focused_element_bid": None}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 0
+
+    def test_last_action_error_observation(self) -> None:
+        """Test conversion of last_action_error observation field."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"last_action_error": "Element not found: bid='xyz'"}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 1
+        assert obs.contents[0].name == "last_action_error"
+        assert obs.contents[0].data == "Element not found: bid='xyz'"
+
+    def test_last_action_error_observation_empty(self) -> None:
+        """Test that empty last_action_error is not added."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"last_action_error": None}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 0
+
+    def test_last_action_error_observation_empty_string(self) -> None:
+        """Test that empty string last_action_error is not added."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"last_action_error": ""}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 0
+
 
 class TestBrowsergymToolActionMethods:
     """Tests for action method implementations."""

@@ -144,7 +144,8 @@ class LLM:
 class LLMCall(TypedBaseModel):
     """Represents a call to an LLM model."""
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: str = Field(default_factory=lambda: uuid4().hex)  # unique storage key
+    tag: str = ""  # optional label shown as tab name in viewers (e.g. "act", "summary")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     llm_config: LLMConfig
     prompt: Prompt
