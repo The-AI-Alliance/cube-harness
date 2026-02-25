@@ -18,60 +18,45 @@ AgentLab2/
 │   ├── episode.py           # Episode execution and trajectory persistence
 │   ├── experiment.py        # Experiment configuration and statistics
 │   ├── exp_runner.py        # Sequential and Ray-based parallel execution
+│   ├── storage.py           # Trajectory storage (Protocol + FileStorage)
 │   ├── utils.py             # HTML pruning utilities
+│   ├── viewer.py            # Gradio-based experiment/trajectory viewer
 │   ├── agents/              # Agent implementations
-│   │   └── react.py         # ReAct agent with LLM-based reasoning
+│   │   ├── react.py         # ReAct agent with LLM-based reasoning
+│   │   └── legacy_generic_agent.py  # XML-tag-based generic agent with prompt building
 │   ├── tools/               # Tool implementations
-│   │   ├── __init__.py      # Tools package
+│   │   ├── base.py          # BrowserTaskTool protocol
 │   │   ├── playwright.py    # Sync/Async Playwright browser tools
 │   │   ├── toolbox.py       # Composite tool for multiple tools
-│   │   ├── browsergym.py    # BrowserGym integration (stub)
-│   │   └── computer.py      # Computer use tools (stub)
+│   │   ├── browsergym.py    # BrowserGym integration (BidBrowserActionSpace)
+│   │   └── computer.py      # Computer use tools (Docker-based)
 │   ├── action_spaces/       # Action space protocols
-│   │   └── browser_action_space.py  # Browser action protocol
-│   └── benchmarks/          # Benchmark implementations
-│       └── miniwob/         # MiniWob benchmark
-│           ├── benchmark.py # MiniWobBenchmark class
-│           ├── task.py      # MiniWobTask implementation
-│           └── miniwob_tasks.json  # Task definitions
+│   │   └── browser_action_space.py  # BrowserActionSpace + BidBrowserActionSpace
+│   ├── benchmarks/          # Benchmark implementations
+│   │   ├── miniwob/         # MiniWob benchmark
+│   │   │   ├── benchmark.py # MiniWobBenchmark class
+│   │   │   ├── task.py      # MiniWobTask implementation
+│   │   │   └── miniwob_tasks.json  # Task definitions
+│   │   └── workarena/       # WorkArena ServiceNow benchmark
+│   │       ├── benchmark.py # WorkArenaBenchmark class
+│   │       └── task.py      # WorkArenaTask implementation
+│   └── metrics/             # Telemetry and tracing
+│       ├── models.py        # SpanRecord data model
+│       ├── tracer.py        # Agent tracer (OpenTelemetry-based)
+│       ├── processor.py     # Trace export and processing
+│       ├── store.py         # JSONL span writer
+│       └── disk_exporter.py # Disk-based span exporter
 ├── recipes/                 # Example experiment recipes
-│   └── hello_miniwob.py     # Sample MiniWob experiment
 ├── tests/                   # Test suite
 └── docs/                    # Documentation and assets
 ```
 
-## Core Abstractions
-
-### Data Flow
+## Data Flow
 
 ```
 Benchmark → Episode(s) → Agent ↔ Environment → Trajectory
                             ↑        ↓
                            LLM   Tool(s)
-```
-
-### Module Dependencies
-
-```
-base.py (TypedBaseModel for serialization)
-    ↑
-llm.py (LLM wrapper, uses TypedBaseModel)
-    ↑
-core.py (data structures: Action, Observation, Trajectory, Task)
-    ↑
-tool.py (Tool, ToolConfig, AbstractTool)
-    ↑
-environment.py (Environment, EnvConfig - composes task + tool)
-    ↑
-agent.py (Agent protocol - receives observations, produces actions)
-    ↑
-benchmark.py (task collections with tool_config)
-    ↑
-episode.py (runs single agent-task execution)
-    ↑
-experiment.py (coordinates multiple episodes)
-    ↑
-exp_runner.py (sequential or Ray parallel execution)
 ```
 
 ## Key Classes
@@ -82,12 +67,14 @@ exp_runner.py (sequential or Ray parallel execution)
 ### core.py - Data Structures
 - **ActionSchema**: Function specification for LLM tool calls (name, description, parameters)
 - **Action**: Represents a function call with id, name, and arguments
+- **StepError**: Represents an error that occurred during a step execution
 - **AgentOutput**: Contains actions list and llm_calls for logging
 - **Content**: Piece of content (text, image, dict, BaseModel) in an observation, supports tool_call_id
 - **Observation**: List of Contents, convertible to LLM messages
 - **EnvironmentOutput**: Result of env step (obs, reward, done, info)
+- **TrajectoryStep**: Single step pairing AgentOutput + EnvironmentOutput
 - **Trajectory**: Full interaction history with steps and metadata
-- **ActionSpace**: Type alias for tuple of action methods (for filtering)
+- **ActionSpace**: A frozenset of action callables for filtering
 - **Task**: Abstract task with `setup(tool)`, `validate_task()`, `filter_actions()`, `obs_postprocess()`
 
 ### agent.py - Agent Protocol
@@ -98,7 +85,6 @@ exp_runner.py (sequential or Ray parallel execution)
 - **EnvConfig**: Runtime config holding task and tool_config, has `make()` method
 - **AbstractEnvironment**: Abstract base with `setup()`, `step(action)`, `close()`, `action_set`
 - **Environment**: Concrete implementation that composes Task + Tool
-- **STOP_ACTION**: Special action to signal task completion
 
 ### tool.py - Tool Abstraction
 - **AbstractTool**: Abstract base with `execute_action()`, `action_set`, `reset()`, `close()`
@@ -112,10 +98,13 @@ exp_runner.py (sequential or Ray parallel execution)
 ### llm.py - LLM Integration
 - **Prompt**: Messages + tools for LLM call
 - **LLMConfig**: Model config (name, temperature, max_tokens, reasoning_effort, retry strategy)
+- **Usage**: Token usage information from LLM response
+- **LLMResponse**: Response from LLM containing message and usage info
 - **LLM**: Wrapper around LiteLLM completion API
 - **LLMCall**: Logged LLM call with timestamp, config, prompt, and output
 
 ### episode.py - Episode Execution
+- **EpisodeConfig**: Configuration for an episode that can be saved and reloaded
 - **Episode**: Manages agent-task execution, saves trajectory incrementally to JSONL files
 
 ### experiment.py - Experiment Management
@@ -126,6 +115,15 @@ exp_runner.py (sequential or Ray parallel execution)
 - **run_with_ray()**: Parallel execution using Ray workers
 - **run_sequentially()**: Sequential execution with optional debug_limit
 
+### storage.py - Trajectory Storage
+- **Storage**: Protocol for trajectory storage backends
+- **FileStorage**: File-based storage with JSONL step appending and separate LLM call extraction
+- **LLMCallRef**: Reference to an LLM call stored in a separate file
+
+### viewer.py - Experiment Viewer
+- **ViewerState**: State for the Gradio viewer application
+- **run_viewer()**: Launch Gradio UI for exploring trajectories and agent outputs
+
 ## Implementations
 
 ### agents/react.py - ReAct Agent
@@ -135,6 +133,20 @@ exp_runner.py (sequential or Ray parallel execution)
   - Auto-compacts history when exceeding token limit via LLM summarization
   - Parses tool_calls from LLM output into Actions
   - Supports `get_training_pairs()` for extracting input/output pairs
+
+### agents/legacy_generic_agent.py - Generic Agent
+- **GenericAgentConfig**: Config with llm_config, prompt flags (GenericPromptFlags)
+- **GenericAgent**: XML-tag-based agent with structured prompt building
+  - Prompt elements: Think, Plan, Memory, Criticise, BeCautious, Hints
+  - Configurable observation flags (use_html, use_axtree, use_screenshot)
+  - Token-aware prompt fitting via observation shrinking (HTML/AXTree truncation)
+  - Retry mechanism for LLM parsing errors
+  - Screenshot support with multimodal messages
+  - Extended thinking integration (reasoning_effort)
+  - Draft-then-criticise pattern
+
+### tools/base.py - Browser Tool Protocol
+- **BrowserTaskTool**: Protocol for browser tools (reset, goto, evaluate_js, page_obs, page)
 
 ### tools/playwright.py - Playwright Tool
 - **PlaywrightConfig**: Browser config (headless, use_html, use_screenshot, use_axtree, prune_html)
@@ -151,17 +163,25 @@ exp_runner.py (sequential or Ray parallel execution)
   - Routes actions to appropriate tool by action name
   - Provides `find_tool(cls)` helper to retrieve specific tool
 
-### tools/browsergym.py - BrowserGym Tool (stub)
-- **BrowsergymTool**: Placeholder for BrowserGym integration
+### tools/browsergym.py - BrowserGym Tool
+- **BrowsergymConfig**: Config for BrowserGym environment
+- **BrowsergymTool**: Full BrowserGym integration implementing BidBrowserActionSpace
+  - Wraps BrowserGym's BrowserEnv for task setup and validation
+  - Implements BrowserTaskTool protocol (goto, evaluate_js, page_obs)
+  - Frame/iframe navigation for BID-based element access
+  - Checkbox/radio fallback to JavaScript when needed
+  - Observation conversion from BrowserGym to AgentLab2 format
 
-### tools/computer.py - Computer Use Tool (stub)
+### tools/computer.py - Computer Use Tool
 - **Computer**: Docker-based computer interaction tool
   - Methods: mouse_click_xy, mouse_hover_xy, mouse_drag_xy, keyboard_type, run_cli_command, get_screenshot, get_current_window_axtree
 
 ### action_spaces/browser_action_space.py - Browser Actions
-- **BrowserActionSpace**: Protocol defining browser actions
+- **BrowserActionSpace**: Protocol defining browser actions using CSS selectors
   - browser_press_key, browser_type, browser_click, browser_drag, browser_hover
   - browser_select_option, browser_mouse_click_xy, browser_wait, browser_back, browser_forward, noop
+- **BidBrowserActionSpace**: Protocol defining browser actions using Browser IDs (BIDs)
+  - Same action set as BrowserActionSpace but uses BID-based element identification
 
 ### benchmarks/miniwob/ - MiniWob Benchmark
 - **MiniWobBenchmark**: Manages local HTTP server for MiniWob HTML
@@ -172,6 +192,22 @@ exp_runner.py (sequential or Ray parallel execution)
   - Validates via JS reward function (`validate_per_step=True`)
   - Filters actions to browser actions via `supported_actions`
   - Post-processes screenshots to crop to MiniWob viewport (332x214)
+
+### benchmarks/workarena/ - WorkArena Benchmark
+- **WorkArenaBenchmark**: Benchmark for WorkArena ServiceNow tasks
+  - Integrates with BrowserGym task classes
+  - Configurable task level (l1, l2, l3)
+- **WorkArenaTask**: Task wrapper for WorkArena BrowserGym tasks
+  - Initializes BrowserGym environment with specific task class and seed
+  - Validates via BrowserGym's reward function
+  - Handles task teardown and resource cleanup
+
+### metrics/ - Telemetry and Tracing
+- **_AgentTracer**: OpenTelemetry-based tracer for benchmark, episode, and step spans
+- **TraceProcessor**: Exports episode spans to structured JSON hierarchy
+- **JsonlSpanWriter**: JSONL-based span storage
+- **DiskSpanExporter**: Disk-based OpenTelemetry span exporter
+- **get_tracer()**: Factory function for creating tracers (returns no-op if deps missing)
 
 ## Common Patterns
 
@@ -286,27 +322,8 @@ run_sequentially(exp, debug_limit=5)
 run_with_ray(exp, n_cpus=8)
 ```
 
-## Output Structure
-
-```
-output_dir/
-├── experiment_config.json     # Full experiment configuration
-├── trajectories/
-│   ├── run{id}_task_{task_id}.metadata.json  # Trajectory metadata
-│   └── run{id}_task_{task_id}.jsonl          # Steps as JSON lines (AgentOutput, EnvironmentOutput)
-└── ray_logs/                  # Ray worker logs (if using Ray)
-```
-
 ## Development Commands
-
-```bash
-make install   # Install dependencies (uv sync + pip install -e .)
-make hello     # Run MiniWob benchmark (full, parallel with Ray)
-make debug     # Run 2 tasks sequentially for debugging
-make format    # Format code with Ruff
-make lint      # Lint and auto-fix with Ruff
-make test      # Run pytest tests
-```
+We're using make commands for most tasks. Look into `Makefile` for development commands.
 
 ## Project Configuration
 
@@ -316,37 +333,11 @@ make test      # Run pytest tests
 - **Virtual env**: `.venv/` in project root
 - **Source layout**: `src/agentlab2/` (src-layout)
 
-### Code Style (Ruff)
+### Code Style
+- **Formatter**: Ruff
 - **Line length**: 120 characters
 - **Indent**: 4 spaces
 - **Quotes**: Double quotes (`"`)
-
-When writing code, follow these conventions:
-```python
-# Line length: 120 chars max
-# Use double quotes for strings
-# Imports are auto-sorted by ruff
-from agentlab2.core import Action, ActionSchema, Observation  # sorted alphabetically
-```
-
-### Key Dependencies
-| Package | Purpose |
-|---------|---------|
-| `pydantic` | Data validation and serialization for all config/data classes |
-| `litellm` | Unified LLM API (OpenAI, Anthropic, Azure, etc.) |
-| `playwright` | Browser automation for web agents |
-| `ray` | Distributed parallel execution of episodes |
-| `miniwob` | MiniWob benchmark HTML files |
-| `beautifulsoup4` | HTML parsing and pruning |
-| `Pillow` | Image handling for screenshots |
-| `termcolor` | Colored terminal output for logging |
-
-### VSCode Setup
-The project includes `.vscode/settings.json` with:
-- Ruff as default Python formatter with format-on-save
-- Python interpreter: `.venv/bin/python`
-- Extra paths: `./src` for import resolution
-- Type checking: standard mode (Pylance)
 
 ### Running Commands
 Always use `uv run` to execute Python scripts:
@@ -358,10 +349,7 @@ uv run python -c "import agentlab2"    # Quick import test
 ```
 
 ## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| LLM API keys | Set in `.env` or environment (e.g., `OPENAI_API_KEY`, `AZURE_API_KEY`) |
+All vars are set in `.env` file.
 
 ## Testing
 
@@ -376,12 +364,10 @@ uv run pytest tests/test_core.py -v
 uv run pytest tests/ --cov=agentlab2
 ```
 
-
 ## Development Notes
 - do not use imports inside the function or class, all imports should be at the top of the module!
 - always add type hints for function parameters and return types, including for test functions.
 
----
 
 ## Constitution: Code Review Rules
 

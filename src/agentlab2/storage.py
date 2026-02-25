@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 from pydantic import BaseModel
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
+from agentlab2.episode_logs import get_log_path as get_episode_log_path
 
 if TYPE_CHECKING:
     from agentlab2.episode import EpisodeConfig
@@ -196,6 +197,95 @@ class FileStorage:
 
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
+
+    def load_trajectory_metadata(self, trajectory_id: str) -> Trajectory:
+        """Load only metadata (no steps) for fast experiment listing.
+
+        Returns a Trajectory stub with steps=[] — significantly faster than
+        load_trajectory() since it skips the JSONL file and all LLM call refs.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
+
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
+
+        with open(metadata_path) as f:
+            trajectory_data = json.load(f)
+
+        # TODO: remove legacy format support
+        if "metadata" not in trajectory_data:
+            trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
+
+        trajectory_data["steps"] = []
+        return Trajectory.model_validate(trajectory_data)
+
+    def load_all_trajectory_metadata(self) -> list[Trajectory]:
+        """Load metadata stubs for all trajectories (no steps).
+
+        Much faster than load_all_trajectories() — only reads *.metadata.json files.
+        Each returned Trajectory has steps=[] until select_trajectory() loads it on demand.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return []
+
+        trajectories = []
+        for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
+            trajectory_id = metadata_file.stem.replace(".metadata", "")
+            try:
+                trajectories.append(self.load_trajectory_metadata(trajectory_id))
+            except Exception as e:
+                logger.error(f"Failed to load trajectory metadata {trajectory_id}: {e}")
+
+        return trajectories
+
+    def list_trajectory_ids(self) -> list[str]:
+        """List all non-archived trajectory IDs in the output directory."""
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return []
+        return [
+            f.stem.replace(".metadata", "")
+            for f in traj_dir.glob("*.metadata.json")
+            if ".archived_" not in f.name
+        ]
+
+    def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
+        """List trajectory IDs mapped to their latest file modification time.
+
+        Returns the max mtime across the .metadata.json and .jsonl files for each
+        trajectory — cheap stat() calls only, no file reads. Used for change detection
+        in live polling to avoid reloading trajectories that haven't changed.
+        """
+        traj_dir = self.output_dir / "trajectories"
+        if not traj_dir.exists():
+            return {}
+        result: dict[str, float] = {}
+        for metadata_file in traj_dir.glob("*.metadata.json"):
+            if ".archived_" in metadata_file.name:
+                continue
+            traj_id = metadata_file.stem.replace(".metadata", "")
+            mtime = metadata_file.stat().st_mtime
+            jsonl_path = traj_dir / f"{traj_id}.jsonl"
+            if jsonl_path.exists():
+                mtime = max(mtime, jsonl_path.stat().st_mtime)
+            result[traj_id] = mtime
+        return result
+
+    def get_log_path(self, trajectory_id: str) -> Path:
+        return get_episode_log_path(self.output_dir, trajectory_id)
+
+    def load_logs(self, trajectory_id: str) -> str:
+        log_path = self.get_log_path(trajectory_id)
+        if not log_path.exists():
+            return ""
+        return log_path.read_text()
+
+    def has_logs(self, trajectory_id: str) -> bool:
+        return self.get_log_path(trajectory_id).exists()
 
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.

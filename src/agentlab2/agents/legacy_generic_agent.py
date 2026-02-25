@@ -950,7 +950,7 @@ class GenericAgent(Agent):
             logger.info("Max actions reached, issuing STOP action.")
             return AgentOutput(
                 actions=[Action(id="stop", name=STOP_ACTION.name, arguments={})],
-                thinking="Reached max actions, stopping.",
+                action_rationale="Reached max actions, stopping.",
             )
 
         # Extract observation data (text for history + raw components for shrinkable observation)
@@ -1008,7 +1008,7 @@ class GenericAgent(Agent):
         self._actions_cnt += 1
 
         # Build output
-        return AgentOutput(actions=actions, llm_calls=[llm_call] if llm_call else [], thinking=thoughts)
+        return AgentOutput(actions=actions, llm_calls=[llm_call] if llm_call else [], action_rationale=thoughts)
 
     def _extract_obs_data(self, obs: Observation) -> tuple[str, dict[str, str | None]]:
         """Extract both formatted text and raw components from observation in one pass.

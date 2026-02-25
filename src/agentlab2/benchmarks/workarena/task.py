@@ -24,7 +24,7 @@ class WorkArenaTask(Task):
     """
 
     validate_per_step: bool = True
-    supported_actions = ActionSpace(
+    supported_actions: ActionSpace = ActionSpace(
         BidBrowserActionSpace.browser_press_key,
         BidBrowserActionSpace.browser_type,
         BidBrowserActionSpace.browser_click,
