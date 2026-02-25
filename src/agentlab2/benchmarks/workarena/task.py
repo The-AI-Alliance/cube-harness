@@ -3,9 +3,12 @@
 import logging
 from typing import Any, Callable
 
+from agentlab2.action_spaces.chat_action_space import ChatActionSpace
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
 from agentlab2.tools.browsergym import BrowsergymTool
+from agentlab2.tools.chat import ChatTool
+from agentlab2.tools.toolbox import Toolbox
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +18,7 @@ class WorkArenaTask(Task):
 
     validate_per_step: bool = True
     supported_actions: ActionSpace = ActionSpace(
+        ChatActionSpace.send_message,
         BidBrowserActionSpace.browser_press_key,
         BidBrowserActionSpace.browser_type,
         BidBrowserActionSpace.browser_click,
@@ -33,7 +37,8 @@ class WorkArenaTask(Task):
         BidBrowserActionSpace.browser_focus,
         BidBrowserActionSpace.noop,
     )
-    _tool: BrowsergymTool
+    _browser_tool: BrowsergymTool
+    _chat_tool: ChatTool
 
     def __init__(
         self,
@@ -60,24 +65,26 @@ class WorkArenaTask(Task):
         self._cached_task_info: dict[str, Any] = {}
         self._validation_cached: bool = False
 
-    def setup(self, tool: BrowsergymTool) -> tuple[Observation, dict]:
+
+    def setup(self, tool: Toolbox) -> tuple[Observation, dict]:
         """Set up the WorkArena task with direct task lifecycle management."""
-        self._tool = tool
+        self._browser_tool = tool.find_tool(BrowsergymTool)
+        self._chat_tool = tool.find_tool(ChatTool)
 
         logger.info(f"Setting up WorkArena task {self.id} with seed {self.seed}")
         self._workarena_task = self.workarena_task_class(seed=self.seed)
         self._apply_task_runtime_preferences()
 
         tool.reset()
-        goal, task_info = self._workarena_task.setup(tool.page)
+        goal, task_info = self._workarena_task.setup(self._browser_tool.page)
 
-        logger.info(f"WorkArena page URL after setup: {tool.page.url}")
-        logger.info(f"WorkArena page title: {tool.page.title()}")
+        logger.info(f"WorkArena page URL after setup: {self._browser_tool.page.url}")
+        logger.info(f"WorkArena page title: {self._browser_tool.page.title()}")
         logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
 
         goal_text = self._goal_to_text(goal)
         obs = Observation.from_text(goal_text)
-        obs += tool.page_obs()
+        obs += self._browser_tool.page_obs()
 
         self._validation_cached = False
         self._cached_reward = 0.0
@@ -98,26 +105,26 @@ class WorkArenaTask(Task):
         if self._workarena_task is None:
             return
 
-        updated_config = self._tool.config.model_copy(
+        updated_config = self._browser_tool.config.model_copy(
             update={
-                "viewport": self._tool.config.viewport
-                if self._tool.config.viewport is not None
+                "viewport": self._browser_tool.config.viewport
+                if self._browser_tool.config.viewport is not None
                 else getattr(self._workarena_task, "viewport", None),
-                "slow_mo": self._tool.config.slow_mo
-                if self._tool.config.slow_mo is not None
+                "slow_mo": self._browser_tool.config.slow_mo
+                if self._browser_tool.config.slow_mo is not None
                 else getattr(self._workarena_task, "slow_mo", None),
-                "timeout": self._tool.config.timeout
-                if self._tool.config.timeout is not None
+                "timeout": self._browser_tool.config.timeout
+                if self._browser_tool.config.timeout is not None
                 else getattr(self._workarena_task, "timeout", None),
-                "locale": self._tool.config.locale
-                if self._tool.config.locale is not None
+                "locale": self._browser_tool.config.locale
+                if self._browser_tool.config.locale is not None
                 else getattr(self._workarena_task, "locale", None),
-                "timezone_id": self._tool.config.timezone_id
-                if self._tool.config.timezone_id is not None
+                "timezone_id": self._browser_tool.config.timezone_id
+                if self._browser_tool.config.timezone_id is not None
                 else getattr(self._workarena_task, "timezone_id", None),
             }
         )
-        self._tool.config = updated_config
+        self._browser_tool.config = updated_config
 
     def _goal_to_text(self, goal: Any) -> str:
         if goal is None:
@@ -139,7 +146,7 @@ class WorkArenaTask(Task):
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
 
-        reward, done, _user_message, task_info = self._workarena_task.validate(self._tool.page, [])
+        reward, done, _user_message, task_info = self._workarena_task.validate(self._browser_tool.page, self._chat_tool.messages)
         self._cached_reward = float(reward)
         self._cached_done = bool(done)
         self._cached_task_info = task_info if isinstance(task_info, dict) else {}

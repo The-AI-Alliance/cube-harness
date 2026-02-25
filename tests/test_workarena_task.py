@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from agentlab2.benchmarks.workarena.task import WorkArenaTask
 from agentlab2.core import Observation
 from agentlab2.tools.browsergym import BrowsergymConfig
+from agentlab2.tools.chat import ChatTool
 
 
 class DummyWorkArenaTask:
@@ -22,6 +23,7 @@ class DummyWorkArenaTask:
         self.seed = seed
         self.validate_calls = 0
         self.teardown_calls = 0
+        self.last_chat_messages: list = []
 
     @classmethod
     def get_task_id(cls) -> str:
@@ -33,7 +35,7 @@ class DummyWorkArenaTask:
 
     def validate(self, page: MagicMock, chat_messages: list) -> tuple[float, bool, str, dict]:
         _ = page
-        _ = chat_messages
+        self.last_chat_messages = list(chat_messages)
         self.validate_calls += 1
         return 1.0, True, "", {"task_info_key": "value"}
 
@@ -131,6 +133,27 @@ def test_validate_task_without_finished_calls_validation() -> None:
     assert info["done"] is True
     assert workarena_task._workarena_task is not None
     assert workarena_task._workarena_task.validate_calls == 1
+
+
+def test_validate_task_passes_chat_messages_to_workarena_validate() -> None:
+    workarena_task = WorkArenaTask(
+        id="dummy-task",
+        workarena_task_class=DummyWorkArenaTask,
+        seed=42,
+        level="l1",
+    )
+    tool = _make_tool()
+    workarena_task.setup(tool)
+    workarena_task._chat_tool = ChatTool()
+    workarena_task._chat_tool.send_message("message one")
+    workarena_task._chat_tool.send_message("message two")
+
+    reward, info = workarena_task.validate_task(Observation())
+
+    assert reward == 1.0
+    assert info["done"] is True
+    assert workarena_task._workarena_task is not None
+    assert workarena_task._workarena_task.last_chat_messages == ["message one", "message two"]
 
 
 def test_teardown_calls_underlying_task_teardown() -> None:
