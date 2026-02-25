@@ -6,7 +6,9 @@ from typing import Any, Callable
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
-from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
+from cube.core import ActionSchema, Observation
+
+from agentlab2.core import ActionSpace, Task
 from agentlab2.tools.browsergym import BrowsergymTool
 
 logger = logging.getLogger(__name__)

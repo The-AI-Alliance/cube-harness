@@ -17,16 +17,16 @@ Make `cube-standard` a dependency of `AgentLab2` and remove AL2 classes that are
 | `Action` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `StepError` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `STOP_ACTION` | `cube.task` | ~~defined in `agentlab2.environment`~~ | ✅ |
+| `Content` (+ subclasses) | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ — all call sites use `Content.from_data()` / `to_llm_message()` |
+| `Observation` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
+| `EnvironmentOutput` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ — cube adds `truncated: bool = False` |
 
-All five are now imported from `cube` in AL2. `base.py` has been deleted.
+All are now imported directly from `cube` across all AL2 source and test files. `base.py` has been deleted.
 
 ### ⚠️ Partially Aligned — TODO
 
 | Concept | CUBE | AL2 | Delta |
 | --- | --- | --- | --- |
-| `Content` (+ subclasses) | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ Done — all call sites use `Content.from_data()` / `to_llm_message()` |
-| `Observation` | `cube.core` | defined in `agentlab2.core` | Migrate `Observation` next, then `EnvironmentOutput` follows |
-| `EnvironmentOutput` | has `truncated` field | missing `truncated` | Blocked on `Observation` migration; import from cube once `Observation` is done |
 | `AbstractTool` | no `close()` method | has `close()` | Add `close()` to cube's `AbstractTool`, then import from cube |
 | `ToolConfig` | `make(container=None)` | `make()` | Update `BrowsergymConfig.make()` signature, then import from cube |
 | `tool_action` decorator | `cube.tool` | not present in AL2 | Used when migrating `Tool` and `BrowsergymTool` |
@@ -121,7 +121,7 @@ Same changes as MiniWob apply.
 | `src/agentlab2/tools/browsergym.py` | Use `Content.from_data()` | ✅ Done |
 | `src/agentlab2/tools/playwright.py` | Use `Content.from_data()` | ✅ Done |
 | `src/agentlab2/benchmarks/miniwob/task.py` | Use `Content.from_data()` (obs_postprocess) | ✅ Done |
-| `src/agentlab2/core.py` | Remove `Observation`, `EnvironmentOutput`; import from cube | TODO (after Observation migration) |
+| `src/agentlab2/core.py` | Remove `Observation`, `EnvironmentOutput`; import from cube | ✅ Done |
 | `src/agentlab2/tool.py` | Import `AbstractTool`, `ToolConfig`, `tool_action`, `Tool` from cube; update `make()` sig; add `close()` to cube's `AbstractTool` | TODO |
 | `src/agentlab2/environment.py` | Delete entirely (merged into cube's Task) | TODO (after Task migration) |
 | `src/agentlab2/benchmark.py` | Refactor to cube's ClassVar pattern | TODO |
@@ -131,6 +131,17 @@ Same changes as MiniWob apply.
 | `src/agentlab2/benchmarks/miniwob/benchmark.py` | Migrate to cube Benchmark API; add `MiniWobTaskConfig` | TODO |
 | `src/agentlab2/benchmarks/workarena/task.py` | Migrate to cube Task API | TODO |
 | `src/agentlab2/benchmarks/workarena/benchmark.py` | Migrate to cube Benchmark API; add `WorkArenaTaskConfig` | TODO |
+
+---
+
+## Final Cleanup — Test Migration (after full cube integration)
+
+Once all cube classes have been migrated, review `AgentLab2/tests/` and move any tests that cover cube-owned classes (`Observation`, `EnvironmentOutput`, `Content`, `Action`, `ActionSchema`, `StepError`, `TypedBaseModel`, etc.) to `cube-standard/tests/`. AL2 tests should only cover AL2-specific concepts (`AgentOutput`, `Trajectory`, `Episode`, `Agent`, etc.).
+
+- Audit each test file in `AgentLab2/tests/` for tests on cube classes
+- For each test being ported, check if `cube-standard/tests/` already has coverage for the same behaviour; if there is overlap, pause and ask the user which version to keep before proceeding
+- Port the agreed-upon tests to `cube-standard/tests/` and remove them from AL2
+- Run `make test` in both repos to verify nothing regressed
 
 ---
 

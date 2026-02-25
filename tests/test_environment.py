@@ -2,7 +2,7 @@
 
 import pytest
 
-from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from agentlab2.environment import STOP_ACTION, EnvConfig, Environment
 from agentlab2.tools.toolbox import Toolbox
 from tests.conftest import MockTool

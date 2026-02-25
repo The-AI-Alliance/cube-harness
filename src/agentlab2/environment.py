@@ -3,9 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
 from cube.task import STOP_ACTION
 
-from agentlab2.core import Action, ActionSchema, EnvironmentOutput, Observation, Task
+from agentlab2.core import Task
 from agentlab2.tool import AbstractTool, ToolConfig
 
 

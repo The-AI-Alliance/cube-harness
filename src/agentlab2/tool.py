@@ -5,8 +5,7 @@ from typing import Any, Callable, List
 from typing_extensions import get_protocol_members
 
 from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
-from cube.core import Action, ActionSchema, Content, TypedBaseModel
-from agentlab2.core import Observation
+from cube.core import Action, ActionSchema, Content, Observation, TypedBaseModel
 
 logger = logging.getLogger(__name__)
 

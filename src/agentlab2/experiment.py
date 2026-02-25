@@ -7,7 +7,8 @@ from pydantic import Field
 
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TypedBaseModel
+from cube.core import EnvironmentOutput, TypedBaseModel
+from agentlab2.core import AgentOutput, Trajectory
 from agentlab2.episode import Episode
 from agentlab2.storage import FileStorage
 

@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Self
+from typing import Any, Callable
 
 from pydantic import Field
 
 from agentlab2.llm import LLMCall
-from cube.core import Action, ActionSchema, Content, StepError, TypedBaseModel
+from cube.core import Action, ActionSchema, EnvironmentOutput, Observation, StepError, TypedBaseModel
 
 
 class AgentOutput(TypedBaseModel):
@@ -15,34 +15,6 @@ class AgentOutput(TypedBaseModel):
     def __str__(self) -> str:
         return self.model_dump_json(exclude={"llm_calls"})
 
-
-
-class Observation(TypedBaseModel):
-    """Represents an observation from the environment."""
-
-    contents: list[Content] = Field(default_factory=list)
-
-    @classmethod
-    def from_text(cls, text: str) -> Self:
-        return cls(contents=[Content.from_data(text)])
-
-    def to_llm_messages(self) -> list[dict]:
-        """Convert observation to a list of messages suitable for sending to LLM."""
-        return [content.to_llm_message() for content in self.contents]
-
-    def __add__(self, other: Self) -> Self:
-        self.contents += other.contents
-        return self
-
-
-class EnvironmentOutput(TypedBaseModel):
-    """Represents the result of an environment step."""
-
-    obs: Observation
-    reward: float = 0.0
-    done: bool = False
-    info: dict = Field(default_factory=dict)
-    error: StepError | None = None
 
 
 class TrajectoryStep(TypedBaseModel):

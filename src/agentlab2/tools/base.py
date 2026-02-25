@@ -2,7 +2,7 @@
 
 from typing import Any, Protocol, runtime_checkable
 
-from agentlab2.core import Observation
+from cube.core import Observation
 
 
 @runtime_checkable
