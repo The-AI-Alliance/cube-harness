@@ -1,22 +1,13 @@
 import logging
-from abc import ABC, abstractmethod
 from typing import Any, Callable, List
 
 from typing_extensions import get_protocol_members
 
 from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
-from cube.core import Action, ActionSchema, Content, Observation, TypedBaseModel
+from cube.core import Action, ActionSchema, Content, Observation
 from cube.tool import AbstractTool
 
 logger = logging.getLogger(__name__)
-
-
-class ToolConfig(TypedBaseModel, ABC):
-    """Base class for tool configurations."""
-
-    @abstractmethod
-    def make(self) -> AbstractTool:
-        pass
 
 
 class Tool(AbstractTool):

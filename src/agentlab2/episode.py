@@ -12,7 +12,7 @@ from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.environment import EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage
-from agentlab2.tool import ToolConfig
+from cube.tool import ToolConfig
 
 logger = logging.getLogger(__name__)
 

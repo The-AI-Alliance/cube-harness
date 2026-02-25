@@ -20,7 +20,8 @@ from agentlab2.core import (
 from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
 from agentlab2.llm import LLMConfig, Prompt
-from agentlab2.tool import Tool, ToolConfig
+from cube.tool import ToolConfig
+from agentlab2.tool import Tool
 
 # --- Core fixtures ---
 
