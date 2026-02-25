@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
+from termcolor import colored
 
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.core import Observation
@@ -104,8 +105,11 @@ def main() -> None:
                 logger.info("Agent called final_step — stopping.")
                 done = True
                 break
-            logger.info(f"  Action: {action.name}({action.arguments})")
+            print(colored(f"  Action: {action.name}({action.arguments})", "magenta", attrs=["bold"]))
             result = tool.execute_action(action)
+            for content in result.contents:
+                text = str(content.data)[:200]
+                print(colored(f"  Obs: {text}", "blue"))
             all_obs = all_obs + result
 
         if done:
