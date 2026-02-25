@@ -72,6 +72,7 @@ def main(debug: bool):
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
+        max_steps=15,
     )
 
     # Run experiment
