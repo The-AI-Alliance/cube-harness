@@ -72,7 +72,6 @@ def main() -> None:
         shuffle_seed=42,
         max_turns=15,
         sample_fraction=0.10,
-        use_som=True,  # Annotate screenshots with numbered bounding boxes (Set-of-Marks)
     )
 
     exp = Experiment(

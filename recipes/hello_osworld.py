@@ -65,7 +65,6 @@ def main(debug: bool):
         domain="all",  # or specific: "chrome", "os", "libreoffice"
         shuffle=True,
         max_turns=15,  # Max turns per task (overrides per-task max_turns in config)
-        use_som=True,  # Annotate screenshots with numbered bounding boxes (Set-of-Marks)
     )
 
     exp = Experiment(

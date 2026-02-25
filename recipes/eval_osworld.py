@@ -65,7 +65,7 @@ def main(debug: bool):
     output_dir_base = os.environ.get("OUTPUT_DIR", str(__import__("pathlib").Path.home() / "agentlab_results" / "al2"))
     output_dir = __import__("pathlib").Path(output_dir_base) / f"osworld_eval_{current_datetime}"
 
-    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", "0.10"))
+    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", "1.0"))
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(
@@ -89,7 +89,6 @@ def main(debug: bool):
         shuffle_seed=42,
         max_turns=15,
         sample_fraction=sample_fraction,
-        use_som=True,  # Annotate screenshots with numbered bounding boxes (Set-of-Marks)
     )
 
     exp = Experiment(
@@ -115,9 +114,9 @@ def main(debug: bool):
         print(f"Output directory: {output_dir}")
         print(f"Provider: {tool_config.provider}")
         print(f"Sample fraction: {sample_fraction:.0%} per domain")
-        print(f"Parallelism: 5 workers")
+        print(f"Parallelism: 3 workers")
         print("=" * 60 + "\n")
-        run_with_ray(exp, n_cpus=5)
+        run_with_ray(exp, n_cpus=3)
 
 
 if __name__ == "__main__":
