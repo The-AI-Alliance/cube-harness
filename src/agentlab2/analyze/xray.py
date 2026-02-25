@@ -14,6 +14,7 @@ import html as html_lib
 import json
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from os.path import expanduser
 from pathlib import Path
@@ -25,7 +26,6 @@ from PIL import Image
 from agentlab2.analyze import xray_utils
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
-
 
 # ---------------------------------------------------------------------------
 # State identifiers
@@ -58,40 +58,79 @@ class XRayState:
 
     # Cached list of raw-step indices that are EnvironmentOutputs
     _env_step_indices: list[int] = field(default_factory=list)
-    # Storage instance kept for on-demand full trajectory loading
-    _storage: FileStorage | None = field(default=None, repr=False)
+    # One FileStorage per loaded experiment
+    _storages: list[FileStorage] = field(default_factory=list, repr=False)
+    # Parallel to self.trajectories: _traj_storages[i] is the storage that owns trajectories[i].
+    # Index-based (not traj_id-based) so experiments with overlapping task IDs don't collide.
+    _traj_storages: list[FileStorage] = field(default_factory=list, repr=False)
+    # Names of currently selected experiments (for change-detection in the UI)
+    _selected_exp_names: list[str] = field(default_factory=list, repr=False)
+    # Per-storage disambiguation tag; keyed by id(storage). Non-empty when > 1 experiment loaded.
+    # TODO: Temporary — once experiments can hold multiple agents, identity won't rely on name mangling.
+    _exp_tags: dict[int, str] = field(default_factory=dict, repr=False)
     # Set to True once the background bulk-loading thread has finished
     _bg_loading_done: bool = field(default=True, repr=False)
+    # Incremented on each load_experiments call; background threads check this to self-abort
+    # when superseded by a newer load (prevents stale writes to self.trajectories).
+    _bg_gen: int = field(default=0, repr=False)
     # Agent name derived from experiment_config.json for backwards-compatibility backfill
     _backfill_name: str | None = field(default=None, repr=False)
     # JSON strings for the Config tabs (set on experiment load, None if unavailable)
     _agent_config_json: str | None = field(default=None, repr=False)
     _exp_config_json: str | None = field(default=None, repr=False)
+    # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
+    _completed_ids: set[str] = field(default_factory=set, repr=False)
+    _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
+    # Timestamp of last detected file change — used for stale experiment detection
+    _last_change_time: float = field(default=0.0, repr=False)
 
-    def load_experiment(self, exp_dir: Path) -> bool:
-        """Load trajectory metadata stubs from an experiment directory. Returns True on success.
+    def load_experiments(self, exp_dirs: list[Path]) -> bool:
+        """Load trajectory metadata stubs from one or more experiment directories.
 
-        Only reads *.metadata.json files — steps are loaded lazily when a trajectory is selected.
-        After returning, a background thread is started to load all full trajectories so that
-        stats (steps, tokens, cost) become available without requiring the user to click each seed.
+        Each directory gets its own FileStorage instance. Trajectories from all
+        directories are merged into self.trajectories. The parallel _traj_storages
+        list maps each trajectory to its owning storage by index, avoiding collisions
+        when multiple experiments share identical task/episode IDs.
 
-        For backwards compatibility with trajectories that predate the agent_name metadata field,
-        reads experiment_config.json (if present) to derive the agent name and stores it as
-        _backfill_name so it is applied consistently to every trajectory loaded from disk.
+        Returns True if at least one trajectory was loaded.
         """
-        self._storage = FileStorage(exp_dir)
-        self.trajectories = self._storage.load_all_trajectory_metadata()
-        self._load_experiment_config(exp_dir)
-        for traj in self.trajectories:
-            self._maybe_backfill(traj)
+        # Increment generation FIRST so any running background thread sees the change
+        # immediately and aborts before it can write stale data into our new trajectory list.
+        self._bg_gen += 1
+        self._storages = [FileStorage(d) for d in exp_dirs]
+        self._selected_exp_names = [d.name for d in exp_dirs]
+        self.trajectories = []
+        self._traj_storages = []
+        self._exp_tags = {}
+        self._agent_config_json = None
+        self._exp_config_json = None
+        for exp_dir, storage in zip(exp_dirs, self._storages):
+            trajs = storage.load_all_trajectory_metadata()
+            self._load_experiment_config(exp_dir)
+            if len(exp_dirs) > 1:
+                self._exp_tags[id(storage)] = xray_utils._parse_exp_date(exp_dir)
+            for traj in trajs:
+                self._maybe_backfill(traj)
+                self._apply_exp_tag(traj, storage)
+            self.trajectories.extend(trajs)
+            self._traj_storages.extend([storage] * len(trajs))
         self.selected_agent_key = None
         self.selected_task_id = None
         self.current_trajectory = None
         self.step = 0
         self._env_step_indices = []
+        self._completed_ids = {t.id for t in self.trajectories if t.end_time is not None}
+        self._traj_mtimes = {}
+        for storage in self._storages:
+            self._traj_mtimes.update(storage.list_trajectory_ids_with_mtime())
+        self._last_change_time = time.time()
         self._bg_loading_done = False
         self._start_background_loading()
         return len(self.trajectories) > 0
+
+    def load_experiment(self, exp_dir: Path) -> bool:
+        """Convenience wrapper: load a single experiment directory."""
+        return self.load_experiments([exp_dir])
 
     def _load_experiment_config(self, exp_dir: Path) -> None:
         """Read experiment_config.json and populate config fields.
@@ -124,6 +163,12 @@ class XRayState:
         if self._backfill_name and "agent_name" not in traj.metadata:
             traj.metadata["agent_name"] = self._backfill_name
 
+    def _apply_exp_tag(self, traj: Trajectory, storage: FileStorage) -> None:
+        """Append this storage's disambiguation tag to traj's agent_name, if set."""
+        tag = self._exp_tags.get(id(storage), "")
+        if tag:
+            traj.metadata["agent_name"] = traj.metadata.get("agent_name", "unknown") + f" [{tag}]"
+
     def _start_background_loading(self) -> None:
         """Spawn a daemon thread that loads all trajectory stubs into full trajectories.
 
@@ -137,31 +182,110 @@ class XRayState:
         *.metadata.json file as it runs, making bulk loading unnecessary.
         See: https://github.com/AgentLab2/AgentLab2/issues/TODO
         """
-        if self._storage is None:
+        if not self._storages:
             self._bg_loading_done = True
             return
 
-        storage = self._storage  # capture to avoid closure over mutable self._storage
+        # Capture a snapshot to avoid closure over mutable state
+        my_gen = self._bg_gen  # This thread's generation; abort if superseded
+        # Capture hard references to the owned lists so that load_experiments
+        # reassigning self.trajectories/self._traj_storages never redirects our writes.
+        my_trajs = self.trajectories
+        my_storages = list(self._traj_storages)  # index-parallel snapshot; no traj_id collision
 
         def _load_all() -> None:
-            for i, traj in enumerate(self.trajectories):
+            for i, traj in enumerate(my_trajs):
+                # Abort if a newer load_experiments call has started
+                if self._bg_gen != my_gen:
+                    return
                 # Skip if already fully loaded (e.g. user clicked it first)
                 if traj.steps:
                     continue
+                storage = my_storages[i]
                 try:
                     full = storage.load_trajectory(traj.id)
                     self._maybe_backfill(full)
-                    self.trajectories[i] = full
-                    # Keep current_trajectory in sync if it was this stub
-                    if self.current_trajectory is not None and self.current_trajectory.id == traj.id:
-                        self.current_trajectory = full
-                        self._env_step_indices = self._build_env_indices()
+                    self._apply_exp_tag(full, storage)
+                    if self._bg_gen == my_gen:
+                        my_trajs[i] = full
+                        if self.current_trajectory is not None and self.current_trajectory.id == traj.id:
+                            self.current_trajectory = full
+                            self._env_step_indices = self._build_env_indices()
                 except Exception:
                     pass  # leave stub; table will show "-" for unavailable stats
-            self._bg_loading_done = True
+            if self._bg_gen == my_gen:
+                self._bg_loading_done = True
 
         thread = threading.Thread(target=_load_all, daemon=True)
         thread.start()
+
+    def refresh_experiment(self) -> bool:
+        """Incrementally reload new or changed trajectories from disk. Returns True if anything changed.
+
+        Uses mtime-based change detection: only trajectories whose files have changed since the
+        last check are reloaded. Completed trajectories (end_time set) are skipped entirely.
+        Called on each bg_timer tick while the experiment is still running.
+        """
+        if not self._storages:
+            return False
+        changed = False
+        known_ids = {t.id for t in self.trajectories}
+
+        for storage in self._storages:
+            id_mtimes = storage.list_trajectory_ids_with_mtime()
+            for traj_id, mtime in id_mtimes.items():
+                if traj_id in self._completed_ids:
+                    continue
+                prev_mtime = self._traj_mtimes.get(traj_id, 0.0)
+                if mtime <= prev_mtime and traj_id in known_ids:
+                    continue
+                try:
+                    full = storage.load_trajectory(traj_id)
+                    self._maybe_backfill(full)
+                    self._apply_exp_tag(full, storage)
+                    self._traj_mtimes[traj_id] = mtime
+                    changed = True
+                    # Find the existing slot owned by this storage (avoids ID collision)
+                    idx = next(
+                        (
+                            i
+                            for i, t in enumerate(self.trajectories)
+                            if t.id == traj_id and self._traj_storages[i] is storage
+                        ),
+                        None,
+                    )
+                    if idx is not None:
+                        self.trajectories[idx] = full
+                        self._traj_storages[idx] = storage
+                        if self.current_trajectory is not None and self.current_trajectory.id == traj_id:
+                            self.current_trajectory = full
+                            self._env_step_indices = self._build_env_indices()
+                    else:
+                        self.trajectories.append(full)
+                        self._traj_storages.append(storage)
+                        known_ids.add(traj_id)
+                    if full.end_time is not None:
+                        self._completed_ids.add(traj_id)
+                except Exception:
+                    pass
+        if changed:
+            self._last_change_time = time.time()
+        return changed
+
+    def is_experiment_complete(self) -> bool:
+        """Return True when every known trajectory has finished (end_time is set)."""
+        if not self.trajectories:
+            return False
+        return all(t.end_time is not None for t in self.trajectories)
+
+    def is_experiment_stale(self, timeout_s: float = 1200.0) -> bool:
+        """Return True if no file changes have been detected for timeout_s seconds.
+
+        Used to stop the live-polling timer when an experiment appears to have stalled
+        (e.g., the runner crashed without setting end_time on every trajectory).
+        Default timeout is 20 minutes.
+        """
+        return time.time() - self._last_change_time > timeout_s
 
     def select_agent(self, agent_key: str) -> None:
         """Select an agent; resets task, trajectory, and step."""
@@ -179,8 +303,22 @@ class XRayState:
         self._env_step_indices = []
 
     def select_trajectory(self, traj_id: str) -> None:
-        """Select a trajectory by ID; loads full steps lazily if not yet loaded."""
-        idx = next((i for i, t in enumerate(self.trajectories) if t.id == traj_id), None)
+        """Select a trajectory by ID; loads full steps lazily if not yet loaded.
+
+        When multiple experiments share the same task/episode IDs, prefers the trajectory
+        whose agent_name matches selected_agent_key, falling back to the first match.
+        """
+        # Prefer the slot whose agent matches the current selection (multi-experiment safety)
+        idx = next(
+            (
+                i
+                for i, t in enumerate(self.trajectories)
+                if t.id == traj_id and t.metadata.get("agent_name") == self.selected_agent_key
+            ),
+            None,
+        )
+        if idx is None:
+            idx = next((i for i, t in enumerate(self.trajectories) if t.id == traj_id), None)
         if idx is None:
             self.current_trajectory = None
             self.step = 0
@@ -188,11 +326,14 @@ class XRayState:
             return
         traj = self.trajectories[idx]
         # Stub has steps=[]; load full trajectory on first access and cache it in place
-        if not traj.steps and self._storage is not None:
+        if not traj.steps:
+            storage = self._traj_storages[idx]
             try:
-                traj = self._storage.load_trajectory(traj_id)
+                traj = storage.load_trajectory(traj_id)
                 self._maybe_backfill(traj)
+                self._apply_exp_tag(traj, storage)
                 self.trajectories[idx] = traj
+                self._traj_storages[idx] = storage
             except Exception:
                 pass  # keep stub; renders will show empty state gracefully
         self.current_trajectory = traj
@@ -353,6 +494,21 @@ th {
     margin: 0 !important;
     padding: 0 !important;
 }
+/* Experiments table: hide the "select all" header checkbox */
+#exp_table table thead tr th:first-child input[type="checkbox"] {
+    display: none;
+}
+/* Experiments table: narrow the checkbox column */
+#exp_table table th:first-child,
+#exp_table table td:first-child {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+}
+/* Experiments table: prevent renaming column headers */
+#exp_table table thead th [contenteditable] {
+    pointer-events: none !important;
+}
 """
 
 _FORCE_LIGHT_JS = "() => { document.body.classList.remove('dark'); }"
@@ -367,13 +523,12 @@ function shortcuts(e) {
         case "button":
             return;
         default:
-            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (e.metaKey || e.ctrlKey)) {
+            if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
-                if (e.key === 'ArrowLeft') {
-                    document.getElementById("xray_prev_btn").click();
-                } else {
-                    document.getElementById("xray_next_btn").click();
-                }
+                document.getElementById("xray_prev_btn").click();
+            } else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                document.getElementById("xray_next_btn").click();
             }
     }
 }
@@ -457,9 +612,6 @@ def run_xray(
             gr.Tab(label=f"Seeds ({len(seed_rows)})"),
         )
 
-    def refresh_exp_dir_choices(current_choice: str) -> gr.Dropdown:
-        return gr.Dropdown(choices=xray_utils.get_directory_contents(state.results_dir), value=current_choice)
-
     def _config_jsons() -> tuple[str, str]:
         """Return (agent_config_json, exp_config_json) from current state, with empty fallback."""
         return (
@@ -467,20 +619,20 @@ def run_xray(
             state._exp_config_json or "",
         )
 
-    def on_select_experiment(exp_name: str) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
-        if exp_name in ("Select experiment directory", "") or not exp_name:
-            return "", None, None, None, StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)"), "", ""
-        dir_name = exp_name.split(" (")[0]
-        exp_dir = state.results_dir / dir_name
-        state.load_experiment(exp_dir)
+    def _load_and_build_hierarchy() -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
+        """Build experiment stats + agent/task/seed tables after state.load_experiments().
+
+        Auto-selects the first agent, first task, and first seed when available.
+        Returns the 10-tuple expected by both on_experiments_change and on_bg_load_tick callers.
+        """
         exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
 
         # Auto-select first agent
         if not agent_rows:
-            seed_rows: list[dict[str, Any]] = []
-            task_rows: list[dict[str, Any]] = []
-            tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+            seed_rows_: list[dict[str, Any]] = []
+            task_rows_: list[dict[str, Any]] = []
+            tab_labels = _make_tab_labels(agent_rows, task_rows_, seed_rows_)
             return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels, *_config_jsons()
         first_agent_key = agent_rows[0]["agent_name"]
         state.select_agent(first_agent_key)
@@ -499,17 +651,103 @@ def run_xray(
         seed_rows = xray_utils.build_seed_table(state.trajectories, first_agent_key, first_task_id)
         if not seed_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return exp_stats, agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels, *_config_jsons()
+            return (
+                exp_stats,
+                agent_table_data,
+                task_table_data,
+                _rows_to_table(seed_rows),
+                StepId(),
+                *tab_labels,
+                *_config_jsons(),
+            )
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
 
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels, *_config_jsons()
+        return (
+            exp_stats,
+            agent_table_data,
+            task_table_data,
+            seed_table_data,
+            StepId(step=0),
+            *tab_labels,
+            *_config_jsons(),
+        )
+
+    def on_experiments_change(
+        exp_df: Any,
+    ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
+        """Handle checkbox changes in the Experiments table.
+
+        Extracts selected experiment names, loads them (merging trajectories), and
+        rebuilds the agent/task/seed hierarchy. Returns gr.skip() for all outputs
+        when the selection hasn't actually changed (avoids spurious Gradio events).
+        """
+        _empty = (
+            "",
+            None,
+            None,
+            None,
+            StepId(),
+            gr.Tab(label="Agents (0)"),
+            gr.Tab(label="Tasks (0)"),
+            gr.Tab(label="Seeds (0)"),
+            "",
+            "",
+            gr.Timer(active=False),
+        )
+        if exp_df is None or len(exp_df) == 0:
+            return _empty
+        selected_names = [str(exp_df.iloc[i, 1]) for i in range(len(exp_df)) if exp_df.iloc[i, 0]]
+        if set(selected_names) == set(state._selected_exp_names):
+            return tuple(gr.skip() for _ in range(11))  # type: ignore[return-value]
+        if not selected_names:
+            state._bg_gen += 1
+            state._selected_exp_names = []
+            state.trajectories = []
+            state.selected_agent_key = None
+            return _empty
+        exp_dirs = [state.results_dir / name for name in selected_names]
+        state.load_experiments(exp_dirs)
+        hierarchy = _load_and_build_hierarchy()
+        timer_active = not state._bg_loading_done
+        return (*hierarchy, gr.Timer(active=timer_active))
+
+    def on_archive_selected() -> tuple[Any, str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
+        """Archive all currently selected experiments and reset state."""
+        for name in list(state._selected_exp_names):
+            xray_utils.archive_experiment(state.results_dir, name)
+        state._bg_gen += 1
+        state._selected_exp_names = []
+        state.trajectories = []
+        state.selected_agent_key = None
+        _empty_hierarchy = (
+            "",
+            None,
+            None,
+            None,
+            StepId(),
+            gr.Tab(label="Agents (0)"),
+            gr.Tab(label="Tasks (0)"),
+            gr.Tab(label="Seeds (0)"),
+            "",
+            "",
+            gr.Timer(active=False),
+        )
+        return (_exp_table_value(), *_empty_hierarchy)
 
     def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
-        if agent_df is None or len(agent_df) == 0:
-            return [], [], [], StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
+        if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
+            return (
+                [],
+                [],
+                [],
+                StepId(),
+                gr.Tab(label="Agents (0)"),
+                gr.Tab(label="Tasks (0)"),
+                gr.Tab(label="Seeds (0)"),
+            )
         row = evt.index[0]
         # Strip HTML tags to get the raw key value
         agent_key = re.sub(r"<[^>]+>", "", str(agent_df.iloc[row, 0]))
@@ -535,7 +773,7 @@ def run_xray(
         return agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
 
     def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
-        if task_df is None or len(task_df) == 0:
+        if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
             return [], [], StepId(), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
         task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 0]))
@@ -555,10 +793,10 @@ def run_xray(
         return task_table_data, seed_table_data, StepId(step=0), seeds_tab_update
 
     def on_select_seed(evt: gr.SelectData, seed_df: Any) -> tuple[Any, StepId]:
-        if seed_df is None or len(seed_df) == 0:
+        if evt is None or evt.index is None or seed_df is None or len(seed_df) == 0:
             return [], StepId(step=0)
         row = evt.index[0]
-        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 0]))
+        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 1]))  # col 0 is status emoji
         state.select_trajectory(traj_id)
         if state.selected_agent_key is None or state.selected_task_id is None:
             return [], StepId(step=0)
@@ -566,13 +804,18 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
         return seed_table_data, StepId(step=0)
 
-    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
-        """Periodic refresh handler called by gr.Timer while background loading is in progress.
+    def on_bg_load_tick() -> tuple[Any, Any, Any, Any, str, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
+        """Periodic refresh handler: bulk-loads stubs, then live-polls for new/changed trajectories.
 
-        Rebuilds hierarchy tables and experiment stats from the current (partially-loaded)
-        state.trajectories list.  When loading finishes, returns an active=False timer update
-        to stop further polling.
+        Two phases share a single timer:
+        1. While _bg_loading_done is False: background thread is still bulk-loading stubs.
+        2. Once _bg_loading_done is True: calls refresh_experiment() to pick up new or
+           changed trajectory files written by a running experiment. Timer deactivates only
+           when is_experiment_complete() returns True (all trajectories have end_time set).
         """
+        if state._bg_loading_done:
+            state.refresh_experiment()
+
         exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
         agent_key = state.selected_agent_key
@@ -584,16 +827,40 @@ def run_xray(
         task_table_data = _rows_to_table(task_rows, task_key, "task_id")
 
         seed_rows = (
-            xray_utils.build_seed_table(state.trajectories, active_agent, task_key)
-            if active_agent and task_key
-            else []
+            xray_utils.build_seed_table(state.trajectories, active_agent, task_key) if active_agent and task_key else []
         )
         traj_id = state.current_trajectory.id if state.current_trajectory else None
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
-        timer_update = gr.Timer(active=not state._bg_loading_done)
+        n_total = len(state.trajectories)
+        # Use end_time directly (not _completed_ids) to avoid undercounting when multiple
+        # experiments share the same task/episode IDs (the set deduplicates colliding IDs).
+        n_completed = sum(1 for t in state.trajectories if t.end_time is not None)
+        n_running = sum(1 for t in state.trajectories if t.end_time is None)
+        # Per-agent breakdown (shown when > 1 agent loaded, e.g. multi-experiment)
+        agent_names = sorted({t.metadata.get("agent_name", "unknown") for t in state.trajectories})
+        per_agent: list[tuple[str, int, int, int]] | None = None
+        if len(agent_names) > 1:
+            per_agent = []
+            for aname in agent_names:
+                atrajs = [t for t in state.trajectories if t.metadata.get("agent_name", "unknown") == aname]
+                per_agent.append(
+                    (
+                        aname,
+                        sum(1 for t in atrajs if t.end_time is not None),
+                        len(atrajs),
+                        sum(1 for t in atrajs if t.end_time is None),
+                    )
+                )
+        progress_html = xray_utils.build_progress_html(
+            n_completed, n_total, n_running, per_agent, state._selected_exp_names or None
+        )
+
+        experiment_done = state.is_experiment_complete() or state.is_experiment_stale()
+        still_active = not state._bg_loading_done or not experiment_done
+        timer_update = gr.Timer(active=still_active)
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, timer_update, *tab_labels
+        return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
 
     def navigate_prev(step_id: StepId) -> StepId:
         step = max(0, step_id.step - 1)
@@ -636,12 +903,8 @@ def run_xray(
                     done = traj_step.output.done
                     break
         reward_emoji = "✅" if reward > 0 and done else "❌" if done else "⏳"
-        return header + f" │ {reward_emoji} Reward: {reward:.2f}"
-
-    def get_step_counter() -> str:
-        if not state.current_trajectory:
-            return "Step 0/0"
-        return f"Step {state.step + 1}/{state.total_ui_steps()}"
+        step_info = f"Step {state.step + 1}/{state.total_ui_steps()}"
+        return header + f" │ {reward_emoji} Reward: {reward:.2f} │ {step_info}"
 
     def update_timeline() -> str:
         return xray_utils.generate_timeline_html(state.current_trajectory, state.step)
@@ -650,17 +913,10 @@ def run_xray(
         if not state.current_trajectory:
             return ""
         stats = xray_utils.compute_trajectory_stats(state.current_trajectory)
-        n_env = stats["n_env_steps"]
-        n_agent = stats["n_agent_steps"]
-        total_actions = stats["total_actions"]
-        total_llm_calls = stats["total_llm_calls"]
 
-        line1 = (
-            f"🌍 Env Steps: **{n_env}** │ 🤖 Agent Steps: **{n_agent}**"
-            f" │ ⚡ Actions: **{total_actions}** │ 💬 LLM Calls: **{total_llm_calls}**"
-        )
+        parts: list[str] = []
         if stats["duration"] is not None:
-            line1 += f" │ ⏱️ **{xray_utils.format_duration(stats['duration'])}**"
+            parts.append(f"⏱️ **{xray_utils.format_duration(stats['duration'])}**")
 
         prompt_tokens = int(stats["prompt_tokens"])
         completion_tokens = int(stats["completion_tokens"])
@@ -669,19 +925,18 @@ def run_xray(
         cost = float(stats["cost"])
 
         if prompt_tokens > 0:
-            token_parts = [f"📊 prompt: **{prompt_tokens:,}**"]
-            token_parts.append(f"completion: **{completion_tokens:,}**")
-            token_parts.append(f"total: **{prompt_tokens + completion_tokens:,}**")
+            parts.append(f"📊 prompt: **{prompt_tokens:,}**")
+            parts.append(f"completion: **{completion_tokens:,}**")
+            parts.append(f"total: **{prompt_tokens + completion_tokens:,}**")
             if cached_tokens > 0:
                 cache_pct = cached_tokens / prompt_tokens * 100
-                token_parts.append(f"cached: **{cached_tokens:,}** ({cache_pct:.0f}%)")
+                parts.append(f"cached: **{cached_tokens:,}** ({cache_pct:.0f}%)")
             if cache_creation_tokens > 0:
-                token_parts.append(f"cache_created: **{cache_creation_tokens:,}**")
-            if cost > 0:
-                token_parts.append(f"💰 **${cost:.4f}**")
-            return line1 + "\n\n" + " │ ".join(token_parts)
+                parts.append(f"cache_created: **{cache_creation_tokens:,}**")
+        if cost > 0:
+            parts.append(f"💰 **${cost:.4f}**")
 
-        return line1
+        return " │ ".join(parts)
 
     def get_task_goal() -> str:
         """Return the task goal as a rendered HTML panel."""
@@ -707,12 +962,6 @@ def run_xray(
             prev_img = xray_utils.get_screenshot_from_step(prev_ts.output)
         return current_img, prev_img
 
-    def _render_gallery() -> list[tuple[Image.Image, str]]:
-        if not state.current_trajectory:
-            return []
-        screenshots = xray_utils.get_all_screenshots(state.current_trajectory)
-        return [(img, f"Step {i + 1}") for i, img in screenshots]
-
     def _render_step_details() -> str:
         env_out = state.get_env_output()
         agent_out = state.get_agent_output()
@@ -729,12 +978,25 @@ def run_xray(
             return "No AXTree content found in this step."
         return content
 
-    def _render_chat() -> str:
+    _MAX_EXTRA_CHAT_BRANCHES = 3
+
+    def _render_chat() -> tuple:
         agent_out = state.get_agent_output()
-        result = xray_utils.get_chat_messages_markdown(agent_out)
-        if not result:
-            return "No agent action follows this observation (terminal step)."
-        return result
+        items = list(xray_utils.get_chat_branches(agent_out).items())
+
+        main_html = items[0][1] if items else "<em>No agent action follows this observation (terminal step).</em>"
+        extra_items = items[1:]
+
+        results: list = [main_html]
+        for i in range(_MAX_EXTRA_CHAT_BRANCHES):
+            if i < len(extra_items):
+                name, html = extra_items[i]
+                results.append(gr.Tab(label=name.capitalize(), visible=True))
+                results.append(html)
+            else:
+                results.append(gr.Tab(visible=False))
+                results.append("")
+        return tuple(results)
 
     def _render_error() -> str:
         env_out = state.get_env_output()
@@ -775,9 +1037,6 @@ def run_xray(
     def _activate_screenshots() -> str:
         return "Screenshots"
 
-    def _activate_gallery() -> str:
-        return "Screenshot Gallery"
-
     def _activate_step_details() -> str:
         return "Step Details"
 
@@ -801,66 +1060,70 @@ def run_xray(
     # ------------------------------------------------------------------
 
     with gr.Blocks(theme=gr.themes.Soft(), css=_CSS, head=_SHORTCUT_JS, js=_FORCE_LIGHT_JS) as demo:  # type: ignore[attr-defined]
-        active_tab = gr.State(value="Screenshots")
+        active_tab = gr.State(value="Chat Messages")
         step_id = gr.State(value=StepId())
 
-        with gr.Accordion("Help", open=False):
-            gr.Markdown(
-                """\
-# AgentLab2 XRay
+        with gr.Tabs():
+            with gr.Tab("Help"):
+                gr.Markdown(
+                    """\
+## AgentLab2 XRay
 
-1. **Select experiment directory** from the dropdown.
+1. **Select experiments** in the Experiments tab (check one or more rows).
 2. **Hierarchy**: click Agents → Tasks → Seeds to drill into a specific episode.
-3. **Navigate steps** using Prev/Next buttons or Ctrl/Cmd + Arrow keys.
+3. **Navigate steps** using Prev/Next buttons or ← → arrow keys.
 4. Each **step** shows the environment observation and the agent action that follows it.
 5. **Tabs** below update lazily — only the active tab renders on step change.
 """
-            )
+                )
+            with gr.Tab("Experiments"):
+                with gr.Row():
+                    exp_refresh_btn = gr.Button("↺ Refresh", scale=0, size="sm")
+                    exp_archive_btn = gr.Button("🗃 Archive selected", scale=0, size="sm", variant="secondary")
+                exp_table = gr.DataFrame(
+                    headers=["☑", "experiment", "date", "n_trajs"],
+                    datatype=["bool", "str", "str", "number"],
+                    col_count=(4, "fixed"),
+                    interactive=True,
+                    static_columns=[1, 2, 3],
+                    max_height=260,
+                    show_label=False,
+                    elem_id="exp_table",
+                )
+            with gr.Tab("Dashboard"):
+                progress_bar = gr.HTML("")
+                experiment_stats = gr.Markdown("")
+            with gr.Tab("Agents") as agents_tab:
+                agent_table = gr.DataFrame(
+                    headers=["agent_name", "n_tasks", "n_trajs", "avg_reward", "total_cost"],
+                    datatype="html",
+                    max_height=260,
+                    show_label=False,
+                    interactive=False,
+                )
+            with gr.Tab("Tasks") as tasks_tab:
+                task_table = gr.DataFrame(
+                    headers=["task_id", "n_seeds", "avg_reward", "avg_steps", "avg_duration", "avg_tokens", "avg_cost"],
+                    datatype="html",
+                    max_height=260,
+                    show_label=False,
+                    interactive=False,
+                )
+            with gr.Tab("Seeds") as seeds_tab:
+                seed_table = gr.DataFrame(
+                    headers=["status", "traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
+                    datatype="html",
+                    max_height=260,
+                    show_label=False,
+                    interactive=False,
+                )
+            with gr.Tab("Agent Config"):
+                agent_config_code = gr.Code(language="json", show_label=False)
+            with gr.Tab("Exp Config"):
+                exp_config_code = gr.Code(language="json", show_label=False)
 
-        with gr.Row():
-            exp_dir_choice = gr.Dropdown(
-                choices=xray_utils.get_directory_contents(results_dir),
-                value="Select experiment directory",
-                label="Experiment Directory",
-                show_label=False,
-                scale=6,
-            )
-            refresh_button = gr.Button("↺ Refresh", scale=0, size="sm")
-
-        with gr.Accordion("📂 Trajectory Hierarchy", open=True):
-            with gr.Tabs():
-                with gr.Tab("Agents") as agents_tab:
-                    agent_table = gr.DataFrame(
-                        headers=["agent_name", "n_tasks", "n_trajs", "avg_reward", "total_cost"],
-                        datatype="html",
-                        max_height=260,
-                        show_label=False,
-                        interactive=False,
-                    )
-                with gr.Tab("Tasks") as tasks_tab:
-                    task_table = gr.DataFrame(
-                        headers=["task_id", "n_seeds", "avg_reward", "avg_steps", "avg_duration", "avg_tokens", "avg_cost"],
-                        datatype="html",
-                        max_height=260,
-                        show_label=False,
-                        interactive=False,
-                    )
-                with gr.Tab("Seeds") as seeds_tab:
-                    seed_table = gr.DataFrame(
-                        headers=["traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
-                        datatype="html",
-                        max_height=260,
-                        show_label=False,
-                        interactive=False,
-                    )
-                with gr.Tab("Agent Config"):
-                    agent_config_code = gr.Code(language="json", show_label=False)
-                with gr.Tab("Exp Config"):
-                    exp_config_code = gr.Code(language="json", show_label=False)
-            experiment_stats = gr.Markdown("")
-
-        # Background-loading timer: ticks every 1s to refresh tables while stubs are being loaded.
-        # Starts inactive; activated when an experiment is selected, deactivated when loading ends.
+        # Timer: ticks every 1s to bulk-load stubs and then live-poll for new/changed trajectories.
+        # Starts inactive; activated on experiment select; deactivates when experiment is complete.
         bg_timer = gr.Timer(value=1.0, active=False)
 
         with gr.Row(variant="panel", elem_classes="compact-header"):
@@ -870,14 +1133,12 @@ def run_xray(
                 stats_display = gr.Markdown("")
 
         with gr.Row():
-            with gr.Column(scale=0, min_width=90):
-                prev_btn = gr.Button("◀ Prev", size="sm", elem_id="xray_prev_btn", min_width=80)
-            with gr.Column(scale=0, min_width=110):
-                step_counter = gr.Markdown("Step 0/0")
+            with gr.Column(scale=0, min_width=40):
+                prev_btn = gr.Button("◀", size="sm", elem_id="xray_prev_btn", min_width=36)
             with gr.Column(scale=1):
                 timeline_html = gr.HTML(label="Timeline")
-            with gr.Column(scale=0, min_width=90):
-                next_btn = gr.Button("Next ▶", size="sm", elem_id="xray_next_btn", min_width=80)
+            with gr.Column(scale=0, min_width=40):
+                next_btn = gr.Button("▶", size="sm", elem_id="xray_next_btn", min_width=36)
 
         with gr.Row(visible=True, elem_id="timeline_click_input"):
             timeline_click_input = gr.Number(show_label=False, container=False)
@@ -890,6 +1151,17 @@ def run_xray(
                 agent_action_md = gr.HTML(value="")
 
         with gr.Tabs() as main_tabs:
+            with gr.Tab("Chat Messages") as chat_tab:
+                with gr.Tabs():
+                    with gr.Tab("Main"):
+                        chat_act_md = gr.HTML()
+                    with gr.Tab("Branch 1", visible=False) as chat_branch_tab_1:
+                        chat_branch_md_1 = gr.HTML()
+                    with gr.Tab("Branch 2", visible=False) as chat_branch_tab_2:
+                        chat_branch_md_2 = gr.HTML()
+                    with gr.Tab("Branch 3", visible=False) as chat_branch_tab_3:
+                        chat_branch_md_3 = gr.HTML()
+
             with gr.Tab("Screenshots") as screenshots_tab:
                 screenshot = gr.Image(
                     label="Current Screenshot",
@@ -906,15 +1178,6 @@ def run_xray(
                         height=400,
                     )
 
-            with gr.Tab("Screenshot Gallery") as gallery_tab:
-                screenshot_gallery = gr.Gallery(
-                    columns=2,
-                    show_download_button=False,
-                    show_label=False,
-                    object_fit="contain",
-                    preview=True,
-                )
-
             with gr.Tab("Step Details") as step_details_tab:
                 step_details = gr.Markdown(
                     value="Select a trajectory to view step details",
@@ -923,9 +1186,6 @@ def run_xray(
 
             with gr.Tab("AXTree") as axtree_tab:
                 axtree_code = gr.Code(language=None, show_label=False, max_lines=40)
-
-            with gr.Tab("Chat Messages") as chat_tab:
-                chat_md = gr.Markdown()
 
             with gr.Tab("Task Error") as error_tab:
                 error_md = gr.Markdown()
@@ -946,26 +1206,41 @@ def run_xray(
         # Event wiring
         # ------------------------------------------------------------------
 
-        refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
+        def _exp_table_value() -> list[list[Any]]:
+            rows = xray_utils.get_experiments_table_rows(state.results_dir)
+            return [[r["selected"], r["experiment"], r["date"], r["n_trajs"]] for r in rows]
 
-        def on_select_experiment_with_timer(
-            exp_name: str,
-        ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
-            """Wrap on_select_experiment to also activate the background-loading timer."""
-            result = on_select_experiment(exp_name)
-            # Activate timer only if background loading was actually started (trajectories exist)
-            timer_active = not state._bg_loading_done
-            return (*result, gr.Timer(active=timer_active))
+        _hierarchy_outputs = [
+            experiment_stats,
+            agent_table,
+            task_table,
+            seed_table,
+            step_id,
+            agents_tab,
+            tasks_tab,
+            seeds_tab,
+            agent_config_code,
+            exp_config_code,
+            bg_timer,
+        ]
 
-        exp_dir_choice.change(
-            fn=on_select_experiment_with_timer,
-            inputs=exp_dir_choice,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, agent_config_code, exp_config_code, bg_timer],
-        )
+        exp_table.change(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
+        exp_refresh_btn.click(fn=_exp_table_value, outputs=exp_table)
+        exp_archive_btn.click(fn=on_archive_selected, outputs=[exp_table, *_hierarchy_outputs])
 
         bg_timer.tick(
             fn=on_bg_load_tick,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, bg_timer, agents_tab, tasks_tab, seeds_tab],
+            outputs=[
+                experiment_stats,
+                agent_table,
+                task_table,
+                seed_table,
+                progress_bar,
+                bg_timer,
+                agents_tab,
+                tasks_tab,
+                seeds_tab,
+            ],
         )
 
         agent_table.select(
@@ -985,7 +1260,6 @@ def run_xray(
 
         # Always-rendered on step change
         step_id.change(fn=get_compact_header_info, outputs=header_info)
-        step_id.change(fn=get_step_counter, outputs=step_counter)
         step_id.change(fn=update_timeline, outputs=timeline_html)
         step_id.change(fn=update_trajectory_stats, outputs=stats_display)
         step_id.change(fn=get_task_goal, outputs=task_goal_md)
@@ -998,11 +1272,6 @@ def run_xray(
             outputs=[screenshot, prev_screenshot],
         )
         step_id.change(
-            fn=if_active("Screenshot Gallery")(_render_gallery),
-            inputs=[active_tab, step_id],
-            outputs=screenshot_gallery,
-        )
-        step_id.change(
             fn=if_active("Step Details")(_render_step_details),
             inputs=[active_tab, step_id],
             outputs=step_details,
@@ -1012,10 +1281,19 @@ def run_xray(
             inputs=[active_tab, step_id],
             outputs=axtree_code,
         )
+        _chat_outputs = [
+            chat_act_md,
+            chat_branch_tab_1,
+            chat_branch_md_1,
+            chat_branch_tab_2,
+            chat_branch_md_2,
+            chat_branch_tab_3,
+            chat_branch_md_3,
+        ]
         step_id.change(
-            fn=if_active("Chat Messages")(_render_chat),
+            fn=if_active("Chat Messages", 7)(_render_chat),
             inputs=[active_tab, step_id],
-            outputs=chat_md,
+            outputs=_chat_outputs,
         )
         step_id.change(
             fn=if_active("Task Error")(_render_error),
@@ -1038,9 +1316,6 @@ def run_xray(
         screenshots_tab.select(fn=_activate_screenshots, outputs=active_tab)
         screenshots_tab.select(fn=_render_screenshots, outputs=[screenshot, prev_screenshot])
 
-        gallery_tab.select(fn=_activate_gallery, outputs=active_tab)
-        gallery_tab.select(fn=_render_gallery, outputs=screenshot_gallery)
-
         step_details_tab.select(fn=_activate_step_details, outputs=active_tab)
         step_details_tab.select(fn=_render_step_details, outputs=step_details)
 
@@ -1048,7 +1323,7 @@ def run_xray(
         axtree_tab.select(fn=_render_axtree, outputs=axtree_code)
 
         chat_tab.select(fn=_activate_chat, outputs=active_tab)
-        chat_tab.select(fn=_render_chat, outputs=chat_md)
+        chat_tab.select(fn=_render_chat, outputs=_chat_outputs)
 
         error_tab.select(fn=_activate_error, outputs=active_tab)
         error_tab.select(fn=_render_error, outputs=error_md)
@@ -1059,8 +1334,8 @@ def run_xray(
         debug_tab.select(fn=_activate_debug, outputs=active_tab)
         debug_tab.select(fn=_render_debug, outputs=[raw_json, llm_calls_code, llm_tools_code])
 
-        # Initial dropdown refresh on page load
-        demo.load(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
+        # Populate experiment table on page load
+        demo.load(fn=_exp_table_value, outputs=exp_table)
 
     demo.queue()
     demo.launch(server_port=port, share=share, debug=debug)
