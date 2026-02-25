@@ -1150,7 +1150,7 @@ def run_xray(
             with gr.Column(scale=3):
                 agent_action_md = gr.HTML(value="")
 
-        with gr.Tabs() as main_tabs:
+        with gr.Tabs():
             with gr.Tab("Chat Messages") as chat_tab:
                 with gr.Tabs():
                     with gr.Tab("Main"):
