@@ -27,7 +27,6 @@ from agentlab2.analyze import xray_utils
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
 
-
 # ---------------------------------------------------------------------------
 # State identifiers
 # ---------------------------------------------------------------------------
@@ -248,7 +247,11 @@ class XRayState:
                     changed = True
                     # Find the existing slot owned by this storage (avoids ID collision)
                     idx = next(
-                        (i for i, t in enumerate(self.trajectories) if t.id == traj_id and self._traj_storages[i] is storage),
+                        (
+                            i
+                            for i, t in enumerate(self.trajectories)
+                            if t.id == traj_id and self._traj_storages[i] is storage
+                        ),
                         None,
                     )
                     if idx is not None:
@@ -307,8 +310,11 @@ class XRayState:
         """
         # Prefer the slot whose agent matches the current selection (multi-experiment safety)
         idx = next(
-            (i for i, t in enumerate(self.trajectories)
-             if t.id == traj_id and t.metadata.get("agent_name") == self.selected_agent_key),
+            (
+                i
+                for i, t in enumerate(self.trajectories)
+                if t.id == traj_id and t.metadata.get("agent_name") == self.selected_agent_key
+            ),
             None,
         )
         if idx is None:
@@ -645,15 +651,33 @@ def run_xray(
         seed_rows = xray_utils.build_seed_table(state.trajectories, first_agent_key, first_task_id)
         if not seed_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return exp_stats, agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels, *_config_jsons()
+            return (
+                exp_stats,
+                agent_table_data,
+                task_table_data,
+                _rows_to_table(seed_rows),
+                StepId(),
+                *tab_labels,
+                *_config_jsons(),
+            )
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
 
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels, *_config_jsons()
+        return (
+            exp_stats,
+            agent_table_data,
+            task_table_data,
+            seed_table_data,
+            StepId(step=0),
+            *tab_labels,
+            *_config_jsons(),
+        )
 
-    def on_experiments_change(exp_df: Any) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
+    def on_experiments_change(
+        exp_df: Any,
+    ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
         """Handle checkbox changes in the Experiments table.
 
         Extracts selected experiment names, loads them (merging trajectories), and
@@ -661,17 +685,21 @@ def run_xray(
         when the selection hasn't actually changed (avoids spurious Gradio events).
         """
         _empty = (
-            "", None, None, None, StepId(),
-            gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)"),
-            "", "", gr.Timer(active=False),
+            "",
+            None,
+            None,
+            None,
+            StepId(),
+            gr.Tab(label="Agents (0)"),
+            gr.Tab(label="Tasks (0)"),
+            gr.Tab(label="Seeds (0)"),
+            "",
+            "",
+            gr.Timer(active=False),
         )
         if exp_df is None or len(exp_df) == 0:
             return _empty
-        selected_names = [
-            str(exp_df.iloc[i, 1])
-            for i in range(len(exp_df))
-            if exp_df.iloc[i, 0]
-        ]
+        selected_names = [str(exp_df.iloc[i, 1]) for i in range(len(exp_df)) if exp_df.iloc[i, 0]]
         if set(selected_names) == set(state._selected_exp_names):
             return tuple(gr.skip() for _ in range(11))  # type: ignore[return-value]
         if not selected_names:
@@ -695,15 +723,31 @@ def run_xray(
         state.trajectories = []
         state.selected_agent_key = None
         _empty_hierarchy = (
-            "", None, None, None, StepId(),
-            gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)"),
-            "", "", gr.Timer(active=False),
+            "",
+            None,
+            None,
+            None,
+            StepId(),
+            gr.Tab(label="Agents (0)"),
+            gr.Tab(label="Tasks (0)"),
+            gr.Tab(label="Seeds (0)"),
+            "",
+            "",
+            gr.Timer(active=False),
         )
         return (_exp_table_value(), *_empty_hierarchy)
 
     def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
         if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
-            return [], [], [], StepId(), gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)")
+            return (
+                [],
+                [],
+                [],
+                StepId(),
+                gr.Tab(label="Agents (0)"),
+                gr.Tab(label="Tasks (0)"),
+                gr.Tab(label="Seeds (0)"),
+            )
         row = evt.index[0]
         # Strip HTML tags to get the raw key value
         agent_key = re.sub(r"<[^>]+>", "", str(agent_df.iloc[row, 0]))
@@ -783,9 +827,7 @@ def run_xray(
         task_table_data = _rows_to_table(task_rows, task_key, "task_id")
 
         seed_rows = (
-            xray_utils.build_seed_table(state.trajectories, active_agent, task_key)
-            if active_agent and task_key
-            else []
+            xray_utils.build_seed_table(state.trajectories, active_agent, task_key) if active_agent and task_key else []
         )
         traj_id = state.current_trajectory.id if state.current_trajectory else None
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
@@ -802,8 +844,17 @@ def run_xray(
             per_agent = []
             for aname in agent_names:
                 atrajs = [t for t in state.trajectories if t.metadata.get("agent_name", "unknown") == aname]
-                per_agent.append((aname, sum(1 for t in atrajs if t.end_time is not None), len(atrajs), sum(1 for t in atrajs if t.end_time is None)))
-        progress_html = xray_utils.build_progress_html(n_completed, n_total, n_running, per_agent, state._selected_exp_names or None)
+                per_agent.append(
+                    (
+                        aname,
+                        sum(1 for t in atrajs if t.end_time is not None),
+                        len(atrajs),
+                        sum(1 for t in atrajs if t.end_time is None),
+                    )
+                )
+        progress_html = xray_utils.build_progress_html(
+            n_completed, n_total, n_running, per_agent, state._selected_exp_names or None
+        )
 
         experiment_done = state.is_experiment_complete() or state.is_experiment_stale()
         still_active = not state._bg_loading_done or not experiment_done
@@ -1159,7 +1210,19 @@ def run_xray(
             rows = xray_utils.get_experiments_table_rows(state.results_dir)
             return [[r["selected"], r["experiment"], r["date"], r["n_trajs"]] for r in rows]
 
-        _hierarchy_outputs = [experiment_stats, agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, agent_config_code, exp_config_code, bg_timer]
+        _hierarchy_outputs = [
+            experiment_stats,
+            agent_table,
+            task_table,
+            seed_table,
+            step_id,
+            agents_tab,
+            tasks_tab,
+            seeds_tab,
+            agent_config_code,
+            exp_config_code,
+            bg_timer,
+        ]
 
         exp_table.change(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
         exp_refresh_btn.click(fn=_exp_table_value, outputs=exp_table)
@@ -1167,7 +1230,17 @@ def run_xray(
 
         bg_timer.tick(
             fn=on_bg_load_tick,
-            outputs=[experiment_stats, agent_table, task_table, seed_table, progress_bar, bg_timer, agents_tab, tasks_tab, seeds_tab],
+            outputs=[
+                experiment_stats,
+                agent_table,
+                task_table,
+                seed_table,
+                progress_bar,
+                bg_timer,
+                agents_tab,
+                tasks_tab,
+                seeds_tab,
+            ],
         )
 
         agent_table.select(
@@ -1208,7 +1281,15 @@ def run_xray(
             inputs=[active_tab, step_id],
             outputs=axtree_code,
         )
-        _chat_outputs = [chat_act_md, chat_branch_tab_1, chat_branch_md_1, chat_branch_tab_2, chat_branch_md_2, chat_branch_tab_3, chat_branch_md_3]
+        _chat_outputs = [
+            chat_act_md,
+            chat_branch_tab_1,
+            chat_branch_md_1,
+            chat_branch_tab_2,
+            chat_branch_md_2,
+            chat_branch_tab_3,
+            chat_branch_md_3,
+        ]
         step_id.change(
             fn=if_active("Chat Messages", 7)(_render_chat),
             inputs=[active_tab, step_id],

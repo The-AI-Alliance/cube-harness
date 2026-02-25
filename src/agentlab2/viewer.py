@@ -442,7 +442,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         row = evt.index[0]
         traj_name = traj_table.iloc[row, 0]
         state.select_trajectory(traj_name)
-        return TrajectoryId(exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name)
+        return TrajectoryId(
+            exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name
+        )
 
     def new_trajectory(traj_id: TrajectoryId | None) -> StepId:
         """Handle new trajectory selection."""

@@ -1,6 +1,5 @@
 """Tests for agentlab2.analyze.xray_utils module."""
 
-import json
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,6 @@ from agentlab2.core import (
     TrajectoryStep,
 )
 from agentlab2.llm import LLMCall, LLMConfig, Message, Prompt, Usage
-
 
 # ---------------------------------------------------------------------------
 # Additional fixtures (complement conftest.py)
@@ -300,8 +298,16 @@ class TestGetChatBranches:
     def test_multiple_calls_get_separate_tabs(self) -> None:
         config = LLMConfig(model_name="gpt-test")
         prompt = Prompt(messages=[{"role": "user", "content": "x"}], tools=[])
-        call1 = LLMCall(tag="act", llm_config=config, prompt=prompt, output=Message(role="assistant", content="a"), usage=Usage())
-        call2 = LLMCall(tag="summary", llm_config=config, prompt=prompt, output=Message(role="assistant", content="s"), usage=Usage())
+        call1 = LLMCall(
+            tag="act", llm_config=config, prompt=prompt, output=Message(role="assistant", content="a"), usage=Usage()
+        )
+        call2 = LLMCall(
+            tag="summary",
+            llm_config=config,
+            prompt=prompt,
+            output=Message(role="assistant", content="s"),
+            usage=Usage(),
+        )
         step = AgentOutput(llm_calls=[call1, call2])
         assert list(xray_utils.get_chat_branches(step).keys()) == ["act", "summary"]
 
@@ -326,7 +332,11 @@ class TestGetChatBranches:
         sample_llm_call.output = Message(
             role="assistant",
             content=None,
-            tool_calls=[ChatCompletionMessageToolCall(id="tc1", function=Function(name="browser_click", arguments='{"bid": "42"}'), type="function")],
+            tool_calls=[
+                ChatCompletionMessageToolCall(
+                    id="tc1", function=Function(name="browser_click", arguments='{"bid": "42"}'), type="function"
+                )
+            ],
         )
         step = AgentOutput(llm_calls=[sample_llm_call])
         html = xray_utils.get_chat_branches(step)[sample_llm_call.tag]
@@ -485,7 +495,9 @@ class TestComputeExperimentStats:
 
     def test_counts_failed_trajectories(self) -> None:
         # A trajectory with end_time set and an error step is considered "error"
-        error_step = TrajectoryStep(output=AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace="")))
+        error_step = TrajectoryStep(
+            output=AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace=""))
+        )
         failed_traj = Trajectory(id="failed", start_time=1.0, end_time=2.0, steps=[error_step])
         result = xray_utils.compute_experiment_stats([failed_traj])
         assert "Failed" in result
@@ -927,9 +939,7 @@ class TestGetPairedStepDetailsMarkdown:
         assert "Agent" in result
         assert "click" in result
 
-    def test_includes_env_duration_from_traj_step(
-        self, env_step_done_success: EnvironmentOutput
-    ) -> None:
+    def test_includes_env_duration_from_traj_step(self, env_step_done_success: EnvironmentOutput) -> None:
         ts = TrajectoryStep(output=env_step_done_success, start_time=0.0, end_time=3.0)
         result = xray_utils.get_paired_step_details_markdown(env_step_done_success, None, ts, None)
         assert "3.0s" in result
@@ -1009,7 +1019,9 @@ class TestGetChatBranchesWithMessageObjects:
         """LLMCall.output is a Message object; prompts can also contain Message objects."""
         config = LLMConfig(model_name="gpt-test")
         prompt = Prompt(messages=[Message(role="user", content="Use a Message object")], tools=[])
-        llm_call = LLMCall(tag="test", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage())
+        llm_call = LLMCall(
+            tag="test", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage()
+        )
         step = AgentOutput(llm_calls=[llm_call])
         html = xray_utils.get_chat_branches(step)["test"]
         assert "user" in html
@@ -1017,8 +1029,16 @@ class TestGetChatBranchesWithMessageObjects:
 
     def test_handles_mixed_dict_and_message_in_messages(self) -> None:
         config = LLMConfig(model_name="gpt-test")
-        prompt = Prompt(messages=[Message(role="system", content="System prompt from Message"), {"role": "user", "content": "User dict message"}], tools=[])
-        llm_call = LLMCall(tag="test2", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage())
+        prompt = Prompt(
+            messages=[
+                Message(role="system", content="System prompt from Message"),
+                {"role": "user", "content": "User dict message"},
+            ],
+            tools=[],
+        )
+        llm_call = LLMCall(
+            tag="test2", llm_config=config, prompt=prompt, output=Message(role="assistant", content="ok"), usage=Usage()
+        )
         step = AgentOutput(llm_calls=[llm_call])
         html = xray_utils.get_chat_branches(step)["test2"]
         assert "system" in html
