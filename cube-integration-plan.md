@@ -20,6 +20,7 @@ Make `cube-standard` a dependency of `AgentLab2` and remove AL2 classes that are
 | `Content` (+ subclasses) | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ — all call sites use `Content.from_data()` / `to_llm_message()` |
 | `Observation` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ |
 | `EnvironmentOutput` | `cube.core` | ~~defined in `agentlab2.core`~~ | ✅ — cube adds `truncated: bool = False` |
+| `AbstractTool` | `cube.tool` | ~~defined in `agentlab2.tool`~~ | ✅ — added `close()` to cube; `environment.py` and `toolbox.py` import directly from `cube.tool` |
 
 All are now imported directly from `cube` across all AL2 source and test files. `base.py` has been deleted.
 
@@ -27,7 +28,6 @@ All are now imported directly from `cube` across all AL2 source and test files. 
 
 | Concept | CUBE | AL2 | Delta |
 | --- | --- | --- | --- |
-| `AbstractTool` | no `close()` method | has `close()` | Add `close()` to cube's `AbstractTool`, then import from cube |
 | `ToolConfig` | `make(container=None)` | `make()` | Update `BrowsergymConfig.make()` signature, then import from cube |
 | `tool_action` decorator | `cube.tool` | not present in AL2 | Used when migrating `Tool` and `BrowsergymTool` |
 
@@ -122,7 +122,10 @@ Same changes as MiniWob apply.
 | `src/agentlab2/tools/playwright.py` | Use `Content.from_data()` | ✅ Done |
 | `src/agentlab2/benchmarks/miniwob/task.py` | Use `Content.from_data()` (obs_postprocess) | ✅ Done |
 | `src/agentlab2/core.py` | Remove `Observation`, `EnvironmentOutput`; import from cube | ✅ Done |
-| `src/agentlab2/tool.py` | Import `AbstractTool`, `ToolConfig`, `tool_action`, `Tool` from cube; update `make()` sig; add `close()` to cube's `AbstractTool` | TODO |
+| `src/agentlab2/tool.py` | Remove local `AbstractTool`; import from `cube.tool` | ✅ Done |
+| `src/agentlab2/environment.py` | Import `AbstractTool` from `cube.tool` | ✅ Done (full deletion after Task migration) |
+| `src/agentlab2/tools/toolbox.py` | Import `AbstractTool` from `cube.tool` | ✅ Done |
+| `src/agentlab2/tool.py` | Import `ToolConfig`, `tool_action`, `Tool` from cube; update `make()` sig | TODO |
 | `src/agentlab2/environment.py` | Delete entirely (merged into cube's Task) | TODO (after Task migration) |
 | `src/agentlab2/benchmark.py` | Refactor to cube's ClassVar pattern | TODO |
 | `src/agentlab2/episode.py` | Remove `EnvConfig` usage; call `task.reset()` / `task.step()` directly | TODO (after Task migration) |
