@@ -1,8 +1,7 @@
 import os
 import time
-from pathlib import Path
-
 from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
 
 try:
     __version__ = version("agentlab2")
