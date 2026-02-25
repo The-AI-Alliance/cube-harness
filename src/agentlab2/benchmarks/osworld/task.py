@@ -4,9 +4,13 @@ This module provides the OSWorldTask class that manages the lifecycle of a singl
 OSWorld task, including VM setup, observation building, and evaluation.
 """
 
+import io
 import logging
 from typing import TYPE_CHECKING, List, Optional
 
+from PIL import Image
+
+from agentlab2.benchmarks.osworld.osworld_axtree import linearize_accessibility_tree, tag_screenshot
 from agentlab2.core import ActionSchema, Observation, Task
 
 if TYPE_CHECKING:
@@ -35,6 +39,7 @@ class OSWorldTask(Task):
         evaluator: Evaluation configuration with function name and expected results
         validate_per_step: Whether to validate after each step (default: False)
         max_turns: Maximum number of agent turns allowed
+        use_som: Whether to use Set-of-Marks screenshot annotation (default: False)
     """
 
     validate_per_step: bool = False
@@ -50,6 +55,7 @@ class OSWorldTask(Task):
         config: Optional[List[dict]] = None,
         evaluator: Optional[dict] = None,
         max_turns: int = 15,
+        use_som: bool = False,
     ) -> None:
         self.id = id
         self.desc = desc
@@ -60,6 +66,7 @@ class OSWorldTask(Task):
         self.config = config or []
         self.evaluator = evaluator or {}
         self.max_turns = max_turns
+        self.use_som = use_som
         self._tool: "Computer | None" = None
         self._is_done: bool = False
 
@@ -173,39 +180,98 @@ class OSWorldTask(Task):
     def obs_postprocess(self, obs: Observation) -> Observation:
         """Post-process observation before returning to agent.
 
-        For OSWorld tasks, this linearizes the raw accessibility tree XML
-        into a tab-separated table format suitable for agent consumption.
+        Dispatches to SoM or linearize mode depending on self.use_som.
 
         Args:
-            obs: Raw observation from the tool with raw accessibility_tree
+            obs: Raw observation from the tool
 
         Returns:
-            Processed observation with linearized axtree_txt
+            Processed observation
         """
-        from agentlab2.benchmarks.osworld.osworld_axtree import linearize_accessibility_tree
+        if self.use_som:
+            return self._postprocess_som(obs)
+        return self._postprocess_linearize(obs)
 
-        # Find and linearize accessibility tree if present
+    def _postprocess_linearize(self, obs: Observation) -> Observation:
+        """Replace raw axtree XML with a linearized tab-separated table.
+
+        Args:
+            obs: Raw observation containing accessibility_tree content
+
+        Returns:
+            Observation with axtree_txt content replacing accessibility_tree
+        """
+        platform = self._tool.config.os_type.lower() if self._tool else "ubuntu"
         new_contents = []
         for content in obs.contents:
             if content.name == "accessibility_tree":
-                # Linearize the raw XML accessibility tree
                 try:
-                    platform = self._tool.config.os_type.lower() if self._tool else "ubuntu"
                     axtree_txt = linearize_accessibility_tree(content.data, platform=platform)
-                    # Replace raw tree with linearized version
                     new_contents.append(
                         content.model_copy(update={"data": axtree_txt, "name": "axtree_txt"})
                     )
                 except Exception as e:
                     logger.warning(f"Failed to linearize accessibility tree: {e}")
-                    # Keep the raw tree if linearization fails
                     new_contents.append(content)
             else:
-                # Keep other contents as-is
                 new_contents.append(content)
-
-        # Create new observation with processed contents
         return obs.model_copy(update={"contents": new_contents})
+
+    def _postprocess_som(self, obs: Observation) -> Observation:
+        """Annotate screenshot with numbered bounding boxes and replace axtree with indexed element table.
+
+        Bounding boxes are drawn at the screen coordinates reported by the OS accessibility APIs
+        for each visible, interactive element. Falls back to linearize if screenshot or axtree
+        are missing, or if annotation fails.
+
+        Args:
+            obs: Raw observation containing screenshot and accessibility_tree content
+
+        Returns:
+            Observation with annotated screenshot and som_elements text content
+        """
+        platform = self._tool.config.os_type.lower() if self._tool else "ubuntu"
+
+        screenshot_content = None
+        axtree_content = None
+        for content in obs.contents:
+            if content.name == "screenshot" and isinstance(content.data, Image.Image):
+                screenshot_content = content
+            elif content.name == "accessibility_tree":
+                axtree_content = content
+
+        if screenshot_content is None or axtree_content is None:
+            logger.warning("SoM requires both screenshot and accessibility_tree; falling back to linearize.")
+            return self._postprocess_linearize(obs)
+
+        try:
+            buf = io.BytesIO()
+            screenshot_content.data.save(buf, format="PNG")
+            screenshot_bytes = buf.getvalue()
+
+            marks, _, tagged_screenshot_bytes, element_list = tag_screenshot(
+                screenshot_bytes, axtree_content.data, platform=platform
+            )
+            if self._tool is not None:
+                self._tool.update_marks(marks)
+
+            tagged_img = Image.open(io.BytesIO(tagged_screenshot_bytes))
+            tagged_img.load()  # force load before BytesIO goes out of scope
+
+            # Rebuild contents in original order, replacing screenshot and axtree in place
+            new_contents = []
+            for content in obs.contents:
+                if content.name == "screenshot" and isinstance(content.data, Image.Image):
+                    new_contents.append(content.model_copy(update={"data": tagged_img}))
+                elif content.name == "accessibility_tree":
+                    new_contents.append(content.model_copy(update={"data": element_list, "name": "som_elements"}))
+                else:
+                    new_contents.append(content)
+            return obs.model_copy(update={"contents": new_contents})
+
+        except Exception as e:
+            logger.warning(f"Failed to apply SoM annotation: {e}")
+            return self._postprocess_linearize(obs)
 
     def finished(self) -> bool:
         """Check if the task is finished.

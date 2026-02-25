@@ -14,7 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.osworld.benchmark import OSWorldBenchmark
+from agentlab2.benchmarks.osworld.benchmark import OSWORLD_SYSTEM_PROMPT_COMPUTER_13, OSWorldBenchmark
 from agentlab2.benchmarks.osworld.task import OSWorldTask
 from agentlab2.exp_runner import run_with_ray
 from agentlab2.experiment import Experiment
@@ -51,7 +51,11 @@ def main() -> None:
     output_dir = Path(output_dir_base) / f"osworld_2tasks_{current_datetime}"
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
-    agent_config = ReactAgentConfig(llm_config=llm_config)
+    agent_config = ReactAgentConfig(
+        llm_config=llm_config,
+        max_actions=15,
+        system_prompt=OSWORLD_SYSTEM_PROMPT_COMPUTER_13,
+    )
 
     tool_config = ComputerConfig(
         provider="docker",
@@ -68,6 +72,7 @@ def main() -> None:
         shuffle_seed=42,
         max_turns=15,
         sample_fraction=0.10,
+        use_som=True,  # Annotate screenshots with numbered bounding boxes (Set-of-Marks)
     )
 
     exp = Experiment(

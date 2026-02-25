@@ -211,3 +211,50 @@ class ComputerActionSpace(Protocol):
             Success message
         """
         ...
+
+
+class PyAutoGUIActionSpace(Protocol):
+    """Action space for pyautogui-based desktop automation.
+
+    Single code-execution action plus terminal signals.
+    Used when ComputerConfig.action_space == "pyautogui".
+    """
+
+    def run_pyautogui(self, code: str) -> str:
+        """Execute pyautogui Python code in the VM.
+
+        Resolves tag_N references to element center coordinates from the last
+        Set-of-Marks observation. Each tag_N is a (center_x, center_y) tuple,
+        so use pyautogui.click(*tag_2) or pyautogui.click(tag_2[0], tag_2[1]).
+
+        Args:
+            code: Python code using pyautogui and optional tag_N variables
+
+        Returns:
+            Success message
+        """
+        ...
+
+    def fail(self) -> str:
+        """Signal that the task cannot be performed.
+
+        Returns:
+            Success message
+        """
+        ...
+
+    def done(self) -> str:
+        """Signal that the task is complete.
+
+        Returns:
+            Success message
+        """
+        ...
+
+    def wait(self) -> str:
+        """Wait until the next action (no-op).
+
+        Returns:
+            Success message
+        """
+        ...

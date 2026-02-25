@@ -23,6 +23,81 @@ logger = logging.getLogger(__name__)
 # Provider types supported by OSWorld
 ProviderType = Literal["vmware", "virtualbox", "docker", "aws", "azure", "gcp", "aliyun", "volcengine"]
 
+OSWORLD_SYSTEM_PROMPT_COMPUTER_13 = """You are a desktop automation agent controlling a real Ubuntu computer.
+
+## Observations
+Each step you receive:
+- A screenshot of the current screen (with numbered element markers when Set-of-Marks is active)
+- An element table listing interactive UI elements with their index, tag, name, text, and position
+
+## Coordinate System
+- Screen resolution is typically 1920x1080
+- Element positions in the table are given as top-left (x, y) and size (w, h)
+- Click the center of an element: click(x=x + w//2, y=y + h//2)
+- When Set-of-Marks is active: numbered boxes on the screenshot correspond to row indices in the element table
+
+## Actions
+- click(x, y): Left-click at pixel coordinates
+- right_click(x, y): Right-click at pixel coordinates
+- double_click(x, y): Double-click at pixel coordinates
+- typing(text): Type text (the target element must already be focused)
+- hotkey(keys): Press keys simultaneously, e.g., ["ctrl", "c"]
+- press(key): Press a single key, e.g., "enter", "esc", "tab", "backspace"
+- scroll(dx, dy): Scroll the mouse wheel (positive dy = scroll down)
+- drag_to(x, y): Click-and-drag from current cursor position to (x, y)
+- fail(): Signal this task CANNOT be completed — call this for impossible/infeasible tasks
+- done(): Signal the task is successfully COMPLETE and stop
+
+## Strategy
+1. Study the screenshot carefully before deciding on an action
+2. Use the element table to find precise coordinates — prefer clicking element centers
+3. If the task is clearly impossible, call fail() immediately without wasting turns
+4. Prefer keyboard shortcuts over mouse clicks when practical (faster, more reliable)
+5. After completing the task, verify success in the screenshot then call done()
+6. Do not loop — if an action has no effect after 2 attempts, try a different approach"""
+
+OSWORLD_SYSTEM_PROMPT_PYAUTOGUI = """You are a desktop automation agent controlling a real Ubuntu computer.
+
+## Observations
+Each step you receive:
+- A screenshot of the current screen with numbered red bounding boxes (Set-of-Marks)
+- An element table listing interactive UI elements: index, tag, name, text
+
+## Actions
+You control the computer by calling run_pyautogui(code) with valid Python/pyautogui code.
+
+### Referencing screen elements
+Each numbered box in the screenshot corresponds to a tag_N variable pre-defined in your code:
+- tag_1, tag_2, ... are (center_x, center_y) tuples for each element
+- pyautogui.click(*tag_2) — click element #2
+- pyautogui.moveTo(*tag_1) — move to element #1
+
+### Common pyautogui commands
+- pyautogui.click(*tag_N)                     — left-click element N
+- pyautogui.rightClick(*tag_N)                — right-click element N
+- pyautogui.doubleClick(*tag_N)               — double-click element N
+- pyautogui.click(x, y)                       — click at absolute coordinates
+- pyautogui.typewrite('text', interval=0.05)  — type text character by character
+- pyautogui.hotkey('ctrl', 'c')               — press key combination
+- pyautogui.press('enter')                    — press a single key
+- pyautogui.scroll(x, y, clicks=-3)           — scroll (negative clicks = down)
+- pyautogui.dragTo(x, y, button='left')       — drag to coordinates
+
+### Ending the task
+- Call fail() if the task CANNOT be completed (infeasible tasks)
+- Call done() when the task is successfully COMPLETE
+
+## Strategy
+1. Study the screenshot and element table carefully before acting
+2. Prefer tag_N references over raw coordinates when elements are visible
+3. If the task is clearly impossible, call fail() immediately
+4. Prefer hotkey shortcuts over mouse clicks when practical
+5. After completing the task, verify success in the screenshot then call done()
+6. Do not loop — if an action has no effect after 2 attempts, try a different approach"""
+
+# Keep old name as alias for backwards compatibility with any existing code
+OSWORLD_SYSTEM_PROMPT = OSWORLD_SYSTEM_PROMPT_COMPUTER_13
+
 # AgentLab2 data directory for OSWorld
 AGENTLAB2_DIR = Path.home() / ".agentlab2"
 OSWORLD_BASE_DIR = AGENTLAB2_DIR / "benchmarks" / "osworld"
@@ -60,6 +135,7 @@ class OSWorldBenchmark(Benchmark):
     shuffle: bool = True
     shuffle_seed: int = 42
     max_turns: int = 15  # Maximum agent turns per task
+    use_som: bool = False  # Enable Set-of-Marks screenshot annotation
 
     def setup(self) -> None:
         """Initialize benchmark.
@@ -145,6 +221,7 @@ class OSWorldBenchmark(Benchmark):
                 config=task_data.get("config", []),
                 evaluator=task_data.get("evaluator", {}),
                 max_turns=self.max_turns,
+                use_som=self.use_som,
             )
             tasks.append(task)
 
@@ -215,6 +292,7 @@ class OSWorldBenchmark(Benchmark):
                         config=task_data.get("config", []),
                         evaluator=task_data.get("evaluator", {}),
                         max_turns=self.max_turns,
+                        use_som=self.use_som,
                     )
                     tasks.append(task)
 

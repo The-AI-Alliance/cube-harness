@@ -11,15 +11,18 @@ import os
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from PIL import Image
+
+from typing_extensions import get_protocol_members
 
 from agentlab2.action_spaces.computer_action_space import (
     ButtonType,
     ComputerActionSpace,
+    PyAutoGUIActionSpace,
 )
-from agentlab2.core import Action, Content, Observation
+from agentlab2.core import Action, ActionSchema, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
 
 logger = logging.getLogger(__name__)
@@ -123,6 +126,21 @@ class Computer(Tool, ComputerActionSpace):
             os_type=config.os_type,
         )
         self._current_task_config: Optional[dict] = None
+        self._last_marks: list[list[int]] = []
+
+    @property
+    def action_set(self) -> list[ActionSchema]:
+        """Return actions for the configured action space (computer_13 or pyautogui)."""
+        protocol = PyAutoGUIActionSpace if self.config.action_space == "pyautogui" else ComputerActionSpace
+        action_names = get_protocol_members(protocol)
+        return [ActionSchema.from_function(getattr(self, name)) for name in action_names]
+
+    def get_action_method(self, action: Action) -> Callable:
+        """Look up action method directly on self (supports both action space protocols)."""
+        fn = getattr(self, action.name, None)
+        if fn is None:
+            raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
+        return fn
 
     def execute_action(self, action: Action) -> Observation:
         """Execute action and return observation.
@@ -326,12 +344,43 @@ class Computer(Tool, ComputerActionSpace):
         return self._execute_desktop_action("WAIT")
 
     def fail(self) -> str:
-        """Signal that the task cannot be performed."""
+        """Signal that the task cannot be performed or infeasible."""
         return "Task marked as failed"
 
     def done(self) -> str:
         """Signal that the task is complete."""
         return "Task marked as done"
+
+    # ========================================================================
+    # PyAutoGUIActionSpace Protocol Implementation
+    # ========================================================================
+
+    def update_marks(self, marks: list[list[int]]) -> None:
+        """Store SoM bounding box marks for tag_N resolution in run_pyautogui.
+
+        Args:
+            marks: List of [x, y, w, h] bounding boxes from the last SoM observation
+        """
+        self._last_marks = marks
+
+    def run_pyautogui(self, code: str) -> str:
+        """Execute pyautogui Python code in the VM with tag_N variables pre-defined.
+
+        Prepends tag_N = (center_x, center_y) variable definitions for each SoM element
+        from the last observation, then executes the combined code string via desktop_env.
+
+        Args:
+            code: Python code using pyautogui and optional tag_N variables
+
+        Returns:
+            Success message
+        """
+        tag_vars = ""
+        for i, mark in enumerate(self._last_marks):
+            x, y, w, h = mark
+            tag_vars += f"tag_{i + 1} = ({int(x + w // 2)}, {int(y + h // 2)})\n"
+        self._env.step(tag_vars + code)
+        return "Success"
 
     def close(self) -> None:
         """Clean up VM resources."""
