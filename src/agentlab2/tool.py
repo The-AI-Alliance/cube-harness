@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class AbstractTool(ABC):
     """
     Abstract interface for objects that can react on a list of actions.
-    List defined by the ActionSpace that tool inherits.
+    List defined by the Protocol that tool inherits.
     """
 
     def reset(self) -> None:

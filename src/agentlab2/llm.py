@@ -1,23 +1,21 @@
 """LLM interaction abstractions, LiteLLM based."""
 
-import os
 import pprint
 from datetime import datetime
 from functools import partial
 from typing import Callable, List, Literal
 from uuid import uuid4
 
-import litellm
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
 from pydantic import Field
 
 from agentlab2.base import TypedBaseModel
 
-os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
-litellm.callbacks = ["otel"]
-# LiteLLM creates "litellm_request" spans with ~50 GenAI semantic attributes (tokens, cost, etc).
-# See: litellm/integrations/opentelemetry.py, https://opentelemetry.io/docs/specs/semconv/gen-ai/
+# NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
+# When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
+# which dumps huge JSON span dicts to stdout. Instead, enable the callback only
+# after a proper TracerProvider has been set up (see metrics/tracer.py).
 
 
 class Prompt(TypedBaseModel):
@@ -146,7 +144,8 @@ class LLM:
 class LLMCall(TypedBaseModel):
     """Represents a call to an LLM model."""
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
+    id: str = Field(default_factory=lambda: uuid4().hex)  # unique storage key
+    tag: str = ""  # optional label shown as tab name in viewers (e.g. "act", "summary")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     llm_config: LLMConfig
     prompt: Prompt

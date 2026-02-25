@@ -1,7 +1,6 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
-import sys
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,12 +8,17 @@ import ray
 
 from agentlab2.core import Trajectory
 from agentlab2.episode import Episode
+from agentlab2.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from agentlab2.experiment import Experiment, ExpResult
 from agentlab2.metrics.tracer import get_trace_env_vars, get_tracer
 
-LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d %(funcName)s() - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+
+def _extract_model(exp: Experiment) -> str | None:
+    llm_config = getattr(exp.agent_config, "llm_config", None)
+    return llm_config.model_name if llm_config else None
 
 
 def run_with_ray(
@@ -23,8 +27,17 @@ def run_with_ray(
     ray_poll_timeout: float = 2.0,
     trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
+    model: str | None = None,
+    agent_name: str | None = None,
 ) -> ExpResult:
-    tracer = get_tracer(exp.name, output_dir=trace_output, otlp_endpoint=otlp_endpoint)
+    model = model or _extract_model(exp)
+    tracer = get_tracer(
+        exp.name,
+        output_dir=trace_output,
+        otlp_endpoint=otlp_endpoint,
+        model=model,
+        agent_name=agent_name,
+    )
 
     try:
         with tracer.benchmark(exp.name):
@@ -35,19 +48,15 @@ def run_with_ray(
 
 def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) -> ExpResult:
     exp.save_config()
-    ray_log_dir = Path(exp.output_dir) / "ray_logs"
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        log_file = ray_log_dir / f"run_{episode.id}_task_{episode.task_id}.log"
-        sys.stdout = open(log_file, "a", buffering=1)  # line-buffered
-        sys.stderr = sys.stdout
-        logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, stream=sys.stdout, force=True)
-        trajectory = episode.run()
-        return trajectory
+        trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+        log_file = get_log_path(exp.output_dir, trajectory_id)
+        with redirect_output_to_log(log_file, append=True, tee=False, log_format=LOG_FORMAT):
+            return episode.run()
 
     if not ray.is_initialized():
-        ray_log_dir.mkdir(parents=True, exist_ok=True)
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",
@@ -58,8 +67,8 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
 
     exp.benchmark.setup()
     try:
-        episodes = exp.create_episodes()
-        ref_to_id = {run_episode.remote(episode): episode.task_id for episode in episodes}
+        episodes = exp.get_episodes_to_run()
+        ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
         results = _poll_ray(exp, ref_to_id, ray_poll_timeout)
         exp.print_stats(results)
@@ -99,8 +108,17 @@ def run_sequentially(
     debug_limit: int | None = None,
     trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
+    model: str | None = None,
+    agent_name: str | None = None,
 ) -> ExpResult:
-    tracer = get_tracer(exp.name, output_dir=trace_output, otlp_endpoint=otlp_endpoint)
+    model = model or _extract_model(exp)
+    tracer = get_tracer(
+        exp.name,
+        output_dir=trace_output,
+        otlp_endpoint=otlp_endpoint,
+        model=model,
+        agent_name=agent_name,
+    )
 
     try:
         with tracer.benchmark(exp.name):
@@ -113,11 +131,16 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
     exp.save_config()
     exp.benchmark.setup()
     try:
-        episodes = exp.create_episodes()
+        episodes = exp.get_episodes_to_run()
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
             episodes = episodes[:debug_limit]
-        trajectories = [episode.run() for episode in episodes]
+        trajectories = []
+        for episode in episodes:
+            trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+            log_file = get_log_path(exp.output_dir, trajectory_id)
+            with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
+                trajectories.append(episode.run())
         results = ExpResult(
             tasks_num=len(episodes),
             trajectories={traj.metadata["task_id"]: traj for traj in trajectories},

@@ -1,8 +1,9 @@
 import base64
 import io
 import json
+import traceback
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Protocol, Self, TypeAlias
+from typing import Any, Callable, Dict, Self
 
 import litellm.utils
 from PIL import Image
@@ -62,9 +63,34 @@ class Action(TypedBaseModel):
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
 
+class StepError(TypedBaseModel):
+    """Represents an error that occurred during a step execution."""
+
+    error_type: str
+    exception_str: str
+    stack_trace: str
+
+    @classmethod
+    def from_exception(cls, exc: Exception) -> "StepError":
+        """Create a StepError from an exception object."""
+        return cls(
+            error_type=type(exc).__name__,
+            exception_str=str(exc),
+            stack_trace="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        )
+
+
 class AgentOutput(TypedBaseModel):
     actions: list[Action] = Field(default_factory=list)
+    # All LLM calls made during this step. Set LLMCall.tag to label each call (e.g. "act", "summary").
     llm_calls: list[LLMCall] = Field(default_factory=list)
+    error: StepError | None = None
+    # Maps label → (start_time, end_time) as absolute Unix timestamps.
+    # Used by the XRay viewer to render a profiling breakdown inside each timeline segment.
+    profiling: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    # The chain-of-thought or reasoning that semantically led to the actions.
+    # Populated by agents that produce explicit rationale (summarize pass COT, extended thinking, etc.).
+    action_rationale: str | None = None
 
     def __str__(self) -> str:
         return self.model_dump_json(exclude={"llm_calls"})
@@ -156,6 +182,7 @@ class EnvironmentOutput(TypedBaseModel):
     reward: float = 0.0
     done: bool = False
     info: dict = Field(default_factory=dict)
+    error: StepError | None = None
 
 
 class TrajectoryStep(TypedBaseModel):
@@ -186,13 +213,18 @@ class Trajectory(TypedBaseModel):
         raise ValueError("No EnvironmentOutput found in the trajectory.")
 
 
-class ActionSpace(Protocol):
-    """Base class for action spaces."""
+class ActionSpace(frozenset[Callable]):
+    """A set of action callables representing a subset of an action space.
 
-    pass
+    Supports set operations (&, -, |) for composing action subsets.
+    """
 
+    def __new__(cls, *actions: Callable) -> "ActionSpace":
+        return super().__new__(cls, actions)
 
-ActionSubset: TypeAlias = tuple[Callable, ...]
+    @property
+    def names(self) -> frozenset[str]:
+        return frozenset(action.__name__ for action in self)
 
 
 class Task(ABC):
@@ -210,7 +242,7 @@ class Task(ABC):
         Returns:
             Tuple of (Observation, dict with additional task info)
         """
-        self._tool = tool
+        pass
 
     def teardown(self) -> None:
         """Optional clean up after task completion."""

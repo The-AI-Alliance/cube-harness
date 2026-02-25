@@ -3,7 +3,7 @@ import logging
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from agentlab2.core import ActionSchema, ActionSubset, Content, Observation, Task
+from agentlab2.core import ActionSchema, ActionSpace, Content, Observation, Task
 from agentlab2.tools.base import BrowserTaskTool
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class MiniWobTask(Task):
     validate_per_step: bool = True
-    supported_actions: ActionSubset = (
+    supported_actions = ActionSpace(
         BrowserActionSpace.browser_press_key,
         BrowserActionSpace.browser_type,
         BrowserActionSpace.browser_click,
@@ -56,6 +56,7 @@ class MiniWobTask(Task):
             info: dict, custom information from the task.
         """
         self._tool = tool
+        tool.reset()
         logger.info(f"Setting up MiniWob task {self.id} at {self.url}")
         self._tool.goto(self.url)
         setup_js = self._get_setup_js()
@@ -63,7 +64,7 @@ class MiniWobTask(Task):
         goal, info = self._parse_setup_result(setup_result)
         obs = Observation.from_text(goal)
         obs += self.obs_postprocess(self._tool.page_obs())
-        return obs, {**info, "task_id": self.id, "task_url": self.url, "task_desc": self.desc}
+        return obs, {**info, "task_id": self.id, "task_url": self.url, "task_desc": self.desc, "goal": goal}
 
     def validate_task(self, *args) -> tuple[float, dict]:
         """
@@ -187,12 +188,7 @@ return core.getUtterance();
         return obs
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        # TODO: This method is currently not called anywhere in the codebase.
-        # It was intended to filter actions based on BrowserActionSpace, but with multiple tools
-        # (SyncPlaywrightTool, BrowsergymTool) having different action spaces, we need a proper
-        # abstraction for tool-agnostic action filtering.
-        supported_action_names = {action.__name__ for action in self.supported_actions}
-        filtered = [a for a in actions if a.name in supported_action_names]
+        filtered = [a for a in actions if a.name in self.supported_actions.names]
         logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
         return filtered
 

@@ -1,9 +1,7 @@
 from typing import Protocol
 
-from agentlab2.core import ActionSpace
 
-
-class BrowserActionSpace(ActionSpace, Protocol):
+class BrowserActionSpace(Protocol):
     """Browser action space using CSS selectors.
 
     Used by tools that interact with elements via CSS selectors (e.g., Playwright).
@@ -54,7 +52,7 @@ class BrowserActionSpace(ActionSpace, Protocol):
         ...
 
 
-class BidBrowserActionSpace(ActionSpace, Protocol):
+class BidBrowserActionSpace(Protocol):
     """Browser action space using Browser IDs (BIDs).
 
     Used by tools that interact with elements via BrowserGym's BID system,

@@ -23,6 +23,12 @@ class BrowserTaskTool(Protocol):
     (e.g., mobile apps, desktop automation) that don't fit the browser paradigm.
     """
 
+    def reset(self) -> None:
+        """
+        Reset the browser state (clear cookies, local storage, etc.) before starting a new task.
+        """
+        ...
+
     def goto(self, url: str) -> None:
         """
         Navigate to a URL.

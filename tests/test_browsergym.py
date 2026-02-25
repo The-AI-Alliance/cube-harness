@@ -247,6 +247,60 @@ class TestBrowsergymToolObservationConversion:
         content_names = {c.name for c in obs.contents}
         assert content_names == {"pruned_html", "axtree_txt", "screenshot"}
 
+    def test_focused_element_observation(self) -> None:
+        """Test conversion of focused_element_bid observation field."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"focused_element_bid": "a123"}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 1
+        assert obs.contents[0].name == "focused_element"
+        assert obs.contents[0].data == "a123"
+
+    def test_focused_element_observation_empty(self) -> None:
+        """Test that empty focused_element_bid is not added."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"focused_element_bid": None}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 0
+
+    def test_last_action_error_observation(self) -> None:
+        """Test conversion of last_action_error observation field."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"last_action_error": "Element not found: bid='xyz'"}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 1
+        assert obs.contents[0].name == "last_action_error"
+        assert obs.contents[0].data == "Element not found: bid='xyz'"
+
+    def test_last_action_error_observation_empty(self) -> None:
+        """Test that empty last_action_error is not added."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"last_action_error": None}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 0
+
+    def test_last_action_error_observation_empty_string(self) -> None:
+        """Test that empty string last_action_error is not added."""
+        config = BrowsergymConfig(use_html=False, use_axtree=False, use_screenshot=False)
+        tool = BrowsergymTool(config)
+
+        bgym_obs = {"last_action_error": ""}
+        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+
+        assert len(obs.contents) == 0
+
 
 class TestBrowsergymToolActionMethods:
     """Tests for action method implementations."""
@@ -595,3 +649,206 @@ class TestBrowsergymToolActionSet:
         }
 
         assert expected_actions.issubset(action_names)
+
+
+class TestBrowsergymToolCheckboxJsFallback:
+    """Tests for checkbox/radio JS fallback in browser_click."""
+
+    def _create_tool_with_mock_env_and_page(self) -> BrowsergymTool:
+        """Helper to create a tool with mocked environment and page.
+
+        Creates a mock that handles the frame navigation chain:
+        1. _get_frame_for_bid(bid) parses BID and navigates to iframe
+        2. For BID "a123": page.get_by_test_id("a") -> frame_locator(":scope") -> frame
+        3. frame.get_by_test_id("a123") -> element locator
+        """
+        config = BrowsergymConfig()
+        tool = BrowsergymTool(config)
+
+        mock_env = MagicMock()
+        mock_env.step.return_value = ({}, 0.0, False, False, {})
+
+        mock_page = MagicMock()
+        mock_env.page = mock_page
+
+        # Create the element locator (final target)
+        mock_element_locator = MagicMock()
+        mock_element_locator.count.return_value = 1
+
+        # Create the iframe locator that returns the element locator
+        mock_iframe_locator = MagicMock()
+        mock_iframe_locator.count.return_value = 1
+
+        # Create the frame (returned by frame_locator)
+        mock_frame = MagicMock()
+        mock_frame.get_by_test_id.return_value = mock_element_locator
+
+        # Chain: iframe_locator.frame_locator(":scope") -> frame
+        mock_iframe_locator.frame_locator.return_value = mock_frame
+
+        # page.get_by_test_id returns either iframe locator or element locator
+        # depending on whether it's called with iframe bid or element bid
+        mock_page.get_by_test_id.return_value = mock_iframe_locator
+
+        # Store references for tests to configure return values
+        mock_page._mock_element_locator = mock_element_locator
+        mock_page._mock_frame = mock_frame
+
+        tool._env = mock_env
+        tool._last_obs = {}
+
+        return tool
+
+    def test_get_checkbox_state_returns_true_when_checked(self) -> None:
+        """Test that _get_checkbox_state returns True for checked checkbox."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # Configure evaluate to return checkbox state
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": True,
+            "checked": True,
+        }
+
+        result = tool._get_checkbox_state("a123")
+
+        assert result is True
+        tool._env.page._mock_element_locator.evaluate.assert_called_once()
+
+    def test_get_checkbox_state_returns_false_when_unchecked(self) -> None:
+        """Test that _get_checkbox_state returns False for unchecked checkbox."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": True,
+            "checked": False,
+        }
+
+        result = tool._get_checkbox_state("a123")
+
+        assert result is False
+
+    def test_get_checkbox_state_returns_none_for_non_checkbox(self) -> None:
+        """Test that _get_checkbox_state returns None for non-checkbox elements."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": False,
+            "tagName": "DIV",
+        }
+
+        result = tool._get_checkbox_state("b456")
+
+        assert result is None
+
+    def test_get_checkbox_state_returns_none_when_element_not_found(self) -> None:
+        """Test that _get_checkbox_state returns None when element not found."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.count.return_value = 0
+
+        result = tool._get_checkbox_state("c789")
+
+        assert result is None
+
+    def test_get_checkbox_state_returns_none_on_exception(self) -> None:
+        """Test that _get_checkbox_state returns None when evaluate raises."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
+
+        result = tool._get_checkbox_state("c789")
+
+        assert result is None
+
+    def test_toggle_checkbox_js_sets_checked_true(self) -> None:
+        """Test that _toggle_checkbox_js sets checkbox to checked."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+
+        tool._toggle_checkbox_js("a123", True)
+
+        tool._env.page._mock_element_locator.evaluate.assert_called_once()
+        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        js_code = call_args[0][0]
+        checked_arg = call_args[0][1]
+        assert "elem.checked = checked" in js_code
+        assert checked_arg is True
+
+    def test_toggle_checkbox_js_sets_checked_false(self) -> None:
+        """Test that _toggle_checkbox_js sets checkbox to unchecked."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+
+        tool._toggle_checkbox_js("a123", False)
+
+        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        checked_arg = call_args[0][1]
+        assert checked_arg is False
+
+    def test_toggle_checkbox_js_dispatches_events(self) -> None:
+        """Test that _toggle_checkbox_js dispatches click, change, and input events."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+
+        tool._toggle_checkbox_js("a123", True)
+
+        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        js_code = call_args[0][0]
+        assert "dispatchEvent(new Event('click'" in js_code
+        assert "dispatchEvent(new Event('change'" in js_code
+        assert "dispatchEvent(new Event('input'" in js_code
+
+    def test_toggle_checkbox_js_handles_exception_gracefully(self) -> None:
+        """Test that _toggle_checkbox_js doesn't raise on exception."""
+        tool = self._create_tool_with_mock_env_and_page()
+        tool._env.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
+
+        # Should not raise
+        tool._toggle_checkbox_js("a123", True)
+
+    def test_browser_click_no_fallback_for_non_checkbox(self) -> None:
+        """Test that browser_click doesn't use JS fallback for non-checkbox elements."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # _get_checkbox_state returns None for non-checkboxes
+        tool._env.page._mock_element_locator.evaluate.return_value = {
+            "found": True,
+            "isCheckbox": False,
+            "tagName": "BUTTON",
+        }
+
+        tool.browser_click("a100")
+
+        # Should only call env.step (no JS fallback)
+        tool._env.step.assert_called_once_with('click(bid="a100")')
+        # evaluate called once for _get_checkbox_state
+        assert tool._env.page._mock_element_locator.evaluate.call_count == 1
+
+    def test_browser_click_no_fallback_when_native_click_works(self) -> None:
+        """Test that browser_click doesn't use JS fallback when native click toggles state."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # First call: state before (unchecked), Second call: state after (checked)
+        tool._env.page._mock_element_locator.evaluate.side_effect = [
+            {"found": True, "isCheckbox": True, "checked": False},
+            {"found": True, "isCheckbox": True, "checked": True},
+        ]
+
+        tool.browser_click("a200")
+
+        tool._env.step.assert_called_once_with('click(bid="a200")')
+        # Two evaluate calls: before and after state check
+        assert tool._env.page._mock_element_locator.evaluate.call_count == 2
+
+    def test_browser_click_fallback_unchecks_when_already_checked(self) -> None:
+        """Test that browser_click JS fallback unchecks when checkbox was checked."""
+        tool = self._create_tool_with_mock_env_and_page()
+        # State before: checked, State after: still checked (click didn't work)
+        tool._env.page._mock_element_locator.evaluate.side_effect = [
+            {"found": True, "isCheckbox": True, "checked": True},
+            {"found": True, "isCheckbox": True, "checked": True},
+            "toggled_checkbox",
+        ]
+
+        tool.browser_click("a400")
+
+        # Verify JS toggle was called with False (to uncheck)
+        js_toggle_call = tool._env.page._mock_element_locator.evaluate.call_args_list[2]
+        checked_arg = js_toggle_call[0][1]
+        assert checked_arg is False

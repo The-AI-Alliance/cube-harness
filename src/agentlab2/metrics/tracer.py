@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+import litellm
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -21,9 +22,12 @@ from agentlab2.metrics.processor import AL2_EXPERIMENT, AL2_NAME, AL2_TYPE, TYPE
 
 _logger = logging.getLogger(__name__)
 
-ENV_TRACEPARENT = "TRACEPARENT"
-ENV_TRACE_OUTPUT = "AGENTLAB_TRACE_OUTPUT"
-ENV_OTLP_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+RAY_ENV_TRACEPARENT = "TRACEPARENT"
+RAY_ENV_TRACE_OUTPUT = "AGENTLAB_TRACE_OUTPUT"
+RAY_ENV_OTLP_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
+RAY_ENV_MODEL = "AGENTLAB_MODEL"
+RAY_ENV_AGENT_NAME = "AGENTLAB_AGENT_NAME"
+GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
 
 # https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/#gen-ai-agent-attributes
 GEN_AI_AGENT_NAME = "gen_ai.agent.name"
@@ -60,6 +64,7 @@ class _AgentTracer:
         agent_name: str | None = None,
         agent_id: str | None = None,
         agent_description: str | None = None,
+        model: str | None = None,
     ) -> None:
         assert output_dir or otlp_endpoint, "At least one collector (output_dir or otlp_endpoint) required"
         _logger.info(
@@ -74,6 +79,10 @@ class _AgentTracer:
         resource_attrs[GEN_AI_AGENT_ID] = agent_id or default_agent_id
         if agent_description is not None:
             resource_attrs[GEN_AI_AGENT_DESCRIPTION] = agent_description
+        if model:
+            resource_attrs[GEN_AI_REQUEST_MODEL] = model
+            os.environ[RAY_ENV_MODEL] = model
+        os.environ[RAY_ENV_AGENT_NAME] = resource_attrs[GEN_AI_AGENT_NAME]
 
         self._provider = TracerProvider(resource=Resource.create(resource_attrs))
 
@@ -81,14 +90,20 @@ class _AgentTracer:
             self.output_dir = Path(output_dir)
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self._provider.add_span_processor(BatchSpanProcessor(DiskSpanExporter(self.output_dir)))
-            os.environ[ENV_TRACE_OUTPUT] = str(self.output_dir)
+            os.environ[RAY_ENV_TRACE_OUTPUT] = str(self.output_dir)
 
         if otlp_endpoint:
-            os.environ[ENV_OTLP_ENDPOINT] = otlp_endpoint
+            os.environ[RAY_ENV_OTLP_ENDPOINT] = otlp_endpoint
             self._provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
         # Set as global provider so OTEL-instrumented libraries emit spans into this trace
         trace.set_tracer_provider(self._provider)
+
+        # Enable litellm OTEL callback now that a proper TracerProvider is configured.
+        # This must happen after set_tracer_provider() to avoid ConsoleSpanExporter fallback.
+        os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
+        litellm.callbacks = ["otel"]
+
         self._tracer = self._provider.get_tracer(__name__)
         self._current_experiment: str | None = None
 
@@ -150,30 +165,28 @@ def _set_traceparent_env() -> None:
     carrier: dict[str, str] = {}
     inject(carrier)
     if tp := carrier.get("traceparent"):
-        os.environ[ENV_TRACEPARENT] = tp
+        os.environ[RAY_ENV_TRACEPARENT] = tp
 
 
 def _get_parent_ctx_env() -> Context | None:
-    if tp := os.environ.get(ENV_TRACEPARENT):
+    if tp := os.environ.get(RAY_ENV_TRACEPARENT):
         return extract({"traceparent": tp})
     return None
 
 
 def get_trace_env_vars() -> dict[str, str]:
     env_vars = {}
-    if tp := os.environ.get(ENV_TRACEPARENT):
-        env_vars[ENV_TRACEPARENT] = tp
-    if output := os.environ.get(ENV_TRACE_OUTPUT):
-        env_vars[ENV_TRACE_OUTPUT] = output
-    if otlp := os.environ.get(ENV_OTLP_ENDPOINT):
-        env_vars[ENV_OTLP_ENDPOINT] = otlp
+    for key in (RAY_ENV_TRACEPARENT, RAY_ENV_TRACE_OUTPUT, RAY_ENV_OTLP_ENDPOINT, RAY_ENV_MODEL, RAY_ENV_AGENT_NAME):
+        if val := os.environ.get(key):
+            env_vars[key] = val
     return env_vars
 
 
 class _NoOpSpan:
-    """A no-op span that ignores all attribute calls."""
-
     def set_attribute(self, key: str, value: Any) -> None:
+        pass
+
+    def set_status(self, status: Any, description: str | None = None) -> None:
         pass
 
 
@@ -211,9 +224,12 @@ def get_tracer(
     agent_name: str | None = None,
     agent_id: str | None = None,
     agent_description: str | None = None,
+    model: str | None = None,
 ) -> _AgentTracer | _NoOpTracer:
-    output_dir = output_dir or os.environ.get(ENV_TRACE_OUTPUT)
-    otlp_endpoint = otlp_endpoint or os.environ.get(ENV_OTLP_ENDPOINT)
+    output_dir = output_dir or os.environ.get(RAY_ENV_TRACE_OUTPUT)
+    otlp_endpoint = otlp_endpoint or os.environ.get(RAY_ENV_OTLP_ENDPOINT)
+    model = model or os.environ.get(RAY_ENV_MODEL)
+    agent_name = agent_name or os.environ.get(RAY_ENV_AGENT_NAME)
 
     if output_dir or otlp_endpoint:
         return _AgentTracer(
@@ -223,5 +239,6 @@ def get_tracer(
             agent_name=agent_name,
             agent_id=agent_id,
             agent_description=agent_description,
+            model=model,
         )
     return _NoOpTracer()
