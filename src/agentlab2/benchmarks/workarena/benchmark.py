@@ -4,8 +4,6 @@ import logging
 import random
 from typing import Literal
 
-from browsergym.workarena import get_all_tasks_agents
-
 from agentlab2.benchmark import Benchmark
 from agentlab2.benchmarks.workarena.task import WorkArenaTask
 
@@ -74,7 +72,14 @@ class WorkArenaBenchmark(Benchmark):
 
         logger.info(f"Loading WorkArena tasks (level={self.level}, meta_seed={self.meta_seed})")
 
-        # Get task tuples from WorkArena
+        try:
+            from browsergym.workarena import get_all_tasks_agents
+        except ImportError as e:
+            raise ImportError(
+                "WorkArena benchmark requires 'browsergym-workarena'. "
+                "Install optional dependencies (e.g. `make install`) before loading WorkArena tasks."
+            ) from e
+
         task_tuples = get_all_tasks_agents(
             filter=self.level,
             meta_seed=self.meta_seed,

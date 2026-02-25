@@ -43,7 +43,7 @@ def main(debug: bool):
     output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_l1_{current_datetime}"
 
     # Configure LLM
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="openai/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(
         render_last_n_steps=2,
         max_actions=20,
