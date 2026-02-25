@@ -334,13 +334,13 @@ class Genny(Agent):
             obs_messages = self._obs_to_messages(obs)
             self._ingest_obs(obs_messages)
 
-        rationale: str | None = None
+        thoughts: str | None = None
         sum_call: LLMCall | None = None
         if self.config.enable_summarize:
             # Summarize the current obs (already in history via _ingest_obs).
             with profiler("summarize"):
                 summary, sum_call = self._summarize_past()
-            rationale = summary  # capture before action is appended below
+            thoughts = summary  # capture before action is appended below
             self.summaries.append(summary)
 
         with profiler("act"):
@@ -353,7 +353,7 @@ class Genny(Agent):
             self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
         else:
             # No explicit summarize LLM — extract COT from the act response for rolling context.
-            rationale = _get_reasoning(response) or None
+            thoughts = _get_reasoning(response) or None
             step_summary = _extract_act_summary(response, actions)
             if step_summary:
                 self.summaries.append(step_summary)
@@ -367,7 +367,7 @@ class Genny(Agent):
             actions=actions,
             llm_calls=llm_calls,
             profiling=profiler.data,
-            thoughts=rationale or None,
+            thoughts=thoughts or None,
         )
 
     def _obs_to_messages(self, obs: Observation) -> list[dict | Message]:

@@ -579,14 +579,14 @@ def _render_goal_panel(text: str) -> str:
     )
 
 
-def _render_rationale_panel(text: str) -> str:
-    """Render the action rationale as a styled HTML panel (same green as action, small bottom gap)."""
+def _render_thoughts_panel(text: str) -> str:
+    """Render the agent's thoughts as a styled HTML panel (same green as action, small bottom gap)."""
     safe = html_lib.escape(text)
     safe = safe.replace("\n", "<br>")
     safe = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", safe)
     return (
         '<div class="info-panel" style="background:#f0fdf4; border-color:#bbf7d0; margin-bottom:6px;">'
-        '<div class="info-panel-title" style="background:#dcfce7; color:#15803d;">💭 Rationale</div>'
+        '<div class="info-panel-title" style="background:#dcfce7; color:#15803d;">💭 Thoughts</div>'
         f'<div class="info-panel-body">{safe}</div>'
         "</div>"
     )
@@ -930,14 +930,14 @@ def run_xray(
         return _render_goal_panel(xray_utils.get_task_goal(state.current_trajectory))
 
     def get_agent_action_md() -> str:
-        """Return the current step's rationale (if any) and action as stacked HTML panels."""
+        """Return the current step's thoughts (if any) and action as stacked HTML panels."""
         agent_out = state.get_agent_output()
         panels = []
         if agent_out and agent_out.thoughts:
-            rationale = agent_out.thoughts.strip()
-            if len(rationale) > 500:
-                rationale = rationale[:500] + "…"
-            panels.append(_render_rationale_panel(rationale))
+            thoughts = agent_out.thoughts.strip()
+            if len(thoughts) > 500:
+                thoughts = thoughts[:500] + "…"
+            panels.append(_render_thoughts_panel(thoughts))
         panels.append(_render_action_panel(xray_utils.get_agent_action_markdown(agent_out)))
         return "\n".join(panels)
 
