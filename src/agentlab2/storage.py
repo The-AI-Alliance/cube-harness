@@ -106,7 +106,7 @@ class FileStorage:
         for ext in [".metadata.json", ".jsonl"]:
             old_path = traj_dir / f"{trajectory_id}{ext}"
             if old_path.exists():
-                new_path = traj_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
+                new_path = self.output_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
                 old_path.rename(new_path)
                 logger.info(f"Archived {old_path.name} -> {new_path.name}")
 
@@ -389,10 +389,14 @@ class FileStorage:
         Returns:
             List of paths to episode config files.
         """
-        # Flat dir first, then legacy episode_configs/ subdir
+        # Flat dir first, then legacy episode_configs/ subdir; dedupe by name so flat wins
+        seen_names: set[str] = set()
         result: list[Path] = []
         for search_dir in [self.output_dir, self.output_dir / "episode_configs"]:
             if not search_dir.exists():
                 continue
-            result.extend(search_dir.glob("episode_*_task_*.json"))
+            for p in search_dir.glob("episode_*_task_*.json"):
+                if p.name not in seen_names:
+                    seen_names.add(p.name)
+                    result.append(p)
         return result
