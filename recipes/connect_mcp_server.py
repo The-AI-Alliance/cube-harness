@@ -98,24 +98,19 @@ def main() -> None:
         logger.info(f"Step {step + 1}: Agent produced {len(agent_output.actions)} action(s)")
 
         # Execute each action through the MCP tool
-        all_obs = Observation(contents=[])
         done = False
         for action in agent_output.actions:
             if action.name == STOP_ACTION.name:
                 logger.info("Agent called final_step — stopping.")
                 done = True
                 break
-            print(colored(f"  Action: {action.name}({action.arguments})", "magenta", attrs=["bold"]))
-            result = tool.execute_action(action)
-            for content in result.contents:
-                text = str(content.data)[:200]
-                print(colored(f"  Obs: {text}", "blue"))
-            all_obs = all_obs + result
+            logger.info(colored(f"Action {action})", "magenta"))
+            obs = tool.execute_action(action)
+            text = str(obs)[:500]
+            logger.info(colored(f"Obs {text}", "blue"))
 
         if done:
             break
-
-        obs = all_obs
 
     # -- 6. Show what changed --
     logger.info("--- Final directory contents ---")
