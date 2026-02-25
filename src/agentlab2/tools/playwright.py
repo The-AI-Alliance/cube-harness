@@ -11,7 +11,8 @@ from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from cube.core import Action, Content, Observation
-from agentlab2.tool import Tool, ToolConfig
+from cube.tool import ToolConfig
+from agentlab2.tool import Tool
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)
@@ -29,10 +30,10 @@ class PlaywrightConfig(ToolConfig):
     chromium_sandbox: bool = True
     pw_kwargs: dict = {}
 
-    def make(self) -> "SyncPlaywrightTool":
+    def make(self, container=None) -> "SyncPlaywrightTool":
         return SyncPlaywrightTool(self)
 
-    def make_async(self) -> "AsyncPlaywrightTool":
+    def make_async(self, container=None) -> "AsyncPlaywrightTool":
         return AsyncPlaywrightTool(self)
 
 

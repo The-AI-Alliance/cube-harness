@@ -4,7 +4,7 @@ from pydantic import Field
 
 from agentlab2.core import Task, TypedBaseModel
 from agentlab2.environment import EnvConfig
-from agentlab2.tool import ToolConfig
+from cube.tool import ToolConfig
 
 
 class Benchmark(TypedBaseModel, ABC):

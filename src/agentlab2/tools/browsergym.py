@@ -12,7 +12,8 @@ from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from cube.core import Action, Content, Observation
-from agentlab2.tool import Tool, ToolConfig
+from cube.tool import ToolConfig
+from agentlab2.tool import Tool
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class BrowsergymConfig(ToolConfig):
     prune_html: bool = True
     max_wait: int = 60
 
-    def make(self) -> "BrowsergymTool":
+    def make(self, container=None) -> "BrowsergymTool":
         return BrowsergymTool(self)
 
 

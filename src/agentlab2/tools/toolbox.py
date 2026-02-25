@@ -3,7 +3,8 @@ from typing import TypeVar
 from cube.core import Action, ActionSchema, Observation
 from cube.tool import AbstractTool
 
-from agentlab2.tool import Tool, ToolConfig
+from cube.tool import ToolConfig
+from agentlab2.tool import Tool
 
 
 class ToolboxConfig(ToolConfig):
@@ -11,8 +12,8 @@ class ToolboxConfig(ToolConfig):
 
     tool_configs: list[ToolConfig] = []
 
-    def make(self) -> "Toolbox":
-        tools = [tc.make() for tc in self.tool_configs]
+    def make(self, container=None) -> "Toolbox":
+        tools = [tc.make(container) for tc in self.tool_configs]
         return Toolbox(tools=tools)
 
 
