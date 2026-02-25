@@ -9,7 +9,7 @@ from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark
 from cube.core import EnvironmentOutput, TypedBaseModel
 from agentlab2.core import AgentOutput, Trajectory
-from agentlab2.episode import Episode
+from agentlab2.episode import MAX_STEPS, Episode
 from agentlab2.storage import FileStorage
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ class Experiment(TypedBaseModel):
     benchmark: Benchmark
     resume: bool = False
     retry_failed: bool = False
+    max_steps: int = MAX_STEPS
 
     @property
     def config(self) -> dict:
@@ -80,6 +81,7 @@ class Experiment(TypedBaseModel):
                 agent_config=self.agent_config,
                 env_config=env_config,
                 exp_name=self.name,
+                max_steps=self.max_steps,
             )
             for i, env_config in enumerate(self.benchmark.env_configs())
         ]

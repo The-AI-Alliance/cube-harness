@@ -4,8 +4,11 @@ All functions in this module are pure (or near-pure) — no Gradio imports, no g
 This makes them independently testable without any UI framework.
 """
 
+import datetime
 import html as html_lib
 import json
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,7 @@ from cube.core import EnvironmentOutput
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 
+from agentlab2.llm import LLMCall
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
@@ -61,8 +65,33 @@ _STATUS_EMOJI: dict[str, str] = {
 }
 
 
-def build_progress_html(n_completed: int, n_total: int, n_running: int) -> str:
-    """Return an HTML progress bar + label for experiment completion status."""
+def build_progress_html(
+    n_completed: int,
+    n_total: int,
+    n_running: int,
+    per_agent: list[tuple[str, int, int, int]] | None = None,
+    exp_names: list[str] | None = None,
+) -> str:
+    """Return an HTML progress bar + label for experiment completion status.
+
+    Args:
+        n_completed: Total completed trajectories across all agents.
+        n_total: Total trajectories across all agents.
+        n_running: Total currently running trajectories.
+        per_agent: Optional list of (agent_name, n_completed, n_total, n_running).
+                   When provided with > 1 entry, a per-agent breakdown is appended.
+        exp_names: Names of selected experiment directories being monitored.
+    """
+    header = ""
+    if exp_names:
+        label_text = "Monitoring"
+        names_html = "".join(
+            f'<code style="font-size:11px;background:#e5e7eb;border-radius:3px;padding:1px 5px;">'
+            f"{html_lib.escape(n)}</code> "
+            for n in exp_names
+        )
+        header = f'<div style="margin-bottom:6px;color:#666;font-size:11px;">{label_text}: {names_html}</div>'
+
     pct = (n_completed / n_total * 100) if n_total > 0 else 0
     bar = (
         f'<div style="background:#e5e7eb;border-radius:6px;height:14px;overflow:hidden;margin-bottom:4px;">'
@@ -73,14 +102,53 @@ def build_progress_html(n_completed: int, n_total: int, n_running: int) -> str:
     if n_running > 0:
         label += f", {n_running} running ⏳"
     label += "</div>"
-    return bar + label
+
+    if not per_agent or len(per_agent) <= 1:
+        return header + bar + label
+
+    rows_html = ""
+    for agent_name, agent_done, agent_total, agent_running in per_agent:
+        agent_pct = (agent_done / agent_total * 100) if agent_total > 0 else 0
+        mini_bar = (
+            f'<div style="background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;flex:1;">'
+            f'<div style="background:#22c55e;height:100%;width:{agent_pct:.1f}%;transition:width 0.5s;"></div></div>'
+        )
+        running_str = f" ⏳{agent_running}" if agent_running > 0 else ""
+        rows_html += (
+            f'<div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:11px;color:#555;">'
+            f'<div style="min-width:140px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+            f'font-family:monospace;" title="{html_lib.escape(agent_name)}">{html_lib.escape(agent_name)}</div>'
+            f"{mini_bar}"
+            f'<div style="min-width:60px;text-align:right;white-space:nowrap;">{agent_done}/{agent_total}{running_str}</div>'
+            f"</div>"
+        )
+    return header + bar + label + rows_html
+
+
+def archive_experiment(results_dir: Path, exp_name: str) -> None:
+    """Move an experiment directory into results_dir/_archive/.
+
+    Creates _archive/ if it does not exist. No-ops silently if the source does not exist.
+    """
+    src = results_dir / exp_name
+    if not src.exists():
+        return
+    archive_dir = results_dir / "_archive"
+    archive_dir.mkdir(exist_ok=True)
+    shutil.move(str(src), str(archive_dir / exp_name))
+
+
+def _is_experiment_dir(dir_path: Path) -> bool:
+    """Return True if dir_path is a valid (non-archived) experiment directory."""
+    return dir_path.is_dir() and not dir_path.name.startswith("_") and (dir_path / "trajectories").exists()
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
     """Return sorted list of experiment directory names with trajectory counts.
 
     Returns ["Select experiment directory"] + names sorted most-recent first.
-    Only includes directories that contain a 'trajectories/' subdirectory.
+    Only includes non-archived directories that contain a 'trajectories/' subdirectory.
+    Directories whose names start with '_' (e.g. _archive) are excluded.
     """
     sentinel = "Select experiment directory"
     if not results_dir or not results_dir.exists():
@@ -88,15 +156,70 @@ def get_directory_contents(results_dir: Path) -> list[str]:
 
     exp_descriptions = []
     for dir_path in results_dir.iterdir():
-        if not dir_path.is_dir():
+        if not _is_experiment_dir(dir_path):
             continue
-        traj_dir = dir_path / "trajectories"
-        if not traj_dir.exists():
-            continue
-        n_trajs = len(list(traj_dir.glob("*.jsonl")))
+        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return [sentinel] + sorted(exp_descriptions, reverse=True)
+
+
+def _parse_exp_date(dir_path: Path) -> str:
+    """Extract a datetime string from the directory name, fall back to mtime.
+
+    Returns "YYYY-MM-DD HH:MM:SS" when a full timestamp is found.
+
+    Recognises common timestamp patterns in directory names:
+      - YYYY-MM-DD[_HH-MM] or YYYY-MM-DDTHH:MM  (ISO-like)
+      - YYYYMMDD_HHMMSS or YYYYMMDD_HHMM or YYYYMMDD  (compact, e.g. exp_20260221_074349)
+    Falls back to the directory's mtime formatted as YYYY-MM-DD HH:MM:SS.
+    """
+    name = dir_path.name
+    # ISO-like: YYYY-MM-DD optionally followed by _HH-MM or THH:MM
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})(?:[_T](\d{2})[-:](\d{2}))?", name)
+    if m:
+        date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        if m.group(4) and m.group(5):
+            date_str += f" {m.group(4)}:{m.group(5)}"
+        return date_str
+    # Compact: YYYYMMDD optionally followed by _HHMMSS or _HHMM
+    m = re.search(r"(\d{4})(\d{2})(\d{2})(?:_(\d{2})(\d{2})(\d{2})?)?(?!\d)", name)
+    if m:
+        date_str = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        if m.group(4) and m.group(5):
+            date_str += f" {m.group(4)}:{m.group(5)}"
+            if m.group(6):
+                date_str += f":{m.group(6)}"
+        return date_str
+    dt = datetime.datetime.fromtimestamp(dir_path.stat().st_mtime)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
+    """Return one row per experiment directory for the Experiments selector table.
+
+    Columns: selected (bool), experiment (str), date (str), n_trajs (int).
+    The date column contains "YYYY-MM-DD HH:MM" when a time is available.
+    Only includes directories that contain a 'trajectories/' subdirectory.
+    Sorted most-recent first (ISO datetime strings sort lexicographically).
+    """
+    if not results_dir or not results_dir.exists():
+        return []
+    rows = []
+    for dir_path in results_dir.iterdir():
+        if not _is_experiment_dir(dir_path):
+            continue
+        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
+        rows.append(
+            {
+                "selected": False,
+                "experiment": dir_path.name,
+                "date": _parse_exp_date(dir_path),
+                "n_trajs": n_trajs,
+            }
+        )
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +253,6 @@ def get_current_screenshot(
     if img is None and prev_step is not None:
         img = get_screenshot_from_step(prev_step)
     return img
-
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +315,11 @@ def _details_block(label: str, body: str, icon: str = "📄") -> str:
     """
     open_attr = " open" if len(body) <= _COLLAPSE_THRESHOLD else ""
     preview = _preview(body)
-    preview_html = f" <span style='color:#888;font-weight:normal'>{html_lib.escape(preview)}</span>" if preview and not open_attr else ""
+    preview_html = (
+        f" <span style='color:#888;font-weight:normal'>{html_lib.escape(preview)}</span>"
+        if preview and not open_attr
+        else ""
+    )
     escaped = html_lib.escape(body)
     return (
         f"<details{open_attr}>"
@@ -213,7 +339,7 @@ def _render_text_content(text: str) -> str:
         newline = text.find("\n")
         if newline != -1:
             name = text[2:newline].strip()
-            body = text[newline + 1:]
+            body = text[newline + 1 :]
             return _details_block(name, body)
     return _details_block("text", text)
 
@@ -249,7 +375,9 @@ def _render_content_items(content: str | list | None) -> str:
             if next_item is not None and next_item.get("type") in ("image_url", "image"):
                 url = next_item.get("image_url", {}).get("url", "") or next_item.get("url", "")
                 img = f"<img src='{url}' style='max-width:100%;border-radius:4px;margin:4px 0'>"
-                parts.append(f"<details open><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n")
+                parts.append(
+                    f"<details open><summary>📷 <strong>{html_lib.escape(text or 'screenshot')}</strong></summary>{img}</details>\n"
+                )
                 idx += 2
             else:
                 parts.append(_render_text_content(text))
@@ -297,19 +425,16 @@ _ROLE_STYLE = {
 }
 
 
-def get_chat_messages_html(step: EnvironmentOutput | AgentOutput | None) -> str:
-    """Render the full LLM conversation (prompt + response) as HTML for one agent step.
-
-    Each message is a collapsible <details> block — short content is expanded by default,
-    long content (axtree, HTML) starts collapsed. Screenshots render as inline images.
-    Returns empty string for non-AgentOutput steps or steps with no llm_calls.
-    """
-    if not isinstance(step, AgentOutput) or not step.llm_calls:
-        return ""
-
-    llm_call = step.llm_calls[0]
+def _render_llm_call_html(llm_call: LLMCall) -> str:
+    """Render a single LLM call (prompt + response) as HTML message blocks."""
+    config_json = html_lib.escape(llm_call.llm_config.model_dump_json(indent=2))
+    config_html = (
+        f"<details><summary>⚙️ <strong>llm_config</strong></summary>"
+        f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{config_json}</pre>"
+        f"</details>\n"
+    )
     messages = list(llm_call.prompt.messages) + [llm_call.output]
-    blocks: list[str] = []
+    blocks: list[str] = [config_html]
 
     for i, msg in enumerate(messages):
         msg_dict = _msg_to_dict(msg)
@@ -332,6 +457,17 @@ def get_chat_messages_html(step: EnvironmentOutput | AgentOutput | None) -> str:
         )
 
     return "".join(blocks)
+
+
+def get_chat_branches(step: EnvironmentOutput | AgentOutput | None) -> dict[str, str]:
+    """Return {label: html} for each LLMCall in an agent step.
+
+    The tab label is call.tag when set, otherwise call.id.
+    Returns empty dict for non-AgentOutput steps or steps with no llm_calls.
+    """
+    if not isinstance(step, AgentOutput):
+        return {}
+    return {(call.tag or call.id): _render_llm_call_html(call) for call in step.llm_calls}
 
 
 def _truncate(text: str, max_len: int) -> str:
@@ -418,6 +554,9 @@ def _format_agent_step_details(step: AgentOutput, duration_info: str) -> str:
             if usage.cost > 0:
                 token_parts.append(f"💰 **${usage.cost:.4f}**")
             sections.append(" │ ".join(token_parts) + "\n")
+
+    if step.action_rationale:
+        sections.append(f"### Rationale\n{_truncate(step.action_rationale, 150000)}\n")
 
     if step.actions:
         sections.append("### Actions\n")
@@ -829,9 +968,7 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
         avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
 
         durations = [
-            t.end_time - t.start_time
-            for t in task_trajs
-            if t.start_time is not None and t.end_time is not None
+            t.end_time - t.start_time for t in task_trajs if t.start_time is not None and t.end_time is not None
         ]
         avg_duration_str = format_duration(sum(durations) / len(durations)) if durations else "-"
 
@@ -913,6 +1050,16 @@ _FAILURE_BORDER_COLOR = "#dc3545"
 _MIN_WIDTH = 12
 _MAX_WIDTH = 240
 
+# Muted palette for profiling labels — distinct from env blue and agent green.
+_PROFILING_PALETTE = [
+    "#f9c784",  # warm amber
+    "#d4a8e0",  # soft violet
+    "#f4a3a8",  # dusty rose
+    "#80cbc4",  # teal
+    "#fde68a",  # pale gold
+    "#ff9a6c",  # soft orange
+]
+
 
 def _compute_step_width(
     duration: float | None,
@@ -928,6 +1075,75 @@ def _compute_step_width(
     return int(min_width + normalized * (max_width - min_width))
 
 
+def _assign_profiling_colors(labels: list[str]) -> dict[str, str]:
+    """Map profiling labels to palette colors in a stable, insertion-order manner."""
+    return {label: _PROFILING_PALETTE[i % len(_PROFILING_PALETTE)] for i, label in enumerate(labels)}
+
+
+def _build_profiling_strip_css(
+    profiling: dict[str, tuple[float, float]],
+    label_colors: dict[str, str],
+    agent_t_start: float | None = None,
+    agent_t_end: float | None = None,
+    env_pct: float = 0.0,
+) -> str | None:
+    """Build a CSS linear-gradient for the top profiling strip.
+
+    The strip is anchored to the agent portion of the bar (env_pct% → 100%).
+    When agent_t_start/end are provided, profiling entries are positioned using the
+    agent step's absolute timestamps so the strip aligns with the green agent zone.
+    Falls back to spanning the profiling window if agent timing is unavailable.
+    Returns None if profiling is empty or the total duration is zero.
+    """
+    if not profiling:
+        return None
+    entries = sorted(
+        [(start, end, label) for label, (start, end) in profiling.items() if end > start],
+        key=lambda x: x[0],
+    )
+    if not entries:
+        return None
+
+    agent_span = 100.0 - env_pct  # bar-% width of the agent zone
+
+    if agent_t_start is not None and agent_t_end is not None and agent_t_end > agent_t_start:
+        ref_start = agent_t_start
+        ref_duration = agent_t_end - agent_t_start
+    else:
+        # Fallback: map relative to the profiling window, over the agent zone only.
+        ref_start = entries[0][0]
+        ref_end = max(e for _, e, _ in entries)
+        ref_duration = ref_end - ref_start
+
+    if ref_duration <= 0:
+        return None
+
+    stops: list[str] = []
+    # Cover the env portion with transparent so colors stay in the agent zone.
+    if env_pct > 0.5:
+        stops.append(f"transparent 0% {env_pct:.1f}%")
+
+    cursor_pct = env_pct
+    for seg_start, seg_end, label in entries:
+        pct_start = env_pct + (seg_start - ref_start) / ref_duration * agent_span
+        pct_end = env_pct + (seg_end - ref_start) / ref_duration * agent_span
+        # Clamp to the agent portion.
+        pct_start = max(env_pct, min(100.0, pct_start))
+        pct_end = max(env_pct, min(100.0, pct_end))
+        if pct_end <= pct_start:
+            continue
+        color = label_colors.get(label, _AGENT_COLOR)
+        if pct_start > cursor_pct + 0.5:
+            stops.append(f"transparent {cursor_pct:.1f}% {pct_start:.1f}%")
+        stops.append(f"{color} {pct_start:.1f}% {pct_end:.1f}%")
+        cursor_pct = pct_end
+    if cursor_pct < 99.5:
+        stops.append(f"transparent {cursor_pct:.1f}% 100%")
+    if not stops or stops == [f"transparent 0% {env_pct:.1f}%"]:
+        return None
+    return f"linear-gradient(to right, {', '.join(stops)})"
+
+
 def _build_segment_html(
     step_idx: int,
     is_current: bool,
@@ -936,11 +1152,12 @@ def _build_segment_html(
     env_frac: float,
     done: bool = False,
     reward: float = 0.0,
+    profiling_strip_css: str | None = None,
 ) -> str:
-    """Build the HTML div for one timeline segment with an env/agent split color bar.
+    """Build the HTML div for one timeline segment.
 
-    The segment is split horizontally: left env_frac shows env color, remainder shows agent color.
-    env_frac=1.0 means the whole bar is env color (no agent step follows).
+    The main bar uses a two-color env/agent gradient. When profiling_strip_css is provided,
+    a thin colored strip is rendered at the top of the bar (like the done border at the bottom).
     """
     border = f"3px solid {_CURRENT_BORDER_COLOR}" if is_current else "1px solid #ccc"
     box_shadow = "0 0 8px rgba(255, 215, 0, 0.8)" if is_current else "none"
@@ -950,16 +1167,19 @@ def _build_segment_html(
         done_color = _SUCCESS_BORDER_COLOR if reward > 0 else _FAILURE_BORDER_COLOR
         done_border = f"border-bottom: 4px solid {done_color};"
 
-    step_num = step_idx + 1  # 1-based display
-
-    # Build the inner split bar using a CSS linear-gradient
+    step_num = step_idx + 1
     env_pct = int(env_frac * 100)
-    agent_pct = 100 - env_pct
-    if agent_pct == 0:
-        gradient = _ENV_COLOR
-    else:
-        gradient = (
-            f"linear-gradient(to right, {_ENV_COLOR} {env_pct}%, {_AGENT_COLOR} {env_pct}%)"
+    gradient = (
+        _ENV_COLOR
+        if env_pct == 100
+        else (f"linear-gradient(to right, {_ENV_COLOR} {env_pct}%, {_AGENT_COLOR} {env_pct}%)")
+    )
+
+    strip_html = ""
+    if profiling_strip_css:
+        strip_html = (
+            f'<div style="position: absolute; top: 0; left: 0; right: 0; height: 5px;'
+            f' background: {profiling_strip_css}; border-radius: 3px 3px 0 0; pointer-events: none;"></div>'
         )
 
     # Use native setter to properly trigger Gradio's change detection
@@ -975,15 +1195,25 @@ def _build_segment_html(
 
     return (
         f'<div class="timeline-step" data-step="{step_idx}" title="{tooltip}" onclick="{onclick}" style="'
-        f"display: inline-flex; align-items: center; justify-content: center;"
+        f"position: relative; display: inline-flex; align-items: center; justify-content: center;"
         f" min-width: {total_width}px; height: 36px; margin: 2px;"
         f" background: {gradient}; border: {border}; border-radius: 4px;"
         f" cursor: pointer; font-size: 11px; font-weight: bold; color: #333;"
         f" box-shadow: {box_shadow}; {done_border} transition: transform 0.1s;"
         f'"'
         f" onmouseover=\"this.style.transform='scale(1.1)'\" onmouseout=\"this.style.transform='scale(1)'\">"
-        f"{step_num}</div>"
+        f"{strip_html}{step_num}</div>"
     )
+
+
+def _collect_profiling_labels(trajectory: Trajectory) -> list[str]:
+    """Return unique profiling labels across all AgentOutputs, in first-seen order."""
+    seen: dict[str, None] = {}
+    for ts in trajectory.steps:
+        if isinstance(ts.output, AgentOutput):
+            for label in ts.output.profiling:
+                seen.setdefault(label, None)
+    return list(seen.keys())
 
 
 def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> str:
@@ -991,7 +1221,8 @@ def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> 
 
     current_step is a UI step index (0-based index into env steps).
     Each segment's width scales with total (env+agent) duration.
-    Inside each segment a left-to-right gradient shows env time (blue) vs agent time (green).
+    The segment bar is split left→right: env time (blue) then agent time (green), with the
+    agent portion further subdivided by AgentOutput.profiling intervals when present.
     """
     if trajectory is None or not trajectory.steps:
         return "<div style='padding: 10px; color: #666;'>No trajectory loaded</div>"
@@ -1004,6 +1235,10 @@ def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> 
 
     if not env_steps:
         return "<div style='padding: 10px; color: #666;'>No environment steps found</div>"
+
+    # Assign stable colors to every profiling label found in this trajectory.
+    profiling_labels = _collect_profiling_labels(trajectory)
+    label_colors = _assign_profiling_colors(profiling_labels)
 
     def _raw_duration(raw_idx: int) -> float | None:
         ts = trajectory.steps[raw_idx]
@@ -1039,46 +1274,92 @@ def generate_timeline_html(trajectory: Trajectory | None, current_step: int) -> 
         total = ed + ad
         env_frac = (ed / total) if total > 0 else 1.0
 
-        # Tooltip with individual timings
-        tooltip = f"Step {ui_idx + 1}"
+        # Collect agent step profiling for the top strip.
+        agent_out: AgentOutput | None = None
+        agent_ts_start: float | None = None
+        agent_ts_end: float | None = None
+        next_idx = raw_idx + 1
+        if next_idx < len(trajectory.steps):
+            next_ts = trajectory.steps[next_idx]
+            if isinstance(next_ts.output, AgentOutput):
+                agent_out = next_ts.output
+                agent_ts_start = next_ts.start_time
+                agent_ts_end = next_ts.end_time
+
+        profiling = agent_out.profiling if agent_out is not None else {}
+        profiling_strip_css = _build_profiling_strip_css(
+            profiling, label_colors, agent_ts_start, agent_ts_end, env_frac * 100.0
+        )
+
+        # Build tooltip as a timing tree.
         timing_parts = []
         if ed > 0:
             timing_parts.append(f"env: {format_duration(ed)}")
         if ad > 0:
             timing_parts.append(f"agent: {format_duration(ad)}")
+        tooltip = f"Step {ui_idx + 1}"
         if timing_parts:
             tooltip += f" ({' + '.join(timing_parts)})"
+        tree_lines: list[str] = []
+        if ed > 0:
+            tree_lines.append(f"  env: {format_duration(ed)}")
+        if ad > 0:
+            tree_lines.append(f"  agent: {format_duration(ad)}")
+            for lbl, (start, end) in profiling.items():
+                tree_lines.append(f"    {lbl}: {format_duration(end - start)}")
         if env_out.done:
-            tooltip += f" — Done, reward: {env_out.reward:.2f}"
-        next_idx = raw_idx + 1
-        if next_idx < len(trajectory.steps):
-            agent_out = trajectory.steps[next_idx].output
-            if isinstance(agent_out, AgentOutput) and agent_out.actions:
-                action_names = ", ".join(a.name for a in agent_out.actions[:2])
-                tooltip += f" → {action_names}"
+            tree_lines.append(f"  reward: {env_out.reward:.2f}")
+        if tree_lines:
+            tooltip += "\n" + "\n".join(tree_lines)
 
         steps_html.append(
-            _build_segment_html(ui_idx, is_current, total_width, tooltip, env_frac, env_out.done, env_out.reward)
+            _build_segment_html(
+                ui_idx,
+                is_current,
+                total_width,
+                tooltip,
+                env_frac,
+                env_out.done,
+                env_out.reward,
+                profiling_strip_css,
+            )
         )
 
-    legend_html = (
-        f'<div style="display: flex; gap: 15px; margin-bottom: 8px; font-size: 12px; color: #666;">'
+    # Legend row 1: bar colors and step indicators (always shown).
+    row1_parts = [
         f'<div style="display: flex; align-items: center; gap: 4px;">'
         f'<div style="width: 22px; height: 14px;'
         f" background: linear-gradient(to right, {_ENV_COLOR} 50%, {_AGENT_COLOR} 50%);"
         f' border-radius: 3px;"></div>'
-        f"<span>Env | Agent time</span></div>"
+        f"<span>Env | Agent time</span></div>",
         f'<div style="display: flex; align-items: center; gap: 4px;">'
         f'<div style="width: 16px; height: 16px; border: 2px solid {_CURRENT_BORDER_COLOR}; border-radius: 3px;"></div>'
-        f"<span>Current</span></div>"
+        f"<span>Current</span></div>",
         f'<div style="display: flex; align-items: center; gap: 4px;">'
         f'<div style="width: 16px; height: 16px; border-bottom: 3px solid {_SUCCESS_BORDER_COLOR}; background: #ddd; border-radius: 3px;"></div>'
-        f"<span>Success</span></div>"
+        f"<span>Success</span></div>",
         f'<div style="display: flex; align-items: center; gap: 4px;">'
         f'<div style="width: 16px; height: 16px; border-bottom: 3px solid {_FAILURE_BORDER_COLOR}; background: #ddd; border-radius: 3px;"></div>'
-        f"<span>Failure</span></div>"
-        f"</div>"
+        f"<span>Failure</span></div>",
+    ]
+    legend_html = (
+        '<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; font-size: 12px; color: #666;">'
+        + "".join(row1_parts)
+        + "</div>"
     )
+
+    # Legend row 2: profiling labels (only when profiling data is present).
+    if profiling_labels:
+        row2_parts = [
+            f'<div style="display: flex; align-items: center; gap: 4px;">'
+            f'<div style="width: 16px; height: 5px; background: {label_colors[lbl]}; border-radius: 2px; border: 1px solid #bbb;"></div>'
+            f"<span>{lbl}</span></div>"
+            for lbl in profiling_labels
+        ]
+        legend_html += (
+            '<div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; font-size: 12px; color: #666;">'
+            '<span style="color:#999;">Agent profiling:</span>' + "".join(row2_parts) + "</div>"
+        )
 
     return (
         f'<div style="padding: 10px; background: #f8f9fa; border-radius: 8px;">'

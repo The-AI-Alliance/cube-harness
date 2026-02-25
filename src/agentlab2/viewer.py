@@ -8,7 +8,6 @@ Mimics the UI of the original agentlab viewer but works with the new data struct
 import argparse
 import json
 from dataclasses import dataclass, field
-from os.path import expanduser
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,7 @@ from PIL import Image
 from cube.core import EnvironmentOutput
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
+from agentlab2 import EXP_DIR
 from agentlab2.storage import FileStorage
 
 
@@ -444,7 +444,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         row = evt.index[0]
         traj_name = traj_table.iloc[row, 0]
         state.select_trajectory(traj_name)
-        return TrajectoryId(exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name)
+        return TrajectoryId(
+            exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name
+        )
 
     def new_trajectory(traj_id: TrajectoryId | None) -> StepId:
         """Handle new trajectory selection."""
@@ -697,6 +699,17 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         return stats
 
+    def get_task_goal() -> str:
+        """Get the task goal from trajectory metadata."""
+        if not state.current_trajectory:
+            return ""
+        goal = state.current_trajectory.metadata.get("goal", "")
+        if not goal:
+            goal = state.current_trajectory.metadata.get("task_goal", "")
+        if goal:
+            return f"**Goal:** {goal}"
+        return ""
+
     def generate_timeline_html() -> str:
         """Generate an HTML timeline visualization of the trajectory."""
         if not state.current_trajectory or not state.current_trajectory.steps:
@@ -905,6 +918,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         with gr.Row(visible=True, elem_id="timeline_click_input"):
             timeline_click_input = gr.Number(show_label=False, container=False)
 
+        # Task goal display
+        task_goal_display = gr.Markdown("", elem_id="task_goal")
+
         # Main two-column view
         with gr.Row():
             # Left column: Screenshots
@@ -946,6 +962,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         # Event handlers
         refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
 
+        # Clear dropdown on focus to allow easy re-selection
+        exp_dir_choice.focus(fn=lambda: None, outputs=exp_dir_choice)
+
         exp_dir_choice.change(
             fn=on_select_experiment,
             inputs=exp_dir_choice,
@@ -975,6 +994,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         step_id.change(fn=get_compact_header_info, outputs=header_info)
         step_id.change(fn=get_step_counter, outputs=step_counter)
         step_id.change(fn=generate_timeline_html, outputs=timeline_html)
+        step_id.change(fn=get_task_goal, outputs=task_goal_display)
         step_id.change(fn=update_screenshot, outputs=screenshot)
         step_id.change(fn=get_prev_screenshot, outputs=prev_screenshot)
         step_id.change(fn=get_step_details, outputs=step_details)
@@ -993,13 +1013,12 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
 def main():
     """Main entry point for the viewer."""
-    results_dir = expanduser("~/agentlab_results/al2")
     parser = argparse.ArgumentParser(description="AgentLab2 Experiment Viewer")
     parser.add_argument(
         "--results-dir",
         type=str,
-        default=results_dir,
-        help="Path to results directory containing experiments",
+        default=str(EXP_DIR),
+        help="Path to results directory containing experiments (default: agentlab2.EXP_DIR)",
     )
     parser.add_argument(
         "--debug",
