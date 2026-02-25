@@ -257,9 +257,8 @@ class TestMCPToolWithMockCore:
     @patch("agentlab2.tools.mcp._MCPToolCore")
     def test_reset_connects(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
-        mock_core.connect = AsyncMock()
-        mock_core.discover_tools = AsyncMock(return_value=[ActionSchema(name="test_tool", description="A test tool")])
-        mock_core.disconnect = AsyncMock()
+        mock_core.start = AsyncMock(return_value=[ActionSchema(name="test_tool", description="A test tool")])
+        mock_core.stop = AsyncMock()
         mock_core_cls.return_value = mock_core
 
         config = MCPToolConfig(servers={"s": MCPServerConfig(command="echo")})
@@ -274,10 +273,9 @@ class TestMCPToolWithMockCore:
     @patch("agentlab2.tools.mcp._MCPToolCore")
     def test_execute_action_text_result(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
-        mock_core.connect = AsyncMock()
-        mock_core.discover_tools = AsyncMock(return_value=[ActionSchema(name="greet", description="Greet")])
+        mock_core.start = AsyncMock(return_value=[ActionSchema(name="greet", description="Greet")])
         mock_core.call_tool = AsyncMock(return_value="Hello!")
-        mock_core.disconnect = AsyncMock()
+        mock_core.stop = AsyncMock()
         mock_core_cls.return_value = mock_core
 
         config = MCPToolConfig(servers={"s": MCPServerConfig(command="echo")})
@@ -295,12 +293,9 @@ class TestMCPToolWithMockCore:
     @patch("agentlab2.tools.mcp._MCPToolCore")
     def test_execute_action_list_result(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
-        mock_core.connect = AsyncMock()
-        mock_core.discover_tools = AsyncMock(
-            return_value=[ActionSchema(name="screenshot", description="Take screenshot")]
-        )
+        mock_core.start = AsyncMock(return_value=[ActionSchema(name="screenshot", description="Take screenshot")])
         mock_core.call_tool = AsyncMock(return_value=[{"data": "text result"}, {"data": "more", "name": "extra"}])
-        mock_core.disconnect = AsyncMock()
+        mock_core.stop = AsyncMock()
         mock_core_cls.return_value = mock_core
 
         config = MCPToolConfig(servers={"s": MCPServerConfig(command="echo")})
@@ -319,10 +314,9 @@ class TestMCPToolWithMockCore:
     @patch("agentlab2.tools.mcp._MCPToolCore")
     def test_execute_action_error_handling(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
-        mock_core.connect = AsyncMock()
-        mock_core.discover_tools = AsyncMock(return_value=[ActionSchema(name="fail", description="Fail")])
+        mock_core.start = AsyncMock(return_value=[ActionSchema(name="fail", description="Fail")])
         mock_core.call_tool = AsyncMock(side_effect=RuntimeError("Server crashed"))
-        mock_core.disconnect = AsyncMock()
+        mock_core.stop = AsyncMock()
         mock_core_cls.return_value = mock_core
 
         config = MCPToolConfig(servers={"s": MCPServerConfig(command="echo")})
@@ -339,9 +333,8 @@ class TestMCPToolWithMockCore:
     @patch("agentlab2.tools.mcp._MCPToolCore")
     def test_close_resets_state(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
-        mock_core.connect = AsyncMock()
-        mock_core.discover_tools = AsyncMock(return_value=[ActionSchema(name="t", description="t")])
-        mock_core.disconnect = AsyncMock()
+        mock_core.start = AsyncMock(return_value=[ActionSchema(name="t", description="t")])
+        mock_core.stop = AsyncMock()
         mock_core_cls.return_value = mock_core
 
         config = MCPToolConfig(servers={"s": MCPServerConfig(command="echo")})
@@ -357,11 +350,10 @@ class TestMCPToolWithMockCore:
     @patch("agentlab2.tools.mcp._MCPToolCore")
     def test_action_set_triggers_connect(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
-        mock_core.connect = AsyncMock()
-        mock_core.discover_tools = AsyncMock(
+        mock_core.start = AsyncMock(
             return_value=[ActionSchema(name="tool_a", description="A"), ActionSchema(name="tool_b", description="B")]
         )
-        mock_core.disconnect = AsyncMock()
+        mock_core.stop = AsyncMock()
         mock_core_cls.return_value = mock_core
 
         config = MCPToolConfig(servers={"s": MCPServerConfig(command="echo")})

@@ -108,64 +108,84 @@ class _AsyncBridge:
 
 
 class _MCPToolCore:
-    """Async core managing MCP server connections, tool discovery, and execution."""
+    """Async core managing MCP server connections, tool discovery, and execution.
+
+    Runs a single long-lived asyncio Task that owns the AsyncExitStack so that
+    connect and disconnect happen in the same task context (required by anyio
+    cancel-scope tracking used inside the MCP SDK).
+    """
 
     def __init__(self, config: MCPToolConfig) -> None:
         self._config = config
-        self._exit_stack: AsyncExitStack | None = None
         self._sessions: dict[str, ClientSession] = {}
         self._action_schemas: list[ActionSchema] = []
         self._tool_to_session: dict[str, ClientSession] = {}
+        self._shutdown_event: asyncio.Event = asyncio.Event()
+        self._lifecycle_task: asyncio.Task[None] | None = None
 
-    async def connect(self) -> None:
-        """Connect to all configured MCP servers and discover their tools."""
-        self._exit_stack = AsyncExitStack()
-        await self._exit_stack.__aenter__()
+    async def start(self) -> list[ActionSchema]:
+        """Launch the lifecycle task, wait for connections and tool discovery."""
+        ready: asyncio.Event = asyncio.Event()
+        error_holder: list[BaseException] = []
+        self._shutdown_event = asyncio.Event()
+        self._lifecycle_task = asyncio.get_running_loop().create_task(
+            self._lifecycle(ready, error_holder),
+        )
+        await ready.wait()
+        if error_holder:
+            raise error_holder[0]
+        return self._action_schemas
 
-        for server_name, server_config in self._config.servers.items():
-            try:
-                session = await self._connect_server(server_name, server_config)
-                self._sessions[server_name] = session
-            except Exception as e:
-                logger.error(f"Failed to connect to MCP server '{server_name}': {e}")
-                raise
+    async def _lifecycle(self, ready: asyncio.Event, error_holder: list[BaseException]) -> None:
+        """Single task that owns the AsyncExitStack for the entire connection lifetime."""
+        try:
+            async with AsyncExitStack() as stack:
+                for server_name, server_config in self._config.servers.items():
+                    try:
+                        session = await self._connect_server(server_name, server_config, stack)
+                        self._sessions[server_name] = session
+                    except Exception as e:
+                        logger.error(f"Failed to connect to MCP server '{server_name}': {e}")
+                        error_holder.append(e)
+                        ready.set()
+                        return
 
-        self._discover_tools()
+                await self._discover_tools()
+                ready.set()
 
-    async def _connect_server(self, name: str, config: MCPServerConfig) -> ClientSession:
+                # Keep the stack alive until told to shut down
+                await self._shutdown_event.wait()
+            # AsyncExitStack.__aexit__ runs here, in the same task that entered it
+        finally:
+            self._sessions.clear()
+            self._tool_to_session.clear()
+            self._action_schemas.clear()
+
+    async def _connect_server(self, name: str, config: MCPServerConfig, stack: AsyncExitStack) -> ClientSession:
         """Connect to a single MCP server and return its session."""
         transport = config._detect_transport()
-        assert self._exit_stack is not None  # for type checker
 
         if transport == "stdio":
             params = config.to_server_params()
-            streams = await self._exit_stack.enter_async_context(stdio_client(params))
+            streams = await stack.enter_async_context(stdio_client(params))
             read_stream, write_stream = streams
         elif transport == "sse":
-            streams = await self._exit_stack.enter_async_context(sse_client(config.url))
+            assert config.url is not None, "SSE transport requires 'url'"
+            streams = await stack.enter_async_context(sse_client(config.url))
             read_stream, write_stream = streams
         elif transport == "streamable_http":
-            streams = await self._exit_stack.enter_async_context(streamable_http_client(config.url))
+            assert config.url is not None, "Streamable HTTP transport requires 'url'"
+            streams = await stack.enter_async_context(streamable_http_client(config.url))
             read_stream, write_stream = streams[0], streams[1]
         else:
             raise ValueError(f"Unknown transport '{transport}' for server '{name}'")
 
-        session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
         await session.initialize()
         logger.info(f"Connected to MCP server '{name}' via {transport}")
         return session
 
-    def _discover_tools(self) -> None:
-        """Synchronously build action schemas from already-fetched tool lists.
-
-        Called after connect() has populated self._sessions.
-        Tools are fetched during connect via _connect_and_list_tools.
-        """
-        # We need to fetch tools from sessions - but this is called from connect()
-        # which is already async. We'll do a two-phase approach.
-        pass
-
-    async def discover_tools(self) -> list[ActionSchema]:
+    async def _discover_tools(self) -> None:
         """Discover tools from all connected sessions and build routing map."""
         self._action_schemas = []
         self._tool_to_session = {}
@@ -189,7 +209,6 @@ class _MCPToolCore:
                 self._tool_to_session[action_name] = session
 
         logger.info(f"Discovered {len(self._action_schemas)} MCP tools: {[s.name for s in self._action_schemas]}")
-        return self._action_schemas
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> str | list[dict[str, Any]]:
         """Call an MCP tool by name, routing to the correct server session."""
@@ -214,14 +233,12 @@ class _MCPToolCore:
 
         return _convert_mcp_result(result)
 
-    async def disconnect(self) -> None:
-        """Disconnect from all MCP servers."""
-        if self._exit_stack:
-            await self._exit_stack.aclose()
-            self._exit_stack = None
-        self._sessions.clear()
-        self._tool_to_session.clear()
-        self._action_schemas.clear()
+    async def stop(self) -> None:
+        """Signal the lifecycle task to shut down and wait for cleanup."""
+        self._shutdown_event.set()
+        if self._lifecycle_task:
+            await self._lifecycle_task
+            self._lifecycle_task = None
 
 
 class MCPTool(AbstractTool):
@@ -256,8 +273,7 @@ class MCPTool(AbstractTool):
             return
         self._bridge.start()
         self._core = _MCPToolCore(self.config)
-        self._bridge.run(self._core.connect())
-        self._action_schemas = self._bridge.run(self._core.discover_tools())
+        self._action_schemas = self._bridge.run(self._core.start())
         self._connected = True
 
     def reset(self) -> None:
@@ -299,7 +315,7 @@ class MCPTool(AbstractTool):
         """Disconnect from all MCP servers and stop the background event loop."""
         if self._core and self._connected:
             try:
-                self._bridge.run(self._core.disconnect())
+                self._bridge.run(self._core.stop())
             except Exception as e:
                 logger.warning(f"Error disconnecting MCP servers: {e}")
         self._bridge.stop()
