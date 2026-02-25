@@ -42,7 +42,7 @@ lint:
 
 lint-check:
 	uvx ruff check --diff ./src
-	uvx ruff format --check ./src
+	uvx ruff format --diff ./src
 
 test: install
 	uv run pytest -n 10 tests/ -v
