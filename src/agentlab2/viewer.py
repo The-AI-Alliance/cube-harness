@@ -47,16 +47,17 @@ class ViewerState:
     step: int = 0
 
     def load_experiment(self, exp_dir: Path) -> dict[str, Any]:
-        """Load all trajectories from an experiment directory."""
+        """Load trajectory metadata from an experiment directory."""
         self.exp_dirs = [exp_dir]
         self.trajectories = {}
+        self.current_exp_dir = exp_dir
 
         traj_dir = exp_dir / "trajectories"
         if not traj_dir.exists():
             return {"error": f"No trajectories directory found in {exp_dir}"}
 
         storage = FileStorage(exp_dir)
-        trajectories = storage.load_all_trajectories()
+        trajectories = storage.load_all_trajectory_metadata()
 
         for n, traj in enumerate(trajectories):
             self.trajectories[traj.id or f"traj{n}"] = traj
@@ -64,9 +65,14 @@ class ViewerState:
         return {"loaded": len(self.trajectories)}
 
     def select_trajectory(self, traj_id: str) -> None:
-        """Select a trajectory by ID."""
+        """Select a trajectory by ID, lazy-loading full steps if needed."""
         if traj_id in self.trajectories:
-            self.current_trajectory = self.trajectories[traj_id]
+            traj = self.trajectories[traj_id]
+            if not traj.steps and self.current_exp_dir:
+                storage = FileStorage(self.current_exp_dir)
+                traj = storage.load_trajectory(traj_id)
+                self.trajectories[traj_id] = traj
+            self.current_trajectory = traj
             self.step = 0
 
     def get_env_steps(self) -> list[tuple[int, EnvironmentOutput]]:
@@ -347,13 +353,6 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         finished_durations = []
         n_failed = 0
 
-        # Aggregate token stats across all trajectories
-        total_prompt_tokens = 0
-        total_completion_tokens = 0
-        total_cached_tokens = 0
-        total_cache_creation_tokens = 0
-        total_cost = 0.0
-
         # Sort trajectories by start_time ascending (None values go to the end)
         sorted_trajectories = sorted(
             state.trajectories.values(),
@@ -361,66 +360,27 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         )
 
         for traj in sorted_trajectories:
-            n_steps = len(traj.steps)
-
-            if traj.reward_info:
-                final_reward = traj.reward_info.get("reward", 0.0)
-                final_message = traj.reward_info.get("message", "")
-            else:
-                # Fallback: find last reward from steps (for older trajectories without reward_info)
-                final_reward = 0.0
-                final_message = ""
-                for step in reversed(traj.steps):
-                    if isinstance(step.output, EnvironmentOutput):
-                        final_reward = step.output.reward
-                        final_message = step.output.info.get("message", "")
-                        break
-
-            # Collect token stats from agent steps (per-trajectory and totals)
-            traj_tokens = 0
-            traj_cost = 0.0
-            for traj_step in traj.steps:
-                if isinstance(traj_step.output, AgentOutput):
-                    for llm_call in traj_step.output.llm_calls:
-                        if llm_call.usage:
-                            traj_tokens += llm_call.usage.prompt_tokens + llm_call.usage.completion_tokens
-                            traj_cost += llm_call.usage.cost
-                            total_prompt_tokens += llm_call.usage.prompt_tokens
-                            total_completion_tokens += llm_call.usage.completion_tokens
-                            total_cached_tokens += llm_call.usage.cached_tokens
-                            total_cache_creation_tokens += llm_call.usage.cache_creation_tokens
-                            total_cost += llm_call.usage.cost
-
             task_id = traj.metadata.get("task_id", "unknown")
+            final_reward = traj.reward_info.get("reward", 0.0) if traj.reward_info else 0.0
+            final_message = traj.reward_info.get("message", "") if traj.reward_info else ""
 
-            # Trajectory is considered finished only if it has timing data
             is_finished = traj.start_time is not None and traj.end_time is not None
             if is_finished:
                 duration = traj.end_time - traj.start_time
                 duration_str = format_duration(duration)
                 finished_rewards.append(final_reward)
-                finished_steps.append(n_steps)
+                finished_steps.append(0)
                 finished_durations.append(duration)
             else:
                 duration_str = "-"
                 n_failed += 1
 
-            # Format tokens and cost for display
-            tokens_str = f"{traj_tokens:,}" if traj_tokens > 0 else "-"
-            cost_str = f"${traj_cost:.4f}" if traj_cost > 0 else "-"
-
+            # Steps/tokens/cost require full trajectory parsing; only metadata is loaded here
             traj_data.append(
-                [traj.id, task_id, n_steps, f"{final_reward:.2f}", final_message, duration_str, tokens_str, cost_str]
+                [traj.id, task_id, "-", f"{final_reward:.2f}", final_message, duration_str, "-", "-"]
             )
 
-        # Calculate experiment statistics
-        token_stats = {
-            "prompt": total_prompt_tokens,
-            "completion": total_completion_tokens,
-            "cached": total_cached_tokens,
-            "cache_created": total_cache_creation_tokens,
-            "cost": total_cost,
-        }
+        token_stats: dict[str, int] = {}
         exp_stats = _compute_experiment_stats(
             finished_rewards, finished_steps, finished_durations, n_failed, token_stats
         )
