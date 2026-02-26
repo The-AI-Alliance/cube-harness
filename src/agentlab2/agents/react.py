@@ -1,13 +1,13 @@
-import json
 import logging
 
 from litellm import Message
 from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import Action, ActionSchema, AgentOutput, Observation
+from agentlab2.core import Action, ActionSchema, AgentOutput, LLMCall, Observation
 from agentlab2.environment import STOP_ACTION
-from agentlab2.llm import LLMCall, LLMConfig, Prompt
+from agentlab2.llm import LLMConfig, Prompt
+from agentlab2.utils import parse_actions
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class ReactAgent(Agent):
         self.history.append(llm_output)
         self._actions_cnt += 1
         llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output, usage=usage)
-        return AgentOutput(actions=self._parse_actions(llm_output), llm_calls=[llm_call])
+        return AgentOutput(actions=parse_actions(llm_output), llm_calls=[llm_call])
 
     def choose_steps_to_render(self, history: list[dict | Message]) -> list[dict | Message]:
         """Select which parts of history to include in the prompt based on length."""
@@ -100,21 +100,6 @@ class ReactAgent(Agent):
             *self.history[-self.config.render_last_n_steps :],
             dict(role="user", content=self.config.react_prompt),
         ]
-
-    def _parse_actions(self, llm_output: Message) -> list[Action]:
-        actions = []
-        if hasattr(llm_output, "tool_calls") and llm_output.tool_calls:
-            for tc in llm_output.tool_calls:
-                arguments = tc.function.arguments
-                if isinstance(arguments, str):
-                    try:
-                        arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        raise ValueError(f"Invalid JSON arguments in tool call: {arguments}")
-                if tc.function.name is None:
-                    raise ValueError("Tool call must have a function name.")
-                actions.append(Action(id=tc.id, name=tc.function.name, arguments=arguments))
-        return actions
 
     def max_actions_reached(self) -> bool:
         return self._actions_cnt >= self.config.max_actions
@@ -127,12 +112,23 @@ class ReactAgent(Agent):
             short_tokens = self.token_counter(messages=self.history)
             logger.info(f"Compacted history from {tokens} to {short_tokens} tokens.")
 
+    def _get_role(self, msg: dict | Message) -> str:
+        if isinstance(msg, dict):
+            return msg.get("role", "")
+        return getattr(msg, "role", "")
+
     def compact_history(self):
         """
         Compact the history by summarizing the first half of messages with the LLM.
         Updates self.history in place by replacing the first half with the summary message.
         """
         midpoint = len(self.history) // 2
+        # Advance past any tool messages to avoid splitting tool_call/tool_result pairs
+        while midpoint < len(self.history) and self._get_role(self.history[midpoint]) == "tool":
+            midpoint += 1
+        if midpoint >= len(self.history):
+            logger.warning("compact_history: could not find a clean split point, skipping compaction.")
+            return
         first_half = self.history[:midpoint]
         second_half = self.history[midpoint:]
         messages = [

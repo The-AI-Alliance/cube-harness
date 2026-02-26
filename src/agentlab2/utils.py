@@ -1,6 +1,10 @@
+import json
 import re
 
 from bs4 import BeautifulSoup
+from litellm import Message
+
+from agentlab2.core import Action
 
 
 def prune_html(html):
@@ -26,3 +30,19 @@ def prune_html(html):
     html = soup.prettify()
 
     return html
+
+
+def parse_actions(llm_output: Message) -> list[Action]:
+    actions = []
+    if hasattr(llm_output, "tool_calls") and llm_output.tool_calls:
+        for tc in llm_output.tool_calls:
+            arguments = tc.function.arguments
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    raise ValueError(f"Invalid JSON arguments in tool call: {arguments}")
+            if tc.function.name is None:
+                raise ValueError("Tool call must have a function name.")
+            actions.append(Action(id=tc.id, name=tc.function.name, arguments=arguments))
+    return actions

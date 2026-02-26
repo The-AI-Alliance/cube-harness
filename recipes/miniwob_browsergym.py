@@ -10,9 +10,8 @@ Usage:
 """
 
 import sys
-import time
-from pathlib import Path
 
+from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
@@ -22,8 +21,7 @@ from agentlab2.tools.browsergym import BrowsergymConfig
 
 
 def main(debug: bool) -> None:
-    current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"miniwob_bgym_{current_datetime}"
+    output_dir = make_experiment_output_dir("react", "miniwob_browsergym")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini")
     agent_config = ReactAgentConfig(llm_config=llm_config)
@@ -40,6 +38,7 @@ def main(debug: bool) -> None:
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
+        max_steps=10,
     )
     if debug:
         run_sequentially(exp, debug_limit=2)
