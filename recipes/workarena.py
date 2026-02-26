@@ -27,6 +27,8 @@ from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
 from agentlab2.tools.browsergym import BrowsergymConfig
+from agentlab2.tools.chat import ChatConfig
+from agentlab2.tools.toolbox import ToolboxConfig
 
 try:
     from agentlab2.benchmarks.workarena import WorkArenaBenchmark
@@ -46,20 +48,23 @@ def main(debug: bool):
         render_last_n_steps=2,
         max_actions=20,
         llm_config=llm_config,
+        can_finish=False,
     )
 
     # Configure BrowserGym tool
     # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
-    tool_config = BrowsergymConfig(
+    browser_config = BrowsergymConfig(
         headless=not debug,  # Show browser in debug mode
         use_screenshot=True,
         use_axtree=True,
         use_html=False,
     )
+    chat_config = ChatConfig()
+    toolbox_config = ToolboxConfig(tool_configs=[browser_config, chat_config])
 
     # Configure WorkArena benchmark
     benchmark = WorkArenaBenchmark(
-        tool_config=tool_config,
+        tool_config=toolbox_config,
         level="l1",
         n_seeds_l1=2 if debug else 5,  # Fewer seeds in debug mode
     )

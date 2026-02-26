@@ -5,10 +5,13 @@ import time
 
 from termcolor import colored
 
+from browsergym.workarena.tasks.base import AbstractServiceNowTask
+from agentlab2.action_spaces.chat_action_space import ChatActionSpace
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
 from agentlab2.tools.browsergym import BrowsergymTool
-from browsergym.workarena.tasks.base import AbstractServiceNowTask
+from agentlab2.tools.chat import ChatTool
+from agentlab2.tools.toolbox import Toolbox
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,7 @@ class WorkArenaTask(Task):
 
     validate_per_step: bool = True
     supported_actions: ActionSpace = ActionSpace(
+        ChatActionSpace.send_message,
         BidBrowserActionSpace.browser_press_key,
         BidBrowserActionSpace.browser_type,
         BidBrowserActionSpace.browser_click,
@@ -36,7 +40,8 @@ class WorkArenaTask(Task):
         BidBrowserActionSpace.browser_focus,
         BidBrowserActionSpace.noop,
     )
-    _tool: BrowsergymTool
+    _browser_tool: BrowsergymTool
+    _chat_tool: ChatTool
 
     def __init__(
         self,
@@ -62,36 +67,38 @@ class WorkArenaTask(Task):
         self.wait_first_page_time = wait_first_page_time
 
 
-    def setup(self, tool: BrowsergymTool) -> tuple[Observation, dict]:
+    def setup(self, tool: Toolbox) -> tuple[Observation, dict]:
         """Set up the WorkArena task with direct task lifecycle management.
+
         Args:
-            tool: The BrowsergymTool instance to configure.
+            tool: The Toolbox containing the BrowsergymTool and ChatTool.
 
         Returns:
             Tuple of (initial observation, task info dict).
         """
-        self._tool = tool
+        self._browser_tool = tool.find_tool(BrowsergymTool)
+        self._chat_tool = tool.find_tool(ChatTool)
         logger.info(f"Setting up WorkArena task {self.id} with seed {self.seed}")
         self._workarena_task = self.workarena_task_class(seed=self.seed)
-        _apply_task_runtime_preferences(self._tool, self._workarena_task)
-        self._tool.reset()
-        goal, task_info = self._workarena_task.setup(self._tool.page)
+        _apply_task_runtime_preferences(self._browser_tool, self._workarena_task)
+        self._browser_tool.reset()
+        goal, task_info = self._workarena_task.setup(self._browser_tool.page)
 
-        logger.info(f"WorkArena page URL after setup: {self._tool.page.url}")
-        logger.info(f"WorkArena page title: {self._tool.page.title()}")
+        logger.info(f"WorkArena page URL after setup: {self._browser_tool.page.url}")
+        logger.info(f"WorkArena page title: {self._browser_tool.page.title()}")
         logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
 
         obs = Observation.from_text(goal)
-        obs += self._tool.page_obs()
+        obs += self._browser_tool.page_obs()
 
         # Get the goal from the BrowserGym task
-        tool.noop()  # perform a noop to ensure env is ready
+        self._browser_tool.noop()  # perform a noop to ensure env is ready
         time.sleep(self.wait_first_page_time)  # wait for page to load
         logger.info(colored(f"WorkArena task goal: {goal}", "green"))
 
         # Build initial observation with goal and page state
         obs = Observation.from_text(goal)
-        obs += tool.page_obs()
+        obs += self._browser_tool.page_obs()
 
         info = {
             "task_id": self.id,
@@ -115,7 +122,7 @@ class WorkArenaTask(Task):
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
 
-        reward, done, _user_message, task_info = self._workarena_task.validate(self._tool.page, [])
+        reward, done, _user_message, task_info = self._workarena_task.validate(self._browser_tool.page, self._chat_tool.messages)
         return reward, {"done": done, **task_info}
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
@@ -134,8 +141,8 @@ class WorkArenaTask(Task):
 
     def finished(self) -> bool:
         """Check task completion via WorkArena validate() and cache the result."""
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(self._tool.page, [])
-        return done or self._tool._last_terminated
+        _reward, done, _user_message, _task_info = self._workarena_task.validate(self._browser_tool.page, self._chat_tool.messages)
+        return done or self._browser_tool._last_terminated
 
     def teardown(self) -> None:
         """Clean up WorkArena task resources."""
