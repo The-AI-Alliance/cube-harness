@@ -30,7 +30,7 @@ Think along the following lines:
 2. Evaluate action success, explain impact on task and next steps.
 3. If you see any errors in the last observation, think about it. If there is no error, just move on.
 4. List next steps to move towards the goal and propose next immediate action.
-Then produce the single function call that performs the proposed action. If the task is complete, produce the final step."""
+Then produce the single function call that performs the proposed action."""
     summarize_system_prompt: str = """
 You are a helpful assistant that summarizes agent interaction history. Following messages is the history to summarize:"""
     summarize_prompt: str = """

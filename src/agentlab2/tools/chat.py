@@ -7,7 +7,7 @@ from typing import TypedDict
 
 class ChatMessage(TypedDict):
     role: str
-    content: str
+    message: str
 
 class ChatConfig(ToolConfig):
     """Configuration for ChatTool."""
@@ -30,7 +30,7 @@ class ChatTool(Tool, ChatActionSpace):
         return list(self._messages)
     
     def add_message(self, message: str, role: str = "assistant") -> None:
-        self._messages.append({"role": role, "content": message})
+        self._messages.append(ChatMessage(role=role, message=message))
 
     def send_message(self, message: str) -> str:
         """Send a message to the user chat."""

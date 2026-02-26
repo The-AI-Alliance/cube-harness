@@ -50,6 +50,7 @@ def main(debug: bool):
         render_last_n_steps=2,
         max_actions=20,
         llm_config=llm_config,
+        can_finish=False,
     )
 
     # Configure BrowserGym tool
@@ -67,7 +68,7 @@ def main(debug: bool):
     benchmark = WorkArenaBenchmark(
         tool_config=toolbox_config,
         level="l1",
-        n_seeds_l1=2 if debug else 2,  # Fewer seeds in debug mode
+        n_seeds_l1=2 if debug else 5,  # Fewer seeds in debug mode
     )
 
     # Create experiment
@@ -82,7 +83,7 @@ def main(debug: bool):
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=8)
+        run_with_ray(exp, n_cpus=1)
 
 
 if __name__ == "__main__":
