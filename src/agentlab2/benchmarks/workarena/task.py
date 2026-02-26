@@ -1,8 +1,10 @@
 """WorkArena task wrapper for AgentLab2."""
 
 import logging
+import time
 from typing import Any, Callable
 
+from termcolor import colored
 from agentlab2.action_spaces.chat_action_space import ChatActionSpace
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
@@ -46,6 +48,7 @@ class WorkArenaTask(Task):
         workarena_task_class: Callable[..., Any],
         seed: int,
         level: str = "l1",
+        wait_first_page_time: float = 10.0,
     ) -> None:
         """Initialize a WorkArena task wrapper.
 
@@ -64,6 +67,7 @@ class WorkArenaTask(Task):
         self._cached_done: bool = False
         self._cached_task_info: dict[str, Any] = {}
         self._validation_cached: bool = False
+        self.wait_first_page_time = wait_first_page_time
 
 
     def setup(self, tool: Toolbox) -> tuple[Observation, dict]:
@@ -90,12 +94,22 @@ class WorkArenaTask(Task):
         self._cached_reward = 0.0
         self._cached_done = False
         self._cached_task_info = {}
+        # Get the goal from the BrowserGym task
+        tool.noop()  # perform a noop to ensure env is ready
+        time.sleep(self.wait_first_page_time)  # wait for page to load
+        goal = self._get_goal_from_env()
+        logger.info(colored(f"WorkArena task goal: {goal}", "green"))
+
+        # Build initial observation with goal and page state
+        obs = Observation.from_text(goal)
+        obs += tool.page_obs()
 
         info = {
             "task_id": self.id,
             "task_class": self.workarena_task_class.__name__,
             "seed": self.seed,
             "level": self.level,
+            "goal": goal,
             **(task_info if isinstance(task_info, dict) else {}),
         }
         return obs, info

@@ -20,9 +20,8 @@ Usage:
 """
 
 import sys
-import time
-from pathlib import Path
 
+from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
@@ -41,8 +40,7 @@ except ImportError:
 
 
 def main(debug: bool):
-    current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"workarena_l1_{current_datetime}"
+    output_dir = make_experiment_output_dir("react", "workarena", tag="l1")
 
     # Configure LLM
     llm_config = LLMConfig(model_name="openai/gpt-5-mini", temperature=1.0)
@@ -77,6 +75,7 @@ def main(debug: bool):
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
+        max_steps=15,
     )
 
     # Run experiment

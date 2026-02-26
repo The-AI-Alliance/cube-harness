@@ -1,7 +1,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from browsergym.core import _get_global_playwright
@@ -57,7 +57,14 @@ class BrowsergymConfig(ToolConfig):
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
-    pre_observation_delay: float = 0.0
+    wait_for_user_message: bool = False
+    terminate_on_infeasible: bool = True
+    resizeable_window: bool = False
+    action_mapping: Callable | None = None
+    use_raw_page_output: bool = False
+    pre_observation_delay: float = 2.5
+
+    # Observation configuration
     use_html: bool = True
     use_axtree: bool = True
     use_screenshot: bool = True
@@ -471,6 +478,18 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 obs.contents.append(Content(data=screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
                 obs.contents.append(Content(data=Image.fromarray(screenshot), name="screenshot"))
+
+        # Add focused element BID if available (raw bid value for agent to format)
+        if "focused_element_bid" in bgym_obs:
+            focused_bid = bgym_obs["focused_element_bid"]
+            if focused_bid:
+                obs.contents.append(Content(data=focused_bid, name="focused_element"))
+
+        # Add last action error if there was one (raw error message for agent to format)
+        if "last_action_error" in bgym_obs:
+            error = bgym_obs["last_action_error"]
+            if error:
+                obs.contents.append(Content(data=str(error), name="last_action_error"))
 
         return obs
 
