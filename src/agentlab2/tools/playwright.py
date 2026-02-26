@@ -10,6 +10,7 @@ from playwright.sync_api import Page as SyncPage
 from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
+from agentlab2.tool import ToolWithTelemetry
 from cube.core import Action, Content, Observation, StepError
 from cube.tool import ToolConfig
 from agentlab2.utils import prune_html
@@ -36,7 +37,7 @@ class PlaywrightConfig(ToolConfig):
         return AsyncPlaywrightTool(self)
 
 
-class SyncPlaywrightTool(BrowserActionSpace):
+class SyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):
     """
     Fully synchronous Playwright tool using playwright.sync_api.
     Implements BrowserActionSpace.
@@ -158,7 +159,7 @@ class SyncPlaywrightTool(BrowserActionSpace):
         self._pw.stop()
 
 
-class AsyncPlaywrightTool(BrowserActionSpace):
+class AsyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):
     """Fully asynchronous Playwright tool using playwright.async_api."""
 
     def __init__(self, config: PlaywrightConfig) -> None:
