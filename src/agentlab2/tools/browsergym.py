@@ -11,6 +11,7 @@ from playwright.sync_api import Frame, Page
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
+from agentlab2.tool import ToolWithTelemetry
 from cube.core import Action, Content, Observation, StepError
 from cube.tool import ToolConfig
 
@@ -59,7 +60,7 @@ class BrowsergymConfig(ToolConfig):
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(BidBrowserActionSpace):
+class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
     """BrowserGym tool wrapper that adapts BrowserGym's BrowserEnv to the AgentLab2 Tool interface.
 
     This tool wraps the BrowserGym environment and provides:

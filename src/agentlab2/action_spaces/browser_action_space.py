@@ -1,10 +1,9 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
-from agentlab2.tool import ToolWithTelemetry
 from cube.tool import tool_action
 
 
-class BrowserActionSpace(ToolWithTelemetry):
+class BrowserActionSpace(ABC):
     """Abstract base class for browser tools using CSS selectors.
 
     Subclasses must implement all methods. The @tool_action decorator on each
@@ -81,7 +80,7 @@ class BrowserActionSpace(ToolWithTelemetry):
         ...
 
 
-class BidBrowserActionSpace(ToolWithTelemetry):
+class BidBrowserActionSpace(ABC):
     """Abstract base class for browser tools using Browser IDs (BIDs).
 
     Subclasses must implement all methods. The @tool_action decorator on each
