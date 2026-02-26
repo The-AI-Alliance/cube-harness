@@ -93,7 +93,7 @@ class WorkArenaTask(Task):
             "seed": self.seed,
             "level": self.level,
             "goal": goal,
-            **(task_info if isinstance(task_info, dict) else {}),
+            **task_info,
         }
         return obs, info
 
