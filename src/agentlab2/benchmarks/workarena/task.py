@@ -2,26 +2,19 @@
 
 import logging
 import time
-from typing import Any, Callable
 
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
 from agentlab2.tools.browsergym import BrowsergymTool
+from browsergym.workarena.tasks.base import AbstractServiceNowTask
 
 logger = logging.getLogger(__name__)
 
 
 class WorkArenaTask(Task):
-    """AgentLab2 Task wrapper for WorkArena BrowserGym tasks.
-
-    This task wraps a WorkArena task class (e.g., CreateUserTask, AllMenuTask)
-    and delegates setup and validation to the BrowserGym environment.
-
-    The task calls `tool.set_gym_task()` during setup to initialize the
-    BrowserGym environment with the correct WorkArena task.
-    """
+    """AgentLab2 Task wrapper for WorkArena BrowserGym tasks."""
 
     validate_per_step: bool = True
     supported_actions: ActionSpace = ActionSpace(
@@ -42,7 +35,7 @@ class WorkArenaTask(Task):
     def __init__(
         self,
         id: str,
-        workarena_task_class: Callable[..., Any],
+        workarena_task_class: type[AbstractServiceNowTask],
         seed: int,
         level: str = "l1",
         wait_first_page_time: float = 10.0,
@@ -59,16 +52,12 @@ class WorkArenaTask(Task):
         self.workarena_task_class = workarena_task_class
         self.seed = seed
         self.level = level
+        self._workarena_task: AbstractServiceNowTask | None = None
         self.wait_first_page_time = wait_first_page_time
 
+
     def setup(self, tool: BrowsergymTool) -> tuple[Observation, dict]:
-        """Set up the WorkArena task by initializing the BrowserGym environment.
-
-        This method calls `tool.set_gym_task()` to create a new BrowserGym
-        environment with the WorkArena task configured. The WorkArena task
-        handles its own setup (user creation, navigation, etc.) during
-        the BrowserGym env.reset() call.
-
+        """Set up the WorkArena task with direct task lifecycle management.
         Args:
             tool: The BrowsergymTool instance to configure.
 
@@ -77,34 +66,21 @@ class WorkArenaTask(Task):
         """
         self._tool = tool
         logger.info(f"Setting up WorkArena task {self.id} with seed {self.seed}")
+        self._workarena_task = self.workarena_task_class(seed=self.seed)
+        _apply_task_runtime_preferences(self._tool, self._workarena_task)
+        self._tool.reset()
+        goal, task_info = self._workarena_task.setup(self._tool.page)
 
-        # Configure BrowserGym with the WorkArena task
-        # Note: seed is passed separately, not in task_kwargs, because
-        # BrowserGym's env.reset() passes seed to the task constructor
-        try:
-            tool.set_gym_task(
-                task_entrypoint=self.workarena_task_class,
-                seed=self.seed,
-            )
-        except Exception as e:
-            logger.error(f"Error during set_gym_task: {e}", exc_info=True)
-            raise
+        logger.info(f"WorkArena page URL after setup: {self._tool.page.url}")
+        logger.info(f"WorkArena page title: {self._tool.page.title()}")
+        logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
 
-        # Debug: log page URL and state after setup
-        if tool.page:
-            logger.info(f"WorkArena page URL after setup: {tool.page.url}")
-            logger.info(f"WorkArena page title: {tool.page.title()}")
-
-        # Log the BrowserGym task state
-        if tool._env and tool._env.task:
-            logger.info(f"BrowserGym task class: {tool._env.task.__class__.__name__}")
-            if hasattr(tool._env.task, "start_url"):
-                logger.info(f"BrowserGym task start_url: {tool._env.task.start_url}")
+        obs = Observation.from_text(goal)
+        obs += self._tool.page_obs()
 
         # Get the goal from the BrowserGym task
         tool.noop()  # perform a noop to ensure env is ready
         time.sleep(self.wait_first_page_time)  # wait for page to load
-        goal = self._get_goal_from_env()
         logger.info(colored(f"WorkArena task goal: {goal}", "green"))
 
         # Build initial observation with goal and page state
@@ -117,33 +93,12 @@ class WorkArenaTask(Task):
             "seed": self.seed,
             "level": self.level,
             "goal": goal,
+            **(task_info if isinstance(task_info, dict) else {}),
         }
-
         return obs, info
 
-    def _get_goal_from_env(self) -> str:
-        """Extract the goal text from the BrowserGym environment."""
-        if self._tool._last_obs and "goal" in self._tool._last_obs:
-            goal = self._tool._last_obs["goal"]
-            if isinstance(goal, str):
-                return goal
-            elif isinstance(goal, list):
-                # Goal might be a list of message objects
-                goal_parts = []
-                for item in goal:
-                    if isinstance(item, dict) and "text" in item:
-                        goal_parts.append(item["text"])
-                    elif isinstance(item, str):
-                        goal_parts.append(item)
-                return "\n".join(goal_parts)
-        return f"Complete the WorkArena task: {self.id}"
-
     def validate_task(self, obs: Observation) -> tuple[float, dict]:
-        """Validate the task using BrowserGym's validation.
-
-        The reward and termination status are obtained from the last
-        BrowserGym step, which internally calls the WorkArena task's
-        validate() method.
+        """Validate the task and return the reward and done status.
 
         Args:
             obs: Current observation (unused, validation uses tool state).
@@ -151,14 +106,10 @@ class WorkArenaTask(Task):
         Returns:
             Tuple of (reward, info dict with done status).
         """
-        reward = self._tool.last_reward
-        done = self._tool.last_terminated
+        if self._workarena_task is None:
+            raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
 
-        # Get additional task info from BrowserGym if available
-        task_info = {}
-        if self._tool._last_info and "task_info" in self._tool._last_info:
-            task_info = self._tool._last_info["task_info"]
-
+        reward, done, _user_message, task_info = self._workarena_task.validate(self._tool.page, [])
         return reward, {"done": done, **task_info}
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
@@ -176,13 +127,39 @@ class WorkArenaTask(Task):
         return filtered
 
     def finished(self) -> bool:
-        """Check if the task is finished based on BrowserGym termination."""
-        return self._tool.last_terminated
+        """Check task completion via WorkArena validate() and cache the result."""
+        _reward, done, _user_message, _task_info = self._workarena_task.validate(self._tool.page, [])
+        return done or self._tool._last_terminated
 
     def teardown(self) -> None:
-        """Clean up after the task.
+        """Clean up WorkArena task resources."""
+        if self._workarena_task is not None:
+            try:
+                self._workarena_task.teardown()
+            except Exception as e:
+                logger.warning(f"Error during WorkArena task teardown: {e}")
+            finally:
+                self._workarena_task = None
 
-        WorkArena tasks handle their own teardown (user deletion, etc.)
-        through the BrowserGym environment's close() method.
-        """
-        pass
+def _apply_task_runtime_preferences(tool: BrowsergymTool, workarena_task: AbstractServiceNowTask) -> None:
+    """Apply task runtime properties to the tool config when not explicitly set."""
+    updated_config = tool.config.model_copy(
+        update={
+            "viewport": tool.config.viewport
+            if tool.config.viewport is not None
+            else getattr(workarena_task, "viewport", None),
+            "slow_mo": tool.config.slow_mo
+            if tool.config.slow_mo is not None
+            else getattr(workarena_task, "slow_mo", None),
+            "timeout": tool.config.timeout
+            if tool.config.timeout is not None
+            else getattr(workarena_task, "timeout", None),
+            "locale": tool.config.locale
+            if tool.config.locale is not None
+            else getattr(workarena_task, "locale", None),
+            "timezone_id": tool.config.timezone_id
+            if tool.config.timezone_id is not None
+            else getattr(workarena_task, "timezone_id", None),
+        }
+    )
+    tool.config = updated_config

@@ -1,28 +1,37 @@
 import logging
-from collections.abc import Callable
-from typing import Any
+import time
+from pathlib import Path
+from typing import Any, Callable
 
 import numpy as np
-from browsergym.core.env import BrowserEnv
-from browsergym.core.task import OpenEndedTask
+from browsergym.core import _get_global_playwright
+from browsergym.core.action.base import execute_python_code
+from browsergym.core.action.highlevel import HighLevelActionSet
+from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE, EXTRACT_OBS_MAX_TRIES
+from browsergym.core.observation import (
+    MarkingError,
+    _post_extract,
+    _pre_extract,
+    extract_dom_extra_properties,
+    extract_dom_snapshot,
+    extract_focused_element_bid,
+    extract_merged_axtree,
+    extract_screenshot,
+)
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
-from playwright.sync_api import Frame, Page
-from termcolor import colored
+from playwright.sync_api import Browser, BrowserContext, Error, Frame, Page
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
+from termcolor import colored
 
 logger = logging.getLogger(__name__)
 
 
 class BrowsergymConfig(ToolConfig):
-    """Configuration for BrowserGym tool."""
-
-    # Task configuration
-    task_entrypoint: Callable[[], Any] | None = None
-    task_kwargs: dict = {}
+    """Configuration for BrowserGym-style Playwright tool."""
 
     # Browser configuration
     headless: bool = True
@@ -31,15 +40,14 @@ class BrowsergymConfig(ToolConfig):
     timeout: int | None = None
     locale: str | None = None
     timezone_id: str | None = None
+    resizeable_window: bool = False
 
     # Playwright customization
     pw_chromium_kwargs: dict = {}
     pw_context_kwargs: dict = {}
-
-    # Recording
     record_video_dir: str | None = None
 
-    # Behavioral options
+    # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
     wait_for_user_message: bool = False
     terminate_on_infeasible: bool = True
@@ -53,6 +61,8 @@ class BrowsergymConfig(ToolConfig):
     use_axtree: bool = True
     use_screenshot: bool = True
     prune_html: bool = True
+
+    # Action behavior
     max_wait: int = 60
 
     def make(self) -> "BrowsergymTool":
@@ -60,160 +70,141 @@ class BrowsergymConfig(ToolConfig):
 
 
 class BrowsergymTool(Tool, BidBrowserActionSpace):
-    """BrowserGym tool wrapper that adapts BrowserGym's BrowserEnv to the AgentLab2 Tool interface.
-
-    This tool wraps the BrowserGym environment and provides:
-    - Action execution via BidBrowserActionSpace protocol (mapped to BrowserGym actions)
-    - Observation extraction (HTML, accessibility tree, screenshots)
-    - Proper lifecycle management (reset, close)
-
-    The action space is defined by the BidBrowserActionSpace protocol, using BID-based element selection.
-    Actions are executed via BrowserGym's env.step() method.
-    """
+    """Playwright-based tool that reuses BrowserGym observation utilities."""
 
     action_space = BidBrowserActionSpace
 
     def __init__(self, config: BrowsergymConfig) -> None:
         super().__init__()
         self.config = config
-        self._env: BrowserEnv | None = None
+        self._action_set = HighLevelActionSet()
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
 
-    def _create_env(self) -> BrowserEnv:
-        """Create a new BrowserGym environment instance."""
-        task_entrypoint = self.config.task_entrypoint if self.config.task_entrypoint is not None else OpenEndedTask
-        task_kwargs = (
-            self.config.task_kwargs
-            if self.config.task_kwargs is not None
-            else {"start_url": "about:blank", "goal": None}
-        )
-
-        env_kwargs = self._build_env_kwargs(task_entrypoint, task_kwargs)
-        return BrowserEnv(**env_kwargs)
-
-    def _build_env_kwargs(self, task_entrypoint, task_kwargs) -> dict:
-        env_kwargs = {
-            "task_entrypoint": task_entrypoint,
-            "task_kwargs": task_kwargs,
-            "headless": self.config.headless,
-            "tags_to_mark": self.config.tags_to_mark,
-            "wait_for_user_message": self.config.wait_for_user_message,
-            "terminate_on_infeasible": self.config.terminate_on_infeasible,
-            "resizeable_window": self.config.resizeable_window,
-            "use_raw_page_output": self.config.use_raw_page_output,
-            "pre_observation_delay": self.config.pre_observation_delay,
-        }
-        if self.config.viewport is not None:
-            env_kwargs["viewport"] = self.config.viewport
-        if self.config.slow_mo is not None:
-            env_kwargs["slow_mo"] = self.config.slow_mo
-        if self.config.timeout is not None:
-            env_kwargs["timeout"] = self.config.timeout
-        if self.config.locale is not None:
-            env_kwargs["locale"] = self.config.locale
-        if self.config.timezone_id is not None:
-            env_kwargs["timezone_id"] = self.config.timezone_id
-        if self.config.pw_chromium_kwargs:
-            env_kwargs["pw_chromium_kwargs"] = self.config.pw_chromium_kwargs
-        if self.config.pw_context_kwargs:
-            env_kwargs["pw_context_kwargs"] = self.config.pw_context_kwargs
-        if self.config.record_video_dir is not None:
-            env_kwargs["record_video_dir"] = self.config.record_video_dir
-        if self.config.action_mapping is not None:
-            env_kwargs["action_mapping"] = self.config.action_mapping
-        return env_kwargs
-
-    def _ensure_env(self) -> None:
-        """Ensure the environment is created and reset."""
-        if self._env is None:
-            raise RuntimeError("BrowserGym environment is not initialized. Call reset() first.")
-
-    @property
-    def env(self) -> BrowserEnv:
-        """Access the underlying BrowserGym environment."""
-        self._ensure_env()
-        return self._env  # type: ignore
+    def _ensure_page(self) -> Page:
+        if self._page is None:
+            raise RuntimeError("Browser is not initialized. Call reset() first.")
+        return self._page
 
     @property
     def page(self) -> Page:
-        """Access the current Playwright page from BrowserGym."""
-        self._ensure_env()
-        return self._env.page if self._env and hasattr(self._env, "page") else None
+        return self._ensure_page()
 
     @property
     def last_reward(self) -> float:
-        """Get the reward from the last step."""
         return self._last_reward
 
     @property
     def last_terminated(self) -> bool:
-        """Check if the episode terminated on the last step."""
         return self._last_terminated
 
-    def reset(self) -> None:
-        """Reset the environment."""
-        if self._env is not None:
-            self._env.close()
-        self._env = self._create_env()
-        self._last_obs, self._last_info = self._env.reset()
+    def _build_launch_args(self, viewport: dict[str, int]) -> list[str]:
+        args = [
+            (
+                f"--window-size={viewport['width']},{viewport['height']}"
+                if self.config.resizeable_window
+                else None
+            ),
+            "--disable-features=OverlayScrollbars,ExtendedOverlayScrollbars",
+        ]
+        return [arg for arg in args if arg is not None]
 
-    def set_gym_task(
-        self,
-        task_entrypoint: Callable[[], Any],
-        task_kwargs: dict | None = None,
-        seed: int | None = None,
-    ) -> None:
-        """Reinitialize the BrowserGym environment with a specific task.
+    def _create_runtime(self) -> None:
+        viewport = self.config.viewport or {"width": 1280, "height": 720}
+        pw = _get_global_playwright()
+        pw.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
-        This method allows tasks (like WorkArenaTask) to configure the BrowserGym
-        task after the tool has been created. It closes the existing environment
-        and creates a new one with the specified task entrypoint and kwargs.
-
-        Args:
-            task_entrypoint: The BrowserGym task class or factory function.
-            task_kwargs: Optional kwargs to pass to the task constructor (excluding seed).
-            seed: Random seed for the task (passed to env.reset(), not task_kwargs).
-        """
-        if self._env is not None:
-            self._env.close()
-            self._env = None
-
-        # Update config with task-specific settings
-        self.config = self.config.model_copy(
-            update={
-                "task_entrypoint": task_entrypoint,
-                "task_kwargs": task_kwargs or {},
-            }
+        self._browser = pw.chromium.launch(
+            headless=self.config.headless,
+            slow_mo=self.config.slow_mo,
+            args=self._build_launch_args(viewport),
+            ignore_default_args=["--hide-scrollbars"],
+            **self.config.pw_chromium_kwargs,
         )
+        self._context = self._browser.new_context(
+            no_viewport=True if self.config.resizeable_window else None,
+            viewport=viewport if not self.config.resizeable_window else None,
+            record_video_dir=Path(self.config.record_video_dir) / "task_video" if self.config.record_video_dir else None,
+            record_video_size=viewport,
+            locale=self.config.locale,
+            timezone_id=self.config.timezone_id,
+            **self.config.pw_context_kwargs,
+        )
+        if self.config.timeout is not None:
+            self._context.set_default_timeout(self.config.timeout)
+        self._page = self._context.new_page()
 
-        # Create and reset the new environment
-        self._env = self._create_env()
-        self._last_obs, self._last_info = self._env.reset(seed=seed)
+    def _close_runtime(self) -> None:
+        if self._context is not None:
+            try:
+                self._context.close()
+            except Exception as e:
+                logger.warning(f"Error closing BrowserGym context: {e}")
+        if self._browser is not None:
+            try:
+                self._browser.close()
+            except Exception as e:
+                logger.warning(f"Error closing BrowserGym browser: {e}")
+        self._browser = None
+        self._context = None
+        self._page = None
+
+    def _wait_dom_loaded(self) -> None:
+        if self._context is None:
+            return
+        for page in self._context.pages:
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=3000)
+            except Error:
+                pass
+            for frame in page.frames:
+                try:
+                    frame.wait_for_load_state("domcontentloaded", timeout=3000)
+                except Error:
+                    pass
+
+    def reset(self) -> None:
+        self._close_runtime()
+        self._create_runtime()
+        self._wait_dom_loaded()
+        self._last_obs = self._extract_bgym_obs()
+        self._last_info = {"source": "reset"}
+        self._last_reward = 0.0
+        self._last_terminated = False
 
     def execute_action(self, action: Action) -> Observation:
-        """Execute an action using BidBrowserActionSpace protocol and return the observation."""
         action_obs = super().execute_action(action)
         action_obs += self.page_obs()
         return action_obs
 
     def _execute_bgym_step(self, action_str: str) -> str:
-        """Execute a BrowserGym action string via env.step() and return result message."""
-        self._ensure_env()
-        logger.info(colored(f"Execute bgym step: {action_str}", "magenta"))
-        obs, reward, terminated, truncated, info = self._env.step(action_str)  # type: ignore
-        self._last_obs = obs
-        self._last_info = info
-        self._last_reward = reward
-        self._last_terminated = terminated
-
+        """Execute a BrowserGym action string and return result message."""
+        page = self._ensure_page()
+        logger.info(f"Execute bgym step: {action_str}")
         result = "Success"
-        if terminated:
-            result += " (Episode terminated)"
-        if truncated:
-            result += " (Episode truncated)"
+
+        try:
+            code = self._action_set.to_python_code(action_str)
+            execute_python_code(
+                code=code,
+                page=page,
+                send_message_to_user=lambda message: logger.info(f"BrowserGym message: {message}"),
+                report_infeasible_instructions=lambda message: logger.warning(f"Infeasible instruction: {message}"),
+            )
+            self._last_info = {"source": "action", "action": action_str, "action_error": ""}
+        except Exception as e:
+            error_msg = f"{type(e).__name__}: {e}"
+            self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
+            result = f"Failed: {error_msg}"
+
+        self._last_obs = self._extract_bgym_obs()
+        self._last_reward = 0.0
+        self._last_terminated = False
         return result
 
     # === BidBrowserActionSpace protocol implementation ===
@@ -394,46 +385,66 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         action_str = "noop()"
         return self._execute_bgym_step(action_str)
 
-    def _bgym_obs_to_agentlab_obs(self, bgym_obs: dict) -> Observation:
-        """Convert BrowserGym observation dict to AgentLab2 Observation.
+    def _extract_bgym_obs(self) -> dict[str, Any]:
+        page = self.page
+        if self.config.pre_observation_delay > 0:
+            time.sleep(self.config.pre_observation_delay)
+        self._wait_dom_loaded()
 
-        BrowserGym provides observations with keys like:
-        - 'screenshot': numpy array (converted to PIL Image)
-        - 'dom_object': dict with 'documents' and 'strings' (converted to HTML string)
-        - 'axtree_object': dict (converted to accessibility tree string)
-        """
+        for retries_left in reversed(range(EXTRACT_OBS_MAX_TRIES)):
+            try:
+                _pre_extract(page, tags_to_mark=self.config.tags_to_mark, lenient=(retries_left == 0))
+                dom = extract_dom_snapshot(page)
+                axtree = extract_merged_axtree(page)
+                focused_element_bid = extract_focused_element_bid(page)
+                scale_factor = getattr(page, "_bgym_scale_factor", 1.0)
+                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor)
+            except (Error, MarkingError) as e:
+                if retries_left > 0:
+                    logger.warning(
+                        f"Error extracting BrowserGym observation. Retrying ({retries_left}/{EXTRACT_OBS_MAX_TRIES})."
+                    )
+                    _post_extract(page)
+                    time.sleep(0.5)
+                    continue
+                raise
+            break
+
+        _post_extract(page)
+        obs: dict[str, Any] = {
+            "dom_object": dom,
+            "axtree_object": axtree,
+            "extra_element_properties": extra_properties,
+            "focused_element_bid": focused_element_bid,
+        }
+        if self.config.use_screenshot:
+            obs["screenshot"] = extract_screenshot(page)
+        return obs
+
+    def _bgym_obs_to_agentlab_obs(self, bgym_obs: dict[str, Any]) -> Observation:
         obs = Observation()
-
-        # Add HTML if configured (flatten BrowserGym's DOM to HTML string)
         if self.config.use_html and "dom_object" in bgym_obs:
-            dom_obj = bgym_obs["dom_object"]
-            # Use flatten_dom_to_str to convert BrowserGym's compact DOM format to HTML
             html_str = flatten_dom_to_str(
-                dom_obj,
+                bgym_obs["dom_object"],
                 extra_properties=bgym_obs.get("extra_element_properties", {}),
                 with_visible=False,
                 filter_visible_only=False,
             )
             if self.config.prune_html:
                 html_str = prune_html(html_str)
-            # BrowserGym's flatten_dom_to_str already provides a pruned representation
             obs.contents.append(Content(data=html_str, name="pruned_html"))
 
-        # Add accessibility tree if configured
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
-                axtree_str = flatten_axtree_to_str(axtree_obj)
-                obs.contents.append(Content(data=axtree_str, name="axtree_txt"))
+                obs.contents.append(Content(data=flatten_axtree_to_str(axtree_obj), name="axtree_txt"))
 
-        # Add screenshot if configured (convert numpy array to PIL Image)
         if self.config.use_screenshot and "screenshot" in bgym_obs:
             screenshot = bgym_obs["screenshot"]
             if isinstance(screenshot, Image.Image):
                 obs.contents.append(Content(data=screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
-                screenshot_img = Image.fromarray(screenshot)
-                obs.contents.append(Content(data=screenshot_img, name="screenshot"))
+                obs.contents.append(Content(data=Image.fromarray(screenshot), name="screenshot"))
 
         # Add focused element BID if available (raw bid value for agent to format)
         if "focused_element_bid" in bgym_obs:
@@ -449,46 +460,22 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
         return obs
 
-    # === Utility methods for BrowserTaskTool (goto, evaluate_js, page_obs) ===
+    # === BrowserTaskTool utility methods ===
 
-    def goto(self, url: str) -> None:
-        """Navigate to a URL and wait for the page to be fully loaded."""
-        self._ensure_env()
-        self.page.goto(url)
 
     def evaluate_js(self, js: str) -> Any:
-        """Evaluate JavaScript in the browser context and return the result."""
-        self._ensure_env()
-        if self.page is not None:
-            return self.page.evaluate(js)
-        return None
+        return self.page.evaluate(js)
 
     def page_obs(self) -> Observation:
-        """Get the current page observation from BrowserGym.
-
-        This method acts as an adapter, converting BrowserGym's observation format
-        to AgentLab2's Observation format.
-        """
-        self._ensure_env()
-
-        # Get the latest observation from BrowserGym
-        # If we have a cached observation from the last step, use it
-        # Otherwise, the observation should be available from reset()
-        if self._last_obs is None:
-            raise RuntimeError("No BrowserGym observation available. Did you call reset()?")
-
+        self._last_obs = self._extract_bgym_obs()
+        self._last_info = {"source": "page_obs"}
+        self._last_reward = 0.0
+        self._last_terminated = False
         return self._bgym_obs_to_agentlab_obs(self._last_obs)
 
     def close(self) -> None:
-        """Clean up BrowserGym environment resources."""
-        if self._env is not None:
-            try:
-                self._env.close()
-            except Exception as e:
-                logger.warning(f"Error closing BrowserGym environment: {e}")
-            finally:
-                self._env = None
-                self._last_obs = None
-                self._last_info = None
-                self._last_reward = 0.0
-                self._last_terminated = False
+        self._close_runtime()
+        self._last_obs = None
+        self._last_info = None
+        self._last_reward = 0.0
+        self._last_terminated = False
