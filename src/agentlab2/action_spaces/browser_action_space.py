@@ -99,6 +99,30 @@ class BidBrowserActionSpace(Protocol):
         """Navigate forward in browser history."""
         ...
 
+    def browser_scroll(self, delta_x: float, delta_y: float) -> str:
+        """Scroll the page by horizontal and vertical deltas."""
+        ...
+
+    def browser_dbclick(self, bid: str) -> str:
+        """Double-click on an element specified by BID."""
+        ...
+
+    def browser_press(self, bid: str, comb: str) -> str:
+        """Press key combination on an element specified by BID."""
+        ...
+
+    def browser_clear(self, bid: str) -> str:
+        """Clear text/content from an element specified by BID."""
+        ...
+
+    def browser_goto(self, url: str) -> str:
+        """Navigate the current page to a URL."""
+        ...
+
+    def browser_focus(self, bid: str) -> str:
+        """Focus an element specified by BID."""
+        ...
+
     def noop(self) -> str:
         """No operation action."""
         ...
