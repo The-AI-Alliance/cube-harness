@@ -29,7 +29,8 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
-    "mcp[cli]>=1.2.0",
+    "mcp[cli]>=1.26",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +63,7 @@ extend-select = ["I"] # sort imports
 [project.scripts]
 al2-viewer = "agentlab2.viewer:main"
 al2-mcp-server = "agentlab2.mcp.server:main"
+al2-xray = "agentlab2.analyze.xray:main"
 
 [dependency-groups]
 dev = [
