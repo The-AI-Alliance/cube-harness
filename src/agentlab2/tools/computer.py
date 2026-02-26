@@ -127,6 +127,7 @@ class Computer(Tool, ComputerActionSpace):
         )
         self._current_task_config: Optional[dict] = None
         self._last_marks: list[list[int]] = []
+        self._is_done: bool = False
 
     @property
     def action_set(self) -> list[ActionSchema]:
@@ -187,6 +188,7 @@ class Computer(Tool, ComputerActionSpace):
         logger.info("Waiting 60s for VM to stabilize...")
         time.sleep(60)
 
+        self._is_done = False
         self._current_task_config = task_config
         return self.get_observation()
 
@@ -342,10 +344,12 @@ class Computer(Tool, ComputerActionSpace):
 
     def fail(self) -> str:
         """Signal that the task cannot be performed or infeasible."""
+        self._is_done = True
         return "Task marked as failed"
 
     def done(self) -> str:
         """Signal that the task is complete."""
+        self._is_done = True
         return "Task marked as done"
 
     # ========================================================================

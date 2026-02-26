@@ -279,6 +279,8 @@ class OSWorldTask(Task):
         Returns:
             True if task has reached a terminal state
         """
+        if self._tool is not None:
+            return self._tool._is_done
         return self._is_done
 
     def mark_done(self, success: bool = False) -> None:
