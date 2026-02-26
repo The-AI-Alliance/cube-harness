@@ -1,12 +1,12 @@
-"""Tests for agentlab2.tool module."""
+"""Tests for cube.tool.Tool used in agentlab2."""
 
-from typing import Protocol, runtime_checkable
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from agentlab2.core import Action, ActionSchema
-from agentlab2.tool import Tool
+from cube.core import Observation, StepError
+from cube.tool import Tool, tool_action
 
 
 class TestAbstractTool:
@@ -62,15 +62,8 @@ class TestTool:
         """Test that execute_action returns 'Success' when method returns None."""
 
         # Add a method that returns None
-        @runtime_checkable
-        class ExtendedActionSpace(Protocol):
-            def click(self, element_id: str) -> str: ...
-            def type_text(self, element_id: str, text: str) -> str: ...
-            def noop(self) -> None: ...
-
         class ExtendedTool(Tool):
-            action_space = ExtendedActionSpace
-
+            @tool_action
             def click(self, element_id: str) -> str:
                 """Click.
 
@@ -82,6 +75,7 @@ class TestTool:
                 """
                 return f"Clicked {element_id}"
 
+            @tool_action
             def type_text(self, element_id: str, text: str) -> str:
                 """Type.
 
@@ -94,6 +88,7 @@ class TestTool:
                 """
                 return f"Typed {text}"
 
+            @tool_action
             def noop(self) -> None:
                 """Do nothing.
 
@@ -105,6 +100,7 @@ class TestTool:
         tool = ExtendedTool()
         action = Action(name="noop", arguments={})
         result = tool.execute_action(action)
+        assert isinstance(result, Observation)
         assert result.contents[0].data == "Success"
 
     def test_tool_execute_action_error_handling(self, mock_tool):
@@ -112,16 +108,17 @@ class TestTool:
 
         # Override click to raise an error
         def raise_error(element_id: str) -> str:
+            """Click stub that always raises."""
             raise ValueError("Element not found")
 
         original_click = mock_tool.click
         mock_tool.click = raise_error
 
         action = Action(name="click", arguments={"element_id": "nonexistent"})
-        result = mock_tool.execute_action(action).contents[0].data
+        result = mock_tool.execute_action(action)
 
-        assert "Error executing action click" in result
-        assert "Element not found" in result
+        assert isinstance(result, StepError)
+        assert "Element not found" in result.exception_str
 
         # Restore
         mock_tool.click = original_click
@@ -136,20 +133,14 @@ class TestTool:
     def test_tool_get_action_method_invalid_action_space(self, mock_tool):
         """Test getting method for action not in action space."""
         action = Action(name="invalid_action", arguments={})
-        with pytest.raises(ValueError, match="is not a part of"):
+        with pytest.raises(ValueError, match="does not exist in"):
             mock_tool.get_action_method(action)
 
     def test_tool_get_action_method_not_implemented(self):
         """Test getting method that's in action space but not implemented."""
 
-        @runtime_checkable
-        class PartialActionSpace(Protocol):
-            def implemented(self) -> str: ...
-            def not_implemented(self) -> str: ...
-
         class PartialTool(Tool):
-            action_space = PartialActionSpace
-
+            @tool_action
             def implemented(self) -> str:
                 """Implemented method.
 
@@ -158,11 +149,14 @@ class TestTool:
                 """
                 return "done"
 
-            # not_implemented is missing
+            # not_implemented exists but has no @tool_action so it is not a registered action
+            def not_implemented(self) -> str:
+                """Not decorated."""
+                return "oops"
 
         tool = PartialTool()
         action = Action(name="not_implemented", arguments={})
-        with pytest.raises(ValueError, match="is not implemented"):
+        with pytest.raises(ValueError, match="is not decorated with @tool_action"):
             tool.get_action_method(action)
 
     def test_tool_reset(self, mock_tool):
@@ -241,6 +235,7 @@ class TestToolExecutionSpans:
         mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
 
         def raise_error(element_id: str) -> str:
+            """Click stub that always raises."""
             raise ValueError("Element not found")
 
         mock_tool.click = raise_error

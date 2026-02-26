@@ -1,10 +1,8 @@
 from typing import TypeVar
 
+from agentlab2.tool import ToolWithTelemetry
 from cube.core import Action, ActionSchema, Observation
-from cube.tool import AbstractTool
-
-from cube.tool import ToolConfig
-from agentlab2.tool import Tool
+from cube.tool import AbstractTool, ToolConfig
 
 
 class ToolboxConfig(ToolConfig):
@@ -20,7 +18,7 @@ class ToolboxConfig(ToolConfig):
 T = TypeVar("T", bound=AbstractTool)
 
 
-class Toolbox(Tool):
+class Toolbox(ToolWithTelemetry):
     """Composite tool that uses multiple tools for interaction."""
 
     def __init__(self, tools: list[AbstractTool]):

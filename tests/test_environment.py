@@ -102,7 +102,7 @@ class TestToolboxEnv:
         mock_tool_env.setup()
 
         action = Action(name="nonexistent_action", arguments={})
-        with pytest.raises(ValueError, match="is not a part of"):
+        with pytest.raises(ValueError, match="does not exist in"):
             mock_tool_env.step(action)
 
     def test_toolbox_env_step_validates_when_done(self, mock_tool_env, mock_task):
@@ -210,10 +210,10 @@ class TestTask:
         mock_task.teardown()
         assert mock_task.teardown_called
 
-    def test_task_validate(self, mock_tool_env, mock_task):
+    def test_task_validate(self, mock_task):
         """Test task validation."""
         obs = Observation.from_text("done")
-        reward, info = mock_task.validate_task(mock_tool_env, obs)
+        reward, info = mock_task.validate_task(obs)
 
         assert reward == 1.0
         assert info == {"success": True}

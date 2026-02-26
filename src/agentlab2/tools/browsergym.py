@@ -11,9 +11,8 @@ from playwright.sync_api import Frame, Page
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
-from cube.core import Action, Content, Observation
+from cube.core import Action, Content, Observation, StepError
 from cube.tool import ToolConfig
-from agentlab2.tool import Tool
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +59,17 @@ class BrowsergymConfig(ToolConfig):
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(Tool, BidBrowserActionSpace):
+class BrowsergymTool(BidBrowserActionSpace):
     """BrowserGym tool wrapper that adapts BrowserGym's BrowserEnv to the AgentLab2 Tool interface.
 
     This tool wraps the BrowserGym environment and provides:
-    - Action execution via BidBrowserActionSpace protocol (mapped to BrowserGym actions)
+    - Action execution via BidBrowserActionSpace (mapped to BrowserGym actions)
     - Observation extraction (HTML, accessibility tree, screenshots)
     - Proper lifecycle management (reset, close)
 
-    The action space is defined by the BidBrowserActionSpace protocol, using BID-based element selection.
+    The action set is defined by BidBrowserActionSpace, using BID-based element selection.
     Actions are executed via BrowserGym's env.step() method.
     """
-
-    action_space = BidBrowserActionSpace
 
     def __init__(self, config: BrowsergymConfig) -> None:
         super().__init__()
@@ -194,11 +191,13 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         self._env = self._create_env()
         self._last_obs, self._last_info = self._env.reset(seed=seed)
 
-    def execute_action(self, action: Action) -> Observation:
-        """Execute an action using BidBrowserActionSpace protocol and return the observation."""
-        action_obs = super().execute_action(action)
-        action_obs += self.page_obs()
-        return action_obs
+    def execute_action(self, action: Action) -> Observation | StepError:
+        """Execute an action and return the observation, or a StepError if the action failed."""
+        result = super().execute_action(action)
+        if isinstance(result, StepError):
+            return result
+        result += self.page_obs()
+        return result
 
     def _execute_bgym_step(self, action_str: str) -> str:
         """Execute a BrowserGym action string via env.step() and return result message."""
@@ -440,13 +439,13 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         if "focused_element_bid" in bgym_obs:
             focused_bid = bgym_obs["focused_element_bid"]
             if focused_bid:
-                obs.contents.append(Content(data=focused_bid, name="focused_element"))
+                obs.contents.append(Content.from_data(focused_bid, name="focused_element"))
 
         # Add last action error if there was one (raw error message for agent to format)
         if "last_action_error" in bgym_obs:
             error = bgym_obs["last_action_error"]
             if error:
-                obs.contents.append(Content(data=str(error), name="last_action_error"))
+                obs.contents.append(Content.from_data(str(error), name="last_action_error"))
 
         return obs
 

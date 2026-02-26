@@ -24,8 +24,8 @@ from PIL import Image
 from pydantic import Field
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.base import TypedBaseModel
-from agentlab2.core import Action, ActionSchema, AgentOutput, Content, LLMCall, Observation
+from cube.core import ImageContent, TypedBaseModel
+from agentlab2.core import Action, ActionSchema, AgentOutput, LLMCall, Observation
 from agentlab2.environment import STOP_ACTION
 from agentlab2.llm import LLMConfig, Message, Prompt
 from agentlab2.utils import parse_actions
@@ -1107,7 +1107,7 @@ class GenericAgent(Agent):
             user_content: list[dict] = [{"type": "text", "text": prompt_text + screenshot_header}]
             for screenshot in screenshots:
                 # Convert PIL Image to base64
-                image_content = Content(data=screenshot, name="screenshot")
+                image_content = ImageContent(data=screenshot, name="screenshot")
                 image_base64 = image_content.as_base64_image_str(screenshot)
                 user_content.append({"type": "image_url", "image_url": {"url": image_base64}})
             messages.append({"role": "user", "content": user_content})
