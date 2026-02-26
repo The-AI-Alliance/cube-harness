@@ -41,7 +41,7 @@ def main(debug: bool):
     output_dir = make_experiment_output_dir("react", "workarena", tag="l1")
 
     # Configure LLM
-    llm_config = LLMConfig(model_name="openai/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(
         render_last_n_steps=2,
         max_actions=20,
