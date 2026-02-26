@@ -369,18 +369,32 @@ class Computer(Tool, ComputerActionSpace):
 
         Prepends tag_N = (center_x, center_y) variable definitions for each SoM element
         from the last observation, then executes the combined code string via desktop_env.
+        Returns the Python traceback if the code raises an exception, so the agent can
+        see and correct the error on the next turn.
 
         Args:
             code: Python code using pyautogui and optional tag_N variables
 
         Returns:
-            Success message
+            "Success" or an error string containing the traceback
         """
+        from desktop_env.desktop_env import _fix_pyautogui_less_than_bug
+
         tag_vars = ""
         for i, mark in enumerate(self._last_marks):
             x, y, w, h = mark
             tag_vars += f"tag_{i + 1} = ({int(x + w // 2)}, {int(y + h // 2)})\n"
-        self._env.step(tag_vars + code)
+
+        fixed_code = _fix_pyautogui_less_than_bug(tag_vars + code)
+        result = self._env.controller.execute_python_command(fixed_code)
+        time.sleep(2)  # replicate desktop_env.step()'s default pause
+
+        if result:
+            returncode = result.get("returncode", 0)
+            error = result.get("error", "") or result.get("stderr", "")
+            if returncode != 0 and error:
+                return f"Error executing code:\n{error.strip()}"
+
         return "Success"
 
     def close(self) -> None:
