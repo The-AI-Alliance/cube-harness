@@ -35,7 +35,7 @@ class BrowsergymConfig(ToolConfig):
 
     # Browser configuration
     headless: bool = True
-    viewport: dict | None = None
+    viewport: dict = {"width": 1280, "height": 720}
     slow_mo: int | None = None
     timeout: int | None = None
     locale: str | None = None
@@ -115,22 +115,21 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         return [arg for arg in args if arg is not None]
 
     def _create_runtime(self) -> None:
-        viewport = self.config.viewport or {"width": 1280, "height": 720}
         pw = _get_global_playwright()
         pw.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
         self._browser = pw.chromium.launch(
             headless=self.config.headless,
             slow_mo=self.config.slow_mo,
-            args=self._build_launch_args(viewport),
+            args=self._build_launch_args(self.config.viewport),
             ignore_default_args=["--hide-scrollbars"],
             **self.config.pw_chromium_kwargs,
         )
         self._context = self._browser.new_context(
             no_viewport=True if self.config.resizeable_window else None,
-            viewport=viewport if not self.config.resizeable_window else None,
+            viewport=self.config.viewport if not self.config.resizeable_window else None,
             record_video_dir=Path(self.config.record_video_dir) / "task_video" if self.config.record_video_dir else None,
-            record_video_size=viewport,
+            record_video_size=self.config.viewport,
             locale=self.config.locale,
             timezone_id=self.config.timezone_id,
             **self.config.pw_context_kwargs,
