@@ -67,7 +67,7 @@ def main(debug: bool):
     benchmark = WorkArenaBenchmark(
         tool_config=toolbox_config,
         level="l1",
-        n_seeds_l1=2 if debug else 1,  # Fewer seeds in debug mode
+        n_seeds_l1=2 if debug else 2,  # Fewer seeds in debug mode
     )
 
     # Create experiment

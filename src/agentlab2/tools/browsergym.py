@@ -5,6 +5,8 @@ from typing import Any
 
 import numpy as np
 from browsergym.core import _get_global_playwright
+from browsergym.core.action.base import execute_python_code
+from browsergym.core.action.highlevel import HighLevelActionSet
 from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE, EXTRACT_OBS_MAX_TRIES
 from browsergym.core.observation import (
     MarkingError,
@@ -76,6 +78,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
     def __init__(self, config: BrowsergymConfig) -> None:
         super().__init__()
         self.config = config
+        self._action_set = HighLevelActionSet()
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
@@ -180,121 +183,115 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         action_obs += self.page_obs()
         return action_obs
 
+    def _execute_bgym_step(self, action_str: str) -> str:
+        """Execute a BrowserGym action string and return result message."""
+        page = self._ensure_page()
+        logger.info(f"Execute bgym step: {action_str}")
+        result = "Success"
+
+        try:
+            code = self._action_set.to_python_code(action_str)
+            execute_python_code(
+                code=code,
+                page=page,
+                send_message_to_user=lambda message: logger.info(f"BrowserGym message: {message}"),
+                report_infeasible_instructions=lambda message: logger.warning(f"Infeasible instruction: {message}"),
+            )
+            self._last_info = {"source": "action", "action": action_str, "action_error": ""}
+        except Exception as e:
+            error_msg = f"{type(e).__name__}: {e}"
+            self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
+            result = f"Failed: {error_msg}"
+
+        self._last_obs = self._extract_bgym_obs()
+        self._last_reward = 0.0
+        self._last_terminated = False
+        return result
+
     # === BidBrowserActionSpace protocol implementation ===
+    # Each method maps to a BrowserGym action and executes via env.step()
 
-    def browser_press_key(self, key: str) -> None:
-        self.page.keyboard.press(key)
-        self._last_info = {"action": "browser_press_key"}
+    def browser_press_key(self, key: str) -> str:
+        """Press a key on the keyboard."""
+        action_str = f'keyboard_press("{key}")'
+        return self._execute_bgym_step(action_str)
 
-    def browser_type(self, bid: str, text: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).fill(text)
-        self._last_info = {"action": "browser_type", "bid": bid}
+    def browser_type(self, bid: str, text: str) -> str:
+        """Type text into the element specified by BID."""
+        # Escape quotes in the text
+        escaped_text = text.replace("\\", "\\\\").replace('"', '\\"')
+        action_str = f'fill(bid="{bid}", value="{escaped_text}")'
+        return self._execute_bgym_step(action_str)
 
-    def browser_click(self, bid: str) -> None:
+    def browser_click(self, bid: str) -> str:
+        """Click on an element specified by BID."""
+        # Get state before click (for checkbox/radio detection)
         state_before = self._get_checkbox_state(bid)
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).click(timeout=3000)
 
+        # Execute standard click
+        action_str = f'click(bid="{bid}")'
+        result = self._execute_bgym_step(action_str)
+
+        # For checkboxes/radios, verify state changed and use JS fallback if needed
         if state_before is not None:
             state_after = self._get_checkbox_state(bid)
             if state_after == state_before:
+                # Click didn't toggle - use JS fallback
                 self._toggle_checkbox_js(bid, not state_before)
-                logger.info(f"Checkbox/radio {bid} clicked with JS fallback.")
+                state_after_js = self._get_checkbox_state(bid)
+                logger.info(f"Checkbox/radio {bid} clicked with JS fallback, state: {state_after_js}", "cyan")
+                result = self._execute_bgym_step("noop()")  # Dummy step to update obs/info
 
-        self._last_info = {"action": "browser_click", "bid": bid}
-
-    def browser_drag(self, from_bid: str, to_bid: str) -> None:
-        from_frame = self._get_frame_for_bid(from_bid)
-        to_frame = self._get_frame_for_bid(to_bid)
-        from_locator = from_frame.get_by_test_id(from_bid)
-        to_locator = to_frame.get_by_test_id(to_bid)
-        from_locator.drag_to(to_locator)
-        self._last_info = {"action": "browser_drag", "from_bid": from_bid, "to_bid": to_bid}
-
-    def browser_hover(self, bid: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).hover(timeout=3000)
-        self._last_info = {"action": "browser_hover", "bid": bid}
-
-    def browser_select_option(self, bid: str, value: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).select_option(value=value)
-        self._last_info = {"action": "browser_select_option", "bid": bid}
-
-    def browser_mouse_click_xy(self, x: int, y: int) -> None:
-        self.page.mouse.click(x, y, delay=100)
-        self._last_info = {"action": "browser_mouse_click_xy", "x": x, "y": y}
-
-    def browser_wait(self, seconds: int) -> None:
-        time.sleep(min(seconds, self.config.max_wait))
-        self._last_info = {"action": "browser_wait", "seconds": seconds}
-
-    def browser_back(self) -> None:
-        self.page.go_back()
-        self._last_info = {"action": "browser_back"}
-
-    def browser_forward(self) -> None:
-        self.page.go_forward()
-        self._last_info = {"action": "browser_forward"}
-
-    def browser_scroll(self, delta_x: float, delta_y: float) -> None:
-        self.page.mouse.wheel(delta_x, delta_y)
-        self._last_info = {"action": "browser_scroll", "delta_x": delta_x, "delta_y": delta_y}
-
-    def browser_dbclick(self, bid: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).dblclick(timeout=3000)
-        self._last_info = {"action": "browser_dbclick", "bid": bid}
-
-    def browser_press(self, bid: str, comb: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).press(comb)
-        self._last_info = {"action": "browser_press", "bid": bid, "comb": comb}
-
-    def browser_clear(self, bid: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).clear()
-        self._last_info = {"action": "browser_clear", "bid": bid}
-
-    def browser_focus(self, bid: str) -> None:
-        frame = self._get_frame_for_bid(bid)
-        frame.get_by_test_id(bid).focus()
-        self._last_info = {"action": "browser_focus", "bid": bid}
-    
-    def browser_goto(self, url: str) -> None:
-        self.goto(url)
-        self._last_info = {"action": "browser_goto", "url": url}
-
-    def noop(self) -> None:
-        self._last_info = {"action": "noop"}
+        return result
 
     def _get_frame_for_bid(self, bid: str) -> Page | Frame:
+        """Navigate to the correct frame for a BID using BrowserGym's naming convention.
+
+        BIDs like 'a195' encode iframe hierarchy:
+        - 'a' is the first iframe
+        - 'aA' would be a nested iframe inside 'a'
+        - '195' without prefix is in the main frame
+
+        Returns the frame/page where the element with this BID lives.
+        """
         current_frame: Page | Frame = self.page
+
+        # Parse the BID to find frame prefixes
         i = 0
         while i < len(bid) and not bid[i:].isnumeric():
             i += 1
+            # Allow multi-character frame ids like aA, bCD etc.
             while i < len(bid) and bid[i].isalpha() and bid[i].isupper():
                 i += 1
+
             if i > 0:
-                frame_bid = bid[:i]
+                frame_bid = bid[:i]  # bid of the next frame to select
                 try:
                     frame_elem = current_frame.get_by_test_id(frame_bid)
                     if frame_elem.count() > 0:
-                        candidate = frame_elem.frame_locator(":scope")
-                        current_frame = candidate
+                        current_frame = frame_elem.frame_locator(":scope")
                     else:
                         break
                 except Exception:
                     break
+
         return current_frame
 
     def _get_checkbox_state(self, bid: str) -> bool | None:
+        """Get checkbox/radio checked state, or None if not a checkbox/radio.
+
+        Navigates to the correct iframe using BrowserGym's BID naming convention,
+        then checks the element's checkbox state.
+        """
         try:
+            # Navigate to the correct frame for this BID
             frame = self._get_frame_for_bid(bid)
             locator = frame.get_by_test_id(bid)
+
             if locator.count() == 0:
                 return None
+
+            # Get the element's properties via evaluate
             js_code = """
                 (elem) => {
                     if (elem.type === 'checkbox' || elem.type === 'radio') {
@@ -307,16 +304,23 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 }
             """
             result = locator.evaluate(js_code)
+
             if isinstance(result, dict) and result.get("isCheckbox"):
-                return bool(result.get("checked"))
+                return result.get("checked")
             return None
         except Exception:
             return None
 
     def _toggle_checkbox_js(self, bid: str, checked: bool) -> None:
+        """Toggle checkbox state using JavaScript.
+
+        Navigates to the correct iframe using BrowserGym's BID naming convention,
+        then toggles the checkbox state.
+        """
         try:
             frame = self._get_frame_for_bid(bid)
             locator = frame.get_by_test_id(bid)
+
             js_code = """
             (elem, checked) => {
                 if (elem.type === 'checkbox' || elem.type === 'radio') {
@@ -337,7 +341,74 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             """
             locator.evaluate(js_code, checked)
         except Exception:
-            logger.debug("Could not toggle checkbox via JavaScript fallback.", exc_info=True)
+            pass
+
+    def browser_drag(self, from_bid: str, to_bid: str) -> str:
+        """Drag and drop from one element to another."""
+        action_str = f'drag_and_drop(from_bid="{from_bid}", to_bid="{to_bid}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_hover(self, bid: str) -> str:
+        """Hover over an element specified by BID."""
+        action_str = f'hover(bid="{bid}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_select_option(self, bid: str, value: str) -> str:
+        """Select an option from a dropdown element."""
+        escaped_value = value.replace("\\", "\\\\").replace('"', '\\"')
+        action_str = f'select_option(bid="{bid}", options="{escaped_value}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_mouse_click_xy(self, x: int, y: int) -> str:
+        """Click at a given x, y coordinate using the mouse."""
+        action_str = f"mouse_click(x={x}, y={y})"
+        return self._execute_bgym_step(action_str)
+
+    def browser_wait(self, seconds: int) -> str:
+        """Wait for a given number of seconds, up to max_wait."""
+        wait_seconds = min(seconds, self.config.max_wait)
+        wait_ms = wait_seconds * 1000
+        action_str = f"noop(wait_ms={wait_ms})"
+        return self._execute_bgym_step(action_str)
+
+    def browser_back(self) -> str:
+        """Navigate back in browser history."""
+        action_str = "go_back()"
+        return self._execute_bgym_step(action_str)
+
+    def browser_forward(self) -> str:
+        """Navigate forward in browser history."""
+        action_str = "go_forward()"
+        return self._execute_bgym_step(action_str)
+    
+    def browser_scroll(self, delta_x: float, delta_y: float) -> str:
+        action_str = f'scroll(delta_x={delta_x}, delta_y={delta_y})'
+        return self._execute_bgym_step(action_str)
+
+    def browser_dbclick(self, bid: str) -> str:
+        action_str = f'dblclick(bid="{bid}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_press(self, bid: str, comb: str) -> str:
+        action_str = f'press(bid="{bid}", comb="{comb}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_clear(self, bid: str) -> str:
+        action_str = f'clear(bid="{bid}")'
+        return self._execute_bgym_step(action_str)
+
+    def browser_focus(self, bid: str) -> str:
+        action_str = f'focus(bid="{bid}")'
+        return self._execute_bgym_step(action_str)
+    
+    def browser_goto(self, url: str) -> str:
+        action_str = f'goto(url="{url}")'
+        return self._execute_bgym_step(action_str)
+
+    def noop(self) -> str:
+        """No operation action."""
+        action_str = "noop()"
+        return self._execute_bgym_step(action_str)
 
     def _extract_bgym_obs(self) -> dict[str, Any]:
         page = self.page
