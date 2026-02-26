@@ -47,6 +47,10 @@ class BrowserActionSpace(Protocol):
         """Navigate forward in browser history."""
         ...
 
+    def goto(self, url: str) -> str:
+        """Navigate to the specified URL."""
+        ...
+
     def noop(self) -> str:
         """No operation action."""
         ...

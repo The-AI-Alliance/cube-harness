@@ -21,11 +21,11 @@ from browsergym.core.observation import (
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from PIL import Image
 from playwright.sync_api import Browser, BrowserContext, Error, Frame, Page
+from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import Action, Content, Observation
 from agentlab2.tool import Tool, ToolConfig
-from termcolor import colored
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class BrowsergymConfig(ToolConfig):
 
     # Browser configuration
     headless: bool = True
-    viewport: dict | None = None
+    viewport: dict = {"width": 1280, "height": 720}
     slow_mo: int | None = None
     timeout: int | None = None
     locale: str | None = None
@@ -105,32 +105,29 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
 
     def _build_launch_args(self, viewport: dict[str, int]) -> list[str]:
         args = [
-            (
-                f"--window-size={viewport['width']},{viewport['height']}"
-                if self.config.resizeable_window
-                else None
-            ),
+            (f"--window-size={viewport['width']},{viewport['height']}" if self.config.resizeable_window else None),
             "--disable-features=OverlayScrollbars,ExtendedOverlayScrollbars",
         ]
         return [arg for arg in args if arg is not None]
 
     def _create_runtime(self) -> None:
-        viewport = self.config.viewport or {"width": 1280, "height": 720}
         pw = _get_global_playwright()
         pw.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
         self._browser = pw.chromium.launch(
             headless=self.config.headless,
             slow_mo=self.config.slow_mo,
-            args=self._build_launch_args(viewport),
+            args=self._build_launch_args(self.config.viewport),
             ignore_default_args=["--hide-scrollbars"],
             **self.config.pw_chromium_kwargs,
         )
         self._context = self._browser.new_context(
             no_viewport=True if self.config.resizeable_window else None,
-            viewport=viewport if not self.config.resizeable_window else None,
-            record_video_dir=Path(self.config.record_video_dir) / "task_video" if self.config.record_video_dir else None,
-            record_video_size=viewport,
+            viewport=self.config.viewport if not self.config.resizeable_window else None,
+            record_video_dir=Path(self.config.record_video_dir) / "task_video"
+            if self.config.record_video_dir
+            else None,
+            record_video_size=self.config.viewport,
             locale=self.config.locale,
             timezone_id=self.config.timezone_id,
             **self.config.pw_context_kwargs,
@@ -429,7 +426,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 focused_element_bid = extract_focused_element_bid(page)
                 scale_factor = getattr(page, "_bgym_scale_factor", 1.0)
                 extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor)
-            except (Error, MarkingError) as e:
+            except (Error, MarkingError):
                 if retries_left > 0:
                     logger.warning(
                         f"Error extracting BrowserGym observation. Retrying ({retries_left}/{EXTRACT_OBS_MAX_TRIES})."
@@ -491,7 +488,6 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         return obs
 
     # === BrowserTaskTool utility methods ===
-
 
     def evaluate_js(self, js: str) -> Any:
         return self.page.evaluate(js)

@@ -3,12 +3,12 @@
 import logging
 import time
 
+from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.core import ActionSchema, ActionSpace, Observation, Task
 from agentlab2.tools.browsergym import BrowsergymTool
-from browsergym.workarena.tasks.base import AbstractServiceNowTask
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,6 @@ class WorkArenaTask(Task):
         self._workarena_task: AbstractServiceNowTask | None = None
         self.wait_first_page_time = wait_first_page_time
 
-
     def setup(self, tool: BrowsergymTool) -> tuple[Observation, dict]:
         """Set up the WorkArena task with direct task lifecycle management.
         Args:
@@ -99,7 +98,7 @@ class WorkArenaTask(Task):
             "seed": self.seed,
             "level": self.level,
             "goal": goal,
-            **(task_info if isinstance(task_info, dict) else {}),
+            **task_info,
         }
         return obs, info
 
@@ -147,6 +146,7 @@ class WorkArenaTask(Task):
             finally:
                 self._workarena_task = None
 
+
 def _apply_task_runtime_preferences(tool: BrowsergymTool, workarena_task: AbstractServiceNowTask) -> None:
     """Apply task runtime properties to the tool config when not explicitly set."""
     updated_config = tool.config.model_copy(
@@ -160,9 +160,7 @@ def _apply_task_runtime_preferences(tool: BrowsergymTool, workarena_task: Abstra
             "timeout": tool.config.timeout
             if tool.config.timeout is not None
             else getattr(workarena_task, "timeout", None),
-            "locale": tool.config.locale
-            if tool.config.locale is not None
-            else getattr(workarena_task, "locale", None),
+            "locale": tool.config.locale if tool.config.locale is not None else getattr(workarena_task, "locale", None),
             "timezone_id": tool.config.timezone_id
             if tool.config.timezone_id is not None
             else getattr(workarena_task, "timezone_id", None),

@@ -300,8 +300,9 @@ class TestBrowsergymToolActionMethods:
         """Test that browser_click constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step, patch.object(
-            tool, "_get_checkbox_state", return_value=None
+        with (
+            patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step,
+            patch.object(tool, "_get_checkbox_state", return_value=None),
         ):
             tool.browser_click("a51")
 
@@ -451,8 +452,9 @@ class TestBrowsergymToolStepResults:
         """Test that _execute_bgym_step returns success message."""
         tool = self._create_tool_with_mock_page()
 
-        with patch("agentlab2.tools.browsergym.execute_python_code"), patch.object(
-            tool, "_extract_bgym_obs", return_value={}
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
         ):
             result = tool._execute_bgym_step("noop()")
 
@@ -462,8 +464,9 @@ class TestBrowsergymToolStepResults:
         """Test that _execute_bgym_step returns failure message on exception."""
         tool = self._create_tool_with_mock_page()
 
-        with patch("agentlab2.tools.browsergym.execute_python_code", side_effect=Exception("Some error")), patch.object(
-            tool, "_extract_bgym_obs", return_value={}
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code", side_effect=Exception("Some error")),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
         ):
             result = tool._execute_bgym_step("noop()")
 
@@ -474,8 +477,9 @@ class TestBrowsergymToolStepResults:
         tool = self._create_tool_with_mock_page()
         new_obs = {"screenshot": np.zeros((10, 10, 3))}
 
-        with patch("agentlab2.tools.browsergym.execute_python_code"), patch.object(
-            tool, "_extract_bgym_obs", return_value=new_obs
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch.object(tool, "_extract_bgym_obs", return_value=new_obs),
         ):
             tool._execute_bgym_step("noop()")
 
@@ -485,8 +489,9 @@ class TestBrowsergymToolStepResults:
         """Test that _execute_bgym_step updates _last_info with source=action."""
         tool = self._create_tool_with_mock_page()
 
-        with patch("agentlab2.tools.browsergym.execute_python_code"), patch.object(
-            tool, "_extract_bgym_obs", return_value={}
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
         ):
             tool._execute_bgym_step("noop()")
 
@@ -505,9 +510,11 @@ class TestBrowsergymToolExecuteAction:
 
         action = Action(name="browser_click", arguments={"bid": "a1"})
 
-        with patch.object(tool, "_get_checkbox_state", return_value=None), patch.object(
-            tool, "_execute_bgym_step", return_value="Success"
-        ), patch.object(tool, "page_obs", return_value=Observation()):
+        with (
+            patch.object(tool, "_get_checkbox_state", return_value=None),
+            patch.object(tool, "_execute_bgym_step", return_value="Success"),
+            patch.object(tool, "page_obs", return_value=Observation()),
+        ):
             obs = tool.execute_action(action)
 
         assert isinstance(obs, Observation)
@@ -523,11 +530,12 @@ class TestBrowsergymToolLifecycle:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        with patch.object(tool, "_close_runtime") as mock_close, patch.object(
-            tool, "_create_runtime"
-        ) as mock_create, patch.object(tool, "_wait_dom_loaded") as mock_wait, patch.object(
-            tool, "_extract_bgym_obs", return_value={}
-        ) as mock_extract:
+        with (
+            patch.object(tool, "_close_runtime") as mock_close,
+            patch.object(tool, "_create_runtime") as mock_create,
+            patch.object(tool, "_wait_dom_loaded") as mock_wait,
+            patch.object(tool, "_extract_bgym_obs", return_value={}) as mock_extract,
+        ):
             tool.reset()
 
         mock_close.assert_called_once()
@@ -541,9 +549,12 @@ class TestBrowsergymToolLifecycle:
         tool = BrowsergymTool(config)
         tool._page = MagicMock()
 
-        with patch.object(tool, "_close_runtime") as mock_close, patch.object(
-            tool, "_create_runtime"
-        ), patch.object(tool, "_wait_dom_loaded"), patch.object(tool, "_extract_bgym_obs", return_value={}):
+        with (
+            patch.object(tool, "_close_runtime") as mock_close,
+            patch.object(tool, "_create_runtime"),
+            patch.object(tool, "_wait_dom_loaded"),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
+        ):
             tool.reset()
 
         mock_close.assert_called_once()
@@ -814,9 +825,9 @@ class TestBrowsergymToolCheckboxJsFallback:
         # State before: checked, State after: still checked (click didn't work)
         # Then _toggle_checkbox_js call, then state_after_js check
         tool._page._mock_element_locator.evaluate.side_effect = [
-            {"found": True, "isCheckbox": True, "checked": True},   # state_before
-            {"found": True, "isCheckbox": True, "checked": True},   # state_after (same → fallback)
-            "toggled_checkbox",                                       # _toggle_checkbox_js
+            {"found": True, "isCheckbox": True, "checked": True},  # state_before
+            {"found": True, "isCheckbox": True, "checked": True},  # state_after (same → fallback)
+            "toggled_checkbox",  # _toggle_checkbox_js
             {"found": True, "isCheckbox": True, "checked": False},  # state_after_js
         ]
 
