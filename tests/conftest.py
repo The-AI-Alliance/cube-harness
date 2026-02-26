@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 import pytest
 from PIL import Image
@@ -20,8 +20,8 @@ from agentlab2.core import (
 from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
 from agentlab2.llm import LLMConfig, Prompt
-from cube.tool import ToolConfig
-from agentlab2.tool import Tool
+from agentlab2.tool import ToolWithTelemetry
+from cube.tool import ToolConfig, tool_action
 
 # --- Core fixtures ---
 
@@ -120,28 +120,14 @@ def sample_prompt() -> Prompt:
 # --- Tool fixtures ---
 
 
-@runtime_checkable
-class MockActionSpace(Protocol):
-    """Mock action space protocol for testing."""
-
-    def click(self, element_id: str) -> str:
-        """Click on an element."""
-        ...
-
-    def type_text(self, element_id: str, text: str) -> str:
-        """Type text into an element."""
-        ...
-
-
-class MockTool(Tool):
+class MockTool(ToolWithTelemetry):
     """Mock tool implementation for testing."""
-
-    action_space = MockActionSpace
 
     def __init__(self):
         self.click_count = 0
         self.typed_texts = []
 
+    @tool_action
     def click(self, element_id: str) -> str:
         """Click on an element.
 
@@ -154,6 +140,7 @@ class MockTool(Tool):
         self.click_count += 1
         return f"Clicked on {element_id}"
 
+    @tool_action
     def type_text(self, element_id: str, text: str) -> str:
         """Type text into an element.
 
@@ -181,7 +168,7 @@ def mock_tool() -> MockTool:
 class MockToolConfig(ToolConfig):
     """Mock tool configuration for testing."""
 
-    def make(self) -> MockTool:
+    def make(self, container=None) -> MockTool:
         return MockTool()
 
 
@@ -212,7 +199,7 @@ class MockTask(Task):
     def teardown(self) -> None:
         self.teardown_called = True
 
-    def validate_task(self, *args) -> tuple[float, dict]:
+    def validate_task(self, obs: Observation) -> tuple[float, dict]:
         self.validate_called = True
         return 1.0, {"success": True}
 
@@ -262,7 +249,7 @@ class MockAgentConfig(AgentConfig):
 
     name: str = "mock_agent"
 
-    def make(self, *args) -> "MockAgent":
+    def make(self, action_set=None, **kwargs) -> "MockAgent":
         return MockAgent(config=self)
 
 
