@@ -376,10 +376,10 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         """Navigate forward in browser history."""
         action_str = "go_forward()"
         return self._execute_bgym_step(action_str)
-    
+
     def browser_scroll(self, delta_x: float, delta_y: float) -> str:
         """Scroll the page by a given amount of horizontal and vertical delta."""
-        action_str = f'scroll(delta_x={delta_x}, delta_y={delta_y})'
+        action_str = f"scroll(delta_x={delta_x}, delta_y={delta_y})"
         return self._execute_bgym_step(action_str)
 
     def browser_dbclick(self, bid: str) -> str:
@@ -401,7 +401,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         """Focus an element specified by BID."""
         action_str = f'focus(bid="{bid}")'
         return self._execute_bgym_step(action_str)
-    
+
     def browser_goto(self, url: str) -> str:
         """Navigate the current page to a URL."""
         action_str = f'goto(url="{url}")'
