@@ -23,8 +23,6 @@ class TestBrowsergymConfig:
         assert config.use_screenshot is True
         assert config.prune_html is True
         assert config.max_wait == 60
-        assert config.task_entrypoint is None
-        assert config.task_kwargs == {}
 
     def test_custom_config_values(self) -> None:
         """Test that custom configuration values are applied."""
@@ -70,32 +68,26 @@ class TestBrowsergymToolInitialization:
         tool = BrowsergymTool(config)
 
         assert tool.config is config
-        assert tool._env is None
+        assert tool._page is None
+        assert tool._browser is None
+        assert tool._context is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
-    def test_ensure_env_raises_when_not_initialized(self) -> None:
-        """Test that _ensure_env raises RuntimeError when env not initialized."""
+    def test_ensure_page_raises_when_not_initialized(self) -> None:
+        """Test that _ensure_page raises RuntimeError when page not initialized."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        with pytest.raises(RuntimeError, match="BrowserGym environment is not initialized"):
-            tool._ensure_env()
-
-    def test_env_property_raises_when_not_initialized(self) -> None:
-        """Test that env property raises RuntimeError when not initialized."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-
-        with pytest.raises(RuntimeError, match="BrowserGym environment is not initialized"):
-            _ = tool.env
+        with pytest.raises(RuntimeError, match="Browser is not initialized"):
+            tool._ensure_page()
 
     def test_page_property_raises_when_not_initialized(self) -> None:
         """Test that page property raises RuntimeError when not initialized."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        with pytest.raises(RuntimeError, match="BrowserGym environment is not initialized"):
+        with pytest.raises(RuntimeError, match="Browser is not initialized"):
             _ = tool.page
 
     def test_page_obs_raises_when_not_initialized(self) -> None:
@@ -103,23 +95,15 @@ class TestBrowsergymToolInitialization:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        with pytest.raises(RuntimeError, match="BrowserGym environment is not initialized"):
+        with pytest.raises(RuntimeError, match="Browser is not initialized"):
             tool.page_obs()
-
-    def test_goto_raises_when_not_initialized(self) -> None:
-        """Test that goto raises RuntimeError when env not initialized."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-
-        with pytest.raises(RuntimeError, match="BrowserGym environment is not initialized"):
-            tool.goto("https://example.com")
 
     def test_evaluate_js_raises_when_not_initialized(self) -> None:
         """Test that evaluate_js raises RuntimeError when env not initialized."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        with pytest.raises(RuntimeError, match="BrowserGym environment is not initialized"):
+        with pytest.raises(RuntimeError, match="Browser is not initialized"):
             tool.evaluate_js("return 1+1")
 
 
@@ -306,295 +290,294 @@ class TestBrowsergymToolActionMethods:
     """Tests for action method implementations."""
 
     def _create_tool_with_mock_env(self) -> BrowsergymTool:
-        """Helper to create a tool with a mocked environment."""
+        """Helper to create a tool with a mocked page for action testing."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-
-        # Mock the environment and step method
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 0.0, False, False, {})
-        tool._env = mock_env
-        tool._last_obs = {}
-
+        tool._page = MagicMock()
         return tool
 
     def test_browser_click_action_string(self) -> None:
         """Test that browser_click constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_click("a51")
+        with (
+            patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step,
+            patch.object(tool, "_get_checkbox_state", return_value=None),
+        ):
+            tool.browser_click("a51")
 
-        tool._env.step.assert_called_once_with('click(bid="a51")')
+        mock_step.assert_called_once_with('click(bid="a51")')
 
     def test_browser_type_action_string(self) -> None:
         """Test that browser_type constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_type("b12", "Hello World")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_type("b12", "Hello World")
 
-        tool._env.step.assert_called_once_with('fill(bid="b12", value="Hello World")')
+        mock_step.assert_called_once_with('fill(bid="b12", value="Hello World")')
 
     def test_browser_type_escapes_quotes(self) -> None:
         """Test that browser_type properly escapes quotes in text."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_type("c1", 'Say "Hello"')
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_type("c1", 'Say "Hello"')
 
-        tool._env.step.assert_called_once_with('fill(bid="c1", value="Say \\"Hello\\"")')
+        mock_step.assert_called_once_with('fill(bid="c1", value="Say \\"Hello\\"")')
 
     def test_browser_type_escapes_backslashes(self) -> None:
         """Test that browser_type properly escapes backslashes."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_type("d1", "path\\to\\file")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_type("d1", "path\\to\\file")
 
-        tool._env.step.assert_called_once_with('fill(bid="d1", value="path\\\\to\\\\file")')
+        mock_step.assert_called_once_with('fill(bid="d1", value="path\\\\to\\\\file")')
 
     def test_browser_press_key_action_string(self) -> None:
         """Test that browser_press_key constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_press_key("Enter")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_press_key("Enter")
 
-        tool._env.step.assert_called_once_with('keyboard_press("Enter")')
+        mock_step.assert_called_once_with('keyboard_press("Enter")')
 
     def test_browser_drag_action_string(self) -> None:
         """Test that browser_drag constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_drag("e1", "f2")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_drag("e1", "f2")
 
-        tool._env.step.assert_called_once_with('drag_and_drop(from_bid="e1", to_bid="f2")')
+        mock_step.assert_called_once_with('drag_and_drop(from_bid="e1", to_bid="f2")')
 
     def test_browser_hover_action_string(self) -> None:
         """Test that browser_hover constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_hover("g3")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_hover("g3")
 
-        tool._env.step.assert_called_once_with('hover(bid="g3")')
+        mock_step.assert_called_once_with('hover(bid="g3")')
 
     def test_browser_select_option_action_string(self) -> None:
         """Test that browser_select_option constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_select_option("h4", "option1")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_select_option("h4", "option1")
 
-        tool._env.step.assert_called_once_with('select_option(bid="h4", options="option1")')
+        mock_step.assert_called_once_with('select_option(bid="h4", options="option1")')
 
     def test_browser_select_option_escapes_quotes(self) -> None:
         """Test that browser_select_option escapes quotes in value."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_select_option("i5", 'value "with" quotes')
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_select_option("i5", 'value "with" quotes')
 
-        tool._env.step.assert_called_once_with('select_option(bid="i5", options="value \\"with\\" quotes")')
+        mock_step.assert_called_once_with('select_option(bid="i5", options="value \\"with\\" quotes")')
 
     def test_browser_mouse_click_xy_action_string(self) -> None:
         """Test that browser_mouse_click_xy constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_mouse_click_xy(100, 200)
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_mouse_click_xy(100, 200)
 
-        tool._env.step.assert_called_once_with("mouse_click(x=100, y=200)")
+        mock_step.assert_called_once_with("mouse_click(x=100, y=200)")
 
     def test_browser_wait_action_string(self) -> None:
         """Test that browser_wait constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_wait(5)
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_wait(5)
 
-        tool._env.step.assert_called_once_with("noop(wait_ms=5000)")
+        mock_step.assert_called_once_with("noop(wait_ms=5000)")
 
     def test_browser_wait_respects_max_wait(self) -> None:
         """Test that browser_wait clamps to max_wait value."""
         config = BrowsergymConfig(max_wait=10)
         tool = BrowsergymTool(config)
+        tool._page = MagicMock()
 
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 0.0, False, False, {})
-        tool._env = mock_env
-        tool._last_obs = {}
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_wait(120)  # Request 120 seconds, but max_wait is 10
 
-        tool.browser_wait(120)  # Request 120 seconds, but max_wait is 10
-
-        tool._env.step.assert_called_once_with("noop(wait_ms=10000)")
+        mock_step.assert_called_once_with("noop(wait_ms=10000)")
 
     def test_browser_back_action_string(self) -> None:
         """Test that browser_back constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_back()
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_back()
 
-        tool._env.step.assert_called_once_with("go_back()")
+        mock_step.assert_called_once_with("go_back()")
 
     def test_browser_forward_action_string(self) -> None:
         """Test that browser_forward constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.browser_forward()
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_forward()
 
-        tool._env.step.assert_called_once_with("go_forward()")
+        mock_step.assert_called_once_with("go_forward()")
 
     def test_noop_action_string(self) -> None:
         """Test that noop constructs correct action string."""
         tool = self._create_tool_with_mock_env()
 
-        tool.noop()
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.noop()
 
-        tool._env.step.assert_called_once_with("noop()")
+        mock_step.assert_called_once_with("noop()")
 
 
 class TestBrowsergymToolStepResults:
     """Tests for action step results and state updates."""
 
-    def test_execute_bgym_step_returns_success(self) -> None:
-        """Test that _execute_bgym_step returns success message."""
+    def _create_tool_with_mock_page(self) -> BrowsergymTool:
+        """Helper to create a tool with a mocked page."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
+        tool._page = MagicMock()
+        tool._action_set = MagicMock()
+        return tool
 
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 0.0, False, False, {})
-        tool._env = mock_env
-        tool._last_obs = {}
+    def test_execute_bgym_step_returns_success(self) -> None:
+        """Test that _execute_bgym_step returns success message."""
+        tool = self._create_tool_with_mock_page()
 
-        result = tool._execute_bgym_step("noop()")
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
+        ):
+            result = tool._execute_bgym_step("noop()")
 
         assert result == "Success"
 
-    def test_execute_bgym_step_indicates_termination(self) -> None:
-        """Test that _execute_bgym_step indicates episode termination."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
+    def test_execute_bgym_step_returns_failure_on_exception(self) -> None:
+        """Test that _execute_bgym_step returns failure message on exception."""
+        tool = self._create_tool_with_mock_page()
 
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 1.0, True, False, {})  # terminated=True
-        tool._env = mock_env
-        tool._last_obs = {}
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code", side_effect=Exception("Some error")),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
+        ):
+            result = tool._execute_bgym_step("noop()")
 
-        result = tool._execute_bgym_step("noop()")
-
-        assert "terminated" in result.lower()
-
-    def test_execute_bgym_step_indicates_truncation(self) -> None:
-        """Test that _execute_bgym_step indicates episode truncation."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 0.0, False, True, {})  # truncated=True
-        tool._env = mock_env
-        tool._last_obs = {}
-
-        result = tool._execute_bgym_step("noop()")
-
-        assert "truncated" in result.lower()
+        assert "Failed" in result
 
     def test_execute_bgym_step_updates_last_obs(self) -> None:
         """Test that _execute_bgym_step updates _last_obs."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-
+        tool = self._create_tool_with_mock_page()
         new_obs = {"screenshot": np.zeros((10, 10, 3))}
-        mock_env = MagicMock()
-        mock_env.step.return_value = (new_obs, 0.0, False, False, {})
-        tool._env = mock_env
-        tool._last_obs = {}
 
-        tool._execute_bgym_step("noop()")
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch.object(tool, "_extract_bgym_obs", return_value=new_obs),
+        ):
+            tool._execute_bgym_step("noop()")
 
         assert tool._last_obs is new_obs
 
     def test_execute_bgym_step_updates_last_info(self) -> None:
-        """Test that _execute_bgym_step updates _last_info."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
+        """Test that _execute_bgym_step updates _last_info with source=action."""
+        tool = self._create_tool_with_mock_page()
 
-        new_info = {"step_count": 5}
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 0.0, False, False, new_info)
-        tool._env = mock_env
-        tool._last_obs = {}
+        with (
+            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
+        ):
+            tool._execute_bgym_step("noop()")
 
-        tool._execute_bgym_step("noop()")
-
-        assert tool._last_info is new_info
+        assert tool._last_info is not None
+        assert tool._last_info["source"] == "action"
 
 
 class TestBrowsergymToolExecuteAction:
     """Tests for execute_action integration."""
 
-    @patch("agentlab2.tools.browsergym.flatten_dom_to_str")
-    def test_execute_action_returns_combined_observation(self, mock_flatten_dom: MagicMock) -> None:
+    def test_execute_action_returns_combined_observation(self) -> None:
         """Test that execute_action combines action result and page observation."""
-        mock_flatten_dom.return_value = "<html>...</html>"
-
         config = BrowsergymConfig(use_html=True, use_axtree=False, use_screenshot=False, prune_html=False)
         tool = BrowsergymTool(config)
-
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({"dom_object": {}}, 0.0, False, False, {})
-        tool._env = mock_env
-        tool._last_obs = {"dom_object": {}}
+        tool._page = MagicMock()
 
         action = Action(name="browser_click", arguments={"bid": "a1"})
-        obs = tool.execute_action(action)
+
+        with (
+            patch.object(tool, "_get_checkbox_state", return_value=None),
+            patch.object(tool, "_execute_bgym_step", return_value="Success"),
+            patch.object(tool, "page_obs", return_value=Observation()),
+        ):
+            obs = tool.execute_action(action)
 
         assert isinstance(obs, Observation)
-        # Should have action result + HTML content
+        # Should have at least the action result content
         assert len(obs.contents) >= 1
 
 
 class TestBrowsergymToolLifecycle:
     """Tests for tool lifecycle methods."""
 
-    @patch("agentlab2.tools.browsergym.BrowserEnv")
-    def test_reset_creates_new_env(self, mock_browser_env_cls: MagicMock) -> None:
-        """Test that reset creates a new BrowserEnv."""
-        mock_env = MagicMock()
-        mock_env.reset.return_value = ({}, {})
-        mock_browser_env_cls.return_value = mock_env
-
+    def test_reset_initializes_browser(self) -> None:
+        """Test that reset calls runtime creation and observation extraction."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        tool.reset()
+        with (
+            patch.object(tool, "_close_runtime") as mock_close,
+            patch.object(tool, "_create_runtime") as mock_create,
+            patch.object(tool, "_wait_dom_loaded") as mock_wait,
+            patch.object(tool, "_extract_bgym_obs", return_value={}) as mock_extract,
+        ):
+            tool.reset()
 
-        mock_browser_env_cls.assert_called_once()
-        mock_env.reset.assert_called_once()
-        assert tool._env is mock_env
+        mock_close.assert_called_once()
+        mock_create.assert_called_once()
+        mock_wait.assert_called_once()
+        mock_extract.assert_called_once()
 
-    @patch("agentlab2.tools.browsergym.BrowserEnv")
-    def test_reset_closes_existing_env(self, mock_browser_env_cls: MagicMock) -> None:
-        """Test that reset closes existing environment before creating new one."""
-        old_env = MagicMock()
-        new_env = MagicMock()
-        new_env.reset.return_value = ({}, {})
-        mock_browser_env_cls.return_value = new_env
-
+    def test_reset_closes_existing_runtime(self) -> None:
+        """Test that reset closes existing runtime before creating new one."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool._env = old_env
+        tool._page = MagicMock()
 
-        tool.reset()
+        with (
+            patch.object(tool, "_close_runtime") as mock_close,
+            patch.object(tool, "_create_runtime"),
+            patch.object(tool, "_wait_dom_loaded"),
+            patch.object(tool, "_extract_bgym_obs", return_value={}),
+        ):
+            tool.reset()
 
-        old_env.close.assert_called_once()
-        assert tool._env is new_env
+        mock_close.assert_called_once()
 
-    def test_close_cleans_up_env(self) -> None:
-        """Test that close cleans up the environment."""
+    def test_close_cleans_up_browser(self) -> None:
+        """Test that close cleans up the browser resources."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        mock_env = MagicMock()
-        tool._env = mock_env
+        mock_context = MagicMock()
+        mock_browser = MagicMock()
+        mock_page = MagicMock()
+        tool._context = mock_context
+        tool._browser = mock_browser
+        tool._page = mock_page
         tool._last_obs = {"some": "data"}
         tool._last_info = {"info": "data"}
 
         tool.close()
 
-        mock_env.close.assert_called_once()
-        assert tool._env is None
+        assert tool._page is None
+        assert tool._browser is None
+        assert tool._context is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
@@ -603,20 +586,22 @@ class TestBrowsergymToolLifecycle:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        mock_env = MagicMock()
-        mock_env.close.side_effect = Exception("Close failed")
-        tool._env = mock_env
+        mock_context = MagicMock()
+        mock_context.close.side_effect = Exception("Close failed")
+        tool._context = mock_context
         tool._last_obs = {"some": "data"}
 
         # Should not raise
         tool.close()
 
         # State should still be cleaned up
-        assert tool._env is None
+        assert tool._page is None
+        assert tool._browser is None
+        assert tool._context is None
         assert tool._last_obs is None
 
-    def test_close_noop_when_no_env(self) -> None:
-        """Test that close is safe to call when no env exists."""
+    def test_close_noop_when_no_browser(self) -> None:
+        """Test that close is safe to call when no browser exists."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
@@ -654,8 +639,8 @@ class TestBrowsergymToolActionSet:
 class TestBrowsergymToolCheckboxJsFallback:
     """Tests for checkbox/radio JS fallback in browser_click."""
 
-    def _create_tool_with_mock_env_and_page(self) -> BrowsergymTool:
-        """Helper to create a tool with mocked environment and page.
+    def _create_tool_with_mock_page(self) -> BrowsergymTool:
+        """Helper to create a tool with a mocked page.
 
         Creates a mock that handles the frame navigation chain:
         1. _get_frame_for_bid(bid) parses BID and navigates to iframe
@@ -665,11 +650,7 @@ class TestBrowsergymToolCheckboxJsFallback:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        mock_env = MagicMock()
-        mock_env.step.return_value = ({}, 0.0, False, False, {})
-
         mock_page = MagicMock()
-        mock_env.page = mock_page
 
         # Create the element locator (final target)
         mock_element_locator = MagicMock()
@@ -694,16 +675,16 @@ class TestBrowsergymToolCheckboxJsFallback:
         mock_page._mock_element_locator = mock_element_locator
         mock_page._mock_frame = mock_frame
 
-        tool._env = mock_env
+        tool._page = mock_page
         tool._last_obs = {}
 
         return tool
 
     def test_get_checkbox_state_returns_true_when_checked(self) -> None:
         """Test that _get_checkbox_state returns True for checked checkbox."""
-        tool = self._create_tool_with_mock_env_and_page()
+        tool = self._create_tool_with_mock_page()
         # Configure evaluate to return checkbox state
-        tool._env.page._mock_element_locator.evaluate.return_value = {
+        tool._page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": True,
             "checked": True,
@@ -712,12 +693,12 @@ class TestBrowsergymToolCheckboxJsFallback:
         result = tool._get_checkbox_state("a123")
 
         assert result is True
-        tool._env.page._mock_element_locator.evaluate.assert_called_once()
+        tool._page._mock_element_locator.evaluate.assert_called_once()
 
     def test_get_checkbox_state_returns_false_when_unchecked(self) -> None:
         """Test that _get_checkbox_state returns False for unchecked checkbox."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.return_value = {
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": True,
             "checked": False,
@@ -729,8 +710,8 @@ class TestBrowsergymToolCheckboxJsFallback:
 
     def test_get_checkbox_state_returns_none_for_non_checkbox(self) -> None:
         """Test that _get_checkbox_state returns None for non-checkbox elements."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.return_value = {
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": False,
             "tagName": "DIV",
@@ -742,8 +723,8 @@ class TestBrowsergymToolCheckboxJsFallback:
 
     def test_get_checkbox_state_returns_none_when_element_not_found(self) -> None:
         """Test that _get_checkbox_state returns None when element not found."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.count.return_value = 0
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.count.return_value = 0
 
         result = tool._get_checkbox_state("c789")
 
@@ -751,8 +732,8 @@ class TestBrowsergymToolCheckboxJsFallback:
 
     def test_get_checkbox_state_returns_none_on_exception(self) -> None:
         """Test that _get_checkbox_state returns None when evaluate raises."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.side_effect = Exception("JS error")
 
         result = tool._get_checkbox_state("c789")
 
@@ -760,13 +741,13 @@ class TestBrowsergymToolCheckboxJsFallback:
 
     def test_toggle_checkbox_js_sets_checked_true(self) -> None:
         """Test that _toggle_checkbox_js sets checkbox to checked."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
         tool._toggle_checkbox_js("a123", True)
 
-        tool._env.page._mock_element_locator.evaluate.assert_called_once()
-        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        tool._page._mock_element_locator.evaluate.assert_called_once()
+        call_args = tool._page._mock_element_locator.evaluate.call_args
         js_code = call_args[0][0]
         checked_arg = call_args[0][1]
         assert "elem.checked = checked" in js_code
@@ -774,23 +755,23 @@ class TestBrowsergymToolCheckboxJsFallback:
 
     def test_toggle_checkbox_js_sets_checked_false(self) -> None:
         """Test that _toggle_checkbox_js sets checkbox to unchecked."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
         tool._toggle_checkbox_js("a123", False)
 
-        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        call_args = tool._page._mock_element_locator.evaluate.call_args
         checked_arg = call_args[0][1]
         assert checked_arg is False
 
     def test_toggle_checkbox_js_dispatches_events(self) -> None:
         """Test that _toggle_checkbox_js dispatches click, change, and input events."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
         tool._toggle_checkbox_js("a123", True)
 
-        call_args = tool._env.page._mock_element_locator.evaluate.call_args
+        call_args = tool._page._mock_element_locator.evaluate.call_args
         js_code = call_args[0][0]
         assert "dispatchEvent(new Event('click'" in js_code
         assert "dispatchEvent(new Event('change'" in js_code
@@ -798,57 +779,62 @@ class TestBrowsergymToolCheckboxJsFallback:
 
     def test_toggle_checkbox_js_handles_exception_gracefully(self) -> None:
         """Test that _toggle_checkbox_js doesn't raise on exception."""
-        tool = self._create_tool_with_mock_env_and_page()
-        tool._env.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
+        tool = self._create_tool_with_mock_page()
+        tool._page._mock_element_locator.evaluate.side_effect = Exception("JS error")
 
         # Should not raise
         tool._toggle_checkbox_js("a123", True)
 
     def test_browser_click_no_fallback_for_non_checkbox(self) -> None:
         """Test that browser_click doesn't use JS fallback for non-checkbox elements."""
-        tool = self._create_tool_with_mock_env_and_page()
+        tool = self._create_tool_with_mock_page()
         # _get_checkbox_state returns None for non-checkboxes
-        tool._env.page._mock_element_locator.evaluate.return_value = {
+        tool._page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": False,
             "tagName": "BUTTON",
         }
 
-        tool.browser_click("a100")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_click("a100")
 
-        # Should only call env.step (no JS fallback)
-        tool._env.step.assert_called_once_with('click(bid="a100")')
+        # Should only call _execute_bgym_step once (no JS fallback)
+        mock_step.assert_called_once_with('click(bid="a100")')
         # evaluate called once for _get_checkbox_state
-        assert tool._env.page._mock_element_locator.evaluate.call_count == 1
+        assert tool._page._mock_element_locator.evaluate.call_count == 1
 
     def test_browser_click_no_fallback_when_native_click_works(self) -> None:
         """Test that browser_click doesn't use JS fallback when native click toggles state."""
-        tool = self._create_tool_with_mock_env_and_page()
+        tool = self._create_tool_with_mock_page()
         # First call: state before (unchecked), Second call: state after (checked)
-        tool._env.page._mock_element_locator.evaluate.side_effect = [
+        tool._page._mock_element_locator.evaluate.side_effect = [
             {"found": True, "isCheckbox": True, "checked": False},
             {"found": True, "isCheckbox": True, "checked": True},
         ]
 
-        tool.browser_click("a200")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
+            tool.browser_click("a200")
 
-        tool._env.step.assert_called_once_with('click(bid="a200")')
+        mock_step.assert_called_once_with('click(bid="a200")')
         # Two evaluate calls: before and after state check
-        assert tool._env.page._mock_element_locator.evaluate.call_count == 2
+        assert tool._page._mock_element_locator.evaluate.call_count == 2
 
     def test_browser_click_fallback_unchecks_when_already_checked(self) -> None:
         """Test that browser_click JS fallback unchecks when checkbox was checked."""
-        tool = self._create_tool_with_mock_env_and_page()
+        tool = self._create_tool_with_mock_page()
         # State before: checked, State after: still checked (click didn't work)
-        tool._env.page._mock_element_locator.evaluate.side_effect = [
-            {"found": True, "isCheckbox": True, "checked": True},
-            {"found": True, "isCheckbox": True, "checked": True},
-            "toggled_checkbox",
+        # Then _toggle_checkbox_js call, then state_after_js check
+        tool._page._mock_element_locator.evaluate.side_effect = [
+            {"found": True, "isCheckbox": True, "checked": True},  # state_before
+            {"found": True, "isCheckbox": True, "checked": True},  # state_after (same → fallback)
+            "toggled_checkbox",  # _toggle_checkbox_js
+            {"found": True, "isCheckbox": True, "checked": False},  # state_after_js
         ]
 
-        tool.browser_click("a400")
+        with patch.object(tool, "_execute_bgym_step", return_value="Success"):
+            tool.browser_click("a400")
 
         # Verify JS toggle was called with False (to uncheck)
-        js_toggle_call = tool._env.page._mock_element_locator.evaluate.call_args_list[2]
+        js_toggle_call = tool._page._mock_element_locator.evaluate.call_args_list[2]
         checked_arg = js_toggle_call[0][1]
         assert checked_arg is False
