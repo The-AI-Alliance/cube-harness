@@ -6,7 +6,7 @@ from litellm import Message
 from agentlab2.llm import LLMCall, LLMConfig, Prompt
 from agentlab2.rl.llm_call_renderer import (
     _load_apriel_tokenizer,
-    _render_apriel_output,
+    _render_model_output,
     llm_call_to_text_pair,
 )
 
@@ -45,7 +45,7 @@ class TestRenderAprielOutput:
 
     def test_content_only(self) -> None:
         output = Message(content="Hello world.", role="assistant")
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert result == "Hello world.\n<|end|>\n"
 
     def test_tool_calls_only(self) -> None:
@@ -54,7 +54,7 @@ class TestRenderAprielOutput:
             role="assistant",
             tool_calls=[_make_tool_call("browser_click", '{"bid": "btn"}')],
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert (
             result == '\n<tool_calls>[{"name": "browser_click", "arguments": {"bid": "btn"}}]</tool_calls>\n<|end|>\n'
         )
@@ -65,7 +65,7 @@ class TestRenderAprielOutput:
             role="assistant",
             tool_calls=[_make_tool_call("browser_click", '{"bid": "btn"}')],
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert result.startswith("Let me click.")
         assert "<tool_calls>" in result
         assert result.endswith("\n<|end|>\n")
@@ -79,7 +79,7 @@ class TestRenderAprielOutput:
                 _make_tool_call("browser_click", '{"bid": "submit"}', tc_id="c2"),
             ],
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert "browser_type" in result
         assert "browser_click" in result
         assert result.count('"name"') == 2
@@ -90,17 +90,17 @@ class TestRenderAprielOutput:
             role="assistant",
             tool_calls=[_make_tool_call("noop", "{}", tc_id="call_xyz")],
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert "call_xyz" not in result
         assert '"id"' not in result
 
     def test_ends_with_end_token(self) -> None:
         output = Message(content="test", role="assistant")
-        assert _render_apriel_output(output).endswith("\n<|end|>\n")
+        assert _render_model_output(output).endswith("\n<|end|>\n")
 
     def test_empty_content_treated_as_no_content(self) -> None:
         output = Message(content="", role="assistant")
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert result == "\n<|end|>\n"
 
     def test_reasoning_with_tool_calls(self) -> None:
@@ -111,7 +111,7 @@ class TestRenderAprielOutput:
             reasoning_content="I need to call get_weather for Montreal.",
             tool_calls=[_make_tool_call("get_weather", '{"city": "Montreal"}')],
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert result == (
             "I need to call get_weather for Montreal."
             "\n[BEGIN FINAL RESPONSE]"
@@ -126,7 +126,7 @@ class TestRenderAprielOutput:
             role="assistant",
             reasoning_content="Let me think step by step.",
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert result == ("Let me think step by step.\n[BEGIN FINAL RESPONSE]\nThe answer is 42.\n<|end|>\n")
 
     def test_reasoning_with_content_and_tool_calls(self) -> None:
@@ -137,14 +137,14 @@ class TestRenderAprielOutput:
             reasoning_content="The user wants weather info.",
             tool_calls=[_make_tool_call("get_weather", '{"city": "Montreal"}')],
         )
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert result.startswith("The user wants weather info.\n[BEGIN FINAL RESPONSE]\nI'll check the weather.")
         assert "<tool_calls>" in result
 
     def test_no_reasoning_no_marker(self) -> None:
         """Without reasoning_content, no [BEGIN FINAL RESPONSE] marker should appear."""
         output = Message(content="Just a response.", role="assistant")
-        result = _render_apriel_output(output)
+        result = _render_model_output(output)
         assert "[BEGIN FINAL RESPONSE]" not in result
 
     def test_matches_live_vllm_output(self) -> None:
@@ -167,7 +167,7 @@ class TestRenderAprielOutput:
             '\n<tool_calls>[{"name": "get_weather", "arguments": {"city": "Montreal"}}]</tool_calls>'
             "\n<|end|>\n"
         )
-        assert _render_apriel_output(output) == expected_raw
+        assert _render_model_output(output) == expected_raw
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ class TestOutputMatchesTemplate:
         marker = "\n<|begin_assistant|>\n"
         template_output = full_text[full_text.rfind(marker) + len(marker) :]
 
-        our_output = _render_apriel_output(output_msg)
+        our_output = _render_model_output(output_msg)
         assert our_output == template_output
 
     @pytest.mark.slow
@@ -325,5 +325,5 @@ class TestOutputMatchesTemplate:
         marker = "\n<|begin_assistant|>\n"
         template_output = full_text[full_text.rfind(marker) + len(marker) :]
 
-        our_output = _render_apriel_output(output_msg)
+        our_output = _render_model_output(output_msg)
         assert our_output == template_output
