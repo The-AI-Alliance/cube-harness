@@ -155,14 +155,11 @@ class Computer(Tool, ComputerActionSpace):
         Returns:
             Observation from action execution, optionally with full VM state
         """
-        # Handle special "done" and "fail" actions that don't need VM execution
-        if action.name in ["done", "fail"]:
-            return Observation.from_text(f"Task marked as {action.name}")
-
         action_obs = super().execute_action(action)
 
-        # Optionally get full observation after each action (expensive for VMs)
-        if self.config.observe_after_action:
+        # Optionally get full observation after each action (expensive for VMs).
+        # Skip for terminal signals — they don't change VM state and need no screenshot.
+        if self.config.observe_after_action and action.name not in ["done", "fail"]:
             action_obs += self.get_observation()
 
         return action_obs
