@@ -2,6 +2,7 @@
 
 import asyncio
 import functools
+import inspect
 import logging
 from typing import Any, Literal
 
@@ -65,12 +66,19 @@ def _make_async_handler(tool: AbstractTool, method: Any, action_name: str) -> An
 
     The wrapper preserves the original method's signature via functools.wraps,
     allowing FastMCP to infer the parameter schema from type hints.
+
+    Async tools (e.g. AsyncPlaywrightTool) are awaited directly.
+    Sync tools are dispatched via asyncio.to_thread to avoid blocking the loop.
     """
+    is_async = inspect.iscoroutinefunction(tool.execute_action)
 
     @functools.wraps(method)
     async def handler(*args: Any, **kwargs: Any) -> list[TextContent | ImageContent]:
         action = Action(name=action_name, arguments=kwargs)
-        obs: Observation = await asyncio.to_thread(tool.execute_action, action)
+        if is_async:
+            obs: Observation = await tool.execute_action(action)
+        else:
+            obs: Observation = await asyncio.to_thread(tool.execute_action, action)
         return observation_to_mcp_content(obs)
 
     # Override the return annotation so FastMCP treats the output as MCP content
