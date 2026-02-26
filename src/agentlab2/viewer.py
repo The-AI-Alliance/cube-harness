@@ -8,13 +8,13 @@ Mimics the UI of the original agentlab viewer but works with the new data struct
 import argparse
 import json
 from dataclasses import dataclass, field
-from os.path import expanduser
 from pathlib import Path
 from typing import Any
 
 import gradio as gr
 from PIL import Image
 
+from agentlab2 import EXP_DIR
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
 
@@ -43,6 +43,7 @@ class ViewerState:
     exp_dirs: list[Path] = field(default_factory=list)
     trajectories: dict[str, Trajectory] = field(default_factory=dict)
     current_trajectory: Trajectory | None = None
+    current_exp_dir: Path | None = None
     step: int = 0
 
     def load_experiment(self, exp_dir: Path) -> dict[str, Any]:
@@ -333,6 +334,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         # Extract directory name (remove trajectory count suffix)
         dir_name = exp_name.split(" (")[0]
         exp_dir = state.results_dir / dir_name
+        state.current_exp_dir = exp_dir
 
         result = state.load_experiment(exp_dir)
         if "error" in result:
@@ -432,17 +434,19 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
         return exp_stats, traj_data, first_traj
 
-    def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> StepId | None:
+    def on_select_trajectory(evt: gr.SelectData, traj_table: Any) -> TrajectoryId | None:
         """Handle trajectory selection from table."""
         if traj_table is None or len(traj_table) == 0:
             return None
 
         row = evt.index[0]
-        traj_id = traj_table.iloc[row, 0]
-        state.select_trajectory(traj_id)
-        return StepId(trajectory_id=TrajectoryId(trajectory_name=traj_id), step=0)
+        traj_name = traj_table.iloc[row, 0]
+        state.select_trajectory(traj_name)
+        return TrajectoryId(
+            exp_dir=str(state.current_exp_dir) if state.current_exp_dir else None, trajectory_name=traj_name
+        )
 
-    def new_trajectory(traj_id: TrajectoryId) -> StepId:
+    def new_trajectory(traj_id: TrajectoryId | None) -> StepId:
         """Handle new trajectory selection."""
         if traj_id and traj_id.trajectory_name:
             state.select_trajectory(traj_id.trajectory_name)
@@ -485,6 +489,15 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             if llm_call.prompt.tools:
                 return json.dumps(llm_call.prompt.tools, indent=2)
         return "No tools in current step"
+
+    def update_episode_logs() -> str:
+        if not state.current_trajectory or not state.current_exp_dir:
+            return "No trajectory selected"
+        storage = FileStorage(state.current_exp_dir)
+        traj_id = state.current_trajectory.id
+        if storage.has_logs(traj_id):
+            return storage.load_logs(traj_id)
+        return f"No logs found for {traj_id}\nExpected at: {storage.get_log_path(traj_id)}"
 
     def update_raw_json() -> str:
         """Get raw JSON of current step."""
@@ -683,6 +696,17 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
             stats += f"\n\n{token_stats}"
 
         return stats
+
+    def get_task_goal() -> str:
+        """Get the task goal from trajectory metadata."""
+        if not state.current_trajectory:
+            return ""
+        goal = state.current_trajectory.metadata.get("goal", "")
+        if not goal:
+            goal = state.current_trajectory.metadata.get("task_goal", "")
+        if goal:
+            return f"**Goal:** {goal}"
+        return ""
 
     def generate_timeline_html() -> str:
         """Generate an HTML timeline visualization of the trajectory."""
@@ -892,6 +916,9 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         with gr.Row(visible=True, elem_id="timeline_click_input"):
             timeline_click_input = gr.Number(show_label=False, container=False)
 
+        # Task goal display
+        task_goal_display = gr.Markdown("", elem_id="task_goal")
+
         # Main two-column view
         with gr.Row():
             # Left column: Screenshots
@@ -927,9 +954,14 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
                     llm_calls = gr.Code(language="json", show_label=False)
                 with gr.Tab("LLM Tools"):
                     llm_tools = gr.Code(language="json", show_label=False)
+                with gr.Tab("Episode Logs"):
+                    episode_logs = gr.Code(language=None, show_label=False)
 
         # Event handlers
         refresh_button.click(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
+
+        # Clear dropdown on focus to allow easy re-selection
+        exp_dir_choice.focus(fn=lambda: None, outputs=exp_dir_choice)
 
         exp_dir_choice.change(
             fn=on_select_experiment,
@@ -940,7 +972,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         trajectory_table.select(
             fn=on_select_trajectory,
             inputs=trajectory_table,
-            outputs=step_id,
+            outputs=traj_id,
         )
 
         traj_id.change(fn=new_trajectory, inputs=traj_id, outputs=step_id)
@@ -960,6 +992,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         step_id.change(fn=get_compact_header_info, outputs=header_info)
         step_id.change(fn=get_step_counter, outputs=step_counter)
         step_id.change(fn=generate_timeline_html, outputs=timeline_html)
+        step_id.change(fn=get_task_goal, outputs=task_goal_display)
         step_id.change(fn=update_screenshot, outputs=screenshot)
         step_id.change(fn=get_prev_screenshot, outputs=prev_screenshot)
         step_id.change(fn=get_step_details, outputs=step_details)
@@ -967,6 +1000,7 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
         step_id.change(fn=update_raw_json, outputs=raw_json)
         step_id.change(fn=update_llm_calls, outputs=llm_calls)
         step_id.change(fn=update_llm_tools, outputs=llm_tools)
+        traj_id.change(fn=update_episode_logs, outputs=episode_logs)
 
         # Initial load
         demo.load(fn=refresh_exp_dir_choices, inputs=exp_dir_choice, outputs=exp_dir_choice)
@@ -977,13 +1011,12 @@ def run_viewer(results_dir: Path, debug: bool = False, port: int | None = None, 
 
 def main():
     """Main entry point for the viewer."""
-    results_dir = expanduser("~/agentlab_results/al2")
     parser = argparse.ArgumentParser(description="AgentLab2 Experiment Viewer")
     parser.add_argument(
         "--results-dir",
         type=str,
-        default=results_dir,
-        help="Path to results directory containing experiments",
+        default=str(EXP_DIR),
+        help="Path to results directory containing experiments (default: agentlab2.EXP_DIR)",
     )
     parser.add_argument(
         "--debug",
