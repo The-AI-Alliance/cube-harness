@@ -98,6 +98,9 @@ Each numbered box in the screenshot corresponds to a tag_N variable pre-defined 
 # Keep old name as alias for backwards compatibility with any existing code
 OSWORLD_SYSTEM_PROMPT = OSWORLD_SYSTEM_PROMPT_COMPUTER_13
 
+# Pinned OSWorld commit for reproducibility
+OSWORLD_COMMIT = "e695a10"
+
 # AgentLab2 data directory for OSWorld
 AGENTLAB2_DIR = Path.home() / ".agentlab2"
 OSWORLD_BASE_DIR = AGENTLAB2_DIR / "benchmarks" / "osworld"
@@ -351,7 +354,14 @@ class OSWorldBenchmark(Benchmark):
                     capture_output=True,
                     text=True
                 )
-                logger.info("✓ OSWorld repository cloned successfully")
+                subprocess.run(
+                    ["git", "checkout", OSWORLD_COMMIT],
+                    cwd=str(OSWORLD_REPO_DIR),
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                logger.info(f"✓ OSWorld repository cloned and pinned to commit {OSWORLD_COMMIT}")
             except subprocess.CalledProcessError as e:
                 logger.error(f"Failed to clone OSWorld: {e.stderr}")
                 raise

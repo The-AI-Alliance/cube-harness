@@ -57,7 +57,8 @@ class OSWorldTask(Task):
         max_turns: int = 15,
         use_som: bool = False,
     ) -> None:
-        self.id = id
+        self._osworld_id = id  # raw UUID used by desktop_env for task lookup
+        self.id = f"{domain}/{id}"  # display ID: domain-prefixed for viewer readability
         self.desc = desc
         self.domain = domain
         self.instruction = instruction
@@ -89,9 +90,9 @@ class OSWorldTask(Task):
         self._is_done = False
         logger.info(f"Setting up OSWorld task: {self.id} (domain={self.domain})")
 
-        # Build task config for desktop_env
+        # Build task config for desktop_env (uses raw UUID, not display ID)
         task_config = {
-            "id": self.id,
+            "id": self._osworld_id,
             "instruction": self.instruction,
             "config": self.config,
             "evaluator": self.evaluator,
