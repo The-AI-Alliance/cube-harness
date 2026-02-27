@@ -27,6 +27,7 @@ from agentlab2.agents.react import ReactAgentConfig  # noqa: F401
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
+from agentlab2.tools.browser_session import PlaywrightSessionConfig
 from agentlab2.tools.browsergym import BrowsergymConfig
 
 try:
@@ -61,7 +62,7 @@ def main(debug: bool) -> None:
     # Configure BrowserGym tool
     # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
     tool_config = BrowsergymConfig(
-        headless=not debug,  # Show browser in debug mode
+        browser_config=PlaywrightSessionConfig(headless=not debug),
         use_screenshot=True,
         use_axtree=True,
         use_html=False,
