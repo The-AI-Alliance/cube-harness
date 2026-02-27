@@ -4,8 +4,6 @@ This module provides a general Computer tool that wraps desktop_env.DesktopEnv
 for desktop automation tasks. The tool provides raw observations (screenshots,
 accessibility trees, terminal output) that can be post-processed by tasks.
 """
-
-import importlib.util
 import logging
 import os
 import time
@@ -27,31 +25,26 @@ from agentlab2.tool import Tool, ToolConfig
 
 logger = logging.getLogger(__name__)
 
-# Conditional import for desktop_env (following AgentLab pattern)
-spec = importlib.util.find_spec("desktop_env")
-if spec is not None:
-    # desktop_env reads PROXY_CONFIG_FILE at module import time (controllers/setup.py),
-    # defaulting to a bare relative path that breaks unless CWD is the OSWorld repo.
-    # Set it to the absolute path before importing so it resolves correctly.
-    if "PROXY_CONFIG_FILE" not in os.environ:
-        _proxy_config = (
-            Path.home()
-            / ".agentlab2"
-            / "benchmarks"
-            / "osworld"
-            / "OSWorld"
-            / "evaluation_examples"
-            / "settings"
-            / "proxy"
-            / "dataimpulse.json"
-        )
-        os.environ["PROXY_CONFIG_FILE"] = str(_proxy_config)
+# desktop_env reads PROXY_CONFIG_FILE at module import time (controllers/setup.py),
+# defaulting to a bare relative path that breaks unless CWD is the OSWorld repo.
+# Set it to the absolute path before importing so it resolves correctly.
+if "PROXY_CONFIG_FILE" not in os.environ:
+    _proxy_config = (
+        Path.home()
+        / ".agentlab2"
+        / "benchmarks"
+        / "osworld"
+        / "OSWorld"
+        / "evaluation_examples"
+        / "settings"
+        / "proxy"
+        / "dataimpulse.json"
+    )
+    os.environ["PROXY_CONFIG_FILE"] = str(_proxy_config)
 
-    from desktop_env.desktop_env import DesktopEnv
-    import desktop_env.providers.docker.manager as docker_manager
-else:
-    DesktopEnv = None
-    docker_manager = None
+from desktop_env.desktop_env import DesktopEnv
+import desktop_env.providers.docker.manager as docker_manager
+
 
 
 class ComputerConfig(ToolConfig):

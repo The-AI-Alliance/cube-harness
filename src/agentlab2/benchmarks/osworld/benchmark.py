@@ -134,7 +134,7 @@ class OSWorldBenchmark(Benchmark):
     tasks_file: Optional[str] = None  # Path to flat JSON array of tasks
     test_set_path: str = str(OSWORLD_REPO_DIR / "evaluation_examples")
     test_set_name: str = "test_all.json"
-    domain: str = "all"  # or specific domain like "chrome", "libreoffice", etc.
+    domain: str = "all" # TODO: make it enum  # or specific domain like "chrome", "libreoffice", etc.
     shuffle: bool = True
     shuffle_seed: int = 42
     max_turns: int = 15  # Maximum agent turns per task
@@ -369,6 +369,38 @@ class OSWorldBenchmark(Benchmark):
         # Create VM data directory (VMs will be downloaded automatically by desktop_env)
         OSWORLD_VM_DIR.mkdir(parents=True, exist_ok=True)
 
+    def ensure_proxy_config_in_env(self, env_path: Path = Path(".env")) -> None:
+        """Append PROXY_CONFIG_FILE to .env if it is not already defined there.
+
+        The value mirrors the default used by computer.py so that desktop_env
+        picks it up regardless of the current working directory.
+        """
+        proxy_config_value = str(
+            Path.home()
+            / ".agentlab2"
+            / "benchmarks"
+            / "osworld"
+            / "OSWorld"
+            / "evaluation_examples"
+            / "settings"
+            / "proxy"
+            / "dataimpulse.json"
+        )
+
+        key = "PROXY_CONFIG_FILE"
+
+        # Check existing entries
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                stripped = line.strip()
+                if stripped.startswith(f"{key}=") or stripped.startswith(f"{key} ="):
+                    logger.debug(f"{key} already present in {env_path}, skipping.")
+                    return
+
+        with env_path.open("a") as f:
+            f.write(f"\n{key}={proxy_config_value}\n")
+        logger.info(f"Appended {key} to {env_path}")
+
     def install(self) -> None:
         """Install OSWorld dependencies.
 
@@ -380,6 +412,7 @@ class OSWorldBenchmark(Benchmark):
         """
         logger.info("Installing OSWorld benchmark...")
         self._ensure_osworld_installed()
+        self.ensure_proxy_config_in_env()
         logger.info("\nInstallation complete!")
         logger.info(f"  OSWorld repo: {OSWORLD_REPO_DIR}")
         logger.info(f"  VM data: {OSWORLD_VM_DIR}")
