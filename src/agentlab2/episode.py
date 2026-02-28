@@ -157,6 +157,10 @@ class Episode:
                         self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                         trajectory.steps.append(agent_step)
 
+                        if not agent_output.actions and not agent_output.error:
+                            logger.info(colored("Agent returned no actions — stopping episode.", "yellow"))
+                            break
+
                         env_ts = time.time()
                         try:
                             env_output = env.step(agent_output.actions)
