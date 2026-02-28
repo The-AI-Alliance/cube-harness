@@ -91,6 +91,7 @@ def main(debug: bool) -> None:
     # These flags must be >= the agent's ObsFlags to provide required observations
     tool_config = BrowsergymConfig(
         headless=not debug,  # Show browser in debug mode
+        timeout=30000,
         use_screenshot=True,  # Always save screenshot in trajectory for debug
         use_axtree=use_axtree,
         use_html=use_html,
