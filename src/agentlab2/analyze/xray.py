@@ -153,7 +153,9 @@ class XRayState:
                 pass
         if not agent_cfg:
             # Fallback: extract agent_config from the first available episode config
-            episode_cfgs = sorted((exp_dir / "episode_configs").glob("*.json")) if (exp_dir / "episode_configs").exists() else []
+            episode_cfgs = (
+                sorted((exp_dir / "episode_configs").glob("*.json")) if (exp_dir / "episode_configs").exists() else []
+            )
             for ep_path in episode_cfgs:
                 try:
                     with open(ep_path) as f:
@@ -678,7 +680,15 @@ def run_xray(
         task_rows = xray_utils.build_task_table(state.trajectories, first_agent_key)
         if not task_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, [])
-            return exp_stats, agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels, *state.get_config_jsons()
+            return (
+                exp_stats,
+                agent_table_data,
+                _rows_to_table(task_rows),
+                [],
+                StepId(),
+                *tab_labels,
+                *state.get_config_jsons(),
+            )
         first_task_id = task_rows[0]["task_id"]
         state.select_task(first_task_id)
         task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
@@ -773,7 +783,9 @@ def run_xray(
         )
         return (_exp_table_value(), *_empty_hierarchy)
 
-    def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
+    def on_select_agent(
+        evt: gr.SelectData, agent_df: Any
+    ) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
         if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
             return (
                 [],
@@ -803,12 +815,26 @@ def run_xray(
         seed_rows = xray_utils.build_seed_table(state.trajectories, agent_key, first_task_id)
         if not seed_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels, *state.get_config_jsons()
+            return (
+                agent_table_data,
+                task_table_data,
+                _rows_to_table(seed_rows),
+                StepId(),
+                *tab_labels,
+                *state.get_config_jsons(),
+            )
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels, *state.get_config_jsons()
+        return (
+            agent_table_data,
+            task_table_data,
+            seed_table_data,
+            StepId(step=0),
+            *tab_labels,
+            *state.get_config_jsons(),
+        )
 
     def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
         if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
@@ -1317,7 +1343,17 @@ def run_xray(
         agent_table.select(
             fn=on_select_agent,
             inputs=agent_table,
-            outputs=[agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab, agent_config_code, exp_config_code],
+            outputs=[
+                agent_table,
+                task_table,
+                seed_table,
+                step_id,
+                agents_tab,
+                tasks_tab,
+                seeds_tab,
+                agent_config_code,
+                exp_config_code,
+            ],
         )
         task_table.select(fn=on_select_task, inputs=task_table, outputs=[task_table, seed_table, step_id, seeds_tab])
         seed_table.select(fn=on_select_seed, inputs=seed_table, outputs=[seed_table, step_id])
