@@ -431,6 +431,15 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 html_str = prune_html(html_str)
             obs.contents.append(Content(data=html_str, name="pruned_html"))
 
+        # focused_element is placed before axtree so that axtree and screenshot
+        # remain the last two items — preserving visibility in agents that use
+        # a small render_last_n_steps window (the axtree already marks focused
+        # elements inline, so placing focused_element first loses nothing).
+        if "focused_element_bid" in bgym_obs:
+            focused_bid = bgym_obs["focused_element_bid"]
+            if focused_bid:
+                obs.contents.append(Content(data=focused_bid, name="focused_element"))
+
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
@@ -442,12 +451,6 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
                 obs.contents.append(Content(data=screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
                 obs.contents.append(Content(data=Image.fromarray(screenshot), name="screenshot"))
-
-        # Add focused element BID if available (raw bid value for agent to format)
-        if "focused_element_bid" in bgym_obs:
-            focused_bid = bgym_obs["focused_element_bid"]
-            if focused_bid:
-                obs.contents.append(Content(data=focused_bid, name="focused_element"))
 
         # Add last action error if there was one (raw error message for agent to format)
         if "last_action_error" in bgym_obs:
