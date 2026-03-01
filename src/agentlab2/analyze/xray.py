@@ -1321,7 +1321,7 @@ def run_xray(
             bg_timer,
         ]
 
-        exp_table.input(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
+        exp_table.change(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
         exp_refresh_btn.click(fn=_exp_table_value, outputs=exp_table)
         exp_archive_btn.click(fn=on_archive_selected, outputs=[exp_table, *_hierarchy_outputs])
 
