@@ -110,7 +110,7 @@ class TestExperiment:
             assert isinstance(episode, Episode)
             assert episode.config.id == i
             assert episode.config.output_dir == tmp_dir
-            assert episode.env_config.task is not None
+            assert episode.config.task_id is not None
 
     def test_experiment_create_episodes_multiple_tasks(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test Experiment create_episodes with multiple tasks."""
@@ -127,7 +127,7 @@ class TestExperiment:
         episodes = exp.get_episodes_to_run()
         assert len(episodes) == 5
         for i, episode in enumerate(episodes):
-            assert episode.env_config.task == tasks[i]
+            assert episode.config.task_id == tasks[i].id
 
     def test_experiment_save_config(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test Experiment save_config."""
@@ -194,7 +194,7 @@ class TestExperiment:
         episodes = exp.get_episodes_to_run()
 
         for episode in episodes:
-            assert episode.env_config.tool_config == mock_benchmark.tool_config
+            assert episode.config.tool_config == mock_benchmark.tool_config
 
     def test_experiment_episodes_have_tasks_from_benchmark(self, tmp_dir, mock_agent_config, mock_benchmark):
         """Test that created episodes have tasks from benchmark."""
