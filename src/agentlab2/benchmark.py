@@ -1,3 +1,4 @@
+import warnings
 from abc import ABC, abstractmethod
 
 from pydantic import Field
@@ -8,7 +9,20 @@ from cube.tool import ToolConfig
 
 
 class Benchmark(TypedBaseModel, ABC):
-    """Represents a benchmark consisting of multiple tasks and an environment."""
+    """DEPRECATED. Inherit from cube.benchmark.Benchmark for new benchmarks.
+
+    This class is kept for backward compatibility with MiniWob and WorkArena.
+    New benchmarks should use cube.benchmark.Benchmark directly.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        warnings.warn(
+            f"{cls.__name__} inherits from agentlab2.benchmark.Benchmark which is deprecated. "
+            "New benchmarks should inherit from cube.benchmark.Benchmark instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     metadata: dict = Field(default_factory=dict)
     tool_config: ToolConfig
@@ -30,25 +44,22 @@ class Benchmark(TypedBaseModel, ABC):
 
     @abstractmethod
     def load_tasks(self) -> list[Task]:
-        """
-        Load and return the list of tasks for this benchmark.
+        """DEPRECATED. Use cube.benchmark.Benchmark.task_metadata or get_task_configs() instead.
+
+        This method is kept for backward compatibility with MiniWob and WorkArena.
+        New benchmarks should define task_metadata as a ClassVar and use get_task_configs().
         """
         pass
 
     def env_configs(self) -> list[EnvConfig]:
-        """Generate environment configurations for all tasks in the benchmark."""
+        """DEPRECATED. Use cube.benchmark.Benchmark.get_task_configs() instead."""
+        warnings.warn(
+            "Benchmark.env_configs() is deprecated. "
+            "New benchmarks should inherit from cube.benchmark.Benchmark and use get_task_configs().",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         tasks = self.load_tasks()
         configs = [EnvConfig(task=task, tool_config=self.tool_config) for task in tasks]
         return configs
 
-    def install(self):
-        """
-        Optional method to download and prepare any resources required by the benchmark.
-        """
-        pass
-
-    def uninstall(self):
-        """
-        Optional method to remove any resources used by the benchmark.
-        """
-        pass

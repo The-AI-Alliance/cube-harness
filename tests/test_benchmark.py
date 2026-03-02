@@ -54,16 +54,6 @@ class TestBenchmark:
         benchmark = MockBenchmark(tasks_list=[], tool_config=mock_tool_config)
         assert len(benchmark.env_configs()) == 0
 
-    def test_benchmark_install_default(self, mock_benchmark):
-        """Test default install does nothing."""
-        # Should not raise
-        mock_benchmark.install()
-
-    def test_benchmark_uninstall_default(self, mock_benchmark):
-        """Test default uninstall does nothing."""
-        # Should not raise
-        mock_benchmark.uninstall()
-
     def test_benchmark_serialization(self, mock_benchmark):
         """Test Benchmark JSON serialization."""
         json_str = mock_benchmark.model_dump_json(serialize_as_any=True)
@@ -71,21 +61,8 @@ class TestBenchmark:
         assert "tool_config" in data
         assert "metadata" in data
 
-    def test_benchmark_custom_install_uninstall(self, mock_tool_config, mock_task):
-        """Test benchmark with custom install/uninstall."""
-
-        benchmark = MockBenchmark(tasks_list=[mock_task], tool_config=mock_tool_config)
-        benchmark.install()
-        assert benchmark.install_called
-
-        benchmark.uninstall()
-        assert benchmark.uninstall_called
-
     def test_benchmark_lifecycle(self, mock_benchmark):
         """Test full benchmark lifecycle."""
-        # Install (optional)
-        mock_benchmark.install()
-
         # Setup
         mock_benchmark.setup()
         assert mock_benchmark.setup_called
@@ -99,9 +76,6 @@ class TestBenchmark:
         # Close
         mock_benchmark.close()
         assert mock_benchmark.close_called
-
-        # Uninstall (optional)
-        mock_benchmark.uninstall()
 
     def test_benchmark_env_config_access(self, mock_benchmark):
         """Test accessing env_config from benchmark."""
