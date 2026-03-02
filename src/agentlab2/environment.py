@@ -1,5 +1,6 @@
 """Environment, Benchmark and Task abstractions."""
 
+import warnings
 from abc import ABC, abstractmethod
 from typing import List
 
@@ -13,9 +14,18 @@ from cube.tool import ToolConfig
 
 
 class EnvConfig:
-    """Runtime configuration for the Environment."""
+    """DEPRECATED. Use cube.task.TaskConfig instead.
+
+    This class is kept for backward compatibility with MiniWob and WorkArena.
+    New benchmarks should use cube.task.TaskConfig directly.
+    """
 
     def __init__(self, task: "Task", tool_config: ToolConfig) -> None:
+        warnings.warn(
+            "EnvConfig is deprecated. Use cube.task.TaskConfig instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.task = task
         self.tool_config = tool_config
 
@@ -25,9 +35,18 @@ class EnvConfig:
 
 
 class AbstractEnvironment(ABC):
-    """Abstract interface for environments that agents interact with."""
+    """DEPRECATED. Use cube.task.Task instead.
+
+    This class is kept for backward compatibility with MiniWob and WorkArena.
+    New benchmarks should use cube.task.Task directly.
+    """
 
     def __init__(self, task: "Task", *args, **kwargs) -> None:
+        warnings.warn(
+            "AbstractEnvironment is deprecated. Use cube.task.Task instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__()
         self.task: "Task" = task
 
@@ -53,9 +72,18 @@ class AbstractEnvironment(ABC):
 
 
 class Environment(AbstractEnvironment):
-    """Environment that encapsulates a tool for interaction and a task."""
+    """DEPRECATED. Use cube.task.Task instead.
+
+    This class is kept for backward compatibility with MiniWob and WorkArena.
+    New benchmarks should use cube.task.Task directly.
+    """
 
     def __init__(self, task: Task, tool: AbstractTool):
+        warnings.warn(
+            "Environment is deprecated. Use cube.task.Task instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.task = task
         self.tool = tool
 

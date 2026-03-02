@@ -1,3 +1,4 @@
+import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 
@@ -67,7 +68,20 @@ class ActionSpace(frozenset[Callable]):
 
 
 class Task(ABC):
-    """Represents a task that an agent must complete in an environment."""
+    """DEPRECATED. Inherit from cube.task.Task for new benchmarks.
+
+    This class is kept for backward compatibility with MiniWob and WorkArena.
+    New benchmarks should use cube.task.Task directly.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        warnings.warn(
+            f"{cls.__name__} inherits from agentlab2.core.Task which is deprecated. "
+            "New benchmarks should inherit from cube.task.Task instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
     id: str
     validate_per_step: bool = False

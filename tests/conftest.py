@@ -295,8 +295,6 @@ class MockBenchmark(Benchmark):
 
     setup_called: bool = False
     close_called: bool = False
-    install_called: bool = False
-    uninstall_called: bool = False
 
     def __init__(self, tasks_list: list[Any], tool_config: ToolConfig, metadata: dict | None = None):
         super().__init__(tool_config=tool_config, metadata=metadata or {})
@@ -307,12 +305,6 @@ class MockBenchmark(Benchmark):
 
     def close(self):
         self.close_called = True
-
-    def install(self):
-        self.install_called = True
-
-    def uninstall(self):
-        self.uninstall_called = True
 
     def load_tasks(self) -> list[Task]:
         return self._tasks
