@@ -12,15 +12,15 @@ This document covers step 2 of the cube → AgentLab2 integration (see `cube-int
 
 ## Summary of Changes
 
-| File | Change type | What |
-|---|---|---|
-| `src/agentlab2/benchmark.py` | Extend | Add `get_task_configs()` non-abstract; make `setup()`,`close()`,`load_tasks()` non-abstract; deprecation warnings on legacy path |
-| `src/agentlab2/episode.py` | Extend | `Episode` accepts `task_config: TaskConfig` (new) OR `env_config: EnvConfig` (deprecated); `EpisodeConfig` gains `task_config` field; new `_run_cube_task()` loop |
-| `src/agentlab2/experiment.py` | Extend | `_create_all_episodes()` tries `get_task_configs()` first, falls back to `env_configs()` with warning |
-| `src/agentlab2/core.py` | Deprecation only | Add deprecation warning to `Task.__init_subclass__` |
-| `src/agentlab2/environment.py` | Deprecation only | Add deprecation warnings to `EnvConfig`, `Environment`, `AbstractEnvironment` |
-| `cubes/arithmetic/` | New | Toy POC benchmark demonstrating the full cube pattern |
-| `tests/test_cube_episode.py` | New | Tests for the new cube task path through Episode |
+| File | Change type | What | Status |
+| --- | --- | --- | --- |
+| `src/agentlab2/benchmark.py` | Deprecation | `__init_subclass__` warning; deprecation docstring on `load_tasks()`; runtime warning on `env_configs()`; removed `install()`/`uninstall()` | ✅ Done |
+| `src/agentlab2/core.py` | Deprecation | `__init_subclass__` warning + docstring on `Task` | ✅ Done |
+| `src/agentlab2/environment.py` | Deprecation | Constructor warnings + docstrings on `EnvConfig`, `Environment`, `AbstractEnvironment` | ✅ Done |
+| `src/agentlab2/experiment.py` | Extend | Accept both AL2 `Benchmark` and `cube.benchmark.Benchmark`; dispatch to `get_task_configs()` or `env_configs()` with deprecation warning | TODO |
+| `src/agentlab2/episode.py` | Extend | Accept `task_config: TaskConfig` (new) OR `env_config: EnvConfig` (deprecated); `EpisodeConfig` gains `task_config` field; new `_run_cube_task()` loop | TODO |
+| `cubes/arithmetic/` | New | Toy POC benchmark using `cube.benchmark.Benchmark` directly | TODO |
+| `tests/test_cube_episode.py` | New | Tests for the new cube task path through `Episode` | TODO |
 
 **Untouched**: `benchmarks/miniwob/`, `benchmarks/workarena/`, all existing tests.
 
@@ -41,17 +41,18 @@ def run(self) -> Trajectory:
         return self._run_legacy()      # existing logic, unchanged
 ```
 
-Old benchmarks (MiniWob, WorkArena) continue to use `env_config=` unchanged. New benchmarks use `task_config=`.
+MiniWob and WorkArena continue to use `env_config=` unchanged. New benchmarks use `task_config=`.
 
-### B. Benchmark.get_task_configs() alongside deprecated load_tasks()
+### B. Experiment accepts both benchmark types; dispatches accordingly
 
-`Benchmark` no longer forces subclasses to implement `load_tasks()`, `setup()`, or `close()`. All three are non-abstract with sensible defaults. `get_task_configs()` is the new extension point:
+New benchmarks subclass `cube.benchmark.Benchmark` directly (has `get_task_configs()`). Legacy benchmarks (MiniWob, WorkArena) subclass AL2's deprecated `agentlab2.benchmark.Benchmark` (has `env_configs()`). `Experiment` accepts either and dispatches:
 
 ```text
-New benchmark authors implement:       get_task_configs() → list[TaskConfig]
-Old benchmarks continue to use:        load_tasks() → list[Task]    [still works, but deprecated]
-Experiment dispatches automatically:   tries get_task_configs() first, falls back to env_configs()
+cube.benchmark.Benchmark  →  get_task_configs()  →  Episode(task_config=...)    [new path]
+agentlab2.benchmark.Benchmark  →  env_configs()  →  Episode(env_config=...)     [deprecated, warns]
 ```
+
+`Experiment.benchmark` is typed as `agentlab2.benchmark.Benchmark | cube.benchmark.Benchmark`. A deprecation warning fires at episode-creation time when the benchmark is an AL2 instance. The dispatch catches both `AttributeError` (AL2's `Benchmark` has no `get_task_configs()`) and `NotImplementedError` as the signal to fall back.
 
 ### C. EpisodeConfig gains task_config field
 
@@ -59,88 +60,11 @@ Experiment dispatches automatically:   tries get_task_configs() first, falls bac
 
 `TypedBaseModel` already serializes with `_type` (full dotted class name) and reconstructs the correct subclass on load — polymorphic `TaskConfig` in `EpisodeConfig` is round-trip safe with no extra work.
 
-### D. tool_config becomes optional on Benchmark
-
-New cube-based benchmarks set `tool_config` inside each `TaskConfig.make()`, not at the benchmark level. Making `tool_config: ToolConfig | None = None` on `Benchmark` lets new benchmarks omit it. Old benchmarks that pass it explicitly continue to work.
-
 ---
 
 ## Detailed File Changes
 
-### 1. `src/agentlab2/benchmark.py`
-
-**Before** (sketch):
-
-```python
-class Benchmark(TypedBaseModel, ABC):
-    tool_config: ToolConfig
-    @abstractmethod def setup(self): ...
-    @abstractmethod def close(self): ...
-    @abstractmethod def load_tasks(self) -> list[Task]: ...
-    def env_configs(self) -> list[EnvConfig]: ...  # calls load_tasks()
-```
-
-**After**:
-
-```python
-import warnings
-from cube.task import TaskConfig
-
-class Benchmark(TypedBaseModel, ABC):
-    metadata: dict = Field(default_factory=dict)
-    tool_config: ToolConfig | None = None  # optional for new-style benchmarks
-
-    # ── New extension point ──────────────────────────────────────────────────
-    def get_task_configs(self) -> list[TaskConfig]:
-        """Return serializable task configs.
-        Override this when writing a new cube-based benchmark.
-        Each config's make() will be called by Episode.run() to instantiate the Task.
-        """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not implement get_task_configs(). "
-            "New benchmarks should override this method. "
-            "Legacy benchmarks implement the deprecated load_tasks() instead."
-        )
-
-    # ── Legacy / deprecated ─────────────────────────────────────────────────
-    def setup(self) -> None:
-        """Optional setup (start server, launch containers, etc.). Override if needed."""
-        pass
-
-    def close(self) -> None:
-        """Optional teardown. Override if needed."""
-        pass
-
-    def load_tasks(self):
-        """DEPRECATED. Override get_task_configs() for new benchmarks."""
-        warnings.warn(
-            f"{type(self).__name__}.load_tasks() is deprecated. "
-            "Implement get_task_configs() for new benchmarks.",
-            DeprecationWarning, stacklevel=2,
-        )
-        raise NotImplementedError(f"{type(self).__name__}.load_tasks() not implemented.")
-
-    def env_configs(self):
-        """DEPRECATED. Use get_task_configs() instead."""
-        warnings.warn(
-            "Benchmark.env_configs() is deprecated. "
-            "Use get_task_configs() for new benchmarks.",
-            DeprecationWarning, stacklevel=2,
-        )
-        tasks = self.load_tasks()
-        return [EnvConfig(task=task, tool_config=self.tool_config) for task in tasks]
-
-    def install(self) -> None: pass
-    def uninstall(self) -> None: pass
-```
-
-**Imports to add**: `import warnings`, `from cube.task import TaskConfig`
-
-**Note**: Old benchmarks override `load_tasks()` directly — the base implementation is never reached for them, so no spurious deprecation warnings fire. The warning fires only if someone calls `env_configs()` *without* a `load_tasks()` override, which would be a mistake.
-
----
-
-### 2. `src/agentlab2/episode.py`
+### 1. `src/agentlab2/episode.py`
 
 #### `EpisodeConfig` changes
 
@@ -311,7 +235,7 @@ def load_episode_from_config(cls, config_path: Path, benchmark=None) -> Self:
 
 ---
 
-### 3. `src/agentlab2/experiment.py`
+### 2. `src/agentlab2/experiment.py`
 
 #### `Experiment._create_all_episodes()` changes
 
@@ -331,8 +255,10 @@ def _create_all_episodes(self) -> list[Episode]:
             )
             for i, tc in enumerate(task_configs)
         ]
-    except NotImplementedError:
-        # Fall back to deprecated env_configs() path for legacy benchmarks
+    except (AttributeError, NotImplementedError):
+        # Fall back to deprecated env_configs() path for legacy benchmarks.
+        # AttributeError: AL2's Benchmark has no get_task_configs() at all.
+        # NotImplementedError: cube.benchmark.Benchmark subclass that doesn't override it.
         warnings.warn(
             f"{type(self.benchmark).__name__} does not implement get_task_configs(). "
             "Falling back to deprecated env_configs(). "
@@ -357,82 +283,9 @@ def _create_all_episodes(self) -> list[Episode]:
 
 **Import to add**: `import warnings`
 
-#### `Experiment._find_episodes_to_relaunch()` changes
-
-Update the `load_episode_from_config` call — make `benchmark` optional:
-
-```python
-episode = Episode.load_episode_from_config(config_file, benchmark=self.benchmark)
-```
-
-(Passing `benchmark` for the legacy path; new-style episodes ignore it.)
-
 ---
 
-### 4. `src/agentlab2/core.py` — deprecation only
-
-Add to `Task` class:
-
-```python
-class Task(ABC):
-    """
-    DEPRECATED. Inherit from cube.task.Task for new benchmarks.
-
-    This class is kept for backward compatibility with MiniWob and WorkArena.
-    New benchmarks should use cube.task.Task directly.
-    """
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        warnings.warn(
-            f"{cls.__name__} inherits from agentlab2.core.Task which is deprecated. "
-            "New benchmarks should inherit from cube.task.Task instead.",
-            DeprecationWarning, stacklevel=2,
-        )
-```
-
-**Add at top**: `import warnings`
-
----
-
-### 5. `src/agentlab2/environment.py` — deprecation only
-
-Add deprecation warnings to each class constructor (not `__init_subclass__`, these aren't subclassed by new code):
-
-```python
-class EnvConfig:
-    """DEPRECATED. Use cube.task.TaskConfig instead."""
-    def __init__(self, task, tool_config):
-        warnings.warn(
-            "EnvConfig is deprecated. Use cube.task.TaskConfig instead.",
-            DeprecationWarning, stacklevel=2,
-        )
-        ...  # rest unchanged
-
-class AbstractEnvironment(ABC):
-    """DEPRECATED. Use cube.task.Task instead."""
-    def __init__(self, task, *args, **kwargs):
-        warnings.warn(
-            "AbstractEnvironment is deprecated. Use cube.task.Task instead.",
-            DeprecationWarning, stacklevel=2,
-        )
-        ...
-
-class Environment(AbstractEnvironment):
-    """DEPRECATED. Use cube.task.Task instead."""
-    def __init__(self, task, tool):
-        warnings.warn(
-            "Environment is deprecated. Use cube.task.Task instead.",
-            DeprecationWarning, stacklevel=2,
-        )
-        ...
-```
-
-**Note**: These warnings will fire for old benchmarks. That is intentional — it signals to benchmark authors that they should migrate. If MiniWob/WorkArena tests become noisy, those test files can suppress the warnings with `pytest.warns(DeprecationWarning)` or `@pytest.mark.filterwarnings("ignore::DeprecationWarning")`.
-
----
-
-### 6. `cubes/arithmetic/` — new POC
+### 3. `cubes/arithmetic/` — new POC
 
 A self-contained arithmetic benchmark demonstrating the full cube pattern with no external dependencies.
 
@@ -553,24 +406,32 @@ class ArithmeticTaskConfig(TaskConfig):
 
 #### `cubes/arithmetic/benchmark.py`
 
+New benchmarks inherit from `cube.benchmark.Benchmark` directly, not from AL2's deprecated `Benchmark`.
+
 ```python
-from agentlab2.benchmark import Benchmark
-from agentlab2.benchmarks.arithmetic.task import ArithmeticTaskConfig
-from agentlab2.benchmarks.arithmetic.tool import ArithmeticToolConfig
-from cube.task import TaskConfig
+from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.task import TaskMetadata
+from cubes.arithmetic.task import ArithmeticTaskConfig
+from cubes.arithmetic.tool import ArithmeticToolConfig
 
 
 class ArithmeticBenchmark(Benchmark):
     """Toy benchmark: simple arithmetic problems. No setup/teardown needed."""
 
-    def get_task_configs(self) -> list[TaskConfig]:
-        tool_config = self.tool_config or ArithmeticToolConfig()
-        return [
-            ArithmeticTaskConfig(task_id="add_3_4",   tool_config=tool_config, a=3,  b=4,  op="+"),
-            ArithmeticTaskConfig(task_id="sub_10_3",  tool_config=tool_config, a=10, b=3,  op="-"),
-            ArithmeticTaskConfig(task_id="mul_6_7",   tool_config=tool_config, a=6,  b=7,  op="*"),
-            ArithmeticTaskConfig(task_id="add_100_1", tool_config=tool_config, a=100,b=1,  op="+"),
-        ]
+    benchmark_metadata = BenchmarkMetadata(name="arithmetic", version="1.0", description="Simple arithmetic tasks")
+    task_metadata = {
+        "add_3_4":   TaskMetadata(id="add_3_4"),
+        "sub_10_3":  TaskMetadata(id="sub_10_3"),
+        "mul_6_7":   TaskMetadata(id="mul_6_7"),
+        "add_100_1": TaskMetadata(id="add_100_1"),
+    }
+    task_config_class = ArithmeticTaskConfig
+
+    def _setup(self) -> None:
+        pass  # no shared infrastructure needed
+
+    def close(self) -> None:
+        pass
 ```
 
 #### Usage example (smoke test / demo)
@@ -596,7 +457,7 @@ task.close()
 
 ---
 
-### 7. `tests/test_cube_episode.py` — new
+### 4. `tests/test_cube_episode.py` — new
 
 Tests that the new cube path through `Episode` and `Experiment` works end-to-end.
 
@@ -688,11 +549,21 @@ task.close()
 
 | Step | File(s) | Status |
 | --- | --- | --- |
-| Add `get_task_configs()` + deprecations | `benchmark.py` | TODO |
+| Deprecation warning on AL2 `Task` | `core.py` | ✅ Done — `__init_subclass__` warning + docstring |
+| Deprecation warnings on `Environment` classes | `environment.py` | ✅ Done — constructor warnings on `EnvConfig`, `AbstractEnvironment`, `Environment` + docstrings |
+| Deprecations on AL2 `Benchmark` | `benchmark.py` | ✅ Done — `__init_subclass__` warning + docstring; runtime warning on `env_configs()`; deprecation docstring on `load_tasks()`; `install()`/`uninstall()` removed (no cube equivalent, only used in tests) |
 | Dual-path `Episode` + `EpisodeConfig` | `episode.py` | TODO |
 | Dispatch in `Experiment` | `experiment.py` | TODO |
-| Deprecation warning on AL2 `Task` | `core.py` | TODO |
-| Deprecation warnings on `Environment` classes | `environment.py` | TODO |
 | Arithmetic toy cube (tool, task, config, benchmark) | `cubes/arithmetic/` | TODO |
 | New tests for cube path | `tests/test_cube_episode.py` | TODO |
 | Update `cube-integration-plan.md` status | `cube-integration-plan.md` | TODO |
+
+### Deviations from original plan
+
+- **`benchmark.py`**: Did not add `get_task_configs()` to AL2's `Benchmark`. New benchmarks use `cube.benchmark.Benchmark` directly — there is no reason to forward the method through the deprecated AL2 class.
+- **`benchmark.py`**: Did not make `tool_config` optional. Only legacy benchmarks (MiniWob/WorkArena) use this class and they always supply it.
+- **`benchmark.py`**: Removed `install()`/`uninstall()` entirely (no cube equivalent, only referenced in tests). Updated `conftest.py` `MockBenchmark` and `tests/test_benchmark.py` accordingly.
+
+### Note on test deprecation warnings
+
+`MockTask` (inherits `agentlab2.core.Task`) and `MockBenchmark` (inherits `agentlab2.benchmark.Benchmark`) in `conftest.py` now emit `DeprecationWarning` at class-definition time. These warnings are intentionally left in place — they serve as a reminder that the legacy test infrastructure itself needs to be migrated once MiniWob and WorkArena move to the cube API.
