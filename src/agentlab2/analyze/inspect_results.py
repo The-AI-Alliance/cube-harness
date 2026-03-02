@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory
+from agentlab2.core import EnvironmentOutput, Trajectory
 
 TASK_KEY = "task_name"
 
