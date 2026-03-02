@@ -18,7 +18,7 @@ This document covers step 2 of the cube → AgentLab2 integration (see `cube-int
 | `src/agentlab2/core.py` | Deprecation | `__init_subclass__` warning + docstring on `Task` | ✅ Done |
 | `src/agentlab2/environment.py` | Deprecation | Constructor warnings + docstrings on `EnvConfig`, `Environment`, `AbstractEnvironment` | ✅ Done |
 | `src/agentlab2/experiment.py` | Extend | Accept both AL2 `Benchmark` and `cube.benchmark.Benchmark`; dispatch to `get_task_configs()` or `env_configs()` with deprecation warning | TODO |
-| `src/agentlab2/episode.py` | Extend | Accept `task_config: TaskConfig` (new) OR `env_config: EnvConfig` (deprecated); `EpisodeConfig` gains `task_config` field; new `_run_cube_task()` loop | TODO |
+| `src/agentlab2/episode.py` | Extend | Accept `task_config: TaskConfig` (new) OR `env_config: EnvConfig` (deprecated); `EpisodeConfig` gains `task_config` field; shared `_run_loop()` via callables | ✅ Done |
 | `cubes/arithmetic/` | New | Toy POC benchmark using `cube.benchmark.Benchmark` directly | TODO |
 | `tests/test_cube_episode.py` | New | Tests for the new cube task path through `Episode` | TODO |
 
@@ -203,7 +203,10 @@ Move the **entire existing `run()` body** verbatim into `_run_legacy()`. No othe
 
 #### `Episode.load_episode_from_config()` changes
 
-Support both paths:
+`benchmark` becomes an optional parameter (`None` by default) because the two paths need different information to reconstruct an episode from disk:
+
+- **Legacy path** stores only `task_id: str` in `EpisodeConfig`. A bare string is not enough to recreate the task — you need the benchmark object to map `task_id → Task instance` (e.g. by calling `benchmark.load_tasks()` and finding the matching one). So `benchmark` is required here and raises if missing.
+- **New cube path** stores the full `task_config: TaskConfig` object, serialized with `_type` discrimination. On reload, Pydantic deserializes it back to the correct `TaskConfig` subclass and you simply call `task_config.make()` to recreate the task. The config is **self-contained** — it carries everything needed. `benchmark` is not needed and is ignored.
 
 ```python
 @classmethod
@@ -552,7 +555,7 @@ task.close()
 | Deprecation warning on AL2 `Task` | `core.py` | ✅ Done — `__init_subclass__` warning + docstring |
 | Deprecation warnings on `Environment` classes | `environment.py` | ✅ Done — constructor warnings on `EnvConfig`, `AbstractEnvironment`, `Environment` + docstrings |
 | Deprecations on AL2 `Benchmark` | `benchmark.py` | ✅ Done — `__init_subclass__` warning + docstring; runtime warning on `env_configs()`; deprecation docstring on `load_tasks()`; `install()`/`uninstall()` removed (no cube equivalent, only used in tests) |
-| Dual-path `Episode` + `EpisodeConfig` | `episode.py` | TODO |
+| Dual-path `Episode` + `EpisodeConfig` | `episode.py` | ✅ Done — `task_config` field on `EpisodeConfig`; `run()` dispatch; shared `_run_loop()` via callables; `load_episode_from_config(benchmark=None)` |
 | Dispatch in `Experiment` | `experiment.py` | TODO |
 | Arithmetic toy cube (tool, task, config, benchmark) | `cubes/arithmetic/` | TODO |
 | New tests for cube path | `tests/test_cube_episode.py` | TODO |
