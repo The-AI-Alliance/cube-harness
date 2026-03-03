@@ -4,17 +4,17 @@ import warnings
 from pathlib import Path
 from typing import Callable, Self
 
+from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.task import TaskConfig
+from cube.tool import ToolConfig
 from opentelemetry.trace import Span, StatusCode
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.environment import EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage
-from cube.task import TaskConfig
-from cube.tool import ToolConfig
 
 logger = logging.getLogger(__name__)
 

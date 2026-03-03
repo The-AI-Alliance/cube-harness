@@ -3,6 +3,8 @@ import logging
 import time
 from io import BytesIO
 
+from cube.core import Action, Content, Observation, StepError
+from cube.tool import ToolConfig
 from PIL import Image
 from playwright.async_api import Page as AsyncPage
 from playwright.async_api import async_playwright
@@ -11,8 +13,6 @@ from playwright.sync_api import sync_playwright
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
 from agentlab2.tool import ToolWithTelemetry
-from cube.core import Action, Content, Observation, StepError
-from cube.tool import ToolConfig
 from agentlab2.utils import prune_html
 
 logger = logging.getLogger(__name__)

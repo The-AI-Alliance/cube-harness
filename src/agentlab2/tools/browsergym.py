@@ -19,14 +19,14 @@ from browsergym.core.observation import (
     extract_screenshot,
 )
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
+from cube.core import Action, Content, Observation, StepError
+from cube.tool import ToolConfig
 from PIL import Image
 from playwright.sync_api import Browser, BrowserContext, Error, Frame, Page
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
 from agentlab2.tool import ToolWithTelemetry
-from cube.core import Action, Content, Observation, StepError
-from cube.tool import ToolConfig
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,9 @@
 import logging
 
-from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
 from cube.core import Action, Observation, StepError
 from cube.tool import Tool
+
+from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
 
 logger = logging.getLogger(__name__)
 

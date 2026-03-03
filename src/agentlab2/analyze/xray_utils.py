@@ -12,13 +12,11 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from cube.core import EnvironmentOutput
 from PIL import Image
 from pydantic import BaseModel
 
-from cube.core import EnvironmentOutput
-
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
-
 from agentlab2.llm import LLMCall
 
 # ---------------------------------------------------------------------------
