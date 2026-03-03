@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import mcp.types as mcp_types
 import pytest
+from cube.core import Action, ActionSchema
 from mcp.client.stdio import StdioServerParameters
 
-from cube.core import Action, ActionSchema
 from agentlab2.tools.mcp import (
     MCPServerConfig,
     MCPToolConfig,

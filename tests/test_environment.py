@@ -1,9 +1,9 @@
 """Tests for agentlab2.environment module."""
 
 import pytest
-
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from cube.task import STOP_ACTION
+
 from agentlab2.environment import EnvConfig, Environment
 from agentlab2.tools.toolbox import Toolbox
 from tests.conftest import MockTool

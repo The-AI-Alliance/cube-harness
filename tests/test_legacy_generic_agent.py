@@ -1,6 +1,7 @@
 """Tests for agentlab2.agents.legacy_generic_agent prompt generation."""
 
 import pytest
+from cube.core import ActionSchema, Content, Observation
 from PIL import Image
 
 from agentlab2.agents.legacy_generic_agent import (
@@ -22,7 +23,6 @@ from agentlab2.agents.legacy_generic_agent import (
     Trunkater,
     parse_html_tags,
 )
-from cube.core import ActionSchema, Content, Observation
 from agentlab2.llm import LLMConfig
 
 # ============================================================================

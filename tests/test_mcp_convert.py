@@ -1,10 +1,10 @@
 """Tests for MCP conversion utilities."""
 
+from cube.core import ActionSchema, Content, Observation
 from mcp.types import ImageContent, TextContent
 from PIL import Image
 from pydantic import BaseModel
 
-from cube.core import ActionSchema, Content, Observation
 from agentlab2.mcp.convert import action_schema_to_mcp_tool, observation_to_mcp_content
 
 
