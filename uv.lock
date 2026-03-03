@@ -20,7 +20,7 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "browsergym-core" },
-    { name = "cube" },
+    { name = "cube-standard" },
     { name = "gradio" },
     { name = "litellm" },
     { name = "matplotlib" },
@@ -60,7 +60,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
     { name = "browsergym-workarena", marker = "extra == 'workarena'", specifier = ">=0.5.2" },
-    { name = "cube", editable = "../cube-standard" },
+    { name = "cube-standard", editable = "../cube-standard" },
     { name = "gradio", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "matplotlib", specifier = ">=3.8" },
@@ -780,13 +780,11 @@ wheels = [
 ]
 
 [[package]]
-name = "cube"
-version = "0.1.0"
+name = "cube-standard"
+version = "0.1.0rc1"
 source = { editable = "../cube-standard" }
 dependencies = [
     { name = "fastapi" },
-    { name = "litellm" },
-    { name = "numpy" },
     { name = "numpydoc" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -799,8 +797,6 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
-    { name = "litellm", specifier = ">=1.0.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
     { name = "numpydoc", specifier = ">=1.8.0" },
     { name = "pillow", specifier = ">=9.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.0" },
