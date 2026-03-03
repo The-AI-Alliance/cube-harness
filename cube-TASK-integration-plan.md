@@ -556,16 +556,32 @@ task.close()
 | Deprecation warnings on `Environment` classes | `environment.py` | ✅ Done — constructor warnings on `EnvConfig`, `AbstractEnvironment`, `Environment` + docstrings |
 | Deprecations on AL2 `Benchmark` | `benchmark.py` | ✅ Done — `__init_subclass__` warning + docstring; runtime warning on `env_configs()`; deprecation docstring on `load_tasks()`; `install()`/`uninstall()` removed (no cube equivalent, only used in tests) |
 | Dual-path `Episode` + `EpisodeConfig` | `episode.py` | ✅ Done — `task_config` field on `EpisodeConfig`; `run()` dispatch; shared `_run_loop()` via callables; `load_episode_from_config(benchmark=None)` |
-| Dispatch in `Experiment` | `experiment.py` | TODO |
-| Arithmetic toy cube (tool, task, config, benchmark) | `cubes/arithmetic/` | TODO |
-| New tests for cube path | `tests/test_cube_episode.py` | TODO |
-| Update `cube-integration-plan.md` status | `cube-integration-plan.md` | TODO |
+| Dispatch in `Experiment` | `experiment.py` | ✅ Done — `isinstance` dispatch on `CubeBenchmark` vs `AL2Benchmark`; deprecation warning on legacy path |
+| Arithmetic toy cube (tool, task, benchmark, debug) | `cubes/arithmetic-cube/` | ✅ Done — standalone pip-installable package; `make test` runs `cube.testing` debug suite |
+| New tests for cube path through AL2 harness | `tests/test_cube_episode.py` | TODO — see note below |
+| Update `cube-integration-plan.md` status | `cube-integration-plan.md` | ✅ Done |
 
 ### Deviations from original plan
 
 - **`benchmark.py`**: Did not add `get_task_configs()` to AL2's `Benchmark`. New benchmarks use `cube.benchmark.Benchmark` directly — there is no reason to forward the method through the deprecated AL2 class.
 - **`benchmark.py`**: Did not make `tool_config` optional. Only legacy benchmarks (MiniWob/WorkArena) use this class and they always supply it.
 - **`benchmark.py`**: Removed `install()`/`uninstall()` entirely (no cube equivalent, only referenced in tests). Updated `conftest.py` `MockBenchmark` and `tests/test_benchmark.py` accordingly.
+- **`Experiment._create_all_episodes()`**: Used `isinstance` dispatch instead of try/except on `AttributeError`/`NotImplementedError`. More explicit and avoids swallowing unexpected errors.
+- **Arithmetic cube location**: Lives at `cubes/arithmetic-cube/` as a self-contained package, not inside `src/agentlab2/benchmarks/`. Each cube is its own installable package. The `cubes/` folder contains both this simple example and all future cube benchmarks built with the AL2 harness.
+- **Arithmetic cube testing**: `debug.py` + `make test` use `cube.testing.run_debug_suite` — this is the **cube-level** harness (no AL2, no agents, no trajectories). It validates the task loop in isolation. The AL2-level integration tests (Episode/Experiment) are separate — see next section.
+
+### Note on AL2 integration tests
+
+The arithmetic cube's `debug.py` intentionally uses `cube.testing` (the cube-standard mini-harness), not the AL2 `Episode`/`Experiment` machinery. This keeps cube packages free of AL2 dependencies and validates just the task loop.
+
+To test the **AL2 harness** with a cube benchmark, we need a lightweight inline fixture rather than importing the arithmetic-cube package (which would add an installation dependency to the AL2 test suite). The plan:
+
+- Add a `MockCubeBenchmark` (inline, no external package needed) to `tests/conftest.py` — a minimal `cube.benchmark.Benchmark` subclass with one trivial task, mirroring `MockBenchmark` for the legacy path.
+- Write `tests/test_cube_episode.py` using this fixture to cover:
+  - `Episode` accepts `task_config=`, saves correct `EpisodeConfig`, dispatches to `_run_cube_task()`
+  - `Episode.load_episode_from_config()` round-trip (no benchmark arg needed)
+  - `Experiment` with a `CubeBenchmark` calls `get_task_configs()` and creates correct episodes
+  - Legacy `Experiment` with an `AL2Benchmark` still works and emits `DeprecationWarning`
 
 ### Note on test deprecation warnings
 
