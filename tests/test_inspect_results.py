@@ -69,7 +69,11 @@ def multi_agent_trajectories() -> list[Trajectory]:
 
 @pytest.fixture
 def trajectories_with_errors() -> list[Trajectory]:
-    err = StepError(error_type="RuntimeError", exception_str="Connection timed out", stack_trace="Traceback...\nRuntimeError: Connection timed out")
+    err = StepError(
+        error_type="RuntimeError",
+        exception_str="Connection timed out",
+        stack_trace="Traceback...\nRuntimeError: Connection timed out",
+    )
     return [
         _make_trajectory("react", "miniwob.click-test", "gpt-4", 1.0, 0),
         _make_trajectory("react", "miniwob.login", "gpt-4", 0.0, 1, error=err),
