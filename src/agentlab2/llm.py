@@ -6,11 +6,10 @@ from functools import partial
 from typing import Callable, List, Literal
 from uuid import uuid4
 
+from cube.core import TypedBaseModel
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
 from pydantic import Field
-
-from cube.core import TypedBaseModel
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter

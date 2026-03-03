@@ -7,6 +7,7 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 import litellm
+from cube.core import Action
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -16,7 +17,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
 
-from cube.core import Action
 from agentlab2.metrics.disk_exporter import DiskSpanExporter
 from agentlab2.metrics.processor import AL2_EXPERIMENT, AL2_NAME, AL2_TYPE, TYPE_EPISODE, TYPE_EXPERIMENT, TYPE_STEP
 

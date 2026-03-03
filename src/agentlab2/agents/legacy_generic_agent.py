@@ -20,12 +20,12 @@ import logging
 import re
 from typing import Any, Callable, Literal
 
+from cube.core import Action, ActionSchema, ImageContent, Observation, TypedBaseModel
+from cube.task import STOP_ACTION
 from PIL import Image
 from pydantic import Field
 
 from agentlab2.agent import Agent, AgentConfig
-from cube.core import Action, ActionSchema, ImageContent, Observation, TypedBaseModel
-from cube.task import STOP_ACTION
 from agentlab2.core import AgentOutput, LLMCall
 from agentlab2.llm import LLMConfig, Message, Prompt
 from agentlab2.utils import parse_actions

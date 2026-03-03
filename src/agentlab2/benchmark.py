@@ -1,11 +1,11 @@
 import warnings
 from abc import ABC, abstractmethod
 
+from cube.tool import ToolConfig
 from pydantic import Field
 
 from agentlab2.core import Task, TypedBaseModel
 from agentlab2.environment import EnvConfig
-from cube.tool import ToolConfig
 
 
 class Benchmark(TypedBaseModel, ABC):

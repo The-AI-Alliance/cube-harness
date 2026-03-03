@@ -6,11 +6,11 @@ import inspect
 import logging
 from typing import Any, Literal
 
+from cube.core import Action, Observation, TypedBaseModel
+from cube.tool import AbstractTool
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ImageContent, TextContent
 
-from cube.core import Action, Observation, TypedBaseModel
-from cube.tool import AbstractTool
 from agentlab2.mcp.convert import observation_to_mcp_content
 
 logger = logging.getLogger(__name__)

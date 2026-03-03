@@ -1,10 +1,9 @@
 import logging
 
+from cube.core import ActionSchema, Content, Observation
 from PIL import Image
 
 from agentlab2.action_spaces.browser_action_space import BrowserActionSpace
-from cube.core import ActionSchema, Content, Observation
-
 from agentlab2.core import ActionSpace, Task
 from agentlab2.tools.base import BrowserTaskTool
 

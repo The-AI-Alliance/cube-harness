@@ -2,10 +2,10 @@ import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Callable
 
+from cube.core import Action, ActionSchema, EnvironmentOutput, Observation, StepError, TypedBaseModel
 from pydantic import Field
 
 from agentlab2.llm import LLMCall
-from cube.core import Action, ActionSchema, EnvironmentOutput, Observation, StepError, TypedBaseModel
 
 
 class AgentOutput(TypedBaseModel):

@@ -1,9 +1,9 @@
 import logging
 
+from cube.tool import tool_action
 from PIL import Image
 
 from agentlab2.tool import ToolWithTelemetry
-from cube.tool import tool_action
 
 logger = logging.getLogger(__name__)
 

@@ -4,12 +4,12 @@ import warnings
 from pathlib import Path
 from typing import Self
 
+from cube.benchmark import Benchmark as CubeBenchmark
+from cube.core import EnvironmentOutput, TypedBaseModel
 from pydantic import Field
 
 from agentlab2.agent import AgentConfig
 from agentlab2.benchmark import Benchmark as AL2Benchmark
-from cube.benchmark import Benchmark as CubeBenchmark
-from cube.core import EnvironmentOutput, TypedBaseModel
 from agentlab2.core import AgentOutput, Trajectory
 from agentlab2.episode import MAX_STEPS, Episode
 from agentlab2.storage import FileStorage

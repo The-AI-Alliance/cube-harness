@@ -2,9 +2,8 @@ import json
 import re
 
 from bs4 import BeautifulSoup
-from litellm import Message
-
 from cube.core import Action
+from litellm import Message
 
 
 def prune_html(html):
