@@ -9,10 +9,9 @@ from typing import Any, Literal
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ImageContent, TextContent
 
-from agentlab2.base import TypedBaseModel
-from agentlab2.core import Action, Observation
+from cube.core import Action, Observation, TypedBaseModel
+from cube.tool import AbstractTool
 from agentlab2.mcp.convert import observation_to_mcp_content
-from agentlab2.tool import AbstractTool
 
 logger = logging.getLogger(__name__)
 

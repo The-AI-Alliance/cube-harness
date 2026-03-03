@@ -19,7 +19,7 @@ from agentlab2.agents.genny import (
     _obs_section_header,
     _truncate_message,
 )
-from agentlab2.core import Action, ActionSchema, Observation
+from cube.core import Action, ActionSchema, Observation
 from agentlab2.llm import LLMConfig, LLMResponse, Usage
 
 # ---------------------------------------------------------------------------

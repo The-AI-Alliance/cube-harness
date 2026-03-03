@@ -4,7 +4,7 @@ from mcp.types import ImageContent, TextContent
 from PIL import Image
 from pydantic import BaseModel
 
-from agentlab2.core import ActionSchema, Content, Observation
+from cube.core import ActionSchema, Content, Observation
 from agentlab2.mcp.convert import action_schema_to_mcp_tool, observation_to_mcp_content
 
 
@@ -46,7 +46,7 @@ class TestActionSchemaToMcpTool:
 
 class TestObservationToMcpContent:
     def test_text_content(self) -> None:
-        obs = Observation(contents=[Content(data="Hello, world!")])
+        obs = Observation(contents=[Content.from_data("Hello, world!")])
         result = observation_to_mcp_content(obs)
 
         assert len(result) == 1
@@ -54,7 +54,7 @@ class TestObservationToMcpContent:
         assert result[0].text == "Hello, world!"
 
     def test_dict_content(self) -> None:
-        obs = Observation(contents=[Content(data={"key": "value", "num": 42})])
+        obs = Observation(contents=[Content.from_data({"key": "value", "num": 42})])
         result = observation_to_mcp_content(obs)
 
         assert len(result) == 1
@@ -63,7 +63,7 @@ class TestObservationToMcpContent:
         assert '"num": 42' in result[0].text
 
     def test_list_content(self) -> None:
-        obs = Observation(contents=[Content(data=[1, 2, 3])])
+        obs = Observation(contents=[Content.from_data([1, 2, 3])])
         result = observation_to_mcp_content(obs)
 
         assert len(result) == 1
@@ -72,7 +72,7 @@ class TestObservationToMcpContent:
 
     def test_image_content(self) -> None:
         img = Image.new("RGB", (10, 10), color="red")
-        obs = Observation(contents=[Content(data=img)])
+        obs = Observation(contents=[Content.from_data(img)])
         result = observation_to_mcp_content(obs)
 
         assert len(result) == 1
@@ -85,7 +85,7 @@ class TestObservationToMcpContent:
             name: str
             value: int
 
-        obs = Observation(contents=[Content(data=MyModel(name="test", value=42))])
+        obs = Observation(contents=[Content.from_data(MyModel(name="test", value=42))])
         result = observation_to_mcp_content(obs)
 
         assert len(result) == 1
@@ -96,9 +96,9 @@ class TestObservationToMcpContent:
         img = Image.new("RGB", (5, 5), color="blue")
         obs = Observation(
             contents=[
-                Content(data="Action result: Clicked button"),
-                Content(data=img),
-                Content(data={"html": "<div>page</div>"}),
+                Content.from_data("Action result: Clicked button"),
+                Content.from_data(img),
+                Content.from_data({"html": "<div>page</div>"}),
             ]
         )
         result = observation_to_mcp_content(obs)

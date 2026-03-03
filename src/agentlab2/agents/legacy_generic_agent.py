@@ -24,9 +24,9 @@ from PIL import Image
 from pydantic import Field
 
 from agentlab2.agent import Agent, AgentConfig
-from cube.core import ImageContent, TypedBaseModel
-from agentlab2.core import Action, ActionSchema, AgentOutput, LLMCall, Observation
-from agentlab2.environment import STOP_ACTION
+from cube.core import Action, ActionSchema, ImageContent, Observation, TypedBaseModel
+from cube.task import STOP_ACTION
+from agentlab2.core import AgentOutput, LLMCall
 from agentlab2.llm import LLMConfig, Message, Prompt
 from agentlab2.utils import parse_actions
 

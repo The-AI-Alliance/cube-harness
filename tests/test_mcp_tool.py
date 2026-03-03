@@ -6,7 +6,7 @@ import mcp.types as mcp_types
 import pytest
 from mcp.client.stdio import StdioServerParameters
 
-from agentlab2.core import Action, ActionSchema
+from cube.core import Action, ActionSchema
 from agentlab2.tools.mcp import (
     MCPServerConfig,
     MCPToolConfig,

@@ -22,9 +22,8 @@ from agentlab2.agents.legacy_generic_agent import (
     Trunkater,
     parse_html_tags,
 )
-from agentlab2.core import ActionSchema, Observation
+from cube.core import ActionSchema, Content, Observation
 from agentlab2.llm import LLMConfig
-from cube.core import Content
 
 # ============================================================================
 # Test parse_html_tags
