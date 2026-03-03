@@ -75,6 +75,12 @@ class BrowserActionSpace(ABC):
 
     @tool_action
     @abstractmethod
+    def goto(self, url: str) -> str:
+        """Navigate to the specified URL."""
+        ...
+
+    @tool_action
+    @abstractmethod
     def noop(self) -> str:
         """No operation action."""
         ...
@@ -149,6 +155,12 @@ class BidBrowserActionSpace(ABC):
     @abstractmethod
     def browser_forward(self) -> str:
         """Navigate forward in browser history."""
+        ...
+
+    @tool_action
+    @abstractmethod
+    def goto(self, url: str) -> str:
+        """Navigate to the specified URL."""
         ...
 
     @tool_action

@@ -1,0 +1,34 @@
+# See https://pre-commit.com for more information
+# Install locally:
+#   pre-commit install --hook-type pre-commit --hook-type commit-msg
+# Run manually:
+#   pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.2
+    hooks:
+      - id: ruff-check
+        types_or: [ python, pyi ]
+        args: [--fix]
+      - id: ruff-format
+        types_or: [ python, pyi ]
+
+  - repo: local
+    hooks:
+      - id: dco-signoff
+        name: Require DCO Signed-off-by line
+        entry: python .github/scripts/check_dco_signoff.py
+        language: python
+        stages: [commit-msg]
