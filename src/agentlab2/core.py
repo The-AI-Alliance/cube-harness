@@ -16,9 +16,8 @@ class AgentOutput(TypedBaseModel):
     # Maps label → (start_time, end_time) as absolute Unix timestamps.
     # Used by the XRay viewer to render a profiling breakdown inside each timeline segment.
     profiling: dict[str, tuple[float, float]] = Field(default_factory=dict)
-    # The chain-of-thought or reasoning that semantically led to the actions.
-    # Populated by agents that produce explicit rationale (summarize pass COT, extended thinking, etc.).
-    action_rationale: str | None = None
+    # Agent's chain-of-thought, rationale, or extended thinking for this step.
+    thoughts: str | None = None
 
     def __str__(self) -> str:
         return self.model_dump_json(exclude={"llm_calls"})

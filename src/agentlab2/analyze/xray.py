@@ -67,19 +67,19 @@ class XRayState:
     _traj_storages: list[FileStorage] = field(default_factory=list, repr=False)
     # Names of currently selected experiments (for change-detection in the UI)
     _selected_exp_names: list[str] = field(default_factory=list, repr=False)
-    # Per-storage disambiguation tag; keyed by id(storage). Non-empty when > 1 experiment loaded.
-    # TODO: Temporary — once experiments can hold multiple agents, identity won't rely on name mangling.
+    # Per-storage timestamp tag (parsed from exp dir name); keyed by id(storage).
+    # Always appended to agent_name so each trajectory is unambiguously identified.
     _exp_tags: dict[int, str] = field(default_factory=dict, repr=False)
     # Set to True once the background bulk-loading thread has finished
     _bg_loading_done: bool = field(default=True, repr=False)
     # Incremented on each load_experiments call; background threads check this to self-abort
     # when superseded by a newer load (prevents stale writes to self.trajectories).
     _bg_gen: int = field(default=0, repr=False)
-    # Agent name derived from experiment_config.json for backwards-compatibility backfill
-    _backfill_name: str | None = field(default=None, repr=False)
-    # JSON strings for the Config tabs (set on experiment load, None if unavailable)
-    _agent_config_json: str | None = field(default=None, repr=False)
-    _exp_config_json: str | None = field(default=None, repr=False)
+    # Per-storage backfill names for backwards-compat (agent class short name from config); keyed by id(storage).
+    _backfill_names: dict[int, str | None] = field(default_factory=dict, repr=False)
+    # Per-storage config JSON strings for the Config tabs; keyed by id(storage).
+    # Value: (agent_config_json, exp_config_json), both may be None if unavailable.
+    _storage_configs: dict[int, tuple[str | None, str | None]] = field(default_factory=dict, repr=False)
     # Live polling: tracks which trajectories are done (skip on future ticks) and their mtimes
     _completed_ids: set[str] = field(default_factory=set, repr=False)
     _traj_mtimes: dict[str, float] = field(default_factory=dict, repr=False)
@@ -104,15 +104,14 @@ class XRayState:
         self.trajectories = []
         self._traj_storages = []
         self._exp_tags = {}
-        self._agent_config_json = None
-        self._exp_config_json = None
+        self._backfill_names = {}
+        self._storage_configs = {}
         for exp_dir, storage in zip(exp_dirs, self._storages):
             trajs = storage.load_all_trajectory_metadata()
-            self._load_experiment_config(exp_dir)
-            if len(exp_dirs) > 1:
-                self._exp_tags[id(storage)] = xray_utils._parse_exp_date(exp_dir)
+            self._load_experiment_config(exp_dir, storage)
+            self._exp_tags[id(storage)] = xray_utils._parse_exp_date(exp_dir)
             for traj in trajs:
-                self._maybe_backfill(traj)
+                self._maybe_backfill(traj, storage)
                 self._apply_exp_tag(traj, storage)
             self.trajectories.extend(trajs)
             self._traj_storages.extend([storage] * len(trajs))
@@ -134,42 +133,73 @@ class XRayState:
         """Convenience wrapper: load a single experiment directory."""
         return self.load_experiments([exp_dir])
 
-    def _load_experiment_config(self, exp_dir: Path) -> None:
-        """Read experiment_config.json and populate config fields.
+    def _load_experiment_config(self, exp_dir: Path, storage: FileStorage) -> None:
+        """Read experiment_config.json and store per-storage config JSON strings.
 
-        Sets _backfill_name (agent class short name for backwards compat),
-        _agent_config_json (pretty JSON for the Agent Config tab), and
-        _exp_config_json (pretty JSON for the Experiment Config tab, with
-        agent_config replaced by a placeholder to avoid duplication).
+        Populates _storage_configs[id(storage)] with (agent_config_json, exp_config_json)
+        and _backfill_names[id(storage)] with the agent class short name for backwards compat.
+
+        Falls back to the first episode_configs/*.json when experiment_config.json
+        is absent (e.g. experiments run before save_config() was added).
         """
-        self._backfill_name = None
-        self._agent_config_json = None
-        self._exp_config_json = None
+        agent_cfg: dict = {}
+        exp_cfg_display: dict = {}
         config_path = exp_dir / "experiment_config.json"
-        if not config_path.exists():
-            return
-        try:
-            with open(config_path) as f:
-                exp_cfg = json.load(f)
-            agent_cfg = exp_cfg.get("agent_config", {})
-            agent_type = agent_cfg.get("_type", "")
-            self._backfill_name = agent_type.split(".")[-1] if agent_type else None
-            self._agent_config_json = json.dumps(agent_cfg, indent=2)
-            exp_cfg_display = {**exp_cfg, "agent_config": "(see Agent Config tab)"}
-            self._exp_config_json = json.dumps(exp_cfg_display, indent=2)
-        except Exception:
-            pass
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    exp_cfg = json.load(f)
+                agent_cfg = exp_cfg.get("agent_config", {})
+                exp_cfg_display = {**exp_cfg, "agent_config": "(see Agent Config tab)"}
+            except Exception:
+                pass
+        if not agent_cfg:
+            # Fallback: extract agent_config from the first available episode config
+            episode_cfgs = (
+                sorted((exp_dir / "episode_configs").glob("*.json")) if (exp_dir / "episode_configs").exists() else []
+            )
+            for ep_path in episode_cfgs:
+                try:
+                    with open(ep_path) as f:
+                        ep_cfg = json.load(f)
+                    agent_cfg = ep_cfg.get("agent_config", {})
+                    if agent_cfg:
+                        break
+                except Exception:
+                    continue
+        agent_type = agent_cfg.get("_type", "") if agent_cfg else ""
+        self._backfill_names[id(storage)] = agent_type.split(".")[-1] if agent_type else None
+        self._storage_configs[id(storage)] = (
+            json.dumps(agent_cfg, indent=2) if agent_cfg else None,
+            json.dumps(exp_cfg_display, indent=2) if exp_cfg_display else None,
+        )
 
-    def _maybe_backfill(self, traj: Trajectory) -> None:
-        """Inject _backfill_name into a trajectory's metadata if agent_name is absent."""
-        if self._backfill_name and "agent_name" not in traj.metadata:
-            traj.metadata["agent_name"] = self._backfill_name
+    def _maybe_backfill(self, traj: Trajectory, storage: FileStorage) -> None:
+        """Inject backfill name into a trajectory's metadata if agent_name is absent."""
+        name = self._backfill_names.get(id(storage))
+        if name and "agent_name" not in traj.metadata:
+            traj.metadata["agent_name"] = name
 
     def _apply_exp_tag(self, traj: Trajectory, storage: FileStorage) -> None:
-        """Append this storage's disambiguation tag to traj's agent_name, if set."""
+        """Append this storage's timestamp tag to traj's agent_name."""
         tag = self._exp_tags.get(id(storage), "")
         if tag:
             traj.metadata["agent_name"] = traj.metadata.get("agent_name", "unknown") + f" [{tag}]"
+
+    def get_config_jsons(self) -> tuple[str, str]:
+        """Return (agent_config_json, exp_config_json) for the currently selected agent.
+
+        Looks up which storage owns the selected agent's trajectories, then returns
+        that storage's config strings. Returns ("", "") when nothing is selected or found.
+        """
+        if self.selected_agent_key is None:
+            return "", ""
+        for i, traj in enumerate(self.trajectories):
+            if traj.metadata.get("agent_name") == self.selected_agent_key:
+                storage = self._traj_storages[i]
+                agent_cfg, exp_cfg = self._storage_configs.get(id(storage), (None, None))
+                return agent_cfg or "", exp_cfg or ""
+        return "", ""
 
     def _start_background_loading(self) -> None:
         """Spawn a daemon thread that loads all trajectory stubs into full trajectories.
@@ -206,7 +236,7 @@ class XRayState:
                 storage = my_storages[i]
                 try:
                     full = storage.load_trajectory(traj.id)
-                    self._maybe_backfill(full)
+                    self._maybe_backfill(full, storage)
                     self._apply_exp_tag(full, storage)
                     if self._bg_gen == my_gen:
                         my_trajs[i] = full
@@ -243,7 +273,7 @@ class XRayState:
                     continue
                 try:
                     full = storage.load_trajectory(traj_id)
-                    self._maybe_backfill(full)
+                    self._maybe_backfill(full, storage)
                     self._apply_exp_tag(full, storage)
                     self._traj_mtimes[traj_id] = mtime
                     changed = True
@@ -332,7 +362,7 @@ class XRayState:
             storage = self._traj_storages[idx]
             try:
                 traj = storage.load_trajectory(traj_id)
-                self._maybe_backfill(traj)
+                self._maybe_backfill(traj, storage)
                 self._apply_exp_tag(traj, storage)
                 self.trajectories[idx] = traj
                 self._traj_storages[idx] = storage
@@ -486,6 +516,11 @@ html {
 code {
     white-space: pre-wrap;
 }
+.help-content {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
 th {
     white-space: normal !important;
     word-wrap: break-word !important;
@@ -518,20 +553,17 @@ _FORCE_LIGHT_JS = "() => { document.body.classList.remove('dark'); }"
 _SHORTCUT_JS = """
 <script>
 function shortcuts(e) {
-    switch (e.target.tagName.toLowerCase()) {
-        case "input":
-        case "textarea":
-        case "select":
-        case "button":
-            return;
-        default:
-            if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-                e.preventDefault();
-                document.getElementById("xray_prev_btn").click();
-            } else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-                e.preventDefault();
-                document.getElementById("xray_next_btn").click();
-            }
+    if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = e.target.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return;
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const prev = document.querySelector('#xray_prev_btn button');
+        if (prev) prev.click();
+    } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const next = document.querySelector('#xray_next_btn button');
+        if (next) next.click();
     }
 }
 document.addEventListener('keydown', shortcuts, false);
@@ -552,6 +584,19 @@ def _render_goal_panel(text: str) -> str:
     return (
         '<div class="info-panel" style="background:#f0f4ff; border-color:#c7d2fe;">'
         '<div class="info-panel-title" style="background:#e0e7ff; color:#4338ca;">📋 Goal</div>'
+        f'<div class="info-panel-body">{safe}</div>'
+        "</div>"
+    )
+
+
+def _render_thoughts_panel(text: str) -> str:
+    """Render the agent's thoughts as a styled HTML panel (same green as action, small bottom gap)."""
+    safe = html_lib.escape(text)
+    safe = safe.replace("\n", "<br>")
+    safe = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", safe)
+    return (
+        '<div class="info-panel" style="background:#f0fdf4; border-color:#bbf7d0; margin-bottom:6px;">'
+        '<div class="info-panel-title" style="background:#dcfce7; color:#15803d;">💭 Thoughts</div>'
         f'<div class="info-panel-body">{safe}</div>'
         "</div>"
     )
@@ -614,13 +659,6 @@ def run_xray(
             gr.Tab(label=f"Seeds ({len(seed_rows)})"),
         )
 
-    def _config_jsons() -> tuple[str, str]:
-        """Return (agent_config_json, exp_config_json) from current state, with empty fallback."""
-        return (
-            state._agent_config_json or "",
-            state._exp_config_json or "",
-        )
-
     def _load_and_build_hierarchy() -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
         """Build experiment stats + agent/task/seed tables after state.load_experiments().
 
@@ -635,7 +673,7 @@ def run_xray(
             seed_rows_: list[dict[str, Any]] = []
             task_rows_: list[dict[str, Any]] = []
             tab_labels = _make_tab_labels(agent_rows, task_rows_, seed_rows_)
-            return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels, *_config_jsons()
+            return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels, *state.get_config_jsons()
         first_agent_key = agent_rows[0]["agent_name"]
         state.select_agent(first_agent_key)
         agent_table_data = _rows_to_table(agent_rows, first_agent_key, "agent_name")
@@ -644,7 +682,15 @@ def run_xray(
         task_rows = xray_utils.build_task_table(state.trajectories, first_agent_key)
         if not task_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, [])
-            return exp_stats, agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels, *_config_jsons()
+            return (
+                exp_stats,
+                agent_table_data,
+                _rows_to_table(task_rows),
+                [],
+                StepId(),
+                *tab_labels,
+                *state.get_config_jsons(),
+            )
         first_task_id = task_rows[0]["task_id"]
         state.select_task(first_task_id)
         task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
@@ -660,7 +706,7 @@ def run_xray(
                 _rows_to_table(seed_rows),
                 StepId(),
                 *tab_labels,
-                *_config_jsons(),
+                *state.get_config_jsons(),
             )
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
@@ -674,7 +720,7 @@ def run_xray(
             seed_table_data,
             StepId(step=0),
             *tab_labels,
-            *_config_jsons(),
+            *state.get_config_jsons(),
         )
 
     def on_experiments_change(
@@ -739,7 +785,9 @@ def run_xray(
         )
         return (_exp_table_value(), *_empty_hierarchy)
 
-    def on_select_agent(evt: gr.SelectData, agent_df: Any) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab]:
+    def on_select_agent(
+        evt: gr.SelectData, agent_df: Any
+    ) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
         if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
             return (
                 [],
@@ -749,6 +797,8 @@ def run_xray(
                 gr.Tab(label="Agents (0)"),
                 gr.Tab(label="Tasks (0)"),
                 gr.Tab(label="Seeds (0)"),
+                "",
+                "",
             )
         row = evt.index[0]
         # Strip HTML tags to get the raw key value
@@ -759,7 +809,7 @@ def run_xray(
         task_rows = xray_utils.build_task_table(state.trajectories, agent_key)
         if not task_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, [])
-            return agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels
+            return agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels, *state.get_config_jsons()
         # Auto-select first task and first seed
         first_task_id = task_rows[0]["task_id"]
         state.select_task(first_task_id)
@@ -767,12 +817,26 @@ def run_xray(
         seed_rows = xray_utils.build_seed_table(state.trajectories, agent_key, first_task_id)
         if not seed_rows:
             tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return agent_table_data, task_table_data, _rows_to_table(seed_rows), StepId(), *tab_labels
+            return (
+                agent_table_data,
+                task_table_data,
+                _rows_to_table(seed_rows),
+                StepId(),
+                *tab_labels,
+                *state.get_config_jsons(),
+            )
         first_traj_id = seed_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
         seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return agent_table_data, task_table_data, seed_table_data, StepId(step=0), *tab_labels
+        return (
+            agent_table_data,
+            task_table_data,
+            seed_table_data,
+            StepId(step=0),
+            *tab_labels,
+            *state.get_config_jsons(),
+        )
 
     def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
         if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
@@ -864,13 +928,15 @@ def run_xray(
         tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
         return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
 
-    def navigate_prev(step_id: StepId) -> StepId:
-        step = max(0, step_id.step - 1)
+    def navigate_prev() -> StepId:
+        """Step backward; reads state.step from closure so JS button.click() works too."""
+        step = max(0, state.step - 1)
         state.step = step
         return StepId(step=step)
 
-    def navigate_next(step_id: StepId) -> StepId:
-        step = min(state.total_ui_steps() - 1, step_id.step + 1)
+    def navigate_next() -> StepId:
+        """Step forward; reads state.step from closure so JS button.click() works too."""
+        step = min(state.total_ui_steps() - 1, state.step + 1)
         state.step = step
         return StepId(step=step)
 
@@ -945,8 +1011,16 @@ def run_xray(
         return _render_goal_panel(xray_utils.get_task_goal(state.current_trajectory))
 
     def get_agent_action_md() -> str:
-        """Return the current step's agent action as a rendered HTML panel."""
-        return _render_action_panel(xray_utils.get_agent_action_markdown(state.get_agent_output()))
+        """Return the current step's thoughts (if any) and action as stacked HTML panels."""
+        agent_out = state.get_agent_output()
+        panels = []
+        if agent_out and agent_out.thoughts:
+            thoughts = agent_out.thoughts.strip()
+            if len(thoughts) > 500:
+                thoughts = thoughts[:500] + "…"
+            panels.append(_render_thoughts_panel(thoughts))
+        panels.append(_render_action_panel(xray_utils.get_agent_action_markdown(agent_out)))
+        return "\n".join(panels)
 
     # ------------------------------------------------------------------
     # Lazy tab render handlers (only run when their tab is active).
@@ -1071,12 +1145,35 @@ def run_xray(
                     """\
 ## AgentLab2 XRay
 
-1. **Select experiments** in the Experiments tab (check one or more rows).
-2. **Hierarchy**: click Agents → Tasks → Seeds to drill into a specific episode.
-3. **Navigate steps** using Prev/Next buttons or ← → arrow keys.
-4. Each **step** shows the environment observation and the agent action that follows it.
-5. **Tabs** below update lazily — only the active tab renders on step change.
-"""
+### Loading experiments
+1. Open the **Experiments** tab — check one or more rows to load them simultaneously.
+2. Use **↺ Refresh** to pick up new experiments; **🗃 Archive selected** moves them to `_archive/`.
+3. When an experiment is running, the viewer polls for new trajectories every second until complete.
+
+### Browsing results
+4. Drill down via the **Agents → Tasks → Seeds** tabs to select a specific episode.
+5. The **Dashboard** tab shows a live progress bar and aggregate stats (reward, tokens, cost).
+6. **Agent Config** / **Exp Config** tabs display the configuration used for the experiment.
+
+### Inspecting a trajectory
+7. The **timeline** shows one segment per step; width scales with wall-clock duration.
+   - Blue = environment time, green = agent time. Coloured strips on top = profiling breakdown.
+   - Click any segment to jump to that step. The gold border marks the current step.
+   - Green / red bottom border = success / failure at that step.
+8. The **💭 Rationale** panel (when available) shows the chain-of-thought that led to the action.
+9. The **🤖 Action** panel shows the action(s) the agent took.
+10. **Navigate steps** with the ◀ / ▶ buttons or **Shift + ← / →** arrow keys.
+
+### Tabs (lazy — only the active tab re-renders on step change)
+- **Chat Messages**: full LLM prompt + response; extra branches for auxiliary LLM calls (e.g. summarize).
+- **Screenshots**: current and previous environment screenshots.
+- **Step Details**: detailed env observation + agent output with token stats.
+- **AXTree**: raw accessibility tree text.
+- **Task Error**: environment and agent errors for this step.
+- **Logs**: step info dict and trajectory metadata.
+- **Debug**: raw JSON for the env step, LLM calls, and tool schemas.
+""",
+                    elem_classes="help-content",
                 )
             with gr.Tab("Experiments"):
                 with gr.Row():
@@ -1226,7 +1323,7 @@ def run_xray(
             bg_timer,
         ]
 
-        exp_table.change(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
+        exp_table.input(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
         exp_refresh_btn.click(fn=_exp_table_value, outputs=exp_table)
         exp_archive_btn.click(fn=on_archive_selected, outputs=[exp_table, *_hierarchy_outputs])
 
@@ -1248,7 +1345,17 @@ def run_xray(
         agent_table.select(
             fn=on_select_agent,
             inputs=agent_table,
-            outputs=[agent_table, task_table, seed_table, step_id, agents_tab, tasks_tab, seeds_tab],
+            outputs=[
+                agent_table,
+                task_table,
+                seed_table,
+                step_id,
+                agents_tab,
+                tasks_tab,
+                seeds_tab,
+                agent_config_code,
+                exp_config_code,
+            ],
         )
         task_table.select(fn=on_select_task, inputs=task_table, outputs=[task_table, seed_table, step_id, seeds_tab])
         seed_table.select(fn=on_select_seed, inputs=seed_table, outputs=[seed_table, step_id])
@@ -1256,9 +1363,10 @@ def run_xray(
         # Timeline click
         timeline_click_input.change(fn=handle_timeline_click, inputs=timeline_click_input, outputs=step_id)
 
-        # Navigation buttons
-        prev_btn.click(fn=navigate_prev, inputs=step_id, outputs=step_id)
-        next_btn.click(fn=navigate_next, inputs=step_id, outputs=step_id)
+        # Navigation buttons — handlers read state.step from closure (inputs=[]) so that
+        # JS button.click() also works without Gradio losing the gr.State value.
+        prev_btn.click(fn=navigate_prev, inputs=[], outputs=step_id)
+        next_btn.click(fn=navigate_next, inputs=[], outputs=step_id)
 
         # Always-rendered on step change
         step_id.change(fn=get_compact_header_info, outputs=header_info)
