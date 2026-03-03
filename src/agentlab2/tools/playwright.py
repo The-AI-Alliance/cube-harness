@@ -54,8 +54,8 @@ class SyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):
         )
         self._page = self._browser.new_page()
 
-    def execute_action(self, action: Action) -> Observation | StepError:
-        result = super().execute_action(action)
+    def _execute_action(self, action: Action) -> Observation | StepError:
+        result = super()._execute_action(action)
         if isinstance(result, StepError):
             return result
         result += self.page_obs()

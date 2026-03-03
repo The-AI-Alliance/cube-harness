@@ -37,7 +37,13 @@ class Toolbox(ToolWithTelemetry):
             tool.reset()
 
     def execute_action(self, action: Action) -> Observation:
-        """Find the appropriate tool for the action and execute it."""
+        """Find the appropriate tool for the action and execute it.
+
+        Intentionally overrides ToolWithTelemetry.execute_action without calling super(),
+        so the Toolbox itself adds no telemetry span. Each sub-tool is responsible for its
+        own telemetry — adding a Toolbox-level span would double-report every action for
+        sub-tools that are themselves ToolWithTelemetry instances.
+        """
         if action.name not in self._action_name_to_tool:
             raise ValueError(f"Action '{action.name}' is not supported by any tool in the toolbox.")
         tool = self._action_name_to_tool[action.name]
