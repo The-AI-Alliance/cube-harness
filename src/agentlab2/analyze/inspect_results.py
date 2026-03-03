@@ -60,9 +60,7 @@ def trajectories_to_df(trajectories: list[Trajectory]) -> pd.DataFrame | None:
     return pd.DataFrame(records)
 
 
-def get_constants_and_variables(
-    df: pd.DataFrame, drop_constants: bool = False
-) -> tuple[dict, list[str], pd.DataFrame]:
+def get_constants_and_variables(df: pd.DataFrame, drop_constants: bool = False) -> tuple[dict, list[str], pd.DataFrame]:
     constants: dict[str, Any] = {}
     variable_keys: list[str] = []
     for col in df.columns:
@@ -138,7 +136,13 @@ def get_sample_std_err(df: pd.DataFrame, metric: str) -> tuple[float, float]:
 def summarize(sub_df: pd.DataFrame) -> pd.Series | None:
     if "cum_reward" not in sub_df:
         return pd.Series(
-            {"avg_reward": np.nan, "std_err": np.nan, "avg_steps": np.nan, "n_completed": f"0/{len(sub_df)}", "n_err": 0}
+            {
+                "avg_reward": np.nan,
+                "std_err": np.nan,
+                "avg_steps": np.nan,
+                "n_completed": f"0/{len(sub_df)}",
+                "n_err": 0,
+            }
         )
 
     err = sub_df["err_msg"].notnull()
@@ -238,8 +242,10 @@ def error_report(df: pd.DataFrame, max_stack_trace: int = 10) -> str:
         for _, row in sub_df.iterrows():
             if shown >= max_stack_trace:
                 break
-            task_name = row.get(task_col, row.get("trajectory_id", "unknown")) if task_col else row.get(
-                "trajectory_id", "unknown"
+            task_name = (
+                row.get(task_col, row.get("trajectory_id", "unknown"))
+                if task_col
+                else row.get("trajectory_id", "unknown")
             )
             report.append(f"\n**Task:** `{task_name}`")
             st = row.get("stack_trace")
@@ -265,7 +271,9 @@ def format_constants_and_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.D
         unique_vals = df[var].value_counts().head(3)
         sample = ", ".join(f"{v} ({c}x)" for v, c in unique_vals.items())
         var_records.append({"parameter": var, "n_unique": nuniq, "sample_values": sample})
-    var_df = pd.DataFrame(var_records) if var_records else pd.DataFrame(columns=["parameter", "n_unique", "sample_values"])
+    var_df = (
+        pd.DataFrame(var_records) if var_records else pd.DataFrame(columns=["parameter", "n_unique", "sample_values"])
+    )
 
     return const_df, var_df
 
