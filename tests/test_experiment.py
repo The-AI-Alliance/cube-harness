@@ -3,6 +3,7 @@
 import json
 
 from cube.core import EnvironmentOutput, Observation
+
 from agentlab2.core import Trajectory, TrajectoryStep
 from agentlab2.episode import Episode
 from agentlab2.experiment import Experiment, ExpResult
@@ -215,6 +216,7 @@ class TestExperiment:
     def test_retry_failed_episodes(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test retry_failed=True returns only failed episodes."""
         from cube.core import EnvironmentOutput, Observation, StepError
+
         from agentlab2.core import Trajectory, TrajectoryStep
         from agentlab2.storage import FileStorage
 

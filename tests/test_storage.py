@@ -4,9 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
-from PIL import Image
-
 from cube.core import Action, Content, EnvironmentOutput, Observation
+from PIL import Image
 
 from agentlab2.core import (
     AgentOutput,

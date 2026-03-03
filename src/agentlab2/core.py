@@ -23,7 +23,6 @@ class AgentOutput(TypedBaseModel):
         return self.model_dump_json(exclude={"llm_calls"})
 
 
-
 class TrajectoryStep(TypedBaseModel):
     output: EnvironmentOutput | AgentOutput
     start_time: float | None = None

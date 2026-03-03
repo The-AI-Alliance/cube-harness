@@ -299,7 +299,9 @@ class MCPTool(AbstractTool):
             span.set_attribute(GEN_AI_TOOL_CALL_RESULT, str(result))
 
         if isinstance(result, list):
-            contents = [Content.from_data(item["data"], tool_call_id=action.id, name=item.get("name")) for item in result]
+            contents = [
+                Content.from_data(item["data"], tool_call_id=action.id, name=item.get("name")) for item in result
+            ]
             return Observation(contents=contents)
         return Observation(contents=[Content.from_data(result, tool_call_id=action.id)])
 

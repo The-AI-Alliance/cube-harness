@@ -3,11 +3,10 @@
 from pathlib import Path
 
 import pytest
+from cube.core import Action, Content, EnvironmentOutput, Observation, StepError
 from PIL import Image
 
 from agentlab2.analyze import xray_utils
-from cube.core import Action, Content, EnvironmentOutput, Observation, StepError
-
 from agentlab2.core import (
     AgentOutput,
     Trajectory,

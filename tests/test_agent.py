@@ -2,11 +2,10 @@
 
 import json
 
+from cube.core import Action, Content, Observation
 from PIL import Image
 
 from agentlab2.agent import Agent, AgentConfig
-from cube.core import Action, Content, Observation
-
 from agentlab2.core import AgentOutput
 
 

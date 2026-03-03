@@ -3,9 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from cube.core import Action, ActionSchema
-from cube.core import Observation, StepError
+from cube.core import Action, ActionSchema, Observation, StepError
 from cube.tool import Tool, tool_action
 
 

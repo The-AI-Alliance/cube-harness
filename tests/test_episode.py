@@ -3,8 +3,8 @@
 import json
 
 import pytest
-
 from cube.core import Action, EnvironmentOutput, Observation
+
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.episode import MAX_STEPS, Episode
 from tests.conftest import MockAgent
@@ -269,6 +269,7 @@ class TestEpisode:
         """Test Episode captures environment errors correctly in trajectory."""
 
         from cube.core import ActionSchema
+
         from agentlab2.core import Task
 
         class ErrorTask(Task):

@@ -36,15 +36,13 @@ update:
 	uv pip install -e . --upgrade
 	uv run playwright install chromium --with-deps
 
-format:
-	uv run ruff format .
-
 lint:
 	uv run ruff check --fix .
+	uv run ruff format .
 
 lint-check:
-	uvx ruff check --diff ./src
-	uvx ruff format --diff ./src
+	uvx ruff check --diff .
+	uvx ruff format --diff .
 
 test: install
 	uv run pytest -n 10 tests/ -v

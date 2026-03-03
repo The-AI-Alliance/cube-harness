@@ -17,9 +17,9 @@ from arithmetic_cube.task import ArithmeticTaskConfig
 logger = logging.getLogger(__name__)
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
-    "add-3-4":   [Action(name="submit_answer", arguments={"answer": 7})],
-    "sub-10-3":  [Action(name="submit_answer", arguments={"answer": 7})],
-    "mul-6-7":   [Action(name="submit_answer", arguments={"answer": 42})],
+    "add-3-4": [Action(name="submit_answer", arguments={"answer": 7})],
+    "sub-10-3": [Action(name="submit_answer", arguments={"answer": 7})],
+    "mul-6-7": [Action(name="submit_answer", arguments={"answer": 42})],
     "add-100-1": [Action(name="submit_answer", arguments={"answer": 101})],
 }
 
@@ -50,11 +50,7 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 
 
 def get_debug_task_configs() -> list[ArithmeticTaskConfig]:
-    return [
-        ArithmeticTaskConfig(task_id=tid)
-        for tid in _TASK_ACTIONS
-        if tid in ArithmeticBenchmark.task_metadata
-    ]
+    return [ArithmeticTaskConfig(task_id=tid) for tid in _TASK_ACTIONS if tid in ArithmeticBenchmark.task_metadata]
 
 
 if __name__ == "__main__":

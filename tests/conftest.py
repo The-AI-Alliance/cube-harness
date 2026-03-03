@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from cube.tool import ToolConfig, tool_action
 from PIL import Image
 
 from agentlab2.agent import Agent, AgentConfig
 from agentlab2.benchmark import Benchmark
-from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
-
 from agentlab2.core import (
     AgentOutput,
     Task,
@@ -21,7 +21,6 @@ from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
 from agentlab2.llm import LLMConfig, Prompt
 from agentlab2.tool import ToolWithTelemetry
-from cube.tool import ToolConfig, tool_action
 
 # --- Core fixtures ---
 

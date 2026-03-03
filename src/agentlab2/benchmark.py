@@ -62,4 +62,3 @@ class Benchmark(TypedBaseModel, ABC):
         tasks = self.load_tasks()
         configs = [EnvConfig(task=task, tool_config=self.tool_config) for task in tasks]
         return configs
-

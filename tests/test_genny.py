@@ -7,6 +7,8 @@ step) use MagicMock so the test suite stays fast.
 
 from unittest.mock import MagicMock
 
+from cube.core import Action, ActionSchema, Observation
+
 from agentlab2.agents.genny import (
     Genny,
     GennyConfig,
@@ -19,7 +21,6 @@ from agentlab2.agents.genny import (
     _obs_section_header,
     _truncate_message,
 )
-from cube.core import Action, ActionSchema, Observation
 from agentlab2.llm import LLMConfig, LLMResponse, Usage
 
 # ---------------------------------------------------------------------------
@@ -272,10 +273,12 @@ class TestIngestObs:
 
     def test_first_obs_with_extra_messages_puts_rest_in_history(self) -> None:
         agent = _make_agent()
-        agent._ingest_obs([
-            {"role": "user", "content": "goal"},
-            {"role": "user", "content": "screenshot"},
-        ])
+        agent._ingest_obs(
+            [
+                {"role": "user", "content": "goal"},
+                {"role": "user", "content": "screenshot"},
+            ]
+        )
         assert agent.goal == [{"role": "user", "content": "goal"}]
         assert agent.history == [[{"role": "user", "content": "screenshot"}]]
 
@@ -324,9 +327,16 @@ class TestWindowedHistory:
         agent = _make_agent(render_last_n_obs=1)
         agent.goal = [{"role": "user", "content": "goal"}]
         # Simulate: one completed step (obs with tool result + user content) + asst + pending obs
-        agent.history.append([{"role": "tool", "content": "Success", "tool_call_id": "c1"}, {"role": "user", "content": "axtree"}])
+        agent.history.append(
+            [{"role": "tool", "content": "Success", "tool_call_id": "c1"}, {"role": "user", "content": "axtree"}]
+        )
         agent.history.append([{"role": "assistant", "content": "act", "tool_calls": [{"id": "c1"}]}])
-        agent.history.append([{"role": "tool", "content": "Success", "tool_call_id": "c2"}, {"role": "user", "content": "current_axtree"}])
+        agent.history.append(
+            [
+                {"role": "tool", "content": "Success", "tool_call_id": "c2"},
+                {"role": "user", "content": "current_axtree"},
+            ]
+        )
         flat = agent._windowed_history()
         # Tool message stripped; only the user content from the latest obs remains
         assert all(m.get("role") != "tool" for m in flat)
@@ -399,6 +409,7 @@ class TestChooseContext:
 
 def _mock_llm_response(text: str = "summary text") -> LLMResponse:
     from litellm import Message as LitellmMessage
+
     return LLMResponse(
         message=LitellmMessage(role="assistant", content=text),
         usage=Usage(prompt_tokens=10, completion_tokens=5),
