@@ -44,8 +44,8 @@ class Episode:
         id: int,
         output_dir: Path,
         agent_config: AgentConfig,
-        task_config: TaskConfig | None = None,
-        env_config: EnvConfig | None = None,
+        task_config: TaskConfig | None = None,  # new cube path: pass full TaskConfig
+        env_config: EnvConfig | None = None,  # deprecated legacy path: pass EnvConfig
         exp_name: str = "default",
         max_steps: int = MAX_STEPS,
         storage: Storage | None = None,
@@ -53,7 +53,7 @@ class Episode:
         if task_config is None and env_config is None:
             raise ValueError("Provide either task_config (new) or env_config (deprecated).")
         if task_config is not None and env_config is not None:
-            raise ValueError("Provide only one of task_config or env_config.")
+            raise ValueError("Provide only one of task_config (new) or env_config (deprecated).")
 
         if env_config is not None:
             warnings.warn(
@@ -61,14 +61,10 @@ class Episode:
                 DeprecationWarning,
                 stacklevel=2,
             )
-
-        if task_config is not None:
-            effective_task_id = task_config.task_id
-            effective_tool_config = None
-        else:
-            assert env_config is not None  # guaranteed by earlier check
             effective_task_id = env_config.task.id
-            effective_tool_config = env_config.tool_config
+        else:
+            assert task_config is not None  # guaranteed by earlier check
+            effective_task_id = task_config.task_id
 
         self.config = EpisodeConfig(
             id=id,
@@ -78,7 +74,7 @@ class Episode:
             output_dir=output_dir,
             max_steps=max_steps,
             task_config=task_config,
-            tool_config=effective_tool_config,
+            tool_config=env_config.tool_config if env_config is not None else None,
         )
         self._env_config = env_config  # kept for the legacy run path
         self.storage = storage or FileStorage(output_dir)
