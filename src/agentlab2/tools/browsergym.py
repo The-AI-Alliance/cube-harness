@@ -379,6 +379,11 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         action_str = "go_forward()"
         return self._execute_bgym_step(action_str)
 
+    def goto(self, url: str) -> str:
+        """Navigate to the specified URL."""
+        action_str = f'goto(url="{url}")'
+        return self._execute_bgym_step(action_str)
+
     def noop(self) -> str:
         """No operation action."""
         action_str = "noop()"
@@ -440,7 +445,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         if "focused_element_bid" in bgym_obs:
             focused_bid = bgym_obs["focused_element_bid"]
             if focused_bid:
-                obs.contents.append(Content(data=focused_bid, name="focused_element"))
+                obs.contents.append(Content.from_data(focused_bid, name="focused_element"))
 
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
@@ -455,12 +460,6 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
             elif isinstance(screenshot, np.ndarray):
                 screenshot_img = Image.fromarray(screenshot)
                 obs.contents.append(Content.from_data(screenshot_img, name="screenshot"))
-
-        # Add focused element BID if available (raw bid value for agent to format)
-        if "focused_element_bid" in bgym_obs:
-            focused_bid = bgym_obs["focused_element_bid"]
-            if focused_bid:
-                obs.contents.append(Content.from_data(focused_bid, name="focused_element"))
 
         # Add last action error if there was one (raw error message for agent to format)
         if "last_action_error" in bgym_obs:

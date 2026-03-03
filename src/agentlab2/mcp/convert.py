@@ -8,7 +8,7 @@ from mcp.types import ImageContent, TextContent, Tool
 from PIL import Image
 from pydantic import BaseModel
 
-from agentlab2.core import ActionSchema, Content, Observation
+from cube.core import ActionSchema, Content, Observation
 
 
 def action_schema_to_mcp_tool(schema: ActionSchema) -> Tool:

@@ -14,10 +14,9 @@ from mcp.client.streamable_http import streamable_http_client
 from PIL import Image
 from pydantic import Field
 
-from agentlab2.base import TypedBaseModel
-from agentlab2.core import Action, ActionSchema, Content, Observation
+from cube.core import Action, ActionSchema, Content, Observation, TypedBaseModel
+from cube.tool import AbstractTool, ToolConfig
 from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
-from agentlab2.tool import AbstractTool, ToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ class MCPToolConfig(ToolConfig):
     name_prefix: bool = False
     timeout_seconds: float = 30.0
 
-    def make(self) -> "MCPTool":
+    def make(self, container=None) -> "MCPTool":
         return MCPTool(config=self)
 
 
@@ -300,9 +299,9 @@ class MCPTool(AbstractTool):
             span.set_attribute(GEN_AI_TOOL_CALL_RESULT, str(result))
 
         if isinstance(result, list):
-            contents = [Content(data=item["data"], tool_call_id=action.id, name=item.get("name")) for item in result]
+            contents = [Content.from_data(item["data"], tool_call_id=action.id, name=item.get("name")) for item in result]
             return Observation(contents=contents)
-        return Observation(contents=[Content(data=result, tool_call_id=action.id)])
+        return Observation(contents=[Content.from_data(result, tool_call_id=action.id)])
 
     @property
     def action_set(self) -> list[ActionSchema]:

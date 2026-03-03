@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from agentlab2.core import Action, Observation
+from cube.core import Action, Observation
 from agentlab2.tools.browsergym import BrowsergymConfig, BrowsergymTool
 
 

@@ -6,7 +6,7 @@ from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
 from agentlab2.core import AgentOutput, LLMCall
-from agentlab2.environment import STOP_ACTION
+from cube.task import STOP_ACTION
 from agentlab2.llm import LLMConfig, Prompt
 from agentlab2.utils import parse_actions
 
