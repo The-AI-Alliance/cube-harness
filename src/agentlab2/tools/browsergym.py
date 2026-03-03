@@ -192,9 +192,9 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         self._env = self._create_env()
         self._last_obs, self._last_info = self._env.reset(seed=seed)
 
-    def execute_action(self, action: Action) -> Observation | StepError:
+    def _execute_action(self, action: Action) -> Observation | StepError:
         """Execute an action and return the observation, or a StepError if the action failed."""
-        result = super().execute_action(action)
+        result = super()._execute_action(action)
         if isinstance(result, StepError):
             return result
         result += self.page_obs()
