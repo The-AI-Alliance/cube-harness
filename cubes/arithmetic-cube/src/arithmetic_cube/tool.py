@@ -1,4 +1,4 @@
-from cube.containers import Container
+from cube.container import Container
 from cube.tool import Tool, ToolConfig, tool_action
 
 

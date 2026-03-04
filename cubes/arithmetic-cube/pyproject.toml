@@ -4,11 +4,8 @@ version = "0.1.0"
 description = "Simple arithmetic benchmark — submit the correct answer to math problems"
 requires-python = ">=3.12"
 dependencies = [
-    "cube",
+    "cube-standard",
 ]
-
-[tool.uv.sources]
-cube = { path = "../../../cube-standard", editable = true }
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
