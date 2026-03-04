@@ -6,7 +6,10 @@ from typing import Any
 
 import pytest
 from cube.benchmark import Benchmark as CubeBenchmark
-from cube.benchmark import BenchmarkMetadata
+from cube.benchmark import (  # noqa: F401 — needed for Pydantic to resolve Task's TYPE_CHECKING import
+    BenchmarkMetadata,
+    RuntimeContext,
+)
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from cube.task import Task as CubeTask
 from cube.task import TaskConfig as CubeTaskConfig
