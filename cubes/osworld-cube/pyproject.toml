@@ -1,0 +1,27 @@
+[project]
+name = "osworld-cube"
+version = "0.1.0"
+description = "OSWorld benchmark ported to the CUBE protocol"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-standard",
+    "desktop-env",   # OSWorld's VM/container driver
+    "pillow>=9.0",
+]
+
+[project.entry-points."cube.benchmarks"]
+osworld-cube = "osworld_cube.benchmark:OSWorldBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4
