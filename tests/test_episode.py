@@ -270,7 +270,7 @@ class TestEpisode:
 
         from cube.core import ActionSchema
 
-        from agentlab2.core import Task
+        from agentlab2.legacy import Task
 
         class ErrorTask(Task):
             id = "error_task"
@@ -293,7 +293,7 @@ class TestEpisode:
             def teardown(self) -> None:
                 pass
 
-        from agentlab2.environment import EnvConfig
+        from agentlab2.legacy import EnvConfig
 
         error_task = ErrorTask()
         env_config = EnvConfig(task=error_task, tool_config=mock_tool_config)

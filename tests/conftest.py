@@ -18,15 +18,13 @@ from cube.tool import ToolConfig, tool_action
 from PIL import Image
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.benchmark import Benchmark
 from agentlab2.core import (
     AgentOutput,
-    Task,
     Trajectory,
     TrajectoryStep,
 )
-from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
+from agentlab2.legacy import Benchmark, EnvConfig, Environment, Task
 from agentlab2.llm import LLMConfig, Prompt
 from agentlab2.tool import ToolWithTelemetry
 
