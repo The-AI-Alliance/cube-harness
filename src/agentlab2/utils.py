@@ -2,9 +2,8 @@ import json
 import re
 
 from bs4 import BeautifulSoup
+from cube.core import Action
 from litellm import Message
-
-from agentlab2.core import Action
 
 
 def prune_html(html):

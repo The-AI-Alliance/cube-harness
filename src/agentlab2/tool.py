@@ -1,81 +1,31 @@
 import logging
-from abc import ABC, abstractmethod
-from typing import Any, Callable, List
 
-from typing_extensions import get_protocol_members
+from cube.core import Action, Observation, StepError
+from cube.tool import Tool
 
-from agentlab2.core import Action, ActionSchema, Content, Observation, TypedBaseModel
 from agentlab2.metrics.tracer import GEN_AI_TOOL_CALL_RESULT, tool_span
 
 logger = logging.getLogger(__name__)
 
 
-class AbstractTool(ABC):
-    """
-    Abstract interface for objects that can react on a list of actions.
-    List defined by the Protocol that tool inherits.
-    """
+class ToolWithTelemetry(Tool):
+    """AL2 Tool subclass that wraps execute_action with OpenTelemetry tracing.
 
-    def reset(self) -> None:
-        """Optional reset the environment to its initial state."""
-        pass
-
-    @abstractmethod
-    def execute_action(self, action: Action) -> Any:
-        """Execute a single action and return the result."""
-        pass
-
-    @property
-    @abstractmethod
-    def action_set(self) -> List[ActionSchema]:
-        """Returns list of actions supported by that tool."""
-        pass
-
-    def close(self) -> None:
-        """Optional clean up environment resources."""
-        pass
-
-
-class ToolConfig(TypedBaseModel, ABC):
-    """Base class for tool configurations."""
-
-    @abstractmethod
-    def make(self) -> AbstractTool:
-        pass
-
-
-class Tool(AbstractTool):
-    """
-    Base class for tool that implements an action space protocol.
-
-    :var action_space: Protocol defining the actions this tool supports
+    Subclasses must override _execute_action instead of execute_action so that
+    the telemetry span always wraps the complete execution, including any
+    subclass-specific post-processing (e.g. appending page observations).
     """
 
-    action_space: Any
-
-    def get_action_method(self, action) -> Callable:
-        if not getattr(self.action_space, action.name, None):
-            raise ValueError(f"Action {action.name} is not a part of {self.action_space}.")
-        if not (fn := getattr(self, action.name, None)):
-            raise ValueError(f"Action {action.name} is not implemented in {self.__class__.__name__}.")
-        return fn
-
-    def execute_action(self, action: Action) -> Observation:
-        fn = self.get_action_method(action)
-
+    def execute_action(self, action: Action) -> Observation | StepError:
         with tool_span(action) as span:
-            try:
-                action_result = fn(**action.arguments) or "Success"
-            except Exception as e:
-                action_result = f"Error executing action {action.name}: {e}"
-                logger.exception(action_result)
+            result = self._execute_action(action)
+            if isinstance(result, StepError):
+                result_str = f"Error executing action {action.name}: {result.exception_str}"
+            else:
+                result_str = str(result.contents[0].data)
+            span.set_attribute(GEN_AI_TOOL_CALL_RESULT, result_str)
+        return result
 
-            span.set_attribute(GEN_AI_TOOL_CALL_RESULT, str(action_result))
-
-        return Observation(contents=[Content(data=action_result, tool_call_id=action.id)])
-
-    @property
-    def action_set(self) -> List[ActionSchema]:
-        """Returns list of actions supported by that environment."""
-        action_names = get_protocol_members(self.action_space)
-        return [ActionSchema.from_function(getattr(self, name)) for name in action_names]
+    def _execute_action(self, action: Action) -> Observation | StepError:
+        """Override this in subclasses instead of execute_action."""
+        return super().execute_action(action)

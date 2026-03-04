@@ -17,12 +17,13 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Protocol, cast
 
+from cube.core import Action, ActionSchema, Observation
+from cube.task import STOP_ACTION
 from litellm import Message
 from termcolor import colored
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import Action, ActionSchema, AgentOutput, Observation
-from agentlab2.environment import STOP_ACTION
+from agentlab2.core import AgentOutput
 from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt
 
 logger = logging.getLogger(__name__)

@@ -1,9 +1,10 @@
 """Tests for agentlab2.environment module."""
 
 import pytest
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from cube.task import STOP_ACTION
 
-from agentlab2.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
-from agentlab2.environment import STOP_ACTION, EnvConfig, Environment
+from agentlab2.legacy import EnvConfig, Environment
 from agentlab2.tools.toolbox import Toolbox
 from tests.conftest import MockTool
 
@@ -102,7 +103,7 @@ class TestToolboxEnv:
         mock_tool_env.setup()
 
         action = Action(name="nonexistent_action", arguments={})
-        with pytest.raises(ValueError, match="is not a part of"):
+        with pytest.raises(ValueError, match="does not exist in"):
             mock_tool_env.step(action)
 
     def test_toolbox_env_step_validates_when_done(self, mock_tool_env, mock_task):
@@ -178,7 +179,7 @@ class TestToolboxEnv:
         class PostprocessTask(type(mock_task)):
             def obs_postprocess(self, obs: Observation) -> Observation:
                 # Add a marker to observation
-                obs.contents.append(Content(data="postprocessed"))
+                obs.contents.append(Content.from_data("postprocessed"))
                 return obs
 
         task = PostprocessTask()
@@ -210,10 +211,10 @@ class TestTask:
         mock_task.teardown()
         assert mock_task.teardown_called
 
-    def test_task_validate(self, mock_tool_env, mock_task):
+    def test_task_validate(self, mock_task):
         """Test task validation."""
         obs = Observation.from_text("done")
-        reward, info = mock_task.validate_task(mock_tool_env, obs)
+        reward, info = mock_task.validate_task(obs)
 
         assert reward == 1.0
         assert info == {"success": True}

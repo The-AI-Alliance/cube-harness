@@ -1,6 +1,7 @@
 """Tests for agentlab2.agents.legacy_generic_agent prompt generation."""
 
 import pytest
+from cube.core import ActionSchema, Content, Observation
 from PIL import Image
 
 from agentlab2.agents.legacy_generic_agent import (
@@ -22,7 +23,6 @@ from agentlab2.agents.legacy_generic_agent import (
     Trunkater,
     parse_html_tags,
 )
-from agentlab2.core import ActionSchema, Content, Observation
 from agentlab2.llm import LLMConfig
 
 # ============================================================================
@@ -848,32 +848,32 @@ class TestGenericAgentObservationExtraction:
 
     def test_extract_goal_from_named_content(self, agent) -> None:
         """Test goal extraction from content named 'goal'."""
-        obs = Observation(contents=[Content(data="Click the button", name="goal")])
+        obs = Observation(contents=[Content.from_data("Click the button", name="goal")])
         goal = agent._extract_goal(obs)
         assert goal == "Click the button"
 
     def test_extract_goal_from_unnamed_short_content(self, agent) -> None:
         """Test goal extraction from unnamed short content."""
-        obs = Observation(contents=[Content(data="Short task description")])
+        obs = Observation(contents=[Content.from_data("Short task description")])
         goal = agent._extract_goal(obs)
         assert goal == "Short task description"
 
     def test_extract_goal_default(self, agent) -> None:
         """Test default goal when no suitable content found."""
         img = Image.new("RGB", (10, 10))
-        obs = Observation(contents=[Content(data=img, name="screenshot")])
+        obs = Observation(contents=[Content.from_data(img, name="screenshot")])
         goal = agent._extract_goal(obs)
         assert goal == "Complete the task."
 
     def test_extract_error_from_observation(self, agent) -> None:
         """Test error extraction from observation."""
-        obs = Observation(contents=[Content(data="Element not found", name="error")])
+        obs = Observation(contents=[Content.from_data("Element not found", name="error")])
         error = agent._extract_error(obs)
         assert error == "Element not found"
 
     def test_extract_error_none_when_missing(self, agent) -> None:
         """Test error extraction returns None when no error."""
-        obs = Observation(contents=[Content(data="Some content", name="html")])
+        obs = Observation(contents=[Content.from_data("Some content", name="html")])
         error = agent._extract_error(obs)
         assert error is None
 
@@ -881,9 +881,9 @@ class TestGenericAgentObservationExtraction:
         """Test extraction of observation data (text and components)."""
         obs = Observation(
             contents=[
-                Content(data="<html>content</html>", name="pruned_html"),
-                Content(data="[1] button", name="axtree_txt"),
-                Content(data="Tab 1", name="tabs"),
+                Content.from_data("<html>content</html>", name="pruned_html"),
+                Content.from_data("[1] button", name="axtree_txt"),
+                Content.from_data("Tab 1", name="tabs"),
             ]
         )
         _obs_text, components = agent._extract_obs_data(obs)
@@ -896,8 +896,8 @@ class TestGenericAgentObservationExtraction:
         img = Image.new("RGB", (100, 100))
         obs = Observation(
             contents=[
-                Content(data="text"),
-                Content(data=img, name="screenshot"),
+                Content.from_data("text"),
+                Content.from_data(img, name="screenshot"),
             ]
         )
         screenshots = agent._extract_screenshots(obs)
@@ -908,6 +908,6 @@ class TestGenericAgentObservationExtraction:
         """Test screenshot extraction when disabled."""
         agent.config.flags.obs.use_screenshot = False
         img = Image.new("RGB", (100, 100))
-        obs = Observation(contents=[Content(data=img, name="screenshot")])
+        obs = Observation(contents=[Content.from_data(img, name="screenshot")])
         screenshots = agent._extract_screenshots(obs)
         assert screenshots == []

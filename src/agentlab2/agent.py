@@ -2,7 +2,9 @@
 
 from abc import ABC, abstractmethod
 
-from agentlab2.core import ActionSchema, AgentOutput, Observation, TypedBaseModel
+from cube.core import ActionSchema, Observation, TypedBaseModel
+
+from agentlab2.core import AgentOutput
 
 
 class AgentConfig(TypedBaseModel, ABC):

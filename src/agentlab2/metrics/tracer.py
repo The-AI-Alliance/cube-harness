@@ -7,6 +7,7 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 import litellm
+from cube.core import Action
 from opentelemetry import trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -16,7 +17,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
 
-from agentlab2.core import Action
 from agentlab2.metrics.disk_exporter import DiskSpanExporter
 from agentlab2.metrics.processor import AL2_EXPERIMENT, AL2_NAME, AL2_TYPE, TYPE_EPISODE, TYPE_EXPERIMENT, TYPE_STEP
 
@@ -48,7 +48,7 @@ def tool_span(action: Action) -> Iterator[trace.Span]:
     """Create a span for tool execution with GenAI semantic attributes."""
     with _tool_tracer.start_as_current_span(f"execute_tool {action.name}", kind=SpanKind.INTERNAL) as span:
         span.set_attribute(GEN_AI_TOOL_NAME, action.name)
-        span.set_attribute(GEN_AI_TOOL_CALL_ID, action.id)
+        span.set_attribute(GEN_AI_TOOL_CALL_ID, action.id or "")
         span.set_attribute(GEN_AI_TOOL_CALL_ARGUMENTS, json.dumps(action.arguments))
         yield span
 
