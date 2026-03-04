@@ -7,6 +7,9 @@ dependencies = [
     "cube-standard",
 ]
 
+[project.entry-points."cube.benchmarks"]
+arithmetic-cube = "arithmetic_cube.benchmark:ArithmeticBenchmark"
+
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
