@@ -1,7 +1,7 @@
 from typing import Any
 
 from cube.benchmark import RuntimeContext
-from cube.containers import ContainerBackend
+from cube.container import ContainerBackend
 from cube.core import Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from arithmetic_cube.tool import ArithmeticTool, ArithmeticToolConfig
