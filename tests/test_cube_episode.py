@@ -1,0 +1,113 @@
+"""Tests for Episode with the cube path (task_config=...)."""
+
+import warnings
+
+import pytest
+from cube.core import EnvironmentOutput
+
+from agentlab2.core import AgentOutput
+from agentlab2.episode import Episode
+
+
+class TestCubeEpisode:
+    """Tests for Episode with the cube path (task_config=...)."""
+
+    def test_episode_requires_task_config_or_env_config(self, tmp_dir, mock_agent_config):
+        """Episode raises ValueError when neither task_config nor env_config is provided."""
+        with pytest.raises(ValueError, match="Provide either task_config"):
+            Episode(id=0, output_dir=tmp_dir, agent_config=mock_agent_config)
+
+    def test_episode_rejects_both_task_config_and_env_config(
+        self, tmp_dir, mock_agent_config, mock_cube_task_config, mock_env_config
+    ):
+        """Episode raises ValueError when both task_config and env_config are provided."""
+        with pytest.raises(ValueError, match="Provide only one"):
+            Episode(
+                id=0,
+                output_dir=tmp_dir,
+                agent_config=mock_agent_config,
+                task_config=mock_cube_task_config,
+                env_config=mock_env_config,
+            )
+
+    def test_episode_accepts_task_config(self, tmp_dir, mock_agent_config, mock_cube_task_config):
+        """Episode created with task_config= stores it correctly; tool_config is None."""
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            task_config=mock_cube_task_config,
+        )
+
+        assert episode.config.task_config == mock_cube_task_config
+        assert episode.config.tool_config is None
+        assert episode.config.task_id == mock_cube_task_config.task_id
+
+    def test_episode_run_no_deprecation_warning(self, tmp_dir, mock_agent_config, mock_cube_task_config):
+        """Episode.run() uses the cube path: no DeprecationWarning, trajectory is correct.
+
+        MockAgent sends final_step immediately, so the trajectory is fully deterministic:
+          step[0]  EnvironmentOutput — initial obs from reset(), done=False
+          step[1]  AgentOutput       — final_step action
+          step[2]  EnvironmentOutput — task.step() intercepts final_step, calls evaluate(),
+                                       done=True, reward=1.0, info={"success": True}
+        """
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            task_config=mock_cube_task_config,
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            trajectory = episode.run()
+
+        assert trajectory.metadata["task_id"] == mock_cube_task_config.task_id
+        assert len(trajectory.steps) == 3
+
+        initial_env_step = trajectory.steps[0].output
+        assert isinstance(initial_env_step, EnvironmentOutput)
+        assert initial_env_step.done is False
+
+        agent_step = trajectory.steps[1].output
+        assert isinstance(agent_step, AgentOutput)
+        assert agent_step.actions[0].name == "final_step"
+
+        final_env_step = trajectory.last_env_step()
+        assert final_env_step.done is True
+        assert final_env_step.reward == 1.0
+
+        assert trajectory.reward_info == {"reward": 1.0, "done": True, "success": True}
+
+    def test_episode_load_from_config_round_trip(self, tmp_dir, mock_agent_config, mock_cube_task_config):
+        """Save EpisodeConfig to disk; reload via load_episode_from_config() without benchmark arg."""
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            task_config=mock_cube_task_config,
+            exp_name="cube_test",
+        )
+        episode.storage.save_episode_config(episode.config)
+
+        config_path = tmp_dir / "episode_configs" / f"episode_0_task_{mock_cube_task_config.task_id}.json"
+        reloaded = Episode.load_episode_from_config(config_path)  # no benchmark arg
+
+        assert reloaded.config == episode.config
+
+    def test_episode_load_from_config_raises_for_legacy_without_benchmark(
+        self, tmp_dir, mock_agent_config, mock_env_config
+    ):
+        """load_episode_from_config raises ValueError for a legacy config when no benchmark is passed."""
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            env_config=mock_env_config,
+        )
+        episode.storage.save_episode_config(episode.config)
+
+        config_path = tmp_dir / "episode_configs" / f"episode_0_task_{mock_env_config.task.id}.json"
+        with pytest.raises(ValueError, match="benchmark is required"):
+            Episode.load_episode_from_config(config_path)  # no benchmark arg

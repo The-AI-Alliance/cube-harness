@@ -5,7 +5,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from cube.benchmark import Benchmark as CubeBenchmark
+from cube.benchmark import BenchmarkMetadata
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from cube.task import Task as CubeTask
+from cube.task import TaskConfig as CubeTaskConfig
+from cube.task import TaskMetadata
 from cube.tool import ToolConfig, tool_action
 from PIL import Image
 
@@ -327,3 +332,59 @@ def mock_episode(tmp_dir, mock_agent_config, mock_env_config) -> Episode:
         agent_config=mock_agent_config,
         env_config=mock_env_config,
     )
+
+
+# --- Cube mock classes ---
+
+
+class MockCubeTask(CubeTask):
+    """Minimal cube Task for testing — no external dependencies."""
+
+    def reset(self) -> tuple[Observation, dict]:
+        return Observation.from_text("Cube task goal"), {}
+
+    def evaluate(self, obs: Observation) -> tuple[float, dict]:  # noqa: ARG002
+        return 1.0, {"success": True}
+
+
+class MockCubeTaskConfig(CubeTaskConfig):
+    """Cube TaskConfig that instantiates a MockCubeTask."""
+
+    def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:  # noqa: ARG002
+        return MockCubeTask(
+            metadata=TaskMetadata(id=self.task_id),
+            tool_config=self.tool_config or MockToolConfig(),
+        )
+
+
+class MockCubeBenchmark(CubeBenchmark):
+    """Cube Benchmark with two inline tasks for testing."""
+
+    benchmark_metadata = BenchmarkMetadata(
+        name="mock-cube",
+        version="0.1.0",
+        description="Mock cube benchmark for testing",
+    )
+    task_metadata = {
+        "mock_cube_task_1": TaskMetadata(id="mock_cube_task_1"),
+        "mock_cube_task_2": TaskMetadata(id="mock_cube_task_2"),
+    }
+    task_config_class = MockCubeTaskConfig
+
+    def _setup(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def mock_cube_task_config() -> MockCubeTaskConfig:
+    """Cube task config for mock_cube_task_1."""
+    return MockCubeTaskConfig(task_id="mock_cube_task_1")
+
+
+@pytest.fixture
+def mock_cube_benchmark() -> MockCubeBenchmark:
+    """Cube benchmark with two mock tasks."""
+    return MockCubeBenchmark()
