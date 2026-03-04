@@ -1,18 +1,20 @@
 import logging
 import time
+import warnings
 from pathlib import Path
-from typing import Self
+from typing import Callable, Self
 
+from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.task import TaskConfig
+from cube.tool import ToolConfig
 from opentelemetry.trace import Span, StatusCode
 from termcolor import colored
 
 from agentlab2.agent import AgentConfig
-from agentlab2.base import TypedBaseModel
-from agentlab2.core import AgentOutput, EnvironmentOutput, StepError, Trajectory, TrajectoryStep
-from agentlab2.environment import EnvConfig
+from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
+from agentlab2.legacy import EnvConfig
 from agentlab2.metrics.tracer import get_tracer
 from agentlab2.storage import FileStorage, Storage
-from agentlab2.tool import ToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +27,13 @@ class EpisodeConfig(TypedBaseModel):
     id: int
     task_id: str
     agent_config: AgentConfig
-    tool_config: ToolConfig
     exp_name: str
     output_dir: Path
     max_steps: int
+    # New cube path:
+    task_config: TaskConfig | None = None
+    # Deprecated legacy path:
+    tool_config: ToolConfig | None = None
 
 
 class Episode:
@@ -39,32 +44,55 @@ class Episode:
         id: int,
         output_dir: Path,
         agent_config: AgentConfig,
-        env_config: EnvConfig,
+        task_config: TaskConfig | None = None,  # new cube path: pass full TaskConfig
+        env_config: EnvConfig | None = None,  # deprecated legacy path: pass EnvConfig
         exp_name: str = "default",
         max_steps: int = MAX_STEPS,
         storage: Storage | None = None,
     ) -> None:
+        if task_config is None and env_config is None:
+            raise ValueError("Provide either task_config (new) or env_config (deprecated).")
+        if task_config is not None and env_config is not None:
+            raise ValueError("Provide only one of task_config (new) or env_config (deprecated).")
+
+        if env_config is not None:
+            warnings.warn(
+                "env_config is deprecated. Pass task_config with a cube.Task instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            effective_task_id = env_config.task.id
+        else:
+            assert task_config is not None  # guaranteed by earlier check
+            effective_task_id = task_config.task_id
+
         self.config = EpisodeConfig(
             id=id,
-            task_id=env_config.task.id,
+            task_id=effective_task_id,
             agent_config=agent_config,
-            tool_config=env_config.tool_config,
             exp_name=exp_name,
             output_dir=output_dir,
             max_steps=max_steps,
+            task_config=task_config,
+            tool_config=env_config.tool_config if env_config is not None else None,
         )
-        self.env_config = env_config
+        self._env_config = env_config  # kept for the legacy run path
         self.storage = storage or FileStorage(output_dir)
         self.allow_overwrite = False
 
     @classmethod
-    def load_episode_from_config(cls, config_path: Path, benchmark) -> Self:
+    def load_episode_from_config(cls, config_path: Path, benchmark=None) -> Self:
         """
         Load episode configuration from disk and recreate the episode.
 
+        For the new cube path, `benchmark` is not needed — the full TaskConfig is
+        stored in EpisodeConfig and is self-contained (call task_config.make()).
+
+        For the legacy path, `benchmark` is required to map task_id → Task instance.
+
         Args:
             config_path: Path to the episode config JSON file
-            benchmark: Benchmark instance to recreate the task
+            benchmark: Benchmark instance (required for legacy path only)
 
         Returns:
             Episode instance ready to run
@@ -74,31 +102,51 @@ class Episode:
         storage = FileStorage(output_dir)
         episode_config = storage.load_episode_config(config_path)
 
-        # Find the task in the benchmark
-        tasks = benchmark.load_tasks()
-        task = None
-        for t in tasks:
-            if t.id == episode_config.task_id:
-                task = t
-                break
+        if episode_config.task_config is not None:
+            # New cube path — fully self-contained, no benchmark needed
+            return cls(
+                id=episode_config.id,
+                output_dir=episode_config.output_dir,
+                agent_config=episode_config.agent_config,
+                task_config=episode_config.task_config,
+                exp_name=episode_config.exp_name,
+                max_steps=episode_config.max_steps,
+                storage=storage,
+            )
+        else:
+            # Legacy path — needs benchmark to reconstruct Task
+            if benchmark is None:
+                raise ValueError(
+                    "benchmark is required when loading a legacy EpisodeConfig "
+                    "(no task_config stored). Pass the benchmark instance."
+                )
 
-        if task is None:
-            raise ValueError(f"Task {episode_config.task_id} not found in benchmark")
+            # Find the task in the benchmark
+            tasks = benchmark.load_tasks()
+            task = None
+            for t in tasks:
+                if t.id == episode_config.task_id:
+                    task = t
+                    break
 
-        # Recreate EnvConfig
-        env_config = EnvConfig(task=task, tool_config=episode_config.tool_config)
+            if task is None:
+                raise ValueError(f"Task {episode_config.task_id} not found in benchmark")
 
-        # Create and return Episode with config stored internally
-        episode = cls(
-            id=episode_config.id,
-            output_dir=episode_config.output_dir,
-            agent_config=episode_config.agent_config,
-            env_config=env_config,
-            exp_name=episode_config.exp_name,
-            max_steps=episode_config.max_steps,
-            storage=storage,  # Allow overwriting existing trajectory since this is a resumed episode
-        )
-        return episode
+            # Recreate EnvConfig
+            assert episode_config.tool_config is not None, "Legacy EpisodeConfig must have tool_config"
+            env_config = EnvConfig(task=task, tool_config=episode_config.tool_config)
+
+            # Create and return Episode with config stored internally
+            episode = cls(
+                id=episode_config.id,
+                output_dir=episode_config.output_dir,
+                agent_config=episode_config.agent_config,
+                env_config=env_config,
+                exp_name=episode_config.exp_name,
+                max_steps=episode_config.max_steps,
+                storage=storage,  # Allow overwriting existing trajectory since this is a resumed episode
+            )
+            return episode
 
     def _record_step_attributes(
         self,
@@ -114,23 +162,57 @@ class Episode:
     def run(self) -> Trajectory:
         """Main loop to run the agent on a single specific task.
 
+        Dispatches to the cube path (task_config) or the deprecated legacy path (env_config),
+        then delegates to the shared _run_loop.
+
         Returns:
             Trajectory containing the full history of the run.
-
         """
+        if self.config.task_config is not None:
+            task = self.config.task_config.make()
+            action_set = task.action_set
+            step_fn = task.step
+            close_fn = task.close
+
+            def setup_fn() -> EnvironmentOutput:
+                obs, info = task.reset()
+                return EnvironmentOutput(obs=obs, info=info)
+        else:
+            warnings.warn(
+                "Running via env_config is deprecated. Use task_config with a cube.Task.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            assert self._env_config is not None  # guaranteed: task_config is None means env_config was provided
+            env = self._env_config.make()
+            action_set = env.action_set
+            step_fn = env.step
+            close_fn = env.close
+            setup_fn = env.setup
+
+        agent = self.config.agent_config.make(action_set)
+        return self._run_loop(setup_fn, step_fn, close_fn, agent)
+
+    def _run_loop(
+        self,
+        setup_fn: Callable[[], EnvironmentOutput],
+        step_fn: Callable,
+        close_fn: Callable,
+        agent,
+    ) -> Trajectory:
+        """Shared run loop used by both the cube path and the legacy path."""
+        task_id = self.config.task_id
         tracer = get_tracer(self.config.exp_name)
-        env = self.env_config.make()
-        agent = self.config.agent_config.make(env.action_set)
         try:
-            with tracer.episode(self.config.task_id, experiment=self.config.exp_name) as episode_span:
+            with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
                 start_time = time.time()
-                env_output = env.setup()
+                env_output = setup_fn()
                 agent_name = type(self.config.agent_config).__name__
                 trajectory = Trajectory(
-                    id=f"{self.config.task_id}_ep{self.config.id}",
+                    id=f"{task_id}_ep{self.config.id}",
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
                     metadata={
-                        "task_id": self.config.task_id,
+                        "task_id": task_id,
                         "agent_name": agent_name,
                         **env_output.info,
                     },
@@ -163,10 +245,9 @@ class Episode:
 
                         env_ts = time.time()
                         try:
-                            env_output = env.step(agent_output.actions)
+                            env_output = step_fn(agent_output.actions)
                         except Exception as e:
-                            logger.exception(f"Error in env.step() at turn {turns}: {e}")
-                            # Use current env_output.obs since env.step() failed (env_output still has previous value)
+                            logger.exception(f"Error in step() at turn {turns}: {e}")
                             env_output = EnvironmentOutput(obs=env_output.obs, error=StepError.from_exception(e))
                             env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                             self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
@@ -190,7 +271,7 @@ class Episode:
             logger.exception(f"Error during agent run: {e}")
             raise e
         finally:
-            env.close()
+            close_fn()
             tracer.shutdown()
         return trajectory
 

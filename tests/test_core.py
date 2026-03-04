@@ -3,16 +3,11 @@
 import json
 
 import pytest
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation, StepError
 from PIL import Image
 
 from agentlab2.core import (
-    Action,
-    ActionSchema,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
-    StepError,
     TrajectoryStep,
 )
 
@@ -99,7 +94,7 @@ class TestContent:
 
     def test_content_with_tool_call_id(self):
         """Test Content with tool_call_id."""
-        content = Content(data="Result", tool_call_id="tool_1")
+        content = Content.from_data("Result", tool_call_id="tool_1")
         assert content.tool_call_id == "tool_1"
 
     def test_image_content_creation(self, sample_image_content):
@@ -123,28 +118,28 @@ class TestContent:
 
     def test_text_content_to_message(self, sample_content):
         """Test text content conversion to LLM message."""
-        msg = sample_content.to_message()
+        msg = sample_content.to_llm_message()
         assert msg["role"] == "user"
-        assert "##greeting" in msg["content"]
+        assert "## greeting" in msg["content"]
         assert "Hello, world!" in msg["content"]
 
     def test_content_without_name_to_message(self):
         """Test content without name conversion to message."""
-        content = Content(data="Simple text")
-        msg = content.to_message()
+        content = Content.from_data("Simple text")
+        msg = content.to_llm_message()
         assert msg["role"] == "user"
         assert msg["content"] == "Simple text"
 
     def test_tool_result_content_to_message(self):
         """Test tool result content conversion to message."""
-        content = Content(data="Tool output", tool_call_id="call_123")
-        msg = content.to_message()
+        content = Content.from_data("Tool output", tool_call_id="call_123")
+        msg = content.to_llm_message()
         assert msg["role"] == "tool"
         assert msg["tool_call_id"] == "call_123"
 
     def test_image_content_to_message(self, sample_image_content):
         """Test image content conversion to LLM message."""
-        msg = sample_image_content.to_message()
+        msg = sample_image_content.to_llm_message()
         assert msg["role"] == "user"
         assert isinstance(msg["content"], list)
         # First item should be text with name
@@ -154,16 +149,16 @@ class TestContent:
 
     def test_dict_content_to_message(self):
         """Test dict content conversion to message."""
-        content = Content(data={"key": "value"}, name="json_data")
-        msg = content.to_message()
+        content = Content.from_data({"key": "value"}, name="json_data")
+        msg = content.to_llm_message()
         assert msg["role"] == "user"
-        assert "##json_data" in msg["content"]
+        assert "## json_data" in msg["content"]
         assert '"key"' in msg["content"]
 
     def test_list_content_to_message(self):
         """Test list content conversion to message."""
-        content = Content(data=[1, 2, 3])
-        msg = content.to_message()
+        content = Content.from_data([1, 2, 3])
+        msg = content.to_llm_message()
         assert "[1, 2, 3]" in msg["content"]
 
 
@@ -189,7 +184,7 @@ class TestObservation:
     def test_observation_to_llm_messages(self):
         """Test conversion to LLM messages."""
         obs = Observation(
-            contents=[Content(data="First message"), Content(data="Second message", tool_call_id="tool_1")]
+            contents=[Content.from_data("First message"), Content.from_data("Second message", tool_call_id="tool_1")]
         )
         messages = obs.to_llm_messages()
         assert len(messages) == 2
@@ -199,7 +194,7 @@ class TestObservation:
     def test_observation_multiple_contents(self):
         """Test Observation with multiple contents."""
         img = Image.new("RGB", (50, 50), color="blue")
-        obs = Observation(contents=[Content(data="Instruction text"), Content(data=img, name="image")])
+        obs = Observation(contents=[Content.from_data("Instruction text"), Content.from_data(img, name="image")])
         messages = obs.to_llm_messages()
         assert len(messages) == 2
 

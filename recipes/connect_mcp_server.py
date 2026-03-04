@@ -17,12 +17,12 @@ import logging
 import tempfile
 from pathlib import Path
 
+from cube.core import Observation
+from cube.task import STOP_ACTION
 from dotenv import load_dotenv
 from termcolor import colored
 
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.core import Observation
-from agentlab2.environment import STOP_ACTION
 from agentlab2.llm import LLMConfig
 from agentlab2.tools.mcp import MCPServerConfig, MCPToolConfig
 

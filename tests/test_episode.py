@@ -3,8 +3,9 @@
 import json
 
 import pytest
+from cube.core import Action, EnvironmentOutput, Observation
 
-from agentlab2.core import Action, AgentOutput, EnvironmentOutput, Observation, Trajectory, TrajectoryStep
+from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.episode import MAX_STEPS, Episode
 from tests.conftest import MockAgent
 
@@ -267,14 +268,16 @@ class TestEpisode:
     def test_episode_captures_env_error(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test Episode captures environment errors correctly in trajectory."""
 
-        from agentlab2.core import ActionSchema, Task
+        from cube.core import ActionSchema
+
+        from agentlab2.legacy import Task
 
         class ErrorTask(Task):
             id = "error_task"
             validate_per_step = True
 
             def setup(self, tool):
-                from agentlab2.core import Observation
+                from cube.core import Observation
 
                 return Observation.from_text("Start"), {}
 
@@ -290,7 +293,7 @@ class TestEpisode:
             def teardown(self) -> None:
                 pass
 
-        from agentlab2.environment import EnvConfig
+        from agentlab2.legacy import EnvConfig
 
         error_task = ErrorTask()
         env_config = EnvConfig(task=error_task, tool_config=mock_tool_config)

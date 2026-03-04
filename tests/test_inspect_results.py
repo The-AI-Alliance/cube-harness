@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from cube.core import EnvironmentOutput, Observation, StepError
 
 from agentlab2.analyze.inspect_results import (
     _extract_error_from_trajectory,
@@ -16,9 +17,6 @@ from agentlab2.analyze.inspect_results import (
 )
 from agentlab2.core import (
     AgentOutput,
-    EnvironmentOutput,
-    Observation,
-    StepError,
     Trajectory,
     TrajectoryStep,
 )

@@ -11,8 +11,8 @@ from pathlib import Path
 from random import shuffle
 from typing import TextIO
 
-from agentlab2.benchmark import Benchmark
 from agentlab2.benchmarks.miniwob.task import MiniWobTask
+from agentlab2.legacy import Benchmark
 
 logger = logging.getLogger(__name__)
 

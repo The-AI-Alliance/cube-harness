@@ -2,28 +2,31 @@
 
 import tempfile
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 import pytest
+from cube.benchmark import Benchmark as CubeBenchmark
+from cube.benchmark import (  # noqa: F401 — needed for Pydantic to resolve Task's TYPE_CHECKING import
+    BenchmarkMetadata,
+    RuntimeContext,
+)
+from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
+from cube.task import Task as CubeTask
+from cube.task import TaskConfig as CubeTaskConfig
+from cube.task import TaskMetadata
+from cube.tool import ToolConfig, tool_action
 from PIL import Image
 
 from agentlab2.agent import Agent, AgentConfig
-from agentlab2.benchmark import Benchmark
 from agentlab2.core import (
-    Action,
-    ActionSchema,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
-    Task,
     Trajectory,
     TrajectoryStep,
 )
-from agentlab2.environment import EnvConfig, Environment
 from agentlab2.episode import Episode
+from agentlab2.legacy import Benchmark, EnvConfig, Environment, Task
 from agentlab2.llm import LLMConfig, Prompt
-from agentlab2.tool import Tool, ToolConfig
+from agentlab2.tool import ToolWithTelemetry
 
 # --- Core fixtures ---
 
@@ -58,20 +61,20 @@ def sample_action() -> Action:
 @pytest.fixture
 def sample_content() -> Content:
     """Sample text content."""
-    return Content(data="Hello, world!", name="greeting")
+    return Content.from_data("Hello, world!", name="greeting")
 
 
 @pytest.fixture
 def sample_image_content() -> Content:
     """Sample image content."""
     img = Image.new("RGB", (100, 100), color="red")
-    return Content(data=img, name="screenshot")
+    return Content.from_data(img, name="screenshot")
 
 
 @pytest.fixture
 def sample_observation() -> Observation:
     """Sample observation with text content."""
-    return Observation(contents=[Content(data="Task: Click the button")])
+    return Observation(contents=[Content.from_data("Task: Click the button")])
 
 
 @pytest.fixture
@@ -122,28 +125,14 @@ def sample_prompt() -> Prompt:
 # --- Tool fixtures ---
 
 
-@runtime_checkable
-class MockActionSpace(Protocol):
-    """Mock action space protocol for testing."""
-
-    def click(self, element_id: str) -> str:
-        """Click on an element."""
-        ...
-
-    def type_text(self, element_id: str, text: str) -> str:
-        """Type text into an element."""
-        ...
-
-
-class MockTool(Tool):
+class MockTool(ToolWithTelemetry):
     """Mock tool implementation for testing."""
-
-    action_space = MockActionSpace
 
     def __init__(self):
         self.click_count = 0
         self.typed_texts = []
 
+    @tool_action
     def click(self, element_id: str) -> str:
         """Click on an element.
 
@@ -156,6 +145,7 @@ class MockTool(Tool):
         self.click_count += 1
         return f"Clicked on {element_id}"
 
+    @tool_action
     def type_text(self, element_id: str, text: str) -> str:
         """Type text into an element.
 
@@ -183,7 +173,7 @@ def mock_tool() -> MockTool:
 class MockToolConfig(ToolConfig):
     """Mock tool configuration for testing."""
 
-    def make(self) -> MockTool:
+    def make(self, container=None) -> MockTool:
         return MockTool()
 
 
@@ -214,7 +204,7 @@ class MockTask(Task):
     def teardown(self) -> None:
         self.teardown_called = True
 
-    def validate_task(self, *args) -> tuple[float, dict]:
+    def validate_task(self, obs: Observation) -> tuple[float, dict]:
         self.validate_called = True
         return 1.0, {"success": True}
 
@@ -264,7 +254,7 @@ class MockAgentConfig(AgentConfig):
 
     name: str = "mock_agent"
 
-    def make(self, *args) -> "MockAgent":
+    def make(self, action_set=None, **kwargs) -> "MockAgent":
         return MockAgent(config=self)
 
 
@@ -310,8 +300,6 @@ class MockBenchmark(Benchmark):
 
     setup_called: bool = False
     close_called: bool = False
-    install_called: bool = False
-    uninstall_called: bool = False
 
     def __init__(self, tasks_list: list[Any], tool_config: ToolConfig, metadata: dict | None = None):
         super().__init__(tool_config=tool_config, metadata=metadata or {})
@@ -322,12 +310,6 @@ class MockBenchmark(Benchmark):
 
     def close(self):
         self.close_called = True
-
-    def install(self):
-        self.install_called = True
-
-    def uninstall(self):
-        self.uninstall_called = True
 
     def load_tasks(self) -> list[Task]:
         return self._tasks
@@ -351,3 +333,59 @@ def mock_episode(tmp_dir, mock_agent_config, mock_env_config) -> Episode:
         agent_config=mock_agent_config,
         env_config=mock_env_config,
     )
+
+
+# --- Cube mock classes ---
+
+
+class MockCubeTask(CubeTask):
+    """Minimal cube Task for testing — no external dependencies."""
+
+    def reset(self) -> tuple[Observation, dict]:
+        return Observation.from_text("Cube task goal"), {}
+
+    def evaluate(self, obs: Observation) -> tuple[float, dict]:  # noqa: ARG002
+        return 1.0, {"success": True}
+
+
+class MockCubeTaskConfig(CubeTaskConfig):
+    """Cube TaskConfig that instantiates a MockCubeTask."""
+
+    def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:  # noqa: ARG002
+        return MockCubeTask(
+            metadata=TaskMetadata(id=self.task_id),
+            tool_config=self.tool_config or MockToolConfig(),
+        )
+
+
+class MockCubeBenchmark(CubeBenchmark):
+    """Cube Benchmark with two inline tasks for testing."""
+
+    benchmark_metadata = BenchmarkMetadata(
+        name="mock-cube",
+        version="0.1.0",
+        description="Mock cube benchmark for testing",
+    )
+    task_metadata = {
+        "mock_cube_task_1": TaskMetadata(id="mock_cube_task_1"),
+        "mock_cube_task_2": TaskMetadata(id="mock_cube_task_2"),
+    }
+    task_config_class = MockCubeTaskConfig
+
+    def _setup(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def mock_cube_task_config() -> MockCubeTaskConfig:
+    """Cube task config for mock_cube_task_1."""
+    return MockCubeTaskConfig(task_id="mock_cube_task_1")
+
+
+@pytest.fixture
+def mock_cube_benchmark() -> MockCubeBenchmark:
+    """Cube benchmark with two mock tasks."""
+    return MockCubeBenchmark()

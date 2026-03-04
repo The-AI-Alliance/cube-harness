@@ -19,13 +19,14 @@ from browsergym.core.observation import (
     extract_screenshot,
 )
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
+from cube.core import Action, Content, Observation, StepError
+from cube.tool import ToolConfig
 from PIL import Image
 from playwright.sync_api import Browser, BrowserContext, Error, Frame, Page
 from termcolor import colored
 
 from agentlab2.action_spaces.browser_action_space import BidBrowserActionSpace
-from agentlab2.core import Action, Content, Observation
-from agentlab2.tool import Tool, ToolConfig
+from agentlab2.tool import ToolWithTelemetry
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +66,12 @@ class BrowsergymConfig(ToolConfig):
     # Action behavior
     max_wait: int = 60
 
-    def make(self) -> "BrowsergymTool":
+    def make(self, container=None) -> "BrowsergymTool":
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(Tool, BidBrowserActionSpace):
+class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
     """Playwright-based tool that reuses BrowserGym observation utilities."""
-
-    action_space = BidBrowserActionSpace
 
     def __init__(self, config: BrowsergymConfig) -> None:
         super().__init__()
@@ -174,10 +173,13 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         self._last_reward = 0.0
         self._last_terminated = False
 
-    def execute_action(self, action: Action) -> Observation:
-        action_obs = super().execute_action(action)
-        action_obs += self.page_obs()
-        return action_obs
+    def _execute_action(self, action: Action) -> Observation | StepError:
+        """Execute an action and return the observation, or a StepError if the action failed."""
+        result = super()._execute_action(action)
+        if isinstance(result, StepError):
+            return result
+        result += self.page_obs()
+        return result
 
     def _execute_bgym_step(self, action_str: str) -> str:
         """Execute a BrowserGym action string and return result message."""
@@ -377,6 +379,11 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         action_str = "go_forward()"
         return self._execute_bgym_step(action_str)
 
+    def goto(self, url: str) -> str:
+        """Navigate to the specified URL."""
+        action_str = f'goto(url="{url}")'
+        return self._execute_bgym_step(action_str)
+
     def noop(self) -> str:
         """No operation action."""
         action_str = "noop()"
@@ -429,7 +436,7 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
             )
             if self.config.prune_html:
                 html_str = prune_html(html_str)
-            obs.contents.append(Content(data=html_str, name="pruned_html"))
+            obs.contents.append(Content.from_data(html_str, name="pruned_html"))
 
         # focused_element is placed before axtree so that axtree and screenshot
         # remain the last two items — preserving visibility in agents that use
@@ -438,25 +445,27 @@ class BrowsergymTool(Tool, BidBrowserActionSpace):
         if "focused_element_bid" in bgym_obs:
             focused_bid = bgym_obs["focused_element_bid"]
             if focused_bid:
-                obs.contents.append(Content(data=focused_bid, name="focused_element"))
+                obs.contents.append(Content.from_data(focused_bid, name="focused_element"))
 
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
-                obs.contents.append(Content(data=flatten_axtree_to_str(axtree_obj), name="axtree_txt"))
+                axtree_str = flatten_axtree_to_str(axtree_obj)
+                obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
         if self.config.use_screenshot and "screenshot" in bgym_obs:
             screenshot = bgym_obs["screenshot"]
             if isinstance(screenshot, Image.Image):
-                obs.contents.append(Content(data=screenshot, name="screenshot"))
+                obs.contents.append(Content.from_data(screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
-                obs.contents.append(Content(data=Image.fromarray(screenshot), name="screenshot"))
+                screenshot_img = Image.fromarray(screenshot)
+                obs.contents.append(Content.from_data(screenshot_img, name="screenshot"))
 
         # Add last action error if there was one (raw error message for agent to format)
         if "last_action_error" in bgym_obs:
             error = bgym_obs["last_action_error"]
             if error:
-                obs.contents.append(Content(data=str(error), name="last_action_error"))
+                obs.contents.append(Content.from_data(str(error), name="last_action_error"))
 
         return obs
 

@@ -4,8 +4,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from cube.core import EnvironmentOutput
 
-from agentlab2.core import EnvironmentOutput, Trajectory
+from agentlab2.core import Trajectory
 
 TASK_KEY = "task_name"
 

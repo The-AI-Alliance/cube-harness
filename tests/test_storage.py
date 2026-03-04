@@ -4,14 +4,11 @@ import json
 from pathlib import Path
 
 import pytest
+from cube.core import Action, Content, EnvironmentOutput, Observation
 from PIL import Image
 
 from agentlab2.core import (
-    Action,
     AgentOutput,
-    Content,
-    EnvironmentOutput,
-    Observation,
     Trajectory,
     TrajectoryStep,
 )
@@ -414,7 +411,7 @@ class TestFileStorageWithImages:
 
         # Create image content
         img = Image.new("RGB", (100, 100), color="blue")
-        obs = Observation(contents=[Content(data=img, name="screenshot")])
+        obs = Observation(contents=[Content.from_data(img, name="screenshot")])
         env_output = EnvironmentOutput(obs=obs, reward=0.0)
 
         traj = Trajectory(id="test_traj")

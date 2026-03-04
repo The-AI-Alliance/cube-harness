@@ -1,7 +1,9 @@
 from typing import TypeVar
 
-from agentlab2.core import Action, ActionSchema, Observation
-from agentlab2.tool import AbstractTool, Tool, ToolConfig
+from cube.core import Action, ActionSchema, Observation
+from cube.tool import AbstractTool, ToolConfig
+
+from agentlab2.tool import ToolWithTelemetry
 
 
 class ToolboxConfig(ToolConfig):
@@ -9,15 +11,15 @@ class ToolboxConfig(ToolConfig):
 
     tool_configs: list[ToolConfig] = []
 
-    def make(self) -> "Toolbox":
-        tools = [tc.make() for tc in self.tool_configs]
+    def make(self, container=None) -> "Toolbox":
+        tools = [tc.make(container) for tc in self.tool_configs]
         return Toolbox(tools=tools)
 
 
 T = TypeVar("T", bound=AbstractTool)
 
 
-class Toolbox(Tool):
+class Toolbox(ToolWithTelemetry):
     """Composite tool that uses multiple tools for interaction."""
 
     def __init__(self, tools: list[AbstractTool]):
@@ -36,7 +38,13 @@ class Toolbox(Tool):
             tool.reset()
 
     def execute_action(self, action: Action) -> Observation:
-        """Find the appropriate tool for the action and execute it."""
+        """Find the appropriate tool for the action and execute it.
+
+        Intentionally overrides ToolWithTelemetry.execute_action without calling super(),
+        so the Toolbox itself adds no telemetry span. Each sub-tool is responsible for its
+        own telemetry — adding a Toolbox-level span would double-report every action for
+        sub-tools that are themselves ToolWithTelemetry instances.
+        """
         if action.name not in self._action_name_to_tool:
             raise ValueError(f"Action '{action.name}' is not supported by any tool in the toolbox.")
         tool = self._action_name_to_tool[action.name]

@@ -1,14 +1,17 @@
 import json
 import logging
+import warnings
 from pathlib import Path
 from typing import Self
 
+from cube.benchmark import Benchmark as CubeBenchmark
+from cube.core import EnvironmentOutput, TypedBaseModel
 from pydantic import Field
 
 from agentlab2.agent import AgentConfig
-from agentlab2.benchmark import Benchmark
-from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TypedBaseModel
+from agentlab2.core import AgentOutput, Trajectory
 from agentlab2.episode import MAX_STEPS, Episode
+from agentlab2.legacy import Benchmark as AL2Benchmark
 from agentlab2.storage import FileStorage
 
 logger = logging.getLogger(__name__)
@@ -26,7 +29,7 @@ class Experiment(TypedBaseModel):
     name: str
     output_dir: Path
     agent_config: AgentConfig
-    benchmark: Benchmark
+    benchmark: AL2Benchmark | CubeBenchmark
     resume: bool = False
     retry_failed: bool = False
     max_steps: int = MAX_STEPS
@@ -73,17 +76,40 @@ class Experiment(TypedBaseModel):
 
     def _create_all_episodes(self) -> list[Episode]:
         """Create all episodes from scratch and save their configs to disk."""
-        episodes = [
-            Episode(
-                id=i,
-                output_dir=self.output_dir,
-                agent_config=self.agent_config,
-                env_config=env_config,
-                exp_name=self.name,
-                max_steps=self.max_steps,
+        if isinstance(self.benchmark, CubeBenchmark):
+            task_configs = list(self.benchmark.get_task_configs())
+            episodes = [
+                Episode(
+                    id=i,
+                    output_dir=self.output_dir,
+                    agent_config=self.agent_config,
+                    task_config=tc,
+                    exp_name=self.name,
+                    max_steps=self.max_steps,
+                )
+                for i, tc in enumerate(task_configs)
+            ]
+        elif isinstance(self.benchmark, AL2Benchmark):
+            warnings.warn(
+                f"{type(self.benchmark).__name__} does not implement get_task_configs(). "
+                "Falling back to deprecated env_configs(). "
+                "Implement get_task_configs() to use the cube.Task path.",
+                DeprecationWarning,
+                stacklevel=2,
             )
-            for i, env_config in enumerate(self.benchmark.env_configs())
-        ]
+            episodes = [
+                Episode(
+                    id=i,
+                    output_dir=self.output_dir,
+                    agent_config=self.agent_config,
+                    env_config=ec,
+                    exp_name=self.name,
+                    max_steps=self.max_steps,
+                )
+                for i, ec in enumerate(self.benchmark.env_configs())
+            ]
+        else:
+            raise ValueError(f"Unsupported benchmark type: {type(self.benchmark)}")
         for episode in episodes:
             episode.storage.save_episode_config(episode.config)
         logger.info(f"Prepared {len(episodes)} episodes for experiment '{self.name}'")

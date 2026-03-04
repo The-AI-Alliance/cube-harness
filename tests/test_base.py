@@ -1,9 +1,9 @@
 import json
 
 from agentlab2.agent import AgentConfig
-from agentlab2.benchmark import Benchmark
 from agentlab2.core import TypedBaseModel
 from agentlab2.experiment import Experiment
+from agentlab2.legacy import Benchmark
 from tests.conftest import MockAgentConfig, MockToolConfig, SerializableBenchmark
 
 

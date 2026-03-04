@@ -6,8 +6,8 @@ from typing import Literal
 
 from browsergym.workarena import get_all_tasks_agents
 
-from agentlab2.benchmark import Benchmark
 from agentlab2.benchmarks.workarena.task import WorkArenaTask
+from agentlab2.legacy import Benchmark
 
 logger = logging.getLogger(__name__)
 
