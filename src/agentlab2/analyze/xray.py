@@ -16,13 +16,13 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from os.path import expanduser
 from pathlib import Path
 from typing import Any, Callable
 
 import gradio as gr
 from PIL import Image
 
+from agentlab2 import EXP_DIR
 from agentlab2.analyze import xray_utils
 from agentlab2.core import AgentOutput, EnvironmentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
@@ -1470,12 +1470,11 @@ def _rows_to_table(rows: list[dict[str, Any]], active_key: str | None = None, ke
 
 def main() -> None:
     """CLI entry point for al2-xray."""
-    default_results_dir = expanduser("~/agentlab_results/al2")
     parser = argparse.ArgumentParser(description="AgentLab2 XRay Experiment Viewer")
     parser.add_argument(
         "--results-dir",
         type=str,
-        default=default_results_dir,
+        default=str(EXP_DIR),
         help="Path to results directory containing experiments",
     )
     parser.add_argument("--debug", action="store_true", help="Enable Gradio debug mode")
