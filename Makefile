@@ -25,13 +25,11 @@ xray:
 	uv run al2-xray --debug
 
 install:
-	@test -d ../cube-standard || git clone https://github.com/The-AI-Alliance/cube-standard ../cube-standard
 	uv sync --all-extras
 	uv pip install -e .
 	uv run playwright install chromium --with-deps
 
 update:
-	git -C ../cube-standard pull origin main
 	uv sync --all-extras --update
 	uv pip install -e . --upgrade
 	uv run playwright install chromium --with-deps
