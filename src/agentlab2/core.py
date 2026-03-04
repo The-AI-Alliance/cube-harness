@@ -1,8 +1,6 @@
-import warnings
-from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Callable
 
-from cube.core import Action, ActionSchema, EnvironmentOutput, Observation, StepError, TypedBaseModel
+from cube.core import Action, EnvironmentOutput, StepError, TypedBaseModel
 from pydantic import Field
 
 from agentlab2.llm import LLMCall
@@ -63,66 +61,3 @@ class ActionSpace(frozenset[Callable]):
     @property
     def names(self) -> frozenset[str]:
         return frozenset(action.__name__ for action in self)
-
-
-class Task(ABC):
-    """DEPRECATED. Inherit from cube.task.Task for new benchmarks.
-
-    This class is kept for backward compatibility with MiniWob and WorkArena.
-    New benchmarks should use cube.task.Task directly.
-    """
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        warnings.warn(
-            f"{cls.__name__} inherits from agentlab2.core.Task which is deprecated. "
-            "New benchmarks should inherit from cube.task.Task instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-    id: str
-    validate_per_step: bool = False
-    _tool: Any  # access to the environment tool, initialized in setup()
-
-    @abstractmethod
-    def setup(self, tool: Any) -> tuple[Observation, dict]:
-        """
-        Set up the task in the given environment.
-
-        Returns:
-            Tuple of (Observation, dict with additional task info)
-        """
-        pass
-
-    def teardown(self) -> None:
-        """Optional clean up after task completion."""
-        pass
-
-    @abstractmethod
-    def validate_task(self, obs: Observation) -> tuple[float, dict]:
-        """Validate the current state of the task and return (reward, info)."""
-        pass
-
-    @abstractmethod
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Allows the task to whitelist subset of all the actions provided by the environment."""
-        pass
-
-    def cheat(self):
-        """
-        Solve the task using a pre-defined solution (optional).
-        """
-        raise NotImplementedError
-
-    def obs_postprocess(self, obs: Observation) -> Observation:
-        """Optional post-processing of observation before returning it to the agent."""
-        return obs
-
-    def finished(self) -> bool:
-        """Check if the task is finished."""
-        return False
-
-    def accept_agent_stop(self) -> bool:
-        """Optional, whether the task accepts the agent stopping the task right now. Default is True."""
-        return True

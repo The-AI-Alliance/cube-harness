@@ -9,9 +9,9 @@ from cube.core import EnvironmentOutput, TypedBaseModel
 from pydantic import Field
 
 from agentlab2.agent import AgentConfig
-from agentlab2.benchmark import Benchmark as AL2Benchmark
 from agentlab2.core import AgentOutput, Trajectory
 from agentlab2.episode import MAX_STEPS, Episode
+from agentlab2.legacy import Benchmark as AL2Benchmark
 from agentlab2.storage import FileStorage
 
 logger = logging.getLogger(__name__)
