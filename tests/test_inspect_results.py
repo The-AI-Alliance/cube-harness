@@ -1,8 +1,8 @@
 """Tests for agentlab2.analyze.inspect_results module."""
 
-from PIL.ImageShow import im
 import numpy as np
 import pytest
+from cube.core import EnvironmentOutput, Observation, StepError
 
 from agentlab2.analyze.inspect_results import (
     _extract_error_from_trajectory,
@@ -20,7 +20,6 @@ from agentlab2.core import (
     Trajectory,
     TrajectoryStep,
 )
-from cube.core import EnvironmentOutput, Observation, StepError
 
 
 def _make_trajectory(
