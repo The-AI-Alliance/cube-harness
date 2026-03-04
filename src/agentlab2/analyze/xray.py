@@ -16,7 +16,6 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from os.path import expanduser
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,7 +23,8 @@ import gradio as gr
 from cube.core import EnvironmentOutput
 from PIL import Image
 
-from agentlab2.analyze import xray_utils
+from agentlab2 import EXP_DIR
+from agentlab2.analyze import inspect_results, xray_utils
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.storage import FileStorage
 
@@ -1105,6 +1105,42 @@ def run_xray(
         return env_json, llm_calls_json, llm_tools_json
 
     # ------------------------------------------------------------------
+    # Experiment-level analysis tabs (lazy, rendered on tab select)
+    # ------------------------------------------------------------------
+
+    def _render_constants_variables() -> tuple[list[list], list[list]]:
+        if not state.trajectories:
+            return [], []
+        df = inspect_results.trajectories_to_df(state.trajectories)
+        if df is None:
+            return [], []
+        const_df, var_df = inspect_results.format_constants_and_variables(df)
+        const_rows = const_df.values.tolist() if not const_df.empty else []
+        var_rows = var_df.values.tolist() if not var_df.empty else []
+        return const_rows, var_rows
+
+    def _render_global_report() -> list[list]:
+        if not state.trajectories:
+            return []
+        df = inspect_results.trajectories_to_df(state.trajectories)
+        if df is None:
+            return []
+        inspect_results.set_index_from_variables(df)
+        report = inspect_results.global_report(df)
+        report = report.reset_index()
+        for col in report.columns:
+            report[col] = report[col].astype(str)
+        return report.values.tolist()
+
+    def _render_error_report() -> str:
+        if not state.trajectories:
+            return "No trajectories loaded."
+        df = inspect_results.trajectories_to_df(state.trajectories)
+        if df is None:
+            return "No data."
+        return inspect_results.error_report(df)
+
+    # ------------------------------------------------------------------
     # Tab activation helpers — no-arg named functions avoid lambda warnings.
     # Gradio tab.select fires with no extra inputs, so these take no args.
     # ------------------------------------------------------------------
@@ -1219,6 +1255,32 @@ def run_xray(
                 agent_config_code = gr.Code(language="json", show_label=False)
             with gr.Tab("Exp Config"):
                 exp_config_code = gr.Code(language="json", show_label=False)
+            with gr.Tab("Constants & Variables") as cv_tab:
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("**Constants** (same across all trajectories)")
+                        cv_const_table = gr.DataFrame(
+                            headers=["parameter", "value"],
+                            max_height=400,
+                            show_label=False,
+                            interactive=False,
+                        )
+                    with gr.Column():
+                        gr.Markdown("**Variables** (differ across trajectories)")
+                        cv_var_table = gr.DataFrame(
+                            headers=["parameter", "n_unique", "sample_values"],
+                            max_height=400,
+                            show_label=False,
+                            interactive=False,
+                        )
+            with gr.Tab("Global Report") as report_tab:
+                report_table = gr.DataFrame(
+                    max_height=400,
+                    show_label=False,
+                    interactive=False,
+                )
+            with gr.Tab("Error Report") as err_report_tab:
+                err_report_md = gr.Markdown()
 
         # Timer: ticks every 1s to bulk-load stubs and then live-poll for new/changed trajectories.
         # Starts inactive; activated on experiment select; deactivates when experiment is complete.
@@ -1443,6 +1505,10 @@ def run_xray(
         debug_tab.select(fn=_activate_debug, outputs=active_tab)
         debug_tab.select(fn=_render_debug, outputs=[raw_json, llm_calls_code, llm_tools_code])
 
+        cv_tab.select(fn=_render_constants_variables, outputs=[cv_const_table, cv_var_table])
+        report_tab.select(fn=_render_global_report, outputs=report_table)
+        err_report_tab.select(fn=_render_error_report, outputs=err_report_md)
+
         # Populate experiment table on page load
         demo.load(fn=_exp_table_value, outputs=exp_table)
 
@@ -1471,12 +1537,11 @@ def _rows_to_table(rows: list[dict[str, Any]], active_key: str | None = None, ke
 
 def main() -> None:
     """CLI entry point for al2-xray."""
-    default_results_dir = expanduser("~/agentlab_results/al2")
     parser = argparse.ArgumentParser(description="AgentLab2 XRay Experiment Viewer")
     parser.add_argument(
         "--results-dir",
         type=str,
-        default=default_results_dir,
+        default=str(EXP_DIR),
         help="Path to results directory containing experiments",
     )
     parser.add_argument("--debug", action="store_true", help="Enable Gradio debug mode")
