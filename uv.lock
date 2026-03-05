@@ -7,6 +7,13 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[manifest]
+constraints = [
+    { name = "cryptography", specifier = ">=46.0.5" },
+    { name = "pyasn1", specifier = ">=0.6.2" },
+]
+overrides = [{ name = "protobuf", specifier = ">=6.33.5" }]
+
 [[package]]
 name = "agentlab2"
 version = "0.1.0"
