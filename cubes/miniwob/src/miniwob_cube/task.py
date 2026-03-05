@@ -57,6 +57,7 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
         contents = []
         for content in obs.contents:
             if content.name == "screenshot" and isinstance(content.data, Image.Image):
+                # crop to 332x214 because this is the viewport size for MiniWob
                 contents.append(Content.from_data(content.data.crop((0, 0, 332, 214)), name=content.name))
             else:
                 contents.append(content)
@@ -65,7 +66,6 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
 
 
 class MiniWobTaskConfig(TaskConfig):
-    task_metadata: TaskMetadata
     base_url: str = "http://localhost:8000/miniwob"
     remove_human_display: bool = True
     episode_max_time: int = 1000000
@@ -75,9 +75,14 @@ class MiniWobTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> MiniWobTask:
+        from miniwob_cube.benchmark import MiniWobBenchmark
+        # import here to avoid circular import (benchmark imports task)
+
         _ = runtime_context, container_backend
+        task_metadata: TaskMetadata = MiniWobBenchmark.task_metadata[self.task_id]
+        assert self.tool_config is not None, "tool_config must be set to either BrowsergymConfig or PlaywrightConfig"
         return MiniWobTask(
-            metadata=self.task_metadata,
+            metadata=task_metadata,
             tool_config=self.tool_config,
             base_url=self.base_url,
             remove_human_display=self.remove_human_display,

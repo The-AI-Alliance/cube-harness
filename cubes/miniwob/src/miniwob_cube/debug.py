@@ -76,7 +76,6 @@ def get_debug_task_configs(base_url: str = "http://localhost:8000/miniwob") -> l
     return [
         MiniWobTaskConfig(
             task_id=tid,
-            task_metadata=MiniWobBenchmark.task_metadata[tid],
             base_url=base_url,
             tool_config=MockToolConfig(),
         )

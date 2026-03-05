@@ -102,7 +102,6 @@ class MiniWobBenchmark(Benchmark):
         for tm in self.task_metadata.values():
             yield MiniWobTaskConfig(
                 task_id=tm.id,
-                task_metadata=tm,
                 tool_config=self.default_tool_config,
                 base_url=self.base_url,
                 remove_human_display=self.remove_human_display,
