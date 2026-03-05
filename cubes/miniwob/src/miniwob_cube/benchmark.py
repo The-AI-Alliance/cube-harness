@@ -46,6 +46,8 @@ class MiniWobBenchmark(Benchmark):
     port: int = 8000
     remove_human_display: bool = True
     episode_max_time: int = 1000000
+    server_start_timeout: float = 10.0
+    server_start_poll_interval: float = 0.1
 
     # Runtime state (not serialized)
     _server_process: subprocess.Popen | None = None
@@ -69,22 +71,30 @@ class MiniWobBenchmark(Benchmark):
             stdout=self._stdout_file,
             stderr=self._stderr_file,
         )
-        time.sleep(1)
+        startup_deadline = time.monotonic() + self.server_start_timeout
+        last_response_error: Exception | None = None
 
-        if self._server_process.poll() is not None:
-            self._stderr_file.flush()
-            stderr_path = Path(tempfile.gettempdir()) / "miniwob_server_stderr.log"
-            stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
-            returncode = self._server_process.returncode
-            self.close()
-            raise RuntimeError(f"MiniWob server failed to start (exit code {returncode}): {stderr_content}")
+        while time.monotonic() < startup_deadline:
+            if self._server_process.poll() is not None:
+                self._stderr_file.flush()
+                stderr_path = Path(tempfile.gettempdir()) / "miniwob_server_stderr.log"
+                stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
+                returncode = self._server_process.returncode
+                self.close()
+                raise RuntimeError(f"MiniWob server failed to start (exit code {returncode}): {stderr_content}")
 
-        try:
-            urllib.request.urlopen(self.base_url, timeout=5)
-            logger.info(f"MiniWob server responding at {self.base_url}")
-        except Exception as e:
+            try:
+                urllib.request.urlopen(self.base_url, timeout=1)
+                logger.info(f"MiniWob server responding at {self.base_url}")
+                break
+            except Exception as e:
+                last_response_error = e
+                time.sleep(self.server_start_poll_interval)
+        else:
             self.close()
-            raise RuntimeError(f"MiniWob server failed to respond {self.base_url}: {e}")
+            raise RuntimeError(
+                f"MiniWob server failed to respond at {self.base_url} within {self.server_start_timeout:.1f}s"
+            ) from last_response_error
 
         self._runtime_context = {"base_url": self.base_url}
 
@@ -92,6 +102,7 @@ class MiniWobBenchmark(Benchmark):
         for tm in self.task_metadata.values():
             yield MiniWobTaskConfig(
                 task_id=tm.id,
+                task_metadata=tm,
                 tool_config=self.default_tool_config,
                 base_url=self.base_url,
                 remove_human_display=self.remove_human_display,
