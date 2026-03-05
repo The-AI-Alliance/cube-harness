@@ -1,6 +1,5 @@
 import json
 import logging
-import random
 import subprocess
 import sys
 import tempfile
@@ -8,41 +7,58 @@ import time
 import urllib.request
 from importlib.resources import files
 from pathlib import Path
-from random import shuffle
-from typing import TextIO
+from typing import ClassVar, Generator
 
-from agentlab2.benchmarks.miniwob.task import MiniWobTask
-from agentlab2.legacy import Benchmark
+from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.task import TaskConfig, TaskMetadata
+
+from miniwob_cube.task import MiniWobTaskConfig
 
 logger = logging.getLogger(__name__)
 
 
+def _load_miniwob_task_metadata() -> dict[str, TaskMetadata]:
+    tasks_file = Path(__file__).parent / "miniwob_tasks.json"
+    with open(tasks_file) as f:
+        task_infos = json.load(f)
+    return {
+        t["subdomain"]: TaskMetadata(
+            id=t["subdomain"],
+            abstract_description=t["desc"],
+            extra_info={"nondeterministic": t.get("nondeterministic", False)},
+        )
+        for t in task_infos
+    }
+
+
 class MiniWobBenchmark(Benchmark):
+    benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
+        name="miniwob-cube",
+        version="1.0.0",
+        description="MiniWob++ browser automation benchmark tasks",
+        num_tasks=125,
+        tags=["browser", "web", "ui"],
+    )
+    task_metadata: ClassVar[dict[str, TaskMetadata]] = _load_miniwob_task_metadata()
+    task_config_class: ClassVar[type[TaskConfig]] = MiniWobTaskConfig
+
     html_path: str = files("miniwob").joinpath("html").as_posix()  # type: ignore
     port: int = 8000
     remove_human_display: bool = True
     episode_max_time: int = 1000000
-    shuffle: bool = True
-    shuffle_seed: int = 42
 
     # Runtime state (not serialized)
     _server_process: subprocess.Popen | None = None
-    _stdout_file: TextIO | None = None
-    _stderr_file: TextIO | None = None
+    _stdout_file: object | None = None
+    _stderr_file: object | None = None
 
     model_config = {"arbitrary_types_allowed": True}
-
-    def load_task_infos(self) -> list[dict]:
-        _tasks_file = Path(__file__).parent / "miniwob_tasks.json"
-        with open(_tasks_file) as f:
-            task_infos = json.load(f)
-        return task_infos
 
     @property
     def base_url(self) -> str:
         return f"http://localhost:{self.port}/miniwob"
 
-    def setup(self):
+    def _setup(self) -> None:
         tmp_dir = Path(tempfile.gettempdir())
         self._stdout_file = open(tmp_dir / "miniwob_server_stdout.log", "w")
         self._stderr_file = open(tmp_dir / "miniwob_server_stderr.log", "w")
@@ -55,17 +71,16 @@ class MiniWobBenchmark(Benchmark):
         )
         time.sleep(1)
 
-        # Check if the process started successfully
         if self._server_process.poll() is not None:
             self._stderr_file.flush()
             stderr_path = Path(tempfile.gettempdir()) / "miniwob_server_stderr.log"
             stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
+            returncode = self._server_process.returncode
             self.close()
             raise RuntimeError(
-                f"MiniWob server failed to start (exit code {self._server_process.returncode}): {stderr_content}"
+                f"MiniWob server failed to start (exit code {returncode}): {stderr_content}"
             )
 
-        # Check if the server is running by attempting to connect
         try:
             urllib.request.urlopen(self.base_url, timeout=5)
             logger.info(f"MiniWob server responding at {self.base_url}")
@@ -73,25 +88,19 @@ class MiniWobBenchmark(Benchmark):
             self.close()
             raise RuntimeError(f"MiniWob server failed to respond {self.base_url}: {e}")
 
-    def load_tasks(self) -> list[MiniWobTask]:
-        tasks = [
-            MiniWobTask(
-                id=task["subdomain"],
-                desc=task["desc"],
-                subdomain=task["subdomain"],
+        self._runtime_context = {"base_url": self.base_url}
+
+    def get_task_configs(self) -> Generator[MiniWobTaskConfig, None, None]:
+        for tm in self.task_metadata.values():
+            yield MiniWobTaskConfig(
+                task_id=tm.id,
+                tool_config=self.default_tool_config,
                 base_url=self.base_url,
                 remove_human_display=self.remove_human_display,
                 episode_max_time=self.episode_max_time,
             )
-            for task in self.load_task_infos()
-        ]
-        if self.shuffle:
-            random.seed(self.shuffle_seed)
-            shuffle(tasks)
-        return tasks
 
-    def close(self):
-        """Shutdown the MiniWob server and close file handles."""
+    def close(self) -> None:
         if self._server_process is not None:
             logger.info("Shutting down MiniWob server...")
             self._server_process.terminate()
