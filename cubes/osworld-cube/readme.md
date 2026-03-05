@@ -4,13 +4,7 @@
 
 ## Prerequisites
 
-`osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` to:
-
-```
-$CUBE_CACHE_DIR/OSWorld        # default: ~/.agentlab2/OSWorld
-```
-
-You can override this location with the `OSWORLD_REPO` environment variable.
+`osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.agentlab2`).
 
 **Before running any task**, follow the [OSWorld Setup Guide](https://github.com/xlang-ai/OSWorld/blob/main/SETUP_GUIDELINE.md) to install the required system dependencies for your chosen provider (Docker, VMware, etc.). In particular:
 
@@ -79,24 +73,30 @@ for task_config in bench.get_task_configs():
 
 | Name | Config | Description |
 |------|--------|-------------|
-| `computer_13` (default) | `ComputerConfig(action_space="computer_13")` | 13 mouse/keyboard primitives (click, drag, scroll, type, hotkey, …) |
-| `pyautogui` | `ComputerConfig(action_space="pyautogui")` | Single `run_pyautogui(code)` action — agent writes Python using `tag_N` SoM variables |
+| `computer_13` (default) | `ComputerConfig(action_space="computer_13")` | 13 mouse/keyboard primitives: click, double\_click, right\_click, mouse\_down, mouse\_up, move\_to, drag\_to, scroll, typing, press, key\_down, key\_up, hotkey — plus shared wait/done/fail signals |
+| `pyautogui` | `ComputerConfig(action_space="pyautogui")` | Single `run_pyautogui(code)` action — agent writes arbitrary Python using pyautogui; `tag_N` coordinate variables (SoM bounding-box centres) are automatically prepended when `use_som=True` |
 
 ## Observations
 
 Each step returns a multimodal `Observation` with:
 - **screenshot** — PIL `Image` of the current desktop
-- **accessibility_tree** — XML document (optionally post-processed)
-- **terminal** — last terminal output (if enabled)
+- **axtree_txt** — linearized accessibility tree as a tab-separated text table (default)
+- **terminal** — last terminal output (only included when `ComputerConfig(require_terminal=True)`)
 
-Set `use_som=True` on `OSWorldTask` / `OSWorldBenchmark` to annotate the screenshot with numbered bounding boxes and replace the raw XML with an indexed element table (Set-of-Marks).
+The raw XML accessibility tree from `desktop_env` is always post-processed before being returned to the agent.
+
+Set `use_som=True` on `OSWorldTask` / `OSWorldBenchmark` to switch to Set-of-Marks mode: the screenshot is annotated with numbered bounding boxes, and the axtree is replaced with an indexed element table (`som_elements`). In `pyautogui` mode, `tag_N` coordinate variables (bounding-box centres) are automatically prepended to the agent's code.
+
+## Screenshot
+
+<!-- TODO: add a screenshot of an eval run once we have results -->
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CUBE_CACHE_DIR` | `~/.agentlab2` | Root directory for VMs and cache |
-| `OSWORLD_REPO` | `$CUBE_CACHE_DIR/benchmarks/osworld/OSWorld` | Path to OSWorld repo |
+| `OSWORLD_REPO` | *(derived from `CUBE_CACHE_DIR`)* | Path used to resolve `settings_file` paths in task configs — override if you have an existing OSWorld clone |
 
 ## Debug / Testing
 

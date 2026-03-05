@@ -1,53 +1,25 @@
 """
-OSWorldBenchmark + OSWorldTaskConfig — CUBE port of kusha/AgentLab2 benchmarks/osworld/benchmark.py.
+OSWorldBenchmark and OSWorldTaskConfig — CUBE benchmark for the OSWorld desktop-automation suite.
 
-Changes vs kusha (per discussions/2026-02-26-cube-al2-osworld-parity.md §Layer 4):
-
-  1. Base class:  agentlab2.benchmark.Benchmark  →  cube.benchmark.Benchmark
-  2. metadata: dict (instance)  →  ClassVar[BenchmarkMetadata]
-  3. Add ClassVar[dict[str, TaskMetadata]] (placeholder {}; populated in _setup())
-  4. Add task_config_class = OSWorldTaskConfig
-  5. setup()  →  _setup()   (rename; cube.Benchmark.setup() wraps _setup())
-  6. load_tasks() → removed  (cube entry point is get_task_configs(), inherited)
-  7. tool_config  →  default_tool_config  (field rename)
-  8. Add OSWorldTaskConfig (new class)
-
-Entry point for the simple agent loop:
-    benchmark = OSWorldBenchmark(default_tool_config=ComputerConfig())
-    benchmark.setup()
-    for task_config in benchmark.get_task_configs():
+Entry point:
+    bench = OSWorldBenchmark(default_tool_config=ComputerConfig())
+    bench.setup()
+    for task_config in bench.get_task_configs():
         task = task_config.make()
         obs, info = task.reset()
         ...
         task.close()
 
-Task metadata strategy (option B from scaffold):
-    task_metadata is declared as ClassVar = {} placeholder at class definition time
-    to satisfy cube.Benchmark.__init_subclass__ enforcement.
-    _setup() populates an instance-level shadow via object.__setattr__.
-    This means each benchmark instance can have a different (filtered/shuffled) task set.
-
-Circular import resolution for OSWorldTaskConfig.make():
-    OSWorldTaskConfig carries a copy of the TaskMetadata in a `metadata` field
-    so that make() never needs to reference OSWorldBenchmark directly.
-    get_task_configs() is overridden to inject metadata into each config.
-
-Filtering:
-    domain= and tasks_file= fields provide filtering.
-    cube.Benchmark.subset_from_glob(glob_key="extra_info.domain", ...) also works
-    on the result of setup() for programmatic subsetting.
-    TODO: Remove domain/shuffle fields once subset_from_glob is the standard.
-
-Paths:
-    test_set_name and test_set_path are constructor params with OSWorld repo defaults.
+Filter by domain or other metadata field after setup():
+    chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
 """
 
 from __future__ import annotations
 
+import enum
 import json
 import logging
 import os
-import random
 import subprocess
 from collections.abc import Generator
 from copy import deepcopy
@@ -107,6 +79,20 @@ OSWORLD_CACHE_DIR = OSWORLD_BASE_DIR / "cache"
 
 # Pinned OSWorld commit for reproducibility
 OSWORLD_COMMIT = "e695a10"
+
+
+# ---------------------------------------------------------------------------
+# OSWorldTestSet
+# ---------------------------------------------------------------------------
+
+
+class OSWorldTestSet(str, enum.Enum):
+    """Valid test-set index files shipped with the OSWorld repo."""
+
+    TEST_ALL = "test_all.json"
+    TEST_INFEASIBLE = "test_infeasible.json"
+    TEST_NOGDRIVE = "test_nogdrive.json"
+    TEST_SMALL = "test_small.json"
 
 
 # ---------------------------------------------------------------------------
@@ -175,17 +161,14 @@ class OSWorldBenchmark(Benchmark):
 
     Constructor params (set by benchmark users):
         default_tool_config:  ComputerConfig  — how to connect to the VM (action_space selects variant)
-        domain:               str                — domain filter ("all" or e.g. "chrome")
         tasks_file:           str | None         — flat JSON task file (overrides repo)
-        test_set_name:        str                — filename inside evaluation_examples/ (default "test_all.json")
+        test_set_name:        OSWorldTestSet     — which test-set index file to load (default: TEST_ALL)
         test_set_path:        str | None         — path to the evaluation_examples dir (default: OSWorld repo)
-        shuffle:              bool               — shuffle task order (default True)
-        shuffle_seed:         int                — seed for reproducible shuffle
         use_som:              bool               — Set-of-Marks mode for all tasks
 
-    TODO: Remove domain/shuffle fields in favour of subset_from_glob() once that
-    becomes the standard filtering pattern.
-    TODO: Add the ability to select other subsets in the repo.
+    To filter by domain or any other metadata field, call subset_from_glob() after setup():
+        bench.setup()
+        chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
     """
 
     # ------------------------------------------------------------------
@@ -218,15 +201,12 @@ class OSWorldBenchmark(Benchmark):
     # ------------------------------------------------------------------
     # Instance fields
     # ------------------------------------------------------------------
-    default_tool_config : ComputerConfig = ComputerConfig()
-    domain: str = "all"
-    # TODO: Check if this the correct place for this? make it ENUM probably. 
-    """Domain filter: "all" or a specific domain like "chrome", "libreoffice"."""
+    default_tool_config: ComputerConfig = ComputerConfig()
 
     tasks_file: str | None = None
     """Path to a flat JSON array of task dicts (overrides OSWorld repo structure)."""
     
-    test_set_name: str = "test_all.json"
+    test_set_name: OSWorldTestSet = OSWorldTestSet.TEST_ALL
     """Filename of the test set index inside <evaluation_examples>/."""
 
     test_set_path: str | None = None
@@ -234,12 +214,6 @@ class OSWorldBenchmark(Benchmark):
     Absolute path to the OSWorld evaluation_examples directory.
     Defaults to OSWORLD_REPO_DIR/evaluation_examples if not set.
     """
-
-    shuffle: bool = True
-    """Whether to shuffle tasks before yielding them from get_task_configs()."""
-
-    shuffle_seed: int = 42
-    """Seed for reproducible shuffling."""
 
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
@@ -276,14 +250,10 @@ class OSWorldBenchmark(Benchmark):
           1. Check desktop_env is installed
           2. Ensure OSWorld repo is cloned (or validate tasks_file)
           3. Load task metadata from JSON files → populate instance shadow of task_metadata
-          4. Apply domain filter and shuffle
         """
         self.install()
 
-        logger.info(
-            f"Setting up OSWorldBenchmark "
-            f"(provider={self._get_provider()}, domain={self.domain})"
-        )
+        logger.info(f"Setting up OSWorldBenchmark (provider={self._get_provider()})")
 
         if self.tasks_file:
             if not Path(self.tasks_file).exists():
@@ -294,21 +264,6 @@ class OSWorldBenchmark(Benchmark):
                 logger.info("OSWorld repo not found — cloning...")
                 self._clone_osworld_repo()
             loaded = self._load_task_metadata_from_repo()
-
-        # Apply domain filter
-        if self.domain != "all":
-            loaded = {
-                tid: tm
-                for tid, tm in loaded.items()
-                if tm.extra_info.get("domain") == self.domain
-            }
-
-        # Shuffle
-        if self.shuffle:
-            keys = list(loaded.keys())
-            random.seed(self.shuffle_seed)
-            random.shuffle(keys)
-            loaded = {k: loaded[k] for k in keys}
 
         # Populate instance-level shadow of the ClassVar
         # (same pattern used by cube.Benchmark.subset_from_list)
