@@ -1,6 +1,6 @@
 import pytest
 
-from osworld_cube.debug_agent import get_debug_task_configs, make_debug_agent
+from osworld_cube.debug import get_debug_task_configs, make_debug_agent
 
 _DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in get_debug_task_configs()}
 

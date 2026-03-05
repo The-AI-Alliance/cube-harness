@@ -479,11 +479,11 @@ class Computer13(ComputerBase):
         )
 
     @tool_action
-    def hotkey(self, keys: list[str]) -> str:
+    def hotkey(self, keys: str) -> str:
         """Press a key combination simultaneously (e.g. Ctrl+C).
 
         Args:
-            keys: List of key names to press together (e.g. ["ctrl", "c"])
+            keys: Key names joined by '+' (e.g. "ctrl+c", "ctrl+shift+t")
         """
         if isinstance(keys, str):
             keys = keys.split("+")
