@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from agentlab2.agents.legacy_generic_agent import GenericAgentConfig, GenericPromptFlags, ObsFlags
-from agentlab2.benchmarks.workarena import WorkArenaBenchmark
+from workarena_cube import WorkArenaBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
@@ -98,7 +98,7 @@ def main(debug: bool) -> None:
 
     # Configure WorkArena benchmark
     benchmark = WorkArenaBenchmark(
-        tool_config=tool_config,
+        default_tool_config=tool_config,
         level="l1",
         n_seeds_l1=2 if debug else 5,  # Fewer seeds in debug mode
     )

@@ -30,10 +30,10 @@ from agentlab2.llm import LLMConfig
 from agentlab2.tools.browsergym import BrowsergymConfig
 
 try:
-    from agentlab2.benchmarks.workarena import WorkArenaBenchmark
+    from workarena_cube import WorkArenaBenchmark
 except ImportError:
     print(
-        "WorkArena benchmark requires 'browsergym-workarena'. Run `make install` to install all optional dependencies."
+        "WorkArena benchmark requires 'workarena-cube'. Run `make install` to install all optional dependencies."
     )
     sys.exit(1)
 
@@ -68,7 +68,7 @@ def main(debug: bool) -> None:
     )
 
     # Configure WorkArena benchmark
-    benchmark = WorkArenaBenchmark(tool_config=tool_config, level="l1", n_seeds_l1=1)
+    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, level="l1", n_seeds_l1=1)
 
     # Create experiment
     exp = Experiment(
