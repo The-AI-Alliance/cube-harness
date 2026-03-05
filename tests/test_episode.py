@@ -3,11 +3,44 @@
 import json
 
 import pytest
-from cube.core import Action, EnvironmentOutput, Observation
+from cube.core import Action, EnvironmentOutput, ImageContent, Observation
+from PIL import Image as PILImage
+from pydantic_core import PydanticSerializationError
 
 from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
 from agentlab2.episode import MAX_STEPS, Episode
 from tests.conftest import MockAgent
+
+
+class TestImageContentSerialization:
+    """Regression tests for PIL Image serialization in EnvironmentOutput.
+
+    Pydantic 2 uses the declared type (Content, data: Any) when serializing
+    list[Content] items, so ImageContent's @field_serializer("data") is not
+    invoked by default. serialize_as_any=True forces dispatch to the actual
+    runtime type, making the field serializer run.
+
+    This is why _record_step_attributes uses model_dump_json(serialize_as_any=True).
+    """
+
+    def _make_image_env_output(self) -> EnvironmentOutput:
+        img = PILImage.new("RGB", (10, 10), color=(255, 0, 0))
+        obs = Observation(contents=[ImageContent(data=img, name="screenshot")])
+        return EnvironmentOutput(obs=obs)
+
+    def test_model_dump_json_without_serialize_as_any_fails(self):
+        """Without serialize_as_any=True, PIL.Image.Image cannot be serialized."""
+        env_output = self._make_image_env_output()
+        with pytest.raises(PydanticSerializationError, match="PIL"):
+            env_output.model_dump_json()
+
+    def test_model_dump_json_with_serialize_as_any_succeeds(self):
+        """With serialize_as_any=True, ImageContent.@field_serializer converts PIL → base64."""
+        env_output = self._make_image_env_output()
+        result = env_output.model_dump_json(serialize_as_any=True)
+        data = json.loads(result)
+        screenshot = data["obs"]["contents"][0]
+        assert screenshot["data"].startswith("data:image/png;base64,")
 
 
 class TestEpisode:

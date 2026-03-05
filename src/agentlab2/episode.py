@@ -154,8 +154,8 @@ class Episode:
         agent_output: AgentOutput,
         env_output: EnvironmentOutput,
     ) -> None:
-        span.set_attribute("agent_output", agent_output.model_dump_json())
-        span.set_attribute("env_output", env_output.model_dump_json())
+        span.set_attribute("agent_output", agent_output.model_dump_json(serialize_as_any=True))
+        span.set_attribute("env_output", env_output.model_dump_json(serialize_as_any=True))
         span.set_attribute("done", env_output.done)
         span.set_attribute("reward", env_output.reward)
 
