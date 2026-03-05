@@ -1,7 +1,22 @@
 # osworld-cube
 
 [OSWorld](https://os-world.github.io/) benchmark ported to the [CUBE](../../) protocol.
-#TODO: recheck this
+
+## Prerequisites
+
+`osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` to:
+
+```
+$CUBE_CACHE_DIR/OSWorld        # default: ~/.agentlab2/OSWorld
+```
+
+You can override this location with the `OSWORLD_REPO` environment variable.
+
+**Before running any task**, follow the [OSWorld Setup Guide](https://github.com/xlang-ai/OSWorld/blob/main/SETUP_GUIDELINE.md) to install the required system dependencies for your chosen provider (Docker, VMware, etc.). In particular:
+
+- **Docker** (recommended): install Docker. VM images are downloaded automatically by `desktop_env` on first use.
+- **VMware / VirtualBox**: install the hypervisor and follow the VM import steps in the guide.
+
 ## Overview
 
 `osworld-cube` wraps OSWorld desktop-automation tasks as CUBE-compliant `Task` and `Tool` objects. Agents interact with real VM/container desktops through a unified interface, choosing between two action spaces.
@@ -36,10 +51,11 @@ task = OSWorldTask(
 )
 
 obs, info = task.reset()
-while not task.tool._is_done:
+done = False
+while not done:
     action = agent(obs, task.action_set)
     env_out = task.step(action)
-    obs = env_out.obs
+    obs, done = env_out.obs, env_out.done
 task.close()
 ```
 
@@ -50,7 +66,6 @@ from osworld_cube import OSWorldBenchmark, ComputerConfig
 
 bench = OSWorldBenchmark(
     default_tool_config=ComputerConfig(provider="docker"),
-    domain="chrome",   # or "all"
 )
 bench.setup()
 for task_config in bench.get_task_configs():
@@ -94,17 +109,18 @@ for config in get_debug_task_configs():
     task = config.make()
     agent = make_debug_agent(config.task_id)
     obs, _ = task.reset()
-    while not task.tool._is_done:
+    done = False
+    while not done:
         action = agent(obs, task.action_set)
         env_out = task.step(action)
-        obs = env_out.obs
+        obs, done = env_out.obs, env_out.done
     task.close()
 ```
 
 Or run directly:
 
 ```bash
-python -m osworld_cube.debug_agent
+python -m osworld_cube.debug
 ```
 
 ## Package Structure
@@ -115,5 +131,6 @@ src/osworld_cube/
 ├── computer.py       # ComputerBase, Computer13, PyAutoGUIComputer, ComputerConfig
 ├── task.py           # OSWorldTask
 ├── benchmark.py      # OSWorldBenchmark, OSWorldTaskConfig
-└── axtree.py         # Accessibility tree parsing and Set-of-Marks annotation
+├── axtree.py         # Accessibility tree parsing and Set-of-Marks annotation
+└── debug.py          # get_debug_task_configs, make_debug_agent
 ```

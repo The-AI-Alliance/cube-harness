@@ -33,7 +33,7 @@ from osworld_cube.computer import (
 )
 from osworld_cube.task import OSWorldTask
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
-from osworld_cube.debug_agent import get_debug_task_configs, make_debug_agent
+from osworld_cube.debug import get_debug_task_configs, make_debug_agent
 
 __all__ = [
     # Tool classes

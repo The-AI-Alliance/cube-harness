@@ -1,7 +1,4 @@
 """
-TODO: rename the module to debug.py
-
-
 Deterministic debug agent for testing OSWorldTask end-to-end without an LLM.
 
 Each debug task in debug_tasks.json has a hardcoded action sequence that
@@ -16,7 +13,7 @@ get_debug_task_configs()        → list[OSWorldTaskConfig]
 Usage::
 
     # Run all debug tasks and print a JSON report
-    python -m osworld_cube.debug_agent
+    python -m osworld_cube.debug
 """
 
 from __future__ import annotations
@@ -167,7 +164,7 @@ def get_debug_task_configs() -> list[OSWorldTaskConfig]:
 
 if __name__ == "__main__":
     import sys
-    import osworld_cube.debug_agent as _mod
+    import osworld_cube.debug as _mod
     from cube.testing import run_debug_suite
 
     logging.basicConfig(
