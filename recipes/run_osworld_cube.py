@@ -1,5 +1,7 @@
 import sys
+from pathlib import Path
 
+import osworld_cube
 from osworld_cube.benchmark import OSWorldBenchmark
 
 from agentlab2 import make_experiment_output_dir
@@ -15,7 +17,8 @@ def main(debug: bool) -> None:
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    benchmark = OSWorldBenchmark()
+    tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
+    benchmark = OSWorldBenchmark(tasks_file=tasks_file)
 
     exp = Experiment(
         name="osworld-cube",
@@ -26,7 +29,7 @@ def main(debug: bool) -> None:
     )
 
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp, debug_limit=1)
     else:
         run_with_ray(
             exp,
