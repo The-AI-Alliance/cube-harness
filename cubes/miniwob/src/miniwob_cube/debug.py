@@ -41,7 +41,7 @@ class MockToolConfig(ToolConfig):
 class MockTool(AbstractTool):
     def execute_action(self, action: Action) -> Observation:
         return Observation(contents=[])
-    
+
     def goto(self, url: str) -> None:
         _ = url
 

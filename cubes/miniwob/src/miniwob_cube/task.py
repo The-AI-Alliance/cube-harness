@@ -9,15 +9,17 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_ACTION_NAMES = frozenset({
-    "browser_press_key",
-    "browser_type",
-    "browser_click",
-    "browser_drag",
-    "browser_hover",
-    "browser_select_option",
-    "browser_mouse_click_xy",
-})
+_SUPPORTED_ACTION_NAMES = frozenset(
+    {
+        "browser_press_key",
+        "browser_type",
+        "browser_click",
+        "browser_drag",
+        "browser_hover",
+        "browser_select_option",
+        "browser_mouse_click_xy",
+    }
+)
 
 
 class MiniWobTask(Task):

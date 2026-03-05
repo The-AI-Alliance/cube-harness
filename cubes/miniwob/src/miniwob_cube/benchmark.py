@@ -77,9 +77,7 @@ class MiniWobBenchmark(Benchmark):
             stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
             returncode = self._server_process.returncode
             self.close()
-            raise RuntimeError(
-                f"MiniWob server failed to start (exit code {returncode}): {stderr_content}"
-            )
+            raise RuntimeError(f"MiniWob server failed to start (exit code {returncode}): {stderr_content}")
 
         try:
             urllib.request.urlopen(self.base_url, timeout=5)
