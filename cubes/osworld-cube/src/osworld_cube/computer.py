@@ -1,17 +1,9 @@
 """
-Computer tool — CUBE port of kusha/AgentLab2 tools/computer.py.
+Computer tool — CUBE tool wrapping desktop_env for VM-based desktop automation.
 
-Changes vs kusha (per discussions/2026-02-26-cube-al2-osworld-parity.md §Layer 2):
-
-  1. Base class: plain Tool (telemetry works automatically via cube.tool.Tool)
-  2. Action discovery: @tool_action on each method instead of ComputerActionSpace Protocol
-  3. No manual action_set override — inherited from cube.tool.Tool
-  4. ComputerConfig.make() accepts container=None (ignored; OSWorld uses desktop_env)
-  5. execute_action errors bubble up as StepError via base class
-     (errors-as-observations are kept as Observations for agent visibility)
-  6. Two concrete tool classes: Computer13 (13 primitives) and PyAutoGUIComputer
-  7. cache_dir / vm_dir root via cube.get_cache_dir("osworld-cube")
-  8. action_space field on ComputerConfig selects the tool variant — no subconfigs needed
+Two variants selected by ComputerConfig.action_space:
+    Computer13        — 13 mouse/keyboard primitives + wait/done/fail
+    PyAutoGUIComputer — run_pyautogui() code execution + wait/done/fail
 """
 
 import logging
@@ -95,8 +87,6 @@ class ComputerConfig(ToolConfig):
     require_terminal: bool = False
     os_type: Literal["Ubuntu", "Windows"] = "Ubuntu"
     enable_proxy: bool = False
-    # Get full observation (screenshot + axtree) after every action.
-    # Adds ~1-2s per step but gives the agent up-to-date state.
     observe_after_action: bool = True
 
     def make(self, container: Container | None = None) -> "ComputerBase":
@@ -142,7 +132,6 @@ class ComputerBase(Tool):
         self._last_marks: list[list[int]] = []
         self._is_done: bool = False
 
-        # Point docker_manager at our vm_dir so VM images are stored there
         if docker_manager is not None:
             vm_dir = Path(config.vm_dir)
             vm_dir.mkdir(parents=True, exist_ok=True)
@@ -163,26 +152,16 @@ class ComputerBase(Tool):
             os_type=config.os_type,
         )
 
-    # Subclasses override this to select the desktop_env action space
     _desktop_env_action_space: ActionSpace = ActionSpace.COMPUTER_13
-
-    # ------------------------------------------------------------------
-    # execute_action override: optionally fetch full obs after each action
-    # ------------------------------------------------------------------
 
     def execute_action(self, action: Action) -> Observation | StepError:
         """Execute action; append full VM observation if observe_after_action=True."""
         action_obs = super().execute_action(action)
 
-        # Skip full obs fetch for terminal signals — VM state doesn't change
         if self.config.observe_after_action and action.name not in ("done", "fail"):
             action_obs += self.get_observation()
 
         return action_obs
-
-    # ------------------------------------------------------------------
-    # Task lifecycle helpers (called by OSWorldTask, not the agent)
-    # ------------------------------------------------------------------
 
     def setup_task(self, task_config: dict, seed: int | None = None) -> Observation:
         """
@@ -201,8 +180,6 @@ class ComputerBase(Tool):
 
         self._env.reset(task_config=task_config, seed=seed)
 
-        # Per OSWorld documentation: wait 60s for the VM to fully stabilise
-        # after snapshot restore before taking the first observation.
         logger.info("Waiting 60s for VM to stabilise...")
         time.sleep(60)
 
@@ -266,7 +243,6 @@ class ComputerBase(Tool):
         """
         Store SoM bounding-box marks produced by tag_screenshot().
         Used by run_pyautogui() to resolve tag_N variables.
-        Not a @tool_action — called by the task, not the agent.
         """
         self._last_marks = marks
 
@@ -281,10 +257,6 @@ class ComputerBase(Tool):
             logger.info("Closing desktop environment")
             self._env.close()
 
-    # ------------------------------------------------------------------
-    # Terminal signals — shared by both action spaces
-    # ------------------------------------------------------------------
-
     @tool_action
     def wait(self) -> str:
         """Wait one step without taking any action."""
@@ -292,21 +264,13 @@ class ComputerBase(Tool):
 
     @tool_action
     def done(self) -> str:
-        """Signal that the task has been completed successfully.
-
-        Sets _is_done=True so that OSWorldTask.finished() returns True on the
-        next step check, triggering evaluate() and clean task termination.
-        """
+        """Signal that the task has been completed successfuly."""
         self._is_done = True
         return "Task marked as done"
 
     @tool_action
     def fail(self) -> str:
-        """Signal that the task cannot be completed (infeasible or failed).
-
-        Sets _is_done=True so that OSWorldTask.finished() returns True on the
-        next step check, triggering evaluate() and clean task termination.
-        """
+        """Signal that the task cannot be completed (infeasible or failed)."""
         self._is_done = True
         return "Task marked as failed"
 
@@ -328,10 +292,6 @@ class Computer13(ComputerBase):
     """
 
     _desktop_env_action_space = ActionSpace.COMPUTER_13
-
-    # ------------------------------------------------------------------
-    # Agent actions — computer_13 action space
-    # ------------------------------------------------------------------
 
     @tool_action
     def click(

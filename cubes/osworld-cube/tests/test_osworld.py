@@ -402,6 +402,32 @@ class TestOSWorldTask:
 
 
 # ---------------------------------------------------------------------------
+# OSWorldTestSet
+# ---------------------------------------------------------------------------
+
+
+class TestOSWorldTestSet:
+    def test_enum_values_are_filenames(self) -> None:
+        from osworld_cube.benchmark import OSWorldTestSet
+
+        assert OSWorldTestSet.TEST_ALL.value == "test_all.json"
+        assert OSWorldTestSet.TEST_INFEASIBLE.value == "test_infeasible.json"
+        assert OSWorldTestSet.TEST_NOGDRIVE.value == "test_nogdrive.json"
+        assert OSWorldTestSet.TEST_SMALL.value == "test_small.json"
+
+    def test_enum_is_str_subclass(self) -> None:
+        from osworld_cube.benchmark import OSWorldTestSet
+
+        assert isinstance(OSWorldTestSet.TEST_ALL, str)
+        assert OSWorldTestSet.TEST_ALL == "test_all.json"
+
+    def test_enum_from_string(self) -> None:
+        from osworld_cube.benchmark import OSWorldTestSet
+
+        assert OSWorldTestSet("test_small.json") is OSWorldTestSet.TEST_SMALL
+
+
+# ---------------------------------------------------------------------------
 # OSWorldBenchmark
 # ---------------------------------------------------------------------------
 
@@ -455,7 +481,6 @@ class TestOSWorldBenchmark:
                 default_tool_config=ComputerConfig(),
                 test_set_path=str(eval_dir),
                 test_set_name="test_all.json",
-                shuffle=False,
             )
             bench.setup()
 
@@ -463,7 +488,7 @@ class TestOSWorldBenchmark:
             assert "chrome-1" in bench.task_metadata
             assert "os-1" in bench.task_metadata
 
-    def test_domain_filter(self):
+    def test_domain_filter_via_subset_from_glob(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
         from osworld_cube.computer import ComputerConfig
 
@@ -473,39 +498,13 @@ class TestOSWorldBenchmark:
                 default_tool_config=ComputerConfig(),
                 test_set_path=str(eval_dir),
                 test_set_name="test_all.json",
-                domain="chrome",
-                shuffle=False,
             )
             bench.setup()
+            chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
 
-            assert len(bench.task_metadata) == 1
-            assert "chrome-1" in bench.task_metadata
+            assert len(chrome_bench.task_metadata) == 1
+            assert "chrome-1" in chrome_bench.task_metadata
 
-    def test_shuffle_changes_order(self):
-        from osworld_cube.benchmark import OSWorldBenchmark
-        from osworld_cube.computer import ComputerConfig
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-
-            bench_no_shuffle = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                shuffle=False,
-            )
-            bench_shuffled = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                shuffle=True,
-                shuffle_seed=0,
-            )
-            bench_no_shuffle.setup()
-            bench_shuffled.setup()
-
-            keys_no_shuffle = list(bench_no_shuffle.task_metadata.keys())
-            keys_shuffled = list(bench_shuffled.task_metadata.keys())
-            # Both have same tasks; shuffled may have different order
-            assert set(keys_no_shuffle) == set(keys_shuffled)
 
     def test_get_task_configs_carries_metadata(self):
         from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
@@ -516,7 +515,6 @@ class TestOSWorldBenchmark:
             bench = OSWorldBenchmark(
                 default_tool_config=ComputerConfig(),
                 test_set_path=str(eval_dir),
-                shuffle=False,
             )
             bench.setup()
 
@@ -537,7 +535,6 @@ class TestOSWorldBenchmark:
             bench = OSWorldBenchmark(
                 default_tool_config=ComputerConfig(),
                 test_set_path=str(eval_dir),
-                shuffle=False,
             )
             bench.setup()
 
@@ -567,7 +564,6 @@ class TestOSWorldBenchmark:
         bench = OSWorldBenchmark(
             default_tool_config=ComputerConfig(),
             tasks_file=tasks_file,
-            shuffle=False,
         )
         bench.setup()
 
@@ -590,15 +586,8 @@ class TestOSWorldBenchmark:
 
         assert fixed["config"][0]["parameters"]["settings_file"] == "/fake/osworld/configs/x.json"
 
-    def test_close_does_not_raise(self):
-        from osworld_cube.benchmark import OSWorldBenchmark
-        from osworld_cube.computer import ComputerConfig
-
-        OSWorldBenchmark(default_tool_config=ComputerConfig()).close()
-
-    def test_subset_from_glob_by_domain(self):
-        """cube's subset_from_glob works on the populated task_metadata."""
-        from osworld_cube.benchmark import OSWorldBenchmark
+    def test_test_set_name_accepts_enum(self) -> None:
+        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
         from osworld_cube.computer import ComputerConfig
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -606,10 +595,41 @@ class TestOSWorldBenchmark:
             bench = OSWorldBenchmark(
                 default_tool_config=ComputerConfig(),
                 test_set_path=str(eval_dir),
-                shuffle=False,
+                test_set_name=OSWorldTestSet.TEST_ALL,
             )
             bench.setup()
+            assert len(bench.task_metadata) == 2
 
-            chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
-            assert len(chrome_bench.task_metadata) == 1
-            assert "chrome-1" in chrome_bench.task_metadata
+    def test_test_set_name_selects_subset(self) -> None:
+        """Different enum values load different task subsets from the repo."""
+        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
+        from osworld_cube.computer import ComputerConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            eval_dir = _make_osworld_repo(Path(tmpdir))
+            (eval_dir / "test_small.json").write_text(json.dumps({"chrome": ["chrome-1"]}))
+
+            bench_all = OSWorldBenchmark(
+                default_tool_config=ComputerConfig(),
+                test_set_path=str(eval_dir),
+                test_set_name=OSWorldTestSet.TEST_ALL,
+            )
+            bench_small = OSWorldBenchmark(
+                default_tool_config=ComputerConfig(),
+                test_set_path=str(eval_dir),
+                test_set_name=OSWorldTestSet.TEST_SMALL,
+            )
+            bench_all.setup()
+            bench_small.setup()
+
+            assert len(bench_all.task_metadata) == 2
+            assert len(bench_small.task_metadata) == 1
+            assert "chrome-1" in bench_small.task_metadata
+            assert "os-1" not in bench_small.task_metadata
+
+    def test_close_does_not_raise(self) -> None:
+        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.computer import ComputerConfig
+
+        OSWorldBenchmark(default_tool_config=ComputerConfig()).close()
+

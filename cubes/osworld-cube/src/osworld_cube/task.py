@@ -1,33 +1,13 @@
 """
-OSWorldTask — CUBE port of kusha/AgentLab2 benchmarks/osworld/task.py.
-
-Target loop (from discussions/2026-02-26-osworld-cube-minimal-migration.md):
+OSWorldTask — CUBE task for a single OSWorld desktop-automation episode.
 
     task = OSWorldTask(metadata=..., tool_config=ComputerConfig(...))
     obs, info = task.reset()
     while not done:
         action = agent(obs, task.action_set)
-        env_out = task.step(action)        # inherited from cube.task.Task
+        env_out = task.step(action)
         obs, done = env_out.obs, env_out.done
     task.close()
-
-cube.task.Task.step() is INHERITED — it handles STOP_ACTION, calls
-self.tool.execute_action(), calls self.evaluate(), calls self.obs_postprocess().
-OSWorldTask only needs to implement reset() and evaluate().
-
-Changes vs kusha version (per parity doc §Layer 3):
-
-  1. Base class:  agentlab2.core.Task (old ABC)  →  cube.task.Task (Pydantic)
-  2. Construction:  __init__ with positional args  →  Pydantic fields
-     - OSWorld-specific data (domain, snapshot, config, evaluator, related_apps)
-       move into TaskMetadata.extra_info
-     - instruction stored as metadata.abstract_description
-  3. setup(self, tool)  →  reset(self)   — tool injection removed; use self.tool
-  4. validate_task(obs)  →  evaluate(obs)
-  5. finished()  →  finished(obs: Observation)   — adds obs arg; checks _is_done on tool
-  6. teardown()  →  close()              — rename; call super().close()
-  7. mark_done(success)  →  removed      — agent calls done()/fail() @tool_action
-  8. Imports:  agentlab2.core.*  →  cube.core.* / cube.task.*
 """
 
 from __future__ import annotations
@@ -80,10 +60,6 @@ class OSWorldTask(Task):
     """If True, annotate screenshot with numbered bounding boxes (Set-of-Marks)
     and replace axtree with an indexed element table before returning obs."""
 
-    # ------------------------------------------------------------------
-    # Convenience property to access the typed tool
-    # ------------------------------------------------------------------
-
     @property
     def _computer(self) -> "Computer":
         """Return self.tool cast to Computer for type-checker satisfaction."""
@@ -108,7 +84,6 @@ class OSWorldTask(Task):
         """
         extra = self.metadata.extra_info
 
-        # Reset terminal state on the tool for multi-task reuse safety
         self._computer._is_done = False
 
         task_config = {
@@ -128,7 +103,6 @@ class OSWorldTask(Task):
         obs = self._computer.setup_task(task_config)
         obs = self.obs_postprocess(obs)
 
-        # Prepend instruction as text so the agent knows the goal
         goal_obs = Observation.from_text(f"Task: {self.metadata.abstract_description}")
         obs = goal_obs + obs
 
@@ -187,10 +161,6 @@ class OSWorldTask(Task):
         STOP_ACTION (final_step) handling in Task.step().
         """
         return self._computer._is_done
-
-    # ------------------------------------------------------------------
-    # obs_postprocess() — dispatches to SoM or linearize
-    # ------------------------------------------------------------------
 
     def obs_postprocess(self, obs: Observation) -> Observation:
         """Post-process raw observation before returning to the agent."""
@@ -277,10 +247,6 @@ class OSWorldTask(Task):
         except Exception as e:
             logger.warning(f"Failed to apply SoM annotation: {e}")
             return self._postprocess_linearize(obs)
-
-    # ------------------------------------------------------------------
-    # filter_actions() — pass-through; override in subclasses if needed
-    # ------------------------------------------------------------------
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
         """Optionally whitelist a subset of Computer actions for this task.

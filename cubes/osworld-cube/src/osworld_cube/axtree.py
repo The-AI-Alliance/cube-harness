@@ -301,18 +301,3 @@ def tag_screenshot(
     )
     return marks, drew_nodes, tagged_screenshot, element_list
 
-
-def trim_accessibility_tree(linearized_accessibility_tree: str, max_tokens: int) -> str:
-    """Trim a linearized accessibility tree to fit within a token budget.
-
-    Requires tiktoken. Only used when agents have a strict context limit.
-    TODO: remove if not used anywhere.
-    """
-    import tiktoken
-
-    enc = tiktoken.encoding_for_model("gpt-4")
-    tokens = enc.encode(linearized_accessibility_tree)
-    if len(tokens) > max_tokens:
-        linearized_accessibility_tree = enc.decode(tokens[:max_tokens])
-        linearized_accessibility_tree += "[...]\n"
-    return linearized_accessibility_tree
