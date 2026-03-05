@@ -20,12 +20,13 @@ import logging
 import sys
 
 from cube.core import Action, ActionSchema, Observation
+from cube.container import Container
+from cube.tool import ToolConfig, AbstractTool
+from cube.testing import run_debug_suite
 
 from miniwob_cube.benchmark import MiniWobBenchmark
 from miniwob_cube.task import MiniWobTaskConfig
 
-from cube.tool import ToolConfig, AbstractTool
-from cube.container import Container
 
 logger = logging.getLogger(__name__)
 
@@ -73,22 +74,29 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 
 def get_debug_task_configs(base_url: str = "http://localhost:8000/miniwob") -> list[MiniWobTaskConfig]:
     return [
-        MiniWobTaskConfig(task_id=tid, base_url=base_url, tool_config=MockToolConfig())
+        MiniWobTaskConfig(
+            task_id=tid,
+            task_metadata=MiniWobBenchmark.task_metadata[tid],
+            base_url=base_url,
+            tool_config=MockToolConfig(),
+        )
         for tid in _DEBUG_TASK_IDS
-        if tid in MiniWobBenchmark.task_metadata
     ]
 
 
 if __name__ == "__main__":
     import miniwob_cube.debug as _this_module
-    from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
     benchmark = MiniWobBenchmark()
-    benchmark.setup()
-    results = run_debug_suite("miniwob-cube", _this_module)
+    try:
+        benchmark.setup()
+        results = run_debug_suite("miniwob-cube", _this_module)
 
-    # Smoke test: fail only on errors, not on reward (agent stops immediately).
-    failed = [r for r in results if r["error"]]
+        # Smoke test: fail only on errors, not on reward (agent stops immediately).
+        failed = [r for r in results if r["error"]]
+    finally:
+        benchmark.close()
+
     sys.exit(1 if failed else 0)

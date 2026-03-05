@@ -65,6 +65,7 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
 
 
 class MiniWobTaskConfig(TaskConfig):
+    task_metadata: TaskMetadata
     base_url: str = "http://localhost:8000/miniwob"
     remove_human_display: bool = True
     episode_max_time: int = 1000000
@@ -74,11 +75,9 @@ class MiniWobTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> MiniWobTask:
-        from miniwob_cube.benchmark import MiniWobBenchmark
-
-        task_metadata: TaskMetadata = MiniWobBenchmark.task_metadata[self.task_id]
+        _ = runtime_context, container_backend
         return MiniWobTask(
-            metadata=task_metadata,
+            metadata=self.task_metadata,
             tool_config=self.tool_config,
             base_url=self.base_url,
             remove_human_display=self.remove_human_display,
@@ -157,7 +156,7 @@ return core.getUtterance();
     return f"async () => {{{js}}}"
 
 
-def _parse_setup_result(setup_result: str | dict | list) -> tuple[str, dict]:
+def _parse_setup_result(setup_result: str | dict) -> tuple[str, dict]:
     if isinstance(setup_result, dict):
         return setup_result["utterance"], {}
     elif isinstance(setup_result, str):
