@@ -1,0 +1,23 @@
+[project]
+name = "webarena-verified-cube"
+version = "1.0.0"
+description = "WebArena-Verified benchmark cube — 812 verified web automation tasks"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-standard",
+    "webarena-verified",
+    "agentlab2",
+    "Pillow",
+]
+
+[project.entry-points."cube.benchmarks"]
+webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4
