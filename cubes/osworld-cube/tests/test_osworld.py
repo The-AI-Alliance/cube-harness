@@ -98,8 +98,19 @@ class TestComputer:
         mock_cls.return_value = _make_mock_env()
         computer = ComputerConfig(action_space="computer_13").make()
         names = {a.name for a in computer.action_set}
-        for expected in ("click", "double_click", "right_click", "drag_to", "scroll",
-                         "typing", "press", "hotkey", "wait", "done", "fail"):
+        for expected in (
+            "click",
+            "double_click",
+            "right_click",
+            "drag_to",
+            "scroll",
+            "typing",
+            "press",
+            "hotkey",
+            "wait",
+            "done",
+            "fail",
+        ):
             assert expected in names, f"Missing action: {expected}"
         assert "run_pyautogui" not in names
 
@@ -126,8 +137,9 @@ class TestComputer:
         mock_cls.return_value = mock_env
         computer = ComputerConfig().make()
 
-        obs = computer.setup_task({"id": "t1", "instruction": "test", "config": [],
-                                   "evaluator": {}, "snapshot": "init_state"})
+        obs = computer.setup_task(
+            {"id": "t1", "instruction": "test", "config": [], "evaluator": {}, "snapshot": "init_state"}
+        )
         assert isinstance(obs, Observation)
         mock_env.reset.assert_called_once()
         mock_sleep.assert_called_once_with(60)
@@ -442,24 +454,28 @@ def _make_osworld_repo(tmpdir: Path) -> Path:
     (eval_dir / "test_all.json").write_text(json.dumps(test_set))
 
     (eval_dir / "examples" / "chrome" / "chrome-1.json").write_text(
-        json.dumps({
-            "id": "chrome-1",
-            "instruction": "Open Chrome",
-            "snapshot": "init_state",
-            "config": [],
-            "evaluator": {"func": "check_url"},
-            "related_apps": ["chrome"],
-        })
+        json.dumps(
+            {
+                "id": "chrome-1",
+                "instruction": "Open Chrome",
+                "snapshot": "init_state",
+                "config": [],
+                "evaluator": {"func": "check_url"},
+                "related_apps": ["chrome"],
+            }
+        )
     )
     (eval_dir / "examples" / "os" / "os-1.json").write_text(
-        json.dumps({
-            "id": "os-1",
-            "instruction": "Open terminal",
-            "snapshot": "init_state",
-            "config": [],
-            "evaluator": {"func": "check_process"},
-            "related_apps": [],
-        })
+        json.dumps(
+            {
+                "id": "os-1",
+                "instruction": "Open terminal",
+                "snapshot": "init_state",
+                "config": [],
+                "evaluator": {"func": "check_process"},
+                "related_apps": [],
+            }
+        )
     )
     return eval_dir
 
@@ -504,7 +520,6 @@ class TestOSWorldBenchmark:
 
             assert len(chrome_bench.task_metadata) == 1
             assert "chrome-1" in chrome_bench.task_metadata
-
 
     def test_get_task_configs_carries_metadata(self):
         from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
@@ -552,10 +567,24 @@ class TestOSWorldBenchmark:
         from osworld_cube.computer import ComputerConfig
 
         tasks_data = [
-            {"id": "flat-1", "instruction": "Flat task 1", "domain": "os",
-             "snapshot": "init_state", "config": [], "evaluator": {}, "related_apps": []},
-            {"id": "flat-2", "instruction": "Flat task 2", "domain": "chrome",
-             "snapshot": "init_state", "config": [], "evaluator": {}, "related_apps": []},
+            {
+                "id": "flat-1",
+                "instruction": "Flat task 1",
+                "domain": "os",
+                "snapshot": "init_state",
+                "config": [],
+                "evaluator": {},
+                "related_apps": [],
+            },
+            {
+                "id": "flat-2",
+                "instruction": "Flat task 2",
+                "domain": "chrome",
+                "snapshot": "init_state",
+                "config": [],
+                "evaluator": {},
+                "related_apps": [],
+            },
         ]
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(tasks_data, f)
@@ -632,4 +661,3 @@ class TestOSWorldBenchmark:
         from osworld_cube.computer import ComputerConfig
 
         OSWorldBenchmark(default_tool_config=ComputerConfig()).close()
-
