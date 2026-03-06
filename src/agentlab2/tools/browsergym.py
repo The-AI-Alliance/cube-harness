@@ -415,7 +415,6 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
                 axtree_str = flatten_axtree_to_str(axtree_obj)
-<<<<<<< HEAD
                 obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
         # Add screenshot if configured (convert numpy array to PIL Image)
