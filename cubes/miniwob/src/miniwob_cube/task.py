@@ -5,6 +5,7 @@ from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Content, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
+from cube.tools.browser import AbstractBrowserTool
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,10 @@ class MiniWobTask(Task):
     base_url: str = "http://localhost:8000/miniwob"
     remove_human_display: bool = True
     episode_max_time: int = 1000000
+
+    @property
+    def tool(self) -> AbstractBrowserTool:  # type: ignore[override]
+        return self._tool  # type: ignore[return-value]
 
     @property
     def url(self) -> str:
@@ -80,7 +85,7 @@ class MiniWobTaskConfig(TaskConfig):
 
         _ = runtime_context, container_backend
         task_metadata: TaskMetadata = MiniWobBenchmark.task_metadata[self.task_id]
-        assert self.tool_config is not None, "tool_config must be set to either BrowsergymConfig or PlaywrightConfig"
+        assert self.tool_config is not None, "tool_config must be set"
         return MiniWobTask(
             metadata=task_metadata,
             tool_config=self.tool_config,
