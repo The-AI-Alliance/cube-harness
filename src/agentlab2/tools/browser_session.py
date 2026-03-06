@@ -27,10 +27,9 @@ import socket
 from pathlib import Path
 
 from browsergym.core import _get_global_playwright
+from cube.core import TypedBaseModel
 from playwright.sync_api import Browser, BrowserContext, Page
 from pydantic import Field
-
-from agentlab2.base import TypedBaseModel
 
 logger = logging.getLogger(__name__)
 
