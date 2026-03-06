@@ -62,6 +62,7 @@ def main(debug: bool) -> None:
     # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
     tool_config = BrowsergymConfig(
         headless=not debug,  # Show browser in debug mode
+        timeout=30000,
         use_screenshot=True,
         use_axtree=True,
         use_html=False,
