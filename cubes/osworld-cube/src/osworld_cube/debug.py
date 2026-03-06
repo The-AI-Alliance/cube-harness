@@ -57,7 +57,7 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
         Action(name="press", arguments={"key": "enter"}),
         Action(name="wait", arguments={}),
         Action(name="done", arguments={}),
-    ]
+    ],
 }
 
 
@@ -151,9 +151,7 @@ def get_debug_task_configs() -> list[OSWorldTaskConfig]:
                 "related_apps": entry.get("related_apps", []),
             },
         )
-        configs.append(
-            OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta)
-        )
+        configs.append(OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta))
     logger.debug("[get_debug_task_configs] Loaded %d configs from %s", len(configs), _TASKS_FILE)
     return configs
 

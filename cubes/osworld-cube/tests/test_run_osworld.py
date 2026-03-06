@@ -19,7 +19,6 @@ from osworld_cube.computer import ComputerConfig, VMProvider
 from osworld_cube.task import OSWorldTask
 
 
-
 def test_instantiate_and_get_first_obs():
     metadata = TaskMetadata(
         id="demo-open-calculator",

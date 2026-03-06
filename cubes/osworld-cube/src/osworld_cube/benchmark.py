@@ -47,14 +47,7 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
     resolves the path correctly regardless of the current working directory.
     """
     key = "PROXY_CONFIG_FILE"
-    value = str(
-        _CUBE_CACHE_ROOT
-        / "OSWorld"
-        / "evaluation_examples"
-        / "settings"
-        / "proxy"
-        / "dataimpulse.json"
-    )
+    value = str(_CUBE_CACHE_ROOT / "OSWorld" / "evaluation_examples" / "settings" / "proxy" / "dataimpulse.json")
 
     if env_path.exists():
         for line in env_path.read_text().splitlines():
@@ -72,7 +65,7 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
 # Paths — rooted under CUBE_CACHE_DIR (default ~/.agentlab2)
 # ---------------------------------------------------------------------------
 
-OSWORLD_BASE_DIR = _CUBE_CACHE_ROOT 
+OSWORLD_BASE_DIR = _CUBE_CACHE_ROOT
 OSWORLD_REPO_DIR = OSWORLD_BASE_DIR / "OSWorld"
 OSWORLD_VM_DIR = OSWORLD_BASE_DIR / "vm_data"
 OSWORLD_CACHE_DIR = OSWORLD_BASE_DIR / "cache"
@@ -178,10 +171,7 @@ class OSWorldBenchmark(Benchmark):
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
         name="osworld",
         version="1.0.0",
-        description=(
-            "OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks "
-            "in Real Computer Environments"
-        ),
+        description=("OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments"),
         authors=["Tianbao Xie et al."],
         license="CC-BY-4.0",
         requirements={
@@ -205,7 +195,7 @@ class OSWorldBenchmark(Benchmark):
 
     tasks_file: str | None = None
     """Path to a flat JSON array of task dicts (overrides OSWorld repo structure)."""
-    
+
     test_set_name: OSWorldTestSet = OSWorldTestSet.TEST_ALL
     """Filename of the test set index inside <evaluation_examples>/."""
 
@@ -325,17 +315,12 @@ class OSWorldBenchmark(Benchmark):
         Reads test_set_path/test_set_name → {domain: [task_id, ...]}
         Then reads test_set_path/examples/<domain>/<task_id>.json per task.
         """
-        eval_examples_dir = (
-            Path(self.test_set_path)
-            if self.test_set_path
-            else OSWORLD_REPO_DIR / "evaluation_examples"
-        )
+        eval_examples_dir = Path(self.test_set_path) if self.test_set_path else OSWORLD_REPO_DIR / "evaluation_examples"
         test_set_file = eval_examples_dir / self.test_set_name
 
         if not test_set_file.exists():
             raise FileNotFoundError(
-                f"Test set not found: {test_set_file}\n"
-                "Ensure OSWorld is cloned and task files are present."
+                f"Test set not found: {test_set_file}\nEnsure OSWorld is cloned and task files are present."
             )
 
         with open(test_set_file) as f:

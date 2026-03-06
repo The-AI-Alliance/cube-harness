@@ -20,7 +20,7 @@ from PIL import Image
 
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers OSWorldTask.model_rebuild()
 from cube.core import ActionSchema, Observation
-from cube.task import Task, TaskMetadata
+from cube.task import Task
 
 if TYPE_CHECKING:
     from osworld_cube.computer import ComputerBase
@@ -61,10 +61,9 @@ class OSWorldTask(Task):
     and replace axtree with an indexed element table before returning obs."""
 
     @property
-    def _computer(self) -> "Computer":
+    def _computer(self) -> "ComputerBase":
         """Return self.tool cast to Computer for type-checker satisfaction."""
         return self.tool  # type: ignore[return-value]
-
 
     def reset(self) -> tuple[Observation, dict]:
         """
@@ -95,10 +94,7 @@ class OSWorldTask(Task):
             "related_apps": extra.get("related_apps", []),
         }
 
-        logger.info(
-            f"Resetting OSWorldTask {self.metadata.id} "
-            f"(domain={extra.get('domain', 'unknown')})"
-        )
+        logger.info(f"Resetting OSWorldTask {self.metadata.id} (domain={extra.get('domain', 'unknown')})")
 
         obs = self._computer.setup_task(task_config)
         obs = self.obs_postprocess(obs)
@@ -114,7 +110,6 @@ class OSWorldTask(Task):
         }
         return obs, info
 
-
     def evaluate(self, obs: Observation) -> tuple[float, dict]:
         """
         Call desktop_env's built-in evaluator and return (reward, info).
@@ -129,25 +124,18 @@ class OSWorldTask(Task):
         evaluator = self.metadata.extra_info.get("evaluator", {})
 
         if not evaluator:
-            logger.warning(
-                f"Task {self.metadata.id}: no evaluator configured, returning 0.0"
-            )
+            logger.warning(f"Task {self.metadata.id}: no evaluator configured, returning 0.0")
             return 0.0, {"error": "no_evaluator"}
 
         eval_func = evaluator.get("func", "unknown")
-        logger.debug(
-            f"Evaluating task {self.metadata.id} with evaluator: {eval_func}"
-        )
+        logger.debug(f"Evaluating task {self.metadata.id} with evaluator: {eval_func}")
 
         reward = self._computer.evaluate_task()
-        logger.info(
-            f"Task {self.metadata.id} evaluation: reward={reward}, evaluator={eval_func}"
-        )
+        logger.info(f"Task {self.metadata.id} evaluation: reward={reward}, evaluator={eval_func}")
         return reward, {
             "evaluator": eval_func,
             "expected": evaluator.get("expected", {}),
         }
-
 
     def finished(self, obs: Observation) -> bool:
         """
@@ -181,9 +169,7 @@ class OSWorldTask(Task):
             if content.name == "accessibility_tree":
                 try:
                     axtree_txt = linearize_accessibility_tree(content.data, platform=platform)
-                    new_contents.append(
-                        content.model_copy(update={"data": axtree_txt, "name": "axtree_txt"})
-                    )
+                    new_contents.append(content.model_copy(update={"data": axtree_txt, "name": "axtree_txt"}))
                 except Exception as e:
                     logger.warning(f"Failed to linearize accessibility tree: {e}")
                     new_contents.append(content)
@@ -211,10 +197,7 @@ class OSWorldTask(Task):
                 axtree_content = content
 
         if screenshot_content is None or axtree_content is None:
-            logger.warning(
-                "SoM requires both screenshot and accessibility_tree; "
-                "falling back to linearize."
-            )
+            logger.warning("SoM requires both screenshot and accessibility_tree; falling back to linearize.")
             return self._postprocess_linearize(obs)
 
         try:
@@ -235,11 +218,7 @@ class OSWorldTask(Task):
                 if content.name == "screenshot" and isinstance(content.data, Image.Image):
                     new_contents.append(content.model_copy(update={"data": tagged_img}))
                 elif content.name == "accessibility_tree":
-                    new_contents.append(
-                        content.model_copy(
-                            update={"data": element_list, "name": "som_elements"}
-                        )
-                    )
+                    new_contents.append(content.model_copy(update={"data": element_list, "name": "som_elements"}))
                 else:
                     new_contents.append(content)
             return obs.model_copy(update={"contents": new_contents})

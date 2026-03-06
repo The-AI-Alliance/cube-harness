@@ -21,13 +21,14 @@ Usage:
 
 import sys
 
+from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
+from osworld_cube.computer import ComputerConfig
+
 from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.genny import GennyConfig
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
-from osworld_cube.computer import ComputerConfig
 
 OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
 You are an expert computer use agent. You control a desktop computer via pyautogui.

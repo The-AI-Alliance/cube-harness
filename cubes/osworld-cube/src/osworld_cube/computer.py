@@ -80,7 +80,7 @@ class ComputerConfig(ToolConfig):
     path_to_vm: str | None = None
     snapshot_name: str = "init_state"
     cache_dir: str = str(_CUBE_CACHE_ROOT / "cache")
-    vm_dir: str = str(_CUBE_CACHE_ROOT /"vm_data")
+    vm_dir: str = str(_CUBE_CACHE_ROOT / "vm_data")
     screen_size: tuple[int, int] = (1920, 1080)
     headless: bool = True
     require_a11y_tree: bool = True
@@ -225,9 +225,7 @@ class ComputerBase(Tool):
             contents.append(ImageContent(data=img, name="screenshot"))
 
         if raw_obs.get("accessibility_tree"):
-            contents.append(
-                TextContent(data=raw_obs["accessibility_tree"], name="accessibility_tree")
-            )
+            contents.append(TextContent(data=raw_obs["accessibility_tree"], name="accessibility_tree"))
 
         if raw_obs.get("terminal"):
             contents.append(TextContent(data=raw_obs["terminal"], name="terminal"))
@@ -343,9 +341,7 @@ class Computer13(ComputerBase):
         Args:
             button: Mouse button — "left", "right", or "middle"
         """
-        return self._execute_desktop_action(
-            {"action_type": "MOUSE_DOWN", "parameters": {"button": button}}
-        )
+        return self._execute_desktop_action({"action_type": "MOUSE_DOWN", "parameters": {"button": button}})
 
     @tool_action
     def mouse_up(self, button: str = "left") -> str:
@@ -354,9 +350,7 @@ class Computer13(ComputerBase):
         Args:
             button: Mouse button — "left", "right", or "middle"
         """
-        return self._execute_desktop_action(
-            {"action_type": "MOUSE_UP", "parameters": {"button": button}}
-        )
+        return self._execute_desktop_action({"action_type": "MOUSE_UP", "parameters": {"button": button}})
 
     @tool_action
     def move_to(self, x: int, y: int) -> str:
@@ -366,9 +360,7 @@ class Computer13(ComputerBase):
             x: Target X coordinate
             y: Target Y coordinate
         """
-        return self._execute_desktop_action(
-            {"action_type": "MOVE_TO", "parameters": {"x": x, "y": y}}
-        )
+        return self._execute_desktop_action({"action_type": "MOVE_TO", "parameters": {"x": x, "y": y}})
 
     @tool_action
     def drag_to(self, x: int, y: int) -> str:
@@ -378,9 +370,7 @@ class Computer13(ComputerBase):
             x: Target X coordinate
             y: Target Y coordinate
         """
-        return self._execute_desktop_action(
-            {"action_type": "DRAG_TO", "parameters": {"x": x, "y": y}}
-        )
+        return self._execute_desktop_action({"action_type": "DRAG_TO", "parameters": {"x": x, "y": y}})
 
     @tool_action
     def scroll(self, dx: int, dy: int) -> str:
@@ -390,9 +380,7 @@ class Computer13(ComputerBase):
             dx: Horizontal scroll amount (positive = right)
             dy: Vertical scroll amount (positive = down)
         """
-        return self._execute_desktop_action(
-            {"action_type": "SCROLL", "parameters": {"dx": dx, "dy": dy}}
-        )
+        return self._execute_desktop_action({"action_type": "SCROLL", "parameters": {"dx": dx, "dy": dy}})
 
     @tool_action
     def typing(self, text: str) -> str:
@@ -401,9 +389,7 @@ class Computer13(ComputerBase):
         Args:
             text: The text to type
         """
-        return self._execute_desktop_action(
-            {"action_type": "TYPING", "parameters": {"text": text}}
-        )
+        return self._execute_desktop_action({"action_type": "TYPING", "parameters": {"text": text}})
 
     @tool_action
     def press(self, key: str) -> str:
@@ -412,9 +398,7 @@ class Computer13(ComputerBase):
         Args:
             key: Key name (e.g. "enter", "esc", "tab", "backspace", "space")
         """
-        return self._execute_desktop_action(
-            {"action_type": "PRESS", "parameters": {"key": key}}
-        )
+        return self._execute_desktop_action({"action_type": "PRESS", "parameters": {"key": key}})
 
     @tool_action
     def key_down(self, key: str) -> str:
@@ -423,9 +407,7 @@ class Computer13(ComputerBase):
         Args:
             key: Key name (e.g. "ctrl", "shift", "alt")
         """
-        return self._execute_desktop_action(
-            {"action_type": "KEY_DOWN", "parameters": {"key": key}}
-        )
+        return self._execute_desktop_action({"action_type": "KEY_DOWN", "parameters": {"key": key}})
 
     @tool_action
     def key_up(self, key: str) -> str:
@@ -434,9 +416,7 @@ class Computer13(ComputerBase):
         Args:
             key: Key name (e.g. "ctrl", "shift", "alt")
         """
-        return self._execute_desktop_action(
-            {"action_type": "KEY_UP", "parameters": {"key": key}}
-        )
+        return self._execute_desktop_action({"action_type": "KEY_UP", "parameters": {"key": key}})
 
     @tool_action
     def hotkey(self, keys: str) -> str:
@@ -447,9 +427,7 @@ class Computer13(ComputerBase):
         """
         if isinstance(keys, str):
             keys = keys.split("+")
-        return self._execute_desktop_action(
-            {"action_type": "HOTKEY", "parameters": {"keys": keys}}
-        )
+        return self._execute_desktop_action({"action_type": "HOTKEY", "parameters": {"keys": keys}})
 
 
 # ---------------------------------------------------------------------------

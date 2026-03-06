@@ -117,9 +117,7 @@ def judge_node(node: ET.Element, platform: str = "ubuntu", check_image: bool = F
     return keeps
 
 
-def filter_nodes(
-    root: ET.Element, platform: str = "ubuntu", check_image: bool = False
-) -> list[ET.Element]:
+def filter_nodes(root: ET.Element, platform: str = "ubuntu", check_image: bool = False) -> list[ET.Element]:
     """Return all visible and interactable nodes from the accessibility tree."""
     return [node for node in root.iter() if judge_node(node, platform, check_image)]
 
@@ -188,9 +186,7 @@ def draw_bounding_boxes(
 
             draw.rectangle([coords, bottom_right], outline="red", width=1)
             text_pos = (coords[0], bottom_right[1])
-            text_bbox: Tuple[int, int, int, int] = draw.textbbox(
-                text_pos, str(index), font=font, anchor="lb"
-            )
+            text_bbox: Tuple[int, int, int, int] = draw.textbbox(text_pos, str(index), font=font, anchor="lb")
             draw.rectangle(text_bbox, fill="black")
             draw.text(text_pos, str(index), font=font, anchor="lb", fill="white")
 
@@ -199,23 +195,16 @@ def draw_bounding_boxes(
 
             # Build node text for the element table
             if _node.text:
-                node_text = (
-                    _node.text
-                    if '"' not in _node.text
-                    else '"{:}"'.format(_node.text.replace('"', '""'))
-                )
-            elif (
-                _node.get(f"{{{class_ns_windows}}}class", "").endswith("EditWrapper")
-                and _node.get(f"{{{_value_ns}}}value")
+                node_text = _node.text if '"' not in _node.text else '"{:}"'.format(_node.text.replace('"', '""'))
+            elif _node.get(f"{{{class_ns_windows}}}class", "").endswith("EditWrapper") and _node.get(
+                f"{{{_value_ns}}}value"
             ):
                 raw = _node.get(f"{{{_value_ns}}}value", "")
                 node_text = raw if '"' not in raw else '"{:}"'.format(raw.replace('"', '""'))
             else:
                 node_text = '""'
 
-            text_informations.append(
-                f"{index}\t{_node.tag}\t{_node.get('name', '')}\t{node_text}"
-            )
+            text_informations.append(f"{index}\t{_node.tag}\t{_node.get('name', '')}\t{node_text}")
             index += 1
 
         except (ValueError, SyntaxError):
@@ -245,15 +234,8 @@ def linearize_accessibility_tree(accessibility_tree: str, platform: str = "ubunt
 
     for node in filtered_nodes:
         if node.text:
-            text = (
-                node.text
-                if '"' not in node.text
-                else '"{:}"'.format(node.text.replace('"', '""'))
-            )
-        elif (
-            node.get(f"{{{class_ns_windows}}}class", "").endswith("EditWrapper")
-            and node.get(f"{{{_value_ns}}}value")
-        ):
+            text = node.text if '"' not in node.text else '"{:}"'.format(node.text.replace('"', '""'))
+        elif node.get(f"{{{class_ns_windows}}}class", "").endswith("EditWrapper") and node.get(f"{{{_value_ns}}}value"):
             raw = node.get(f"{{{_value_ns}}}value", "")
             text = raw if '"' not in raw else '"{:}"'.format(raw.replace('"', '""'))
         else:
@@ -296,8 +278,5 @@ def tag_screenshot(
         element_list:  tab-separated element table (index/tag/name/text)
     """
     nodes = filter_nodes(ET.fromstring(accessibility_tree), platform=platform, check_image=True)
-    marks, drew_nodes, element_list, tagged_screenshot = draw_bounding_boxes(
-        nodes, screenshot, platform=platform
-    )
+    marks, drew_nodes, element_list, tagged_screenshot = draw_bounding_boxes(nodes, screenshot, platform=platform)
     return marks, drew_nodes, tagged_screenshot, element_list
-
