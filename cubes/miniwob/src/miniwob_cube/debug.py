@@ -21,7 +21,7 @@ import sys
 
 from cube.core import Action, ActionSchema, Observation
 from cube.container import Container
-from cube.tool import ToolConfig, AbstractTool
+from cube.tool import AbstractTool, ToolConfig
 from cube.testing import run_debug_suite
 
 from miniwob_cube.benchmark import MiniWobBenchmark
