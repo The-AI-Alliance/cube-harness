@@ -52,11 +52,12 @@ def _run_with_ray_impl(
     exp: Experiment, n_cpus: int, ray_poll_timeout: float, episode_timeout: float | None
 ) -> ExpResult:
     exp.save_config()
+    output_dir = exp.output_dir
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
         trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
-        log_file = get_log_path(exp.output_dir, trajectory_id)
+        log_file = get_log_path(output_dir, trajectory_id)
         with redirect_output_to_log(log_file, append=True, tee=False, log_format=LOG_FORMAT):
             return episode.run()
 
