@@ -291,7 +291,9 @@ class TestBrowsergymToolActionMethods:
         """Helper to create a tool with a mocked page for action testing."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
         return tool
 
     def test_browser_click_action_string(self) -> None:
@@ -400,7 +402,9 @@ class TestBrowsergymToolActionMethods:
         """Test that browser_wait clamps to max_wait value."""
         config = BrowsergymConfig(max_wait=10)
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_wait(120)  # Request 120 seconds, but max_wait is 10
@@ -442,7 +446,9 @@ class TestBrowsergymToolStepResults:
         """Helper to create a tool with a mocked page."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
         tool._action_set = MagicMock()
         return tool
 
@@ -504,7 +510,9 @@ class TestBrowsergymToolExecuteAction:
         """Test that execute_action combines action result and page observation."""
         config = BrowsergymConfig(use_html=True, use_axtree=False, use_screenshot=False, prune_html=False)
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
 
         action = Action(name="browser_click", arguments={"bid": "a1"})
 
@@ -545,7 +553,9 @@ class TestBrowsergymToolLifecycle:
         """Test that reset closes existing runtime before creating new one."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
 
         with (
             patch.object(tool, "_close_runtime") as mock_close,
@@ -562,7 +572,9 @@ class TestBrowsergymToolLifecycle:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
         tool._last_obs = {"some": "data"}
         tool._last_info = {"info": "data"}
 
@@ -579,7 +591,9 @@ class TestBrowsergymToolLifecycle:
 
         mock_context = MagicMock()
         mock_context.close.side_effect = Exception("Close failed")
-        tool.session = PlaywrightSession(page=MagicMock(), context=mock_context, browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=MagicMock(), context=mock_context, browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
         tool._last_obs = {"some": "data"}
 
         # Should not raise
@@ -664,7 +678,9 @@ class TestBrowsergymToolCheckboxJsFallback:
         mock_page._mock_element_locator = mock_element_locator
         mock_page._mock_frame = mock_frame
 
-        tool.session = PlaywrightSession(page=mock_page, context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222")
+        tool.session = PlaywrightSession(
+            page=mock_page, context=MagicMock(), browser=MagicMock(), cdp_url="http://localhost:9222"
+        )
         tool._last_obs = {}
 
         return tool
