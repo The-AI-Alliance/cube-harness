@@ -30,16 +30,18 @@ from pathlib import Path
 
 from browsergym.core import _get_global_playwright
 from cube.core import TypedBaseModel
-from playwright.sync_api import Browser, BrowserContext, Page
+from playwright.sync_api import BrowserContext, Page
 from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
 
-def _get_cdp_url(user_data_dir: str) -> str:
-    """Return the CDP URL for a Chrome instance launched with --remote-debugging-port=0.
+def _read_cdp_url(user_data_dir: str) -> str:
+    """Read the CDP URL from Chrome's DevToolsActivePort file.
 
-    Chrome writes the actual assigned port to DevToolsActivePort in the user data dir.
+    Chrome writes this file to user_data_dir immediately after binding to the
+    debug port. Using --remote-debugging-port=0 lets the OS assign a free port
+    atomically, avoiding multiprocessing race conditions.
     """
     port_file = Path(user_data_dir) / "DevToolsActivePort"
     deadline = time.monotonic() + 2.0
@@ -132,42 +134,38 @@ class PlaywrightSessionConfig(BrowserConfig):
             f"--window-size={self.viewport['width']},{self.viewport['height']}" if self.resizeable_window else None,
             "--disable-features=OverlayScrollbars,ExtendedOverlayScrollbars",
             "--remote-debugging-port=0",
-            f"--user-data-dir={user_data_dir}",
         ]
-        browser = pw.chromium.launch(
+        context = pw.chromium.launch_persistent_context(
+            user_data_dir,
             headless=self.headless,
             slow_mo=self.slow_mo,
             args=[arg for arg in args if arg is not None],
             ignore_default_args=["--hide-scrollbars"],
-            **self.pw_chromium_kwargs,
-        )
-        context = browser.new_context(
             no_viewport=True if self.resizeable_window else None,
             viewport=self.viewport if not self.resizeable_window else None,
             record_video_dir=Path(self.record_video_dir) / "task_video" if self.record_video_dir else None,
             record_video_size=self.viewport,
             locale=self.locale,
             timezone_id=self.timezone_id,
-            **self.pw_context_kwargs,
+            **{**self.pw_chromium_kwargs, **self.pw_context_kwargs},
         )
         if self.timeout is not None:
             context.set_default_timeout(self.timeout)
-        page = context.new_page()
-        cdp_url = _get_cdp_url(user_data_dir)
-        return PlaywrightSession(page=page, context=context, browser=browser, cdp_url=cdp_url)
+        page = context.pages[0] if context.pages else context.new_page()
+        cdp_url = _read_cdp_url(user_data_dir)
+        return PlaywrightSession(page=page, context=context, cdp_url=cdp_url)
 
 
 class PlaywrightSession(BrowserSession):
     """Live Playwright browser session.
 
     Owns the Playwright page, context, and browser launched by PlaywrightSessionConfig.
-    Always exposes a cdp_url (--remote-debugging-port) for cross-backend access.
+    Always exposes a cdp_url for cross-backend access.
     """
 
-    def __init__(self, page: Page, context: BrowserContext, browser: Browser, cdp_url: str) -> None:
+    def __init__(self, page: Page, context: BrowserContext, cdp_url: str) -> None:
         self._page: Page = page
         self._context: BrowserContext = context
-        self._browser: Browser = browser
         self.cdp_url: str = cdp_url
 
     def get_playwright_session(self) -> tuple[Page, BrowserContext]:
@@ -175,12 +173,8 @@ class PlaywrightSession(BrowserSession):
         return self._page, self._context
 
     def stop(self) -> None:
-        """Close the browser and release all Playwright resources."""
+        """Close the context and release all Playwright resources."""
         try:
             self._context.close()
         except Exception as e:
             logger.warning(f"Error closing browser context: {e}")
-        try:
-            self._browser.close()
-        except Exception as e:
-            logger.warning(f"Error closing browser: {e}")
