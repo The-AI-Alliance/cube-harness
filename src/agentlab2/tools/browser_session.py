@@ -23,7 +23,9 @@ Concrete implementations:
 """
 
 import logging
-import socket
+import tempfile
+import time
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 from browsergym.core import _get_global_playwright
@@ -34,14 +36,22 @@ from pydantic import Field
 logger = logging.getLogger(__name__)
 
 
-def _find_free_port() -> int:
-    """Find a free TCP port on localhost."""
-    with socket.socket() as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
+def _get_cdp_url(user_data_dir: str) -> str:
+    """Return the CDP URL for a Chrome instance launched with --remote-debugging-port=0.
+
+    Chrome writes the actual assigned port to DevToolsActivePort in the user data dir.
+    """
+    port_file = Path(user_data_dir) / "DevToolsActivePort"
+    deadline = time.monotonic() + 2.0
+    while not port_file.exists():
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"Chrome did not write DevToolsActivePort to {user_data_dir!r}")
+        time.sleep(0.05)
+    port = int(port_file.read_text().splitlines()[0])
+    return f"http://localhost:{port}"
 
 
-class BrowserConfig(TypedBaseModel):
+class BrowserConfig(TypedBaseModel, ABC):
     """Abstract serializable config for a browser session.
 
     Call make() to launch a browser and get a live BrowserSession. The config holds
@@ -52,12 +62,13 @@ class BrowserConfig(TypedBaseModel):
     # Future: CUAConfig — no browser protocol; just OS-level window metadata
     """
 
+    @abstractmethod
     def make(self) -> "BrowserSession":
         """Launch a browser and return a live BrowserSession."""
-        raise NotImplementedError
+        ...
 
 
-class BrowserSession:
+class BrowserSession(ABC):
     """Abstract live browser session handle.
 
     Represents a running browser instance that can be shared across processes and
@@ -69,17 +80,13 @@ class BrowserSession:
     interface for browser interaction in this codebase. Non-Playwright backends (e.g.
     CUASession) connect lazily via CDP: pw.chromium.connect_over_cdp(self.cdp_url).
 
-    cdp_url is set by subclasses that expose a CDP port. It is None for session types
-    that identify the browser at the OS level (PID/Display) rather than via a network port.
-
     Subclasses:
     - PlaywrightSession: owns Playwright objects directly; cdp_url always set
     # Future: CUASession — identified via OS process PID and/or Display env var;
     #   get_playwright_session() connects via pw.chromium.connect_over_cdp(cdp_url)
     """
 
-    cdp_url: str | None = None
-
+    @abstractmethod
     def get_playwright_session(self) -> tuple[Page, BrowserContext]:
         """Return a live Playwright (page, context) for this browser.
 
@@ -87,11 +94,12 @@ class BrowserSession:
         For other backends (e.g. CUASession) this connects via CDP lazily:
             pw.chromium.connect_over_cdp(self.cdp_url)
         """
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def stop(self) -> None:
         """Close the browser and release all resources."""
-        raise NotImplementedError
+        ...
 
 
 class PlaywrightSessionConfig(BrowserConfig):
@@ -119,11 +127,12 @@ class PlaywrightSessionConfig(BrowserConfig):
         """Launch a Chromium browser and return a live PlaywrightSession."""
         pw = _get_global_playwright()
 
-        cdp_port = _find_free_port()
+        user_data_dir = tempfile.mkdtemp(prefix="agentlab2_")
         args = [
             f"--window-size={self.viewport['width']},{self.viewport['height']}" if self.resizeable_window else None,
             "--disable-features=OverlayScrollbars,ExtendedOverlayScrollbars",
-            f"--remote-debugging-port={cdp_port}",
+            "--remote-debugging-port=0",
+            f"--user-data-dir={user_data_dir}",
         ]
         browser = pw.chromium.launch(
             headless=self.headless,
@@ -144,7 +153,8 @@ class PlaywrightSessionConfig(BrowserConfig):
         if self.timeout is not None:
             context.set_default_timeout(self.timeout)
         page = context.new_page()
-        return PlaywrightSession(page=page, context=context, browser=browser, cdp_url=f"http://localhost:{cdp_port}")
+        cdp_url = _get_cdp_url(user_data_dir)
+        return PlaywrightSession(page=page, context=context, browser=browser, cdp_url=cdp_url)
 
 
 class PlaywrightSession(BrowserSession):
@@ -155,29 +165,22 @@ class PlaywrightSession(BrowserSession):
     """
 
     def __init__(self, page: Page, context: BrowserContext, browser: Browser, cdp_url: str) -> None:
-        self._page: Page | None = page
-        self._context: BrowserContext | None = context
-        self._browser: Browser | None = browser
+        self._page: Page = page
+        self._context: BrowserContext = context
+        self._browser: Browser = browser
         self.cdp_url: str = cdp_url
 
     def get_playwright_session(self) -> tuple[Page, BrowserContext]:
         """Return the live (page, context)."""
-        if self._page is None or self._context is None:
-            raise RuntimeError("BrowserSession has been stopped or was never started.")
         return self._page, self._context
 
     def stop(self) -> None:
         """Close the browser and release all Playwright resources."""
-        if self._context is not None:
-            try:
-                self._context.close()
-            except Exception as e:
-                logger.warning(f"Error closing browser context: {e}")
-        if self._browser is not None:
-            try:
-                self._browser.close()
-            except Exception as e:
-                logger.warning(f"Error closing browser: {e}")
-        self._page = None
-        self._context = None
-        self._browser = None
+        try:
+            self._context.close()
+        except Exception as e:
+            logger.warning(f"Error closing browser context: {e}")
+        try:
+            self._browser.close()
+        except Exception as e:
+            logger.warning(f"Error closing browser: {e}")
