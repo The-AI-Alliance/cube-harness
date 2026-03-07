@@ -1,10 +1,10 @@
 """Tool layer — bash, read_file, write_file actions backed by a CUBE Container."""
 
-import io
+import base64
 import logging
 import shlex
-import tarfile
 from pathlib import Path
+from typing import Any
 
 from cube.container import Container, ExecResult
 from cube.tool import Tool, ToolConfig, tool_action
@@ -45,14 +45,15 @@ class TerminalBenchTool(Tool):
     def reset(self) -> None:
         pass
 
+    def _exec(self, command: str, **kwargs: Any) -> ExecResult:
+        """Run a command in the container with default workdir."""
+        kwargs.setdefault("workdir", self._config.working_dir)
+        return self._container.exec(command, **kwargs)
+
     @tool_action
     def bash(self, command: str, timeout: int = 120) -> str:
         """Execute a bash command in the sandbox and return its output."""
-        result: ExecResult = self._container.exec(
-            command,
-            timeout=timeout,
-            workdir=self._config.working_dir,
-        )
+        result = self._exec(command, timeout=timeout)
         parts = []
         if result.stdout:
             parts.append(result.stdout)
@@ -68,7 +69,7 @@ class TerminalBenchTool(Tool):
     @tool_action
     def read_file(self, path: str) -> str:
         """Read the contents of a file in the sandbox."""
-        result = self._container.exec(f"cat {shlex.quote(path)}", workdir=self._config.working_dir)
+        result = self._exec(f"cat {shlex.quote(path)}")
         if result.exit_code != 0:
             return f"Error reading {path}: {result.stderr or result.stdout}"
         return result.stdout
@@ -76,42 +77,25 @@ class TerminalBenchTool(Tool):
     @tool_action
     def write_file(self, path: str, content: str) -> str:
         """Write content to a file in the sandbox."""
-        parent = str(Path(path).parent)
-        self._container.exec(f"mkdir -p {shlex.quote(parent)}", workdir=self._config.working_dir)
-        # Use heredoc to avoid shell escaping issues with content
+        self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
         escaped = content.replace("\\", "\\\\").replace("'", "'\\''")
-        self._container.exec(
-            f"printf '%s' '{escaped}' > {shlex.quote(path)}",
-            workdir=self._config.working_dir,
-        )
+        self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
         return f"Wrote {len(content)} bytes to {path}"
 
     def upload_file(self, local_path: Path, remote_path: str) -> None:
         """Upload a local file to the container (not an agent action)."""
         try:
-            content = local_path.read_text(encoding="utf-8")
-            self.write_file(remote_path, content)
+            self.write_file(remote_path, local_path.read_text(encoding="utf-8"))
         except UnicodeDecodeError:
-            self._upload_binary(local_path, remote_path)
+            b64 = base64.b64encode(local_path.read_bytes()).decode("ascii")
+            self._exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}")
+            self._exec(f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}")
 
     def upload_directory(self, local_dir: Path, remote_dir: str) -> None:
-        """Recursively upload a local directory to the container (not an agent action)."""
-        self._container.exec(f"mkdir -p {shlex.quote(remote_dir)}", workdir=self._config.working_dir)
+        """Upload a local directory tree to the container (not an agent action)."""
+        self._exec(f"mkdir -p {shlex.quote(remote_dir)}")
         for item in local_dir.rglob("*"):
             if item.is_file():
-                relative = item.relative_to(local_dir)
-                remote_path = f"{remote_dir}/{relative}"
-                remote_parent = str(Path(remote_path).parent)
-                self._container.exec(f"mkdir -p {shlex.quote(remote_parent)}", workdir=self._config.working_dir)
+                remote_path = f"{remote_dir}/{item.relative_to(local_dir)}"
+                self._exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}")
                 self.upload_file(item, remote_path)
-
-    def _upload_binary(self, local_path: Path, remote_path: str) -> None:
-        """Upload a binary file using base64 encoding."""
-        import base64
-        b64 = base64.b64encode(local_path.read_bytes()).decode("ascii")
-        parent = str(Path(remote_path).parent)
-        self._container.exec(f"mkdir -p {shlex.quote(parent)}", workdir=self._config.working_dir)
-        self._container.exec(
-            f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}",
-            workdir=self._config.working_dir,
-        )

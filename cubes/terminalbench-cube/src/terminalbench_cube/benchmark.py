@@ -9,7 +9,7 @@ import tomllib
 from collections.abc import Generator
 from pathlib import Path
 from random import Random
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from datasets import Dataset, load_from_disk
 
@@ -21,48 +21,6 @@ from terminalbench_cube.task import TerminalBenchTaskConfig
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATASET_PATH = str(Path.home() / ".agentlab" / "data" / "terminal_bench_v2")
-
-
-def _create_task_archive(task_dir: Path) -> bytes:
-    """Create a tar.gz archive of a task directory."""
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
-        for item in task_dir.rglob("*"):
-            if item.is_file():
-                tar.add(item, arcname=str(item.relative_to(task_dir)))
-    return buffer.getvalue()
-
-
-def _load_task_from_repo(task_dir: Path) -> dict | None:
-    """Load a single task from a Terminal-Bench repo directory."""
-    task_toml = task_dir / "task.toml"
-    instruction_md = task_dir / "instruction.md"
-    if not task_toml.exists() or not instruction_md.exists():
-        return None
-
-    with open(task_toml, "rb") as f:
-        config = tomllib.load(f)
-
-    instruction = instruction_md.read_text(encoding="utf-8").strip()
-    metadata = config.get("metadata", {})
-    env_config = config.get("environment", {})
-    agent_config = config.get("agent", {})
-    verifier_config = config.get("verifier", {})
-
-    return {
-        "task_id": task_dir.name,
-        "base_description": instruction,
-        "archive": _create_task_archive(task_dir),
-        "difficulty": metadata.get("difficulty", "unknown"),
-        "category": metadata.get("category", ""),
-        "tags": metadata.get("tags", []),
-        "docker_image": env_config.get("docker_image", "python:3.13"),
-        "cpus": env_config.get("cpus", 1),
-        "memory": env_config.get("memory", "4G"),
-        "storage": env_config.get("storage", "10G"),
-        "max_agent_timeout_sec": int(agent_config.get("timeout_sec", 900)),
-        "max_test_timeout_sec": int(verifier_config.get("timeout_sec", 900)),
-    }
 
 
 def _parse_gb(value: str | int) -> float:
@@ -89,11 +47,9 @@ class TerminalBenchBenchmark(Benchmark):
         tags=["terminal", "swe", "docker"],
     )
 
-    # Populated dynamically in _setup() from the HF dataset.
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = TerminalBenchTaskConfig
 
-    # User-configurable fields
     dataset_path: str = DEFAULT_DATASET_PATH
     shuffle: bool = True
     shuffle_seed: int = 42
@@ -108,27 +64,11 @@ class TerminalBenchBenchmark(Benchmark):
         dataset_path = Path(self.dataset_path)
         if not dataset_path.exists():
             raise FileNotFoundError(
-                f"Terminal-Bench dataset not found at {self.dataset_path}. "
-                "Run benchmark.install() first."
+                f"Terminal-Bench dataset not found at {self.dataset_path}. Run benchmark.install() first."
             )
 
-        ds = load_from_disk(str(dataset_path))
-        tasks_data = list(ds)
+        tasks_data = self._filter_tasks(list(load_from_disk(str(dataset_path))))
         logger.info(f"Loaded {len(tasks_data)} tasks from Terminal-Bench")
-
-        if self.task_ids:
-            id_set = set(self.task_ids)
-            tasks_data = [t for t in tasks_data if t["task_id"] in id_set]
-        if self.difficulty_filter:
-            tasks_data = [t for t in tasks_data if t.get("difficulty", "").lower() == self.difficulty_filter.lower()]
-        if self.category_filter:
-            tasks_data = [t for t in tasks_data if t.get("category", "").lower() == self.category_filter.lower()]
-        if self.shuffle:
-            rng = Random(self.shuffle_seed)
-            tasks_data = list(tasks_data)
-            rng.shuffle(tasks_data)
-        if self.max_tasks:
-            tasks_data = tasks_data[: self.max_tasks]
 
         metadata: dict[str, TaskMetadata] = {}
         for t in tasks_data:
@@ -155,7 +95,6 @@ class TerminalBenchBenchmark(Benchmark):
                 },
             )
 
-        # Set on the class so TaskConfig.make() can look it up
         TerminalBenchBenchmark.task_metadata = metadata
         TerminalBenchBenchmark.benchmark_metadata = BenchmarkMetadata(
             name=self.benchmark_metadata.name,
@@ -164,7 +103,21 @@ class TerminalBenchBenchmark(Benchmark):
             num_tasks=len(metadata),
             tags=self.benchmark_metadata.tags,
         )
-        logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
+
+    def _filter_tasks(self, tasks_data: list[dict]) -> list[dict]:
+        """Apply filtering, shuffling, and slicing to raw task data."""
+        if self.task_ids:
+            id_set = set(self.task_ids)
+            tasks_data = [t for t in tasks_data if t["task_id"] in id_set]
+        if self.difficulty_filter:
+            tasks_data = [t for t in tasks_data if t.get("difficulty", "").lower() == self.difficulty_filter.lower()]
+        if self.category_filter:
+            tasks_data = [t for t in tasks_data if t.get("category", "").lower() == self.category_filter.lower()]
+        if self.shuffle:
+            Random(self.shuffle_seed).shuffle(tasks_data)
+        if self.max_tasks:
+            tasks_data = tasks_data[: self.max_tasks]
+        return tasks_data
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
         """Yield TaskConfigs with container_backend injected."""
@@ -176,7 +129,6 @@ class TerminalBenchBenchmark(Benchmark):
             )
 
     def close(self) -> None:
-        """Release dataset from memory."""
         pass
 
     def install(self) -> None:
@@ -190,8 +142,14 @@ class TerminalBenchBenchmark(Benchmark):
             repo_dir = Path(tmpdir) / "terminal-bench-2"
             logger.info("Cloning laude-institute/terminal-bench-2...")
             subprocess.run(
-                ["git", "clone", "--depth", "1",
-                 "https://github.com/laude-institute/terminal-bench-2.git", str(repo_dir)],
+                [
+                    "git",
+                    "clone",
+                    "--depth",
+                    "1",
+                    "https://github.com/laude-institute/terminal-bench-2.git",
+                    str(repo_dir),
+                ],
                 check=True,
                 timeout=300,
             )
@@ -199,7 +157,7 @@ class TerminalBenchBenchmark(Benchmark):
             tasks = []
             for item in sorted(repo_dir.iterdir()):
                 if item.is_dir() and (item / "task.toml").exists():
-                    task = _load_task_from_repo(item)
+                    task = self._load_task_from_repo(item)
                     if task:
                         tasks.append(task)
                         logger.info(f"  Loaded: {task['task_id']} ({task['difficulty']})")
@@ -208,3 +166,39 @@ class TerminalBenchBenchmark(Benchmark):
             outdir.mkdir(parents=True, exist_ok=True)
             ds.save_to_disk(str(outdir))
         logger.info(f"Dataset saved to: {outdir}")
+
+    @staticmethod
+    def _load_task_from_repo(task_dir: Path) -> dict | None:
+        """Load a single task from a Terminal-Bench repo directory."""
+        if not (task_dir / "task.toml").exists() or not (task_dir / "instruction.md").exists():
+            return None
+
+        with open(task_dir / "task.toml", "rb") as f:
+            config = tomllib.load(f)
+
+        instruction = (task_dir / "instruction.md").read_text(encoding="utf-8").strip()
+        meta = config.get("metadata", {})
+        env = config.get("environment", {})
+        agent = config.get("agent", {})
+        verifier = config.get("verifier", {})
+
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            for item in task_dir.rglob("*"):
+                if item.is_file():
+                    tar.add(item, arcname=str(item.relative_to(task_dir)))
+
+        return {
+            "task_id": task_dir.name,
+            "base_description": instruction,
+            "archive": buf.getvalue(),
+            "difficulty": meta.get("difficulty", "unknown"),
+            "category": meta.get("category", ""),
+            "tags": meta.get("tags", []),
+            "docker_image": env.get("docker_image", "python:3.13"),
+            "cpus": env.get("cpus", 1),
+            "memory": env.get("memory", "4G"),
+            "storage": env.get("storage", "10G"),
+            "max_agent_timeout_sec": int(agent.get("timeout_sec", 900)),
+            "max_test_timeout_sec": int(verifier.get("timeout_sec", 900)),
+        }
