@@ -1,9 +1,9 @@
 """Run terminalbench-cube with AgentLab2.
 
 Usage:
-    uv run cubes/terminalbench-cube/run.py debug              # 1 task, sequential
-    uv run cubes/terminalbench-cube/run.py oracle              # 10 tasks with oracle
-    uv run cubes/terminalbench-cube/run.py easy                # easy tasks with react agent
+    uv run recipes/hello_terminalbench.py debug              # 1 task, sequential
+    uv run recipes/hello_terminalbench.py easy               # 4 easy tasks
+    uv run recipes/hello_terminalbench.py full --model openai/gpt-4o
 """
 
 import argparse
