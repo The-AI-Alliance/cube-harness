@@ -436,10 +436,6 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
 
     # === BrowserTaskTool utility methods ===
 
-    def goto(self, url: str) -> None:  # type: ignore[override]
-        """Navigate to a URL and wait for the page to be fully loaded."""
-        self.page.goto(url)
-
     def evaluate_js(self, js: str) -> Any:
         """Evaluate JavaScript in the browser context and return the result."""
         return self.page.evaluate(js)
