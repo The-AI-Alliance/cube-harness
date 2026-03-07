@@ -139,7 +139,7 @@ class WorkArenaTask(Task):
     def finished(self) -> bool:
         """Check task completion via WorkArena validate()."""
         if self._workarena_task is None:
-            return False
+            raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
         page, _ = self._tool.session.get_playwright_session()
         _, done, _, _ = self._workarena_task.validate(page, [])
         return done
