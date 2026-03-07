@@ -42,8 +42,6 @@ workarena = [
 # Terminal-Bench cube dependencies
 terminalbench = [
     "terminalbench-cube",
-    "daytona>=0.142.0",
-    "datasets",
 ]
 
 [build-system]
