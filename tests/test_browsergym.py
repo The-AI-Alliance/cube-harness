@@ -7,6 +7,7 @@ import pytest
 from cube.core import Action, Observation
 from PIL import Image
 
+from agentlab2.tools.browser_session import PlaywrightSession, PlaywrightSessionConfig
 from agentlab2.tools.browsergym import BrowsergymConfig, BrowsergymTool
 
 
@@ -17,7 +18,7 @@ class TestBrowsergymConfig:
         """Test that default configuration values are set correctly."""
         config = BrowsergymConfig()
 
-        assert config.headless is True
+        assert config.browser_config.headless is True
         assert config.use_html is True
         assert config.use_axtree is True
         assert config.use_screenshot is True
@@ -27,20 +28,19 @@ class TestBrowsergymConfig:
     def test_custom_config_values(self) -> None:
         """Test that custom configuration values are applied."""
         config = BrowsergymConfig(
-            headless=False,
+            browser_config=PlaywrightSessionConfig(headless=False, viewport={"width": 1920, "height": 1080}),
             use_html=False,
             use_axtree=False,
             use_screenshot=False,
             max_wait=30,
-            viewport={"width": 1920, "height": 1080},
         )
 
-        assert config.headless is False
+        assert config.browser_config.headless is False
         assert config.use_html is False
         assert config.use_axtree is False
         assert config.use_screenshot is False
         assert config.max_wait == 30
-        assert config.viewport == {"width": 1920, "height": 1080}
+        assert config.browser_config.viewport == {"width": 1920, "height": 1080}
 
     def test_make_creates_tool_instance(self) -> None:
         """Test that make() creates a proper BrowsergymTool instance."""
@@ -52,10 +52,10 @@ class TestBrowsergymConfig:
 
     def test_make_passes_config_to_tool(self) -> None:
         """Test that make() passes configuration to the tool."""
-        config = BrowsergymConfig(headless=False, max_wait=120)
+        config = BrowsergymConfig(browser_config=PlaywrightSessionConfig(headless=False), max_wait=120)
         tool = config.make()
 
-        assert tool.config.headless is False
+        assert tool.config.browser_config.headless is False
         assert tool.config.max_wait == 120
 
 
@@ -68,9 +68,7 @@ class TestBrowsergymToolInitialization:
         tool = BrowsergymTool(config)
 
         assert tool.config is config
-        assert tool._page is None
-        assert tool._browser is None
-        assert tool._context is None
+        assert tool.session is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
@@ -293,7 +291,7 @@ class TestBrowsergymToolActionMethods:
         """Helper to create a tool with a mocked page for action testing."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool._page = MagicMock()
+        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
         return tool
 
     def test_browser_click_action_string(self) -> None:
@@ -402,7 +400,7 @@ class TestBrowsergymToolActionMethods:
         """Test that browser_wait clamps to max_wait value."""
         config = BrowsergymConfig(max_wait=10)
         tool = BrowsergymTool(config)
-        tool._page = MagicMock()
+        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_wait(120)  # Request 120 seconds, but max_wait is 10
@@ -444,7 +442,7 @@ class TestBrowsergymToolStepResults:
         """Helper to create a tool with a mocked page."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool._page = MagicMock()
+        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
         tool._action_set = MagicMock()
         return tool
 
@@ -506,7 +504,7 @@ class TestBrowsergymToolExecuteAction:
         """Test that execute_action combines action result and page observation."""
         config = BrowsergymConfig(use_html=True, use_axtree=False, use_screenshot=False, prune_html=False)
         tool = BrowsergymTool(config)
-        tool._page = MagicMock()
+        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
 
         action = Action(name="browser_click", arguments={"bid": "a1"})
 
@@ -547,7 +545,7 @@ class TestBrowsergymToolLifecycle:
         """Test that reset closes existing runtime before creating new one."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool._page = MagicMock()
+        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
 
         with (
             patch.object(tool, "_close_runtime") as mock_close,
@@ -564,20 +562,13 @@ class TestBrowsergymToolLifecycle:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        mock_context = MagicMock()
-        mock_browser = MagicMock()
-        mock_page = MagicMock()
-        tool._context = mock_context
-        tool._browser = mock_browser
-        tool._page = mock_page
+        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
         tool._last_obs = {"some": "data"}
         tool._last_info = {"info": "data"}
 
         tool.close()
 
-        assert tool._page is None
-        assert tool._browser is None
-        assert tool._context is None
+        assert tool.session is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
@@ -588,16 +579,14 @@ class TestBrowsergymToolLifecycle:
 
         mock_context = MagicMock()
         mock_context.close.side_effect = Exception("Close failed")
-        tool._context = mock_context
+        tool.session = PlaywrightSession(page=MagicMock(), context=mock_context, cdp_url="http://localhost:9222")
         tool._last_obs = {"some": "data"}
 
         # Should not raise
         tool.close()
 
         # State should still be cleaned up
-        assert tool._page is None
-        assert tool._browser is None
-        assert tool._context is None
+        assert tool.session is None
         assert tool._last_obs is None
 
     def test_close_noop_when_no_browser(self) -> None:
@@ -675,7 +664,7 @@ class TestBrowsergymToolCheckboxJsFallback:
         mock_page._mock_element_locator = mock_element_locator
         mock_page._mock_frame = mock_frame
 
-        tool._page = mock_page
+        tool.session = PlaywrightSession(page=mock_page, context=MagicMock(), cdp_url="http://localhost:9222")
         tool._last_obs = {}
 
         return tool
@@ -684,7 +673,7 @@ class TestBrowsergymToolCheckboxJsFallback:
         """Test that _get_checkbox_state returns True for checked checkbox."""
         tool = self._create_tool_with_mock_page()
         # Configure evaluate to return checkbox state
-        tool._page._mock_element_locator.evaluate.return_value = {
+        tool.page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": True,
             "checked": True,
@@ -693,12 +682,12 @@ class TestBrowsergymToolCheckboxJsFallback:
         result = tool._get_checkbox_state("a123")
 
         assert result is True
-        tool._page._mock_element_locator.evaluate.assert_called_once()
+        tool.page._mock_element_locator.evaluate.assert_called_once()
 
     def test_get_checkbox_state_returns_false_when_unchecked(self) -> None:
         """Test that _get_checkbox_state returns False for unchecked checkbox."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.return_value = {
+        tool.page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": True,
             "checked": False,
@@ -711,7 +700,7 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_get_checkbox_state_returns_none_for_non_checkbox(self) -> None:
         """Test that _get_checkbox_state returns None for non-checkbox elements."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.return_value = {
+        tool.page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": False,
             "tagName": "DIV",
@@ -724,7 +713,7 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_get_checkbox_state_returns_none_when_element_not_found(self) -> None:
         """Test that _get_checkbox_state returns None when element not found."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.count.return_value = 0
+        tool.page._mock_element_locator.count.return_value = 0
 
         result = tool._get_checkbox_state("c789")
 
@@ -733,7 +722,7 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_get_checkbox_state_returns_none_on_exception(self) -> None:
         """Test that _get_checkbox_state returns None when evaluate raises."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.side_effect = Exception("JS error")
+        tool.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
 
         result = tool._get_checkbox_state("c789")
 
@@ -742,12 +731,12 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_toggle_checkbox_js_sets_checked_true(self) -> None:
         """Test that _toggle_checkbox_js sets checkbox to checked."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+        tool.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
         tool._toggle_checkbox_js("a123", True)
 
-        tool._page._mock_element_locator.evaluate.assert_called_once()
-        call_args = tool._page._mock_element_locator.evaluate.call_args
+        tool.page._mock_element_locator.evaluate.assert_called_once()
+        call_args = tool.page._mock_element_locator.evaluate.call_args
         js_code = call_args[0][0]
         checked_arg = call_args[0][1]
         assert "elem.checked = checked" in js_code
@@ -756,22 +745,22 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_toggle_checkbox_js_sets_checked_false(self) -> None:
         """Test that _toggle_checkbox_js sets checkbox to unchecked."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+        tool.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
         tool._toggle_checkbox_js("a123", False)
 
-        call_args = tool._page._mock_element_locator.evaluate.call_args
+        call_args = tool.page._mock_element_locator.evaluate.call_args
         checked_arg = call_args[0][1]
         assert checked_arg is False
 
     def test_toggle_checkbox_js_dispatches_events(self) -> None:
         """Test that _toggle_checkbox_js dispatches click, change, and input events."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
+        tool.page._mock_element_locator.evaluate.return_value = "toggled_checkbox"
 
         tool._toggle_checkbox_js("a123", True)
 
-        call_args = tool._page._mock_element_locator.evaluate.call_args
+        call_args = tool.page._mock_element_locator.evaluate.call_args
         js_code = call_args[0][0]
         assert "dispatchEvent(new Event('click'" in js_code
         assert "dispatchEvent(new Event('change'" in js_code
@@ -780,7 +769,7 @@ class TestBrowsergymToolCheckboxJsFallback:
     def test_toggle_checkbox_js_handles_exception_gracefully(self) -> None:
         """Test that _toggle_checkbox_js doesn't raise on exception."""
         tool = self._create_tool_with_mock_page()
-        tool._page._mock_element_locator.evaluate.side_effect = Exception("JS error")
+        tool.page._mock_element_locator.evaluate.side_effect = Exception("JS error")
 
         # Should not raise
         tool._toggle_checkbox_js("a123", True)
@@ -789,7 +778,7 @@ class TestBrowsergymToolCheckboxJsFallback:
         """Test that browser_click doesn't use JS fallback for non-checkbox elements."""
         tool = self._create_tool_with_mock_page()
         # _get_checkbox_state returns None for non-checkboxes
-        tool._page._mock_element_locator.evaluate.return_value = {
+        tool.page._mock_element_locator.evaluate.return_value = {
             "found": True,
             "isCheckbox": False,
             "tagName": "BUTTON",
@@ -801,13 +790,13 @@ class TestBrowsergymToolCheckboxJsFallback:
         # Should only call _execute_bgym_step once (no JS fallback)
         mock_step.assert_called_once_with('click(bid="a100")')
         # evaluate called once for _get_checkbox_state
-        assert tool._page._mock_element_locator.evaluate.call_count == 1
+        assert tool.page._mock_element_locator.evaluate.call_count == 1
 
     def test_browser_click_no_fallback_when_native_click_works(self) -> None:
         """Test that browser_click doesn't use JS fallback when native click toggles state."""
         tool = self._create_tool_with_mock_page()
         # First call: state before (unchecked), Second call: state after (checked)
-        tool._page._mock_element_locator.evaluate.side_effect = [
+        tool.page._mock_element_locator.evaluate.side_effect = [
             {"found": True, "isCheckbox": True, "checked": False},
             {"found": True, "isCheckbox": True, "checked": True},
         ]
@@ -817,14 +806,14 @@ class TestBrowsergymToolCheckboxJsFallback:
 
         mock_step.assert_called_once_with('click(bid="a200")')
         # Two evaluate calls: before and after state check
-        assert tool._page._mock_element_locator.evaluate.call_count == 2
+        assert tool.page._mock_element_locator.evaluate.call_count == 2
 
     def test_browser_click_fallback_unchecks_when_already_checked(self) -> None:
         """Test that browser_click JS fallback unchecks when checkbox was checked."""
         tool = self._create_tool_with_mock_page()
         # State before: checked, State after: still checked (click didn't work)
         # Then _toggle_checkbox_js call, then state_after_js check
-        tool._page._mock_element_locator.evaluate.side_effect = [
+        tool.page._mock_element_locator.evaluate.side_effect = [
             {"found": True, "isCheckbox": True, "checked": True},  # state_before
             {"found": True, "isCheckbox": True, "checked": True},  # state_after (same → fallback)
             "toggled_checkbox",  # _toggle_checkbox_js
@@ -835,6 +824,6 @@ class TestBrowsergymToolCheckboxJsFallback:
             tool.browser_click("a400")
 
         # Verify JS toggle was called with False (to uncheck)
-        js_toggle_call = tool._page._mock_element_locator.evaluate.call_args_list[2]
+        js_toggle_call = tool.page._mock_element_locator.evaluate.call_args_list[2]
         checked_arg = js_toggle_call[0][1]
         assert checked_arg is False
