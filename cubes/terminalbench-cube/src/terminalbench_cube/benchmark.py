@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DATASET_PATH = str(Path.home() / ".agentlab" / "data" / "terminal_bench_v2")
 
+REPO_URL = "https://github.com/laude-institute/terminal-bench-2.git"
+
 
 def _parse_gb(value: str | int) -> float:
     """Parse a memory/storage string like '4G' to a float in GB."""
@@ -50,6 +52,7 @@ class TerminalBenchBenchmark(Benchmark):
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = TerminalBenchTaskConfig
 
+    # User-configurable fields
     dataset_path: str = DEFAULT_DATASET_PATH
     shuffle: bool = True
     shuffle_seed: int = 42
@@ -59,8 +62,10 @@ class TerminalBenchBenchmark(Benchmark):
     task_ids: list[str] | None = None
     oracle_mode: bool = False
 
+    # ── Benchmark lifecycle ────────────────────────────────────────
+
     def _setup(self) -> None:
-        """Load dataset and populate task_metadata dynamically."""
+        """Load dataset, apply filters, and populate task_metadata."""
         dataset_path = Path(self.dataset_path)
         if not dataset_path.exists():
             raise FileNotFoundError(
@@ -68,7 +73,6 @@ class TerminalBenchBenchmark(Benchmark):
             )
 
         tasks_data = self._filter_tasks(list(load_from_disk(str(dataset_path))))
-        logger.info(f"Loaded {len(tasks_data)} tasks from Terminal-Bench")
 
         metadata: dict[str, TaskMetadata] = {}
         for t in tasks_data:
@@ -95,29 +99,9 @@ class TerminalBenchBenchmark(Benchmark):
                 },
             )
 
+        # Set on the class so TaskConfig.make() can look it up
         TerminalBenchBenchmark.task_metadata = metadata
-        TerminalBenchBenchmark.benchmark_metadata = BenchmarkMetadata(
-            name=self.benchmark_metadata.name,
-            version=self.benchmark_metadata.version,
-            description=self.benchmark_metadata.description,
-            num_tasks=len(metadata),
-            tags=self.benchmark_metadata.tags,
-        )
-
-    def _filter_tasks(self, tasks_data: list[dict]) -> list[dict]:
-        """Apply filtering, shuffling, and slicing to raw task data."""
-        if self.task_ids:
-            id_set = set(self.task_ids)
-            tasks_data = [t for t in tasks_data if t["task_id"] in id_set]
-        if self.difficulty_filter:
-            tasks_data = [t for t in tasks_data if t.get("difficulty", "").lower() == self.difficulty_filter.lower()]
-        if self.category_filter:
-            tasks_data = [t for t in tasks_data if t.get("category", "").lower() == self.category_filter.lower()]
-        if self.shuffle:
-            Random(self.shuffle_seed).shuffle(tasks_data)
-        if self.max_tasks:
-            tasks_data = tasks_data[: self.max_tasks]
-        return tasks_data
+        logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
         """Yield TaskConfigs with container_backend injected."""
@@ -131,6 +115,8 @@ class TerminalBenchBenchmark(Benchmark):
     def close(self) -> None:
         pass
 
+    # ── Dataset installation ───────────────────────────────────────
+
     def install(self) -> None:
         """Clone terminal-bench-2 repo and export as HuggingFace dataset."""
         outdir = Path(self.dataset_path).resolve()
@@ -142,14 +128,7 @@ class TerminalBenchBenchmark(Benchmark):
             repo_dir = Path(tmpdir) / "terminal-bench-2"
             logger.info("Cloning laude-institute/terminal-bench-2...")
             subprocess.run(
-                [
-                    "git",
-                    "clone",
-                    "--depth",
-                    "1",
-                    "https://github.com/laude-institute/terminal-bench-2.git",
-                    str(repo_dir),
-                ],
+                ["git", "clone", "--depth", "1", REPO_URL, str(repo_dir)],
                 check=True,
                 timeout=300,
             )
@@ -166,6 +145,23 @@ class TerminalBenchBenchmark(Benchmark):
             outdir.mkdir(parents=True, exist_ok=True)
             ds.save_to_disk(str(outdir))
         logger.info(f"Dataset saved to: {outdir}")
+
+    # ── Private helpers ────────────────────────────────────────────
+
+    def _filter_tasks(self, tasks_data: list[dict]) -> list[dict]:
+        """Apply filtering, shuffling, and slicing to raw task data."""
+        if self.task_ids:
+            id_set = set(self.task_ids)
+            tasks_data = [t for t in tasks_data if t["task_id"] in id_set]
+        if self.difficulty_filter:
+            tasks_data = [t for t in tasks_data if t.get("difficulty", "").lower() == self.difficulty_filter.lower()]
+        if self.category_filter:
+            tasks_data = [t for t in tasks_data if t.get("category", "").lower() == self.category_filter.lower()]
+        if self.shuffle:
+            Random(self.shuffle_seed).shuffle(tasks_data)
+        if self.max_tasks:
+            tasks_data = tasks_data[: self.max_tasks]
+        return tasks_data
 
     @staticmethod
     def _load_task_from_repo(task_dir: Path) -> dict | None:

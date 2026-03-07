@@ -28,6 +28,7 @@ class TerminalBenchTask(Task):
         self.tool.reset()
         extra = self.metadata.extra_info
 
+        # Extract task archive to a temp dir (kept alive until close())
         self._temp_dir = tempfile.TemporaryDirectory()
         task_path = Path(self._temp_dir.name) / self.metadata.id
         task_path.mkdir(parents=True, exist_ok=True)
@@ -35,6 +36,7 @@ class TerminalBenchTask(Task):
             tar.extractall(path=task_path, filter="data")
         self._task_path = task_path
 
+        # Oracle mode: upload solution for debugging/baselines
         if extra.get("oracle_mode") and (task_path / "solution").exists():
             assert isinstance(self.tool, TerminalBenchTool)
             self.tool.bash("mkdir -p /solution")
@@ -50,6 +52,7 @@ class TerminalBenchTask(Task):
         assert isinstance(self.tool, TerminalBenchTool)
         extra = self.metadata.extra_info
 
+        # Upload test harness to the sandbox
         if self._task_path is not None:
             tests_dir = self._task_path / "tests"
             self.tool.bash("mkdir -p /tests /logs/verifier")
@@ -57,12 +60,14 @@ class TerminalBenchTask(Task):
                 self.tool.upload_directory(tests_dir, "/tests")
                 self.tool.bash("chmod +x /tests/test.sh")
 
+        # Run test.sh → pytest → writes reward to /logs/verifier/reward.txt
         output = self.tool.bash(
             "cd /app && bash /tests/test.sh",
             timeout=extra.get("max_test_timeout_sec", 900),
         )
         test_results = self._parse_pytest_output(output)
 
+        # Read reward written by test.sh
         reward_output = self.tool.bash("cat /logs/verifier/reward.txt 2>/dev/null || echo 0")
         try:
             reward = float(reward_output.strip().split()[0])
@@ -108,6 +113,9 @@ class TerminalBenchTask(Task):
 class TerminalBenchTaskConfig(TaskConfig):
     """Serializable factory that produces a TerminalBenchTask."""
 
+    # Stored here because AgentLab2's Episode calls make() with no args.
+    # The base Benchmark.get_task_configs() doesn't pass container_backend,
+    # so we inject it via get_task_configs() override in the benchmark.
     container_backend: ContainerBackend | None = None
     model_config = {"arbitrary_types_allowed": True}
 

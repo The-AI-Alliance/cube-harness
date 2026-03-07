@@ -29,7 +29,7 @@ Work in /app directory. Read existing files, test your solutions before declarin
 def main(mode: str, model: str = "openai/gpt-5-nano") -> None:
     model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"tbench_cube_{mode}_{model_short}_{current_datetime}"again
+    output_dir = Path.home() / "agentlab_results" / "al2" / f"tbench_cube_{mode}_{model_short}_{current_datetime}"
 
     api_key = os.getenv("DAYTONA_API_KEY")
     if not api_key:
