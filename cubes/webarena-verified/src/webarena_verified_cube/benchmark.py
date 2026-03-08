@@ -58,9 +58,7 @@ class WebArenaVerifiedBenchmark(Benchmark):
                 continue
             try:
                 urllib.request.urlopen(url, timeout=5)
-            except urllib.error.HTTPError:
-                pass  # 4xx responses mean the server is reachable
-            except Exception as e:
+            except urllib.error.URLError as e:
                 raise RuntimeError(
                     f"Cannot reach {site} at {url}. "
                     f"Start the Docker container with: webarena-verified env start {site.value}"

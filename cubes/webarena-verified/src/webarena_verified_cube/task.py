@@ -3,7 +3,7 @@ from typing import Any
 
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import ActionSchema, Observation
+from cube.core import Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from webarena_verified.api.webarena_verified import WebArenaVerified
 from webarena_verified.types.config import WebArenaVerifiedConfig
@@ -13,24 +13,6 @@ from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 from webarena_verified_cube.tool import WebArenaToolConfig, WebArenaSyncPlaywrightTool
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        "browser_click",
-        "browser_type",
-        "browser_press_key",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-        "browser_wait",
-        "browser_back",
-        "browser_forward",
-        "goto",
-        "noop",
-        "submit_response",
-    }
-)
 
 
 class WebArenaVerifiedTask(Task):
@@ -74,9 +56,6 @@ class WebArenaVerifiedTask(Task):
 
     def finished(self, obs: Observation) -> bool:
         return self._wav_tool.get_submitted_response() is not None
-
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        return [a for a in actions if a.name in _SUPPORTED_ACTION_NAMES]
 
 
 class WebArenaVerifiedTaskConfig(TaskConfig):
