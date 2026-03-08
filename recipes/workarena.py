@@ -12,21 +12,28 @@ Prerequisites:
        - HUGGING_FACE_HUB_TOKEN: For accessing gated instance pool
 
 Usage:
-    # Debug mode (2 tasks, sequential)
+    # Genny agent, debug mode (default)
     uv run recipes/workarena.py debug
 
-    # Full run (parallel with Ray)
+    # React agent, debug mode
+    uv run recipes/workarena.py debug react
+
+    # Full run with Genny (parallel with Ray)
     uv run recipes/workarena.py
+
+    # Full run with React
+    uv run recipes/workarena.py react
 """
 
 import sys
 
 from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.genny import GennyConfig
-from agentlab2.agents.react import ReactAgentConfig  # noqa: F401
+from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
+from agentlab2.tools.browser_session import PlaywrightSessionConfig
 from agentlab2.tools.browsergym import BrowsergymConfig
 
 try:
@@ -37,49 +44,46 @@ except ImportError:
     )
     sys.exit(1)
 
+_LLM = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
 
-def main(debug: bool) -> None:
-    output_dir = make_experiment_output_dir("genny", "workarena", tag="l1")
-
-    # Configure LLM
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
-
-    # --- Choose agent (uncomment one) ---
-    agent_config = GennyConfig(
-        llm_config=llm_config,
+AGENTS = {
+    "genny": GennyConfig(
+        llm_config=_LLM,
         max_actions=20,
         render_last_n_obs=1,
         tools_as_text=False,
         enable_summarize=False,
         summarize_cot_only=True,
-    )
-    # agent_config = ReactAgentConfig(
-    #     llm_config=llm_config,
-    #     max_actions=20,
-    # )
+    ),
+    "react": ReactAgentConfig(
+        llm_config=_LLM,
+        render_last_n_steps=3,
+        max_actions=20,
+    ),
+}
 
-    # Configure BrowserGym tool
-    # Note: task_entrypoint and task_kwargs are set dynamically by WorkArenaTask.setup()
+
+def main(debug: bool, agent: str) -> None:
+    agent_config = AGENTS[agent]
+    output_dir = make_experiment_output_dir(agent, "workarena", tag="l1")
+
     tool_config = BrowsergymConfig(
-        headless=not debug,  # Show browser in debug mode
+        browser_config=PlaywrightSessionConfig(headless=not debug, timeout=30000),
         use_screenshot=True,
         use_axtree=True,
         use_html=False,
     )
 
-    # Configure WorkArena benchmark
     benchmark = WorkArenaBenchmark(tool_config=tool_config, level="l1", n_seeds_l1=1)
 
-    # Create experiment
     exp = Experiment(
-        name="workarena",
+        name=f"workarena_{agent}",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
         max_steps=15,
     )
 
-    # Run experiment
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
@@ -87,5 +91,5 @@ def main(debug: bool) -> None:
 
 
 if __name__ == "__main__":
-    debug = sys.argv[-1] == "debug"
-    main(debug)
+    args = set(sys.argv[1:])
+    main(debug="debug" in args, agent="react" if "react" in args else "genny")
