@@ -10,7 +10,8 @@ from webarena_verified.types.config import WebArenaVerifiedConfig
 from webarena_verified.types.eval import EvalStatus, TaskEvalResult
 from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 
-from webarena_verified_cube.tool import WebArenaToolConfig, WebArenaSyncPlaywrightTool
+from agentlab2.tools.toolbox import Toolbox
+from webarena_verified_cube.tool import HarPlaywrightTool, SubmitResponseTool, WebArenaToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -20,17 +21,26 @@ class WebArenaVerifiedTask(Task):
     wav_config: WebArenaVerifiedConfig
 
     @property
-    def _wav_tool(self) -> WebArenaSyncPlaywrightTool:
-        assert isinstance(self.tool, WebArenaSyncPlaywrightTool)
-        return self.tool
+    def _har_tool(self) -> HarPlaywrightTool:
+        assert isinstance(self.tool, Toolbox)
+        tool = self.tool.find_tool(HarPlaywrightTool)
+        assert tool is not None
+        return tool
+
+    @property
+    def _submit_tool(self) -> SubmitResponseTool:
+        assert isinstance(self.tool, Toolbox)
+        tool = self.tool.find_tool(SubmitResponseTool)
+        assert tool is not None
+        return tool
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
-        self._wav_tool.reset()
+        self.tool.reset()
         start_url = self.wav_config.render_url(
             self.wav_task.start_urls[0], list(self.wav_task.sites), strict=False
         )
-        self._wav_tool.goto(start_url)
-        obs = Observation.from_text(self.wav_task.intent) + self._wav_tool.page_obs()
+        self._har_tool.goto(start_url)
+        obs = Observation.from_text(self.wav_task.intent) + self._har_tool.page_obs()
         info = {
             "task_id": self.wav_task.task_id,
             "sites": [s.value for s in self.wav_task.sites],
@@ -39,10 +49,10 @@ class WebArenaVerifiedTask(Task):
         return obs, info
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
-        submitted = self._wav_tool.get_submitted_response()
+        submitted = self._submit_tool.get_submitted_response()
         if submitted is None:
             return 0.0, {"eval_status": EvalStatus.FAILURE, "evaluators_results": []}
-        har_entries = self._wav_tool.get_har()
+        har_entries = self._har_tool.get_har()
         wav = WebArenaVerified(config=self.wav_config)
         result: TaskEvalResult = wav.evaluate_task(
             task_id=self.wav_task.task_id,
@@ -55,7 +65,7 @@ class WebArenaVerifiedTask(Task):
         }
 
     def finished(self, obs: Observation) -> bool:
-        return self._wav_tool.get_submitted_response() is not None
+        return self._submit_tool.get_submitted_response() is not None
 
 
 class WebArenaVerifiedTaskConfig(TaskConfig):

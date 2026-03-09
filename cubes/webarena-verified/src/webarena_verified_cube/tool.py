@@ -3,29 +3,28 @@ import logging
 import os
 import tempfile
 
-from cube.tool import tool_action
+from cube.tool import ToolConfig, tool_action
 from playwright.sync_api import BrowserContext
 
+from agentlab2.tool import ToolWithTelemetry
 from agentlab2.tools.playwright import PlaywrightConfig, SyncPlaywrightTool
+from agentlab2.tools.toolbox import ToolboxConfig
 from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, Status
 
 logger = logging.getLogger(__name__)
 
 
-class WebArenaToolConfig(PlaywrightConfig):
-    def make(self, container=None) -> "WebArenaSyncPlaywrightTool":
-        return WebArenaSyncPlaywrightTool(self)
+class HarPlaywrightConfig(PlaywrightConfig):
+    def make(self, container=None) -> "HarPlaywrightTool":
+        return HarPlaywrightTool(self)
 
 
-class WebArenaSyncPlaywrightTool(SyncPlaywrightTool):
-    """Playwright tool extended with HAR recording and submit_response action for WebArena."""
+class HarPlaywrightTool(SyncPlaywrightTool):
+    """SyncPlaywrightTool extended with HAR recording."""
 
     def __init__(self, config: PlaywrightConfig) -> None:
         super().__init__(config)
-        # super().__init__ creates self._page = self._browser.new_page().
-        # We replace it with a page from a HAR-recording context.
         self._page.close()
-        self._submitted_response: FinalAgentResponse | None = None
         self._har_path: str = _new_har_path()
         self._context: BrowserContext = self._browser.new_context(record_har_path=self._har_path)
         self._page = self._context.new_page()
@@ -33,7 +32,6 @@ class WebArenaSyncPlaywrightTool(SyncPlaywrightTool):
     def reset(self) -> None:
         self._context.close()
         _delete_path(self._har_path)
-        self._submitted_response = None
         self._har_path = _new_har_path()
         self._context = self._browser.new_context(record_har_path=self._har_path)
         self._page = self._context.new_page()
@@ -53,6 +51,24 @@ class WebArenaSyncPlaywrightTool(SyncPlaywrightTool):
         self._context = self._browser.new_context(record_har_path=self._har_path)
         self._page = self._context.new_page()
         return entries
+
+
+class SubmitResponseConfig(ToolConfig):
+    def make(self, container=None) -> "SubmitResponseTool":
+        return SubmitResponseTool()
+
+
+class SubmitResponseTool(ToolWithTelemetry):
+    """Tool providing the submit_response action for WebArena tasks."""
+
+    def __init__(self) -> None:
+        self._submitted_response: FinalAgentResponse | None = None
+
+    def reset(self) -> None:
+        self._submitted_response = None
+
+    def close(self) -> None:
+        pass
 
     def get_submitted_response(self) -> FinalAgentResponse | None:
         return self._submitted_response
@@ -87,6 +103,10 @@ class WebArenaSyncPlaywrightTool(SyncPlaywrightTool):
             error_details=error_details,
         )
         return f"Response submitted: task_type={task_type}, status={status}."
+
+
+class WebArenaToolConfig(ToolboxConfig):
+    tool_configs: list[ToolConfig] = [HarPlaywrightConfig(), SubmitResponseConfig()]
 
 
 def _new_har_path() -> str:
