@@ -5,6 +5,7 @@ description = "MiniWob++ benchmark for cube"
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard",
+    "agentlab2",
     "miniwob>=1.0",
 ]
 
