@@ -75,7 +75,9 @@ class ClickCheckboxesAgent:
         self._step += 1
         if idx < len(self._targets):
             word = self._targets[idx]
-            return Action(name="browser_click", arguments={"selector": f"label:has-text('{word}') input[type='checkbox']"})
+            return Action(
+                name="browser_click", arguments={"selector": f"label:has-text('{word}') input[type='checkbox']"}
+            )
         if idx == len(self._targets):
             return Action(name="browser_click", arguments={"selector": "button#subbtn"})
         return Action(name="final_step", arguments={})
