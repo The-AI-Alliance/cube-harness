@@ -20,7 +20,9 @@ Usage:
 """
 
 import sys
+from pathlib import Path
 
+import osworld_cube
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
 from osworld_cube.computer import ComputerConfig
 
@@ -31,15 +33,40 @@ from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
 
 OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
-You are an expert computer use agent. You control a desktop computer via pyautogui.
-You receive the accessibility tree of the current screen as a tab-separated table \
-with columns: tag, name, text, class, description, position (top-left x&y), size (w&h).
-Use it to identify interactive elements and their coordinates, then write Python code
-using pyautogui to interact with them.
+You are a desktop automation agent controlling a real Ubuntu computer.
 
-Think step by step: what does the current screen show, what is the next action toward
-the goal, and which element should you interact with. Then call run_pyautogui with
-the appropriate code."""
+## Observations
+Each step you receive an element table listing interactive UI elements with columns:
+index, tag, name, text, x, y, w, h
+
+Where (x, y) is the top-left corner and (w, h) is the size of each element.
+To click the center of element at row i: center_x = x + w//2, center_y = y + h//2
+
+## Actions
+You control the computer by calling run_pyautogui(code) with valid Python/pyautogui code.
+
+### Common pyautogui commands
+- pyautogui.click(x, y)                       — left-click at pixel coordinates
+- pyautogui.rightClick(x, y)                  — right-click at pixel coordinates
+- pyautogui.doubleClick(x, y)                 — double-click at pixel coordinates
+- pyautogui.typewrite('text', interval=0.05)  — type text character by character
+- pyautogui.hotkey('ctrl', 'c')               — press key combination
+- pyautogui.press('enter')                    — press a single key
+- pyautogui.scroll(x, y, clicks=-3)           — scroll (negative clicks = down)
+- pyautogui.dragTo(x, y, button='left')       — drag to coordinates
+
+### Ending the task
+- Call fail() if the task CANNOT be completed (infeasible tasks)
+- Call done() when the task is successfully COMPLETE
+
+## Strategy
+1. Study the element table carefully to find the element you need to interact with
+2. Calculate center coordinates: center_x = x + w//2, center_y = y + h//2
+3. If the task is clearly impossible, call fail() immediately
+4. Prefer hotkey shortcuts over mouse clicks when practical
+5. After completing the task, verify by checking the next observation then call done()
+6. Do not loop — if an action has no effect after 2 attempts, try a different approach\
+"""
 
 
 def main(debug: bool) -> None:
@@ -64,9 +91,11 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
+    tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
     benchmark = OSWorldBenchmark(
         default_tool_config=tool_config,
         use_som=False,
+        tasks_file=tasks_file,
         test_set_name=OSWorldTestSet.TEST_SMALL,
     )
 
@@ -80,13 +109,13 @@ def main(debug: bool) -> None:
 
     if debug:
         print("\n" + "=" * 60)
-        print("DEBUG MODE: Running 2 tasks sequentially")
+        print("DEBUG MODE: Running debug_tasks.json sequentially")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
         print(f"Provider: {tool_config.provider}")
         print("=" * 60 + "\n")
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp)
     else:
         print("\n" + "=" * 60)
         print("EVAL MODE: Running OSWorld tasks with Ray")

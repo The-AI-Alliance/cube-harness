@@ -26,6 +26,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import ClassVar
 
+from pydantic import model_validator
+
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
 from cube.task import TaskConfig, TaskMetadata
@@ -33,6 +35,19 @@ from cube.task import TaskConfig, TaskMetadata
 from osworld_cube.computer import ComputerConfig, _CUBE_CACHE_ROOT
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Paths — rooted under CUBE_CACHE_DIR (default ~/.agentlab2)
+# ---------------------------------------------------------------------------
+
+OSWORLD_BASE_DIR = _CUBE_CACHE_ROOT
+OSWORLD_REPO_DIR = OSWORLD_BASE_DIR / "OSWorld"
+OSWORLD_VM_DIR = OSWORLD_BASE_DIR / "vm_data"
+OSWORLD_CACHE_DIR = OSWORLD_BASE_DIR / "cache"
+
+# Pinned OSWorld commit for reproducibility
+OSWORLD_COMMIT = "e695a10"
 
 
 # ---------------------------------------------------------------------------
@@ -59,20 +74,6 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
     with env_path.open("a") as f:
         f.write(f"\n{key}={value}\n")
     logger.info(f"Appended {key} to {env_path}")
-
-
-# ---------------------------------------------------------------------------
-# Paths — rooted under CUBE_CACHE_DIR (default ~/.agentlab2)
-# ---------------------------------------------------------------------------
-
-OSWORLD_BASE_DIR = _CUBE_CACHE_ROOT
-OSWORLD_REPO_DIR = OSWORLD_BASE_DIR / "OSWorld"
-OSWORLD_VM_DIR = OSWORLD_BASE_DIR / "vm_data"
-OSWORLD_CACHE_DIR = OSWORLD_BASE_DIR / "cache"
-
-# Pinned OSWorld commit for reproducibility
-OSWORLD_COMMIT = "e695a10"
-
 
 # ---------------------------------------------------------------------------
 # OSWorldTestSet
@@ -154,13 +155,12 @@ class OSWorldBenchmark(Benchmark):
 
     Constructor params (set by benchmark users):
         default_tool_config:  ComputerConfig  — how to connect to the VM (action_space selects variant)
-        tasks_file:           str | None         — flat JSON task file (overrides repo)
+        tasks_file:           str | None         — flat JSON task file; mutually exclusive with test_set_name
         test_set_name:        OSWorldTestSet     — which test-set index file to load (default: TEST_ALL)
-        test_set_path:        str | None         — path to the evaluation_examples dir (default: OSWorld repo)
         use_som:              bool               — Set-of-Marks mode for all tasks
 
     To filter by domain or any other metadata field, call subset_from_glob() after setup():
-        bench.setup()
+        bench.setup()   
         chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
     """
 
@@ -199,14 +199,14 @@ class OSWorldBenchmark(Benchmark):
     test_set_name: OSWorldTestSet = OSWorldTestSet.TEST_ALL
     """Filename of the test set index inside <evaluation_examples>/."""
 
-    test_set_path: str | None = None
-    """
-    Absolute path to the OSWorld evaluation_examples directory.
-    Defaults to OSWORLD_REPO_DIR/evaluation_examples if not set.
-    """
-
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
+
+    @model_validator(mode="after")
+    def _warn_on_conflicting_task_source(self) -> "OSWorldBenchmark":
+        if self.tasks_file is not None and "test_set_name" in self.model_fields_set:
+            logger.warning("Both 'tasks_file' and 'test_set_name' were specified — 'tasks_file' takes precedence.")
+        return self
 
     # ------------------------------------------------------------------
     # get_task_configs() override — inject metadata into each config
@@ -244,27 +244,28 @@ class OSWorldBenchmark(Benchmark):
         self.install()
 
         logger.info(f"Setting up OSWorldBenchmark (provider={self._get_provider()})")
+        
+        if not self.task_metadata:
+            if self.tasks_file:
+                if not Path(self.tasks_file).exists():
+                    raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
+                loaded = self._load_task_metadata_from_file(self.tasks_file)
+            else:
+                if not OSWORLD_REPO_DIR.exists():
+                    logger.info("OSWorld repo not found — cloning...")
+                    self._clone_osworld_repo()
+                loaded = self._load_task_metadata_from_repo()
 
-        if self.tasks_file:
-            if not Path(self.tasks_file).exists():
-                raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
-            loaded = self._load_task_metadata_from_file(self.tasks_file)
-        else:
-            if not OSWORLD_REPO_DIR.exists():
-                logger.info("OSWorld repo not found — cloning...")
-                self._clone_osworld_repo()
-            loaded = self._load_task_metadata_from_repo()
-
-        # Populate instance-level shadow of the ClassVar
-        # (same pattern used by cube.Benchmark.subset_from_list)
-        object.__setattr__(self, "task_metadata", loaded)
+            # Populate instance-level shadow of the ClassVar
+            # (same pattern used by cube.Benchmark.subset_from_list)
+            object.__setattr__(self, "task_metadata", loaded)
 
         # OSWorld manages its own VM lifecycle via desktop_env — no shared runtime
         # infrastructure is needed. Populate _runtime_context to suppress the
         # Benchmark.setup() warning that fires when it is left empty.
         self._runtime_context = {"osworld": True}
 
-        logger.info(f"OSWorldBenchmark ready with {len(loaded)} tasks")
+        logger.info(f"OSWorldBenchmark ready with {len(self.task_metadata)} tasks")
 
     def close(self) -> None:
         """
@@ -315,7 +316,7 @@ class OSWorldBenchmark(Benchmark):
         Reads test_set_path/test_set_name → {domain: [task_id, ...]}
         Then reads test_set_path/examples/<domain>/<task_id>.json per task.
         """
-        eval_examples_dir = Path(self.test_set_path) if self.test_set_path else OSWORLD_REPO_DIR / "evaluation_examples"
+        eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
         test_set_file = eval_examples_dir / self.test_set_name
 
         if not test_set_file.exists():
