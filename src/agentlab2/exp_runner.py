@@ -1,6 +1,7 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ def run_with_ray(
     exp: Experiment,
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
+    episode_timeout: float | None = 3600.0,
     trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
     model: str | None = None,
@@ -41,12 +43,14 @@ def run_with_ray(
 
     try:
         with tracer.benchmark(exp.name):
-            return _run_with_ray_impl(exp, n_cpus, ray_poll_timeout)
+            return _run_with_ray_impl(exp, n_cpus, ray_poll_timeout, episode_timeout)
     finally:
         tracer.shutdown()
 
 
-def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) -> ExpResult:
+def _run_with_ray_impl(
+    exp: Experiment, n_cpus: int, ray_poll_timeout: float, episode_timeout: float | None
+) -> ExpResult:
     exp.save_config()
     output_dir = exp.output_dir
 
@@ -71,7 +75,7 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
         episodes = exp.get_episodes_to_run()
         ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
-        results = _poll_ray(exp, ref_to_id, ray_poll_timeout)
+        results = _poll_ray(exp, ref_to_id, ray_poll_timeout, episode_timeout)
         exp.print_stats(results)
         return results
     finally:
@@ -79,10 +83,16 @@ def _run_with_ray_impl(exp: Experiment, n_cpus: int, ray_poll_timeout: float) ->
         exp.benchmark.close()
 
 
-def _poll_ray(exp: Experiment, ref_to_id: dict[ray.ObjectRef, str], ray_poll_timeout: float) -> ExpResult:
+def _poll_ray(
+    exp: Experiment,
+    ref_to_id: dict[ray.ObjectRef, str],
+    ray_poll_timeout: float,
+    episode_timeout: float | None,
+) -> ExpResult:
     results = ExpResult(tasks_num=len(ref_to_id), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     completed = 0
     episodes_in_progress = list(ref_to_id.keys())
+    start_times = {ref: time.time() for ref in episodes_in_progress}
     while len(episodes_in_progress) > 0:
         done, episodes_in_progress = ray.wait(
             episodes_in_progress,
@@ -101,6 +111,16 @@ def _poll_ray(exp: Experiment, ref_to_id: dict[ray.ObjectRef, str], ray_poll_tim
             except Exception as e:
                 logger.exception(f"Run failed with exception: {e}")
                 results.failures[task_id] = str(e)
+        if episode_timeout is not None:
+            now = time.time()
+            timed_out = [ref for ref in episodes_in_progress if now - start_times[ref] > episode_timeout]
+            for ref in timed_out:
+                task_id = ref_to_id[ref]
+                elapsed = now - start_times[ref]
+                logger.error(f"Episode {task_id} timed out after {elapsed:.0f}s — cancelling")
+                ray.cancel(ref, force=True)
+                results.failures[task_id] = f"Episode timed out after {elapsed:.0f}s"
+                episodes_in_progress.remove(ref)
     return results
 
 

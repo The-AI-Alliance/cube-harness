@@ -42,6 +42,7 @@ class LLMConfig(TypedBaseModel):
     parallel_tool_calls: bool = False
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
+    timeout: float | None = 120.0  # seconds per attempt; None = no timeout
 
     def make(self) -> "LLM":
         """Create LLM instance from config."""
@@ -85,6 +86,7 @@ class LLM:
             "parallel_tool_calls": self.config.parallel_tool_calls,
             "tools": prompt.tools,
             "messages": prompt.messages,
+            "timeout": self.config.timeout,
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
