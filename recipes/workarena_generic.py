@@ -101,6 +101,7 @@ def main(debug: bool) -> None:
         tool_config=tool_config,
         level="l1",
         n_seeds_l1=2 if debug else 5,  # Fewer seeds in debug mode
+        debug_task_limit=2 if debug else None,
     )
 
     # Create experiment
@@ -113,7 +114,7 @@ def main(debug: bool) -> None:
 
     # Run experiment
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp)
     else:
         run_with_ray(exp, n_cpus=2)
 

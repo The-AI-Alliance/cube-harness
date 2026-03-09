@@ -32,7 +32,7 @@ def main(debug: bool) -> None:
         use_html=True,
         use_axtree=False,
     )
-    benchmark = MiniWobBenchmark(tool_config=tool_config)
+    benchmark = MiniWobBenchmark(tool_config=tool_config, debug_task_limit=2 if debug else None)
     exp = Experiment(
         name="miniwob_bgym",
         output_dir=output_dir,
@@ -41,7 +41,7 @@ def main(debug: bool) -> None:
         max_steps=10,
     )
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp)
     else:
         run_with_ray(exp, n_cpus=4)
 

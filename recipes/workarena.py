@@ -68,7 +68,7 @@ def main(debug: bool) -> None:
     )
 
     # Configure WorkArena benchmark
-    benchmark = WorkArenaBenchmark(tool_config=tool_config, level="l1", n_seeds_l1=1)
+    benchmark = WorkArenaBenchmark(tool_config=tool_config, level="l1", n_seeds_l1=1, debug_task_limit=2 if debug else None)
 
     # Create experiment
     exp = Experiment(
@@ -81,7 +81,7 @@ def main(debug: bool) -> None:
 
     # Run experiment
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp)
     else:
         run_with_ray(exp, n_cpus=4)
 

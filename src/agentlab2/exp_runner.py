@@ -105,7 +105,6 @@ def _poll_ray(exp: Experiment, ref_to_id: dict[ray.ObjectRef, str], ray_poll_tim
 
 def run_sequentially(
     exp: Experiment,
-    debug_limit: int | None = None,
     trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
     model: str | None = None,
@@ -122,19 +121,16 @@ def run_sequentially(
 
     try:
         with tracer.benchmark(exp.name):
-            return _run_sequentially_impl(exp, debug_limit)
+            return _run_sequentially_impl(exp)
     finally:
         tracer.shutdown()
 
 
-def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResult:
+def _run_sequentially_impl(exp: Experiment) -> ExpResult:
     exp.save_config()
     exp.benchmark.setup()
     try:
         episodes = exp.get_episodes_to_run()
-        if debug_limit is not None:
-            logger.info(f"Running only first {debug_limit} episodes for debugging")
-            episodes = episodes[:debug_limit]
         trajectories = []
         for episode in episodes:
             trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)

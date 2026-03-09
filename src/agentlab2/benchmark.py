@@ -12,6 +12,8 @@ class Benchmark(TypedBaseModel, ABC):
 
     metadata: dict = Field(default_factory=dict)
     tool_config: ToolConfig
+    n_attempts: int = 1
+    debug_task_limit: int | None = None
 
     @abstractmethod
     def setup(self):
@@ -38,8 +40,10 @@ class Benchmark(TypedBaseModel, ABC):
     def env_configs(self) -> list[EnvConfig]:
         """Generate environment configurations for all tasks in the benchmark."""
         tasks = self.load_tasks()
-        configs = [EnvConfig(task=task, tool_config=self.tool_config) for task in tasks]
-        return configs
+        if self.debug_task_limit is not None:
+            tasks = tasks[:self.debug_task_limit]
+        interleaved = [task for _ in range(self.n_attempts) for task in tasks]
+        return [EnvConfig(task=task, tool_config=self.tool_config) for task in interleaved]
 
     def install(self):
         """

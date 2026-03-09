@@ -16,7 +16,7 @@ def main(debug: bool):
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
-    benchmark = MiniWobBenchmark(tool_config=tool_config)
+    benchmark = MiniWobBenchmark(tool_config=tool_config, n_attempts=2, debug_task_limit=5 if debug else None)
 
     exp = Experiment(
         name="miniwob",
@@ -27,7 +27,7 @@ def main(debug: bool):
     )
 
     if debug:
-        run_sequentially(exp, debug_limit=2)
+        run_sequentially(exp)
     else:
         run_with_ray(
             exp,
