@@ -29,6 +29,7 @@ class PlaywrightConfig(ToolConfig):
     headless: bool = True
     chromium_sandbox: bool = True
     pw_kwargs: dict = {}
+    context_kwargs: dict = {}
 
     def make(self, container=None) -> "SyncPlaywrightTool":
         return SyncPlaywrightTool(self)
@@ -52,7 +53,8 @@ class SyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):
             headless=self.config.headless,
             **self.config.pw_kwargs,
         )
-        self._page = self._browser.new_page()
+        self._context = self._browser.new_context(**self.config.context_kwargs)
+        self._page = self._context.new_page()
 
     def _execute_action(self, action: Action) -> Observation | StepError:
         result = super()._execute_action(action)
@@ -149,14 +151,24 @@ class SyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):
             obs.contents.append(Content.from_data(self.page_screenshot(), name="screenshot"))
         return obs
 
-    def reset(self):
-        self._page.close()
-        self._page = self._browser.new_page()
+    def reset(self) -> None:
+        self._context.close()
+        self._context = self._browser.new_context(**self.config.context_kwargs)
+        self._page = self._context.new_page()
 
-    def close(self):
-        self._page.close()
-        self._browser.close()
-        self._pw.stop()
+    def close(self) -> None:
+        try:
+            self._context.close()
+        except Exception as e:
+            logger.warning("Error closing context: %s", e)
+        try:
+            self._browser.close()
+        except Exception as e:
+            logger.warning("Error closing browser: %s", e)
+        try:
+            self._pw.stop()
+        except Exception as e:
+            logger.warning("Error stopping playwright: %s", e)
 
 
 class AsyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):

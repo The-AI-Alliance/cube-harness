@@ -1,56 +1,19 @@
-import json
-import logging
-import os
 import tempfile
 
 from cube.tool import ToolConfig, tool_action
-from playwright.sync_api import BrowserContext
 
 from agentlab2.tool import ToolWithTelemetry
 from agentlab2.tools.playwright import PlaywrightConfig, SyncPlaywrightTool
 from agentlab2.tools.toolbox import ToolboxConfig
 from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, Status
 
-logger = logging.getLogger(__name__)
-
 
 class HarPlaywrightConfig(PlaywrightConfig):
-    def make(self, container=None) -> "HarPlaywrightTool":
-        return HarPlaywrightTool(self)
-
-
-class HarPlaywrightTool(SyncPlaywrightTool):
-    """SyncPlaywrightTool extended with HAR recording."""
-
-    def __init__(self, config: PlaywrightConfig) -> None:
-        super().__init__(config)
-        self._page.close()
-        self._har_path: str = _new_har_path()
-        self._context: BrowserContext = self._browser.new_context(record_har_path=self._har_path)
-        self._page = self._context.new_page()
-
-    def reset(self) -> None:
-        self._context.close()
-        _delete_path(self._har_path)
-        self._har_path = _new_har_path()
-        self._context = self._browser.new_context(record_har_path=self._har_path)
-        self._page = self._context.new_page()
-
-    def close(self) -> None:
-        self._context.close()
-        _delete_path(self._har_path)
-        self._browser.close()
-        self._pw.stop()
-
-    def get_har(self) -> list[dict]:
-        """Close current context (flushing HAR), read entries, then open a fresh context."""
-        self._context.close()
-        entries = _read_har(self._har_path)
-        _delete_path(self._har_path)
-        self._har_path = _new_har_path()
-        self._context = self._browser.new_context(record_har_path=self._har_path)
-        self._page = self._context.new_page()
-        return entries
+    def make(self, container=None) -> SyncPlaywrightTool:
+        with tempfile.NamedTemporaryFile(suffix=".har", delete=False) as f:
+            har_path = f.name
+        config = self.model_copy(update={"context_kwargs": {**self.context_kwargs, "record_har_path": har_path}})
+        return SyncPlaywrightTool(config)
 
 
 class SubmitResponseConfig(ToolConfig):
@@ -107,25 +70,3 @@ class SubmitResponseTool(ToolWithTelemetry):
 
 class WebArenaToolConfig(ToolboxConfig):
     tool_configs: list[ToolConfig] = [HarPlaywrightConfig(), SubmitResponseConfig()]
-
-
-def _new_har_path() -> str:
-    with tempfile.NamedTemporaryFile(suffix=".har", delete=False) as f:
-        return f.name
-
-
-def _delete_path(path: str) -> None:
-    try:
-        os.unlink(path)
-    except FileNotFoundError:
-        pass
-
-
-def _read_har(path: str) -> list[dict]:
-    try:
-        with open(path) as f:
-            har = json.load(f)
-        return har["log"]["entries"]
-    except (FileNotFoundError, KeyError, json.JSONDecodeError):
-        logger.warning(f"Failed to read HAR file at {path}, returning empty list.")
-        return []

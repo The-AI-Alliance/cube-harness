@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any
 
@@ -10,8 +11,9 @@ from webarena_verified.types.config import WebArenaVerifiedConfig
 from webarena_verified.types.eval import EvalStatus, TaskEvalResult
 from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 
+from agentlab2.tools.playwright import SyncPlaywrightTool
 from agentlab2.tools.toolbox import Toolbox
-from webarena_verified_cube.tool import HarPlaywrightTool, SubmitResponseTool, WebArenaToolConfig
+from webarena_verified_cube.tool import SubmitResponseTool, WebArenaToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +23,9 @@ class WebArenaVerifiedTask(Task):
     wav_config: WebArenaVerifiedConfig
 
     @property
-    def _har_tool(self) -> HarPlaywrightTool:
+    def _playwright_tool(self) -> SyncPlaywrightTool:
         assert isinstance(self.tool, Toolbox)
-        tool = self.tool.find_tool(HarPlaywrightTool)
+        tool = self.tool.find_tool(SyncPlaywrightTool)
         assert tool is not None
         return tool
 
@@ -36,11 +38,9 @@ class WebArenaVerifiedTask(Task):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        start_url = self.wav_config.render_url(
-            self.wav_task.start_urls[0], list(self.wav_task.sites), strict=False
-        )
-        self._har_tool.goto(start_url)
-        obs = Observation.from_text(self.wav_task.intent) + self._har_tool.page_obs()
+        start_url = self.wav_config.render_url(self.wav_task.start_urls[0], list(self.wav_task.sites), strict=False)
+        self._playwright_tool.goto(start_url)
+        obs = Observation.from_text(self.wav_task.intent) + self._playwright_tool.page_obs()
         info = {
             "task_id": self.wav_task.task_id,
             "sites": [s.value for s in self.wav_task.sites],
@@ -52,7 +52,8 @@ class WebArenaVerifiedTask(Task):
         submitted = self._submit_tool.get_submitted_response()
         if submitted is None:
             return 0.0, {"eval_status": EvalStatus.FAILURE, "evaluators_results": []}
-        har_entries = self._har_tool.get_har()
+        self._playwright_tool.close()  # HAR is saved at context close
+        har_entries = self._get_har_entries()
         wav = WebArenaVerified(config=self.wav_config)
         result: TaskEvalResult = wav.evaluate_task(
             task_id=self.wav_task.task_id,
@@ -66,6 +67,12 @@ class WebArenaVerifiedTask(Task):
 
     def finished(self, obs: Observation) -> bool:
         return self._submit_tool.get_submitted_response() is not None
+
+    def _get_har_entries(self) -> list[dict]:
+        har_path = self._playwright_tool.config.context_kwargs["record_har_path"]
+        with open(har_path) as f:
+            har = json.load(f)
+        return har["log"]["entries"]
 
 
 class WebArenaVerifiedTaskConfig(TaskConfig):
