@@ -1,14 +1,13 @@
-"""Smoke-test script for miniwob-cube — validates infrastructure without an LLM.
+"""Smoke-test script for miniwob-cube — validates infrastructure and task solving.
 
-Verifies that the MiniWob HTTP server starts, BrowserGym connects, the task
-page loads and JS initialises, and page observations are returned without errors.
-The DebugAgent immediately stops (reward=0 is expected), so only errors are
-treated as failures.
+Verifies that the MiniWob HTTP server starts, the browser connects, the task
+page loads and JS initialises, and the hardcoded agents achieve reward=1.0 for
+the debug tasks.
 
 Public API (cube.testing protocol)
 -----------------------------------
 get_debug_task_configs()           -> list[MiniWobTaskConfig]
-make_debug_agent(task_id: str)     -> DebugAgent
+make_debug_agent(task_id: str)     -> ClickButtonAgent | ClickCheckboxesAgent
 
 Usage:
     uv run python -m miniwob_cube.debug
@@ -17,12 +16,13 @@ Usage:
 from __future__ import annotations
 
 import logging
+import re
 import sys
 
-from cube.core import Action, ActionSchema, Observation
-from cube.container import Container
-from cube.tool import AbstractTool, ToolConfig
+from cube.core import Action, ActionSchema, Observation, TextContent
 from cube.testing import run_debug_suite
+
+from agentlab2.tools.playwright import PlaywrightConfig
 
 from miniwob_cube.benchmark import MiniWobBenchmark
 from miniwob_cube.task import MiniWobTaskConfig
@@ -34,42 +34,59 @@ logger = logging.getLogger(__name__)
 _DEBUG_TASK_IDS = ["click-button", "click-checkboxes"]
 
 
-class MockToolConfig(ToolConfig):
-    def make(self, container: Container | None = None) -> AbstractTool:
-        return MockTool()
+class ClickButtonAgent:
+    def __init__(self) -> None:
+        self._done = False
 
-
-class MockTool(AbstractTool):
-    def execute_action(self, action: Action) -> Observation:
-        return Observation(contents=[])
-
-    def goto(self, url: str) -> None:
-        _ = url
-
-    def evaluate_js(self, js: str) -> str:
-        _ = js
-        return "0.0,0.0,reason,true,1,true"
-
-    def page_obs(self) -> Observation:
-        return Observation(contents=[])
-
-    @property
-    def action_set(self) -> list[ActionSchema]:
-        return []
-
-
-class DebugAgent:
-    """Minimal agent that stops immediately — validates infrastructure, not task solving."""
-
-    def __init__(self, task_id: str) -> None:
-        self._task_id = task_id
+    def _parse_button_text(self, obs: Observation) -> str:
+        for content in obs.contents:
+            if isinstance(content, TextContent):
+                match = re.search(r'Click on the "(.+?)" button', content.data, re.IGNORECASE)
+                assert match
+                return match.group(1)
 
     def __call__(self, obs: Observation, action_set: list[ActionSchema]) -> Action:
+        if not self._done:
+            self._done = True
+            text = self._parse_button_text(obs)
+            return Action(name="browser_click", arguments={"selector": f"button:has-text('{text}')"})
         return Action(name="final_step", arguments={})
 
 
-def make_debug_agent(task_id: str) -> DebugAgent:
-    return DebugAgent(task_id)
+class ClickCheckboxesAgent:
+    def __init__(self) -> None:
+        self._step = 0
+        self._targets: list[str] = []
+
+    def _parse_targets(self, obs: Observation) -> list[str]:
+        for content in obs.contents:
+            if isinstance(content, TextContent):
+                match = re.search(r"Select (.+?) and click Submit", content.data, re.IGNORECASE)
+                assert match
+                words_str = match.group(1)
+                if words_str.lower() == "nothing":
+                    return []
+                return [w.strip() for w in words_str.split(",")]
+
+    def __call__(self, obs: Observation, action_set: list[ActionSchema]) -> Action:
+        if self._step == 0:
+            self._targets = self._parse_targets(obs)
+        idx = self._step
+        self._step += 1
+        if idx < len(self._targets):
+            word = self._targets[idx]
+            return Action(name="browser_click", arguments={"selector": f"label:has-text('{word}') input[type='checkbox']"})
+        if idx == len(self._targets):
+            return Action(name="browser_click", arguments={"selector": "button#subbtn"})
+        return Action(name="final_step", arguments={})
+
+
+def make_debug_agent(task_id: str) -> ClickButtonAgent | ClickCheckboxesAgent:
+    if task_id == "click-button":
+        return ClickButtonAgent()
+    if task_id == "click-checkboxes":
+        return ClickCheckboxesAgent()
+    raise ValueError(f"No hardcoded agent for task: {task_id}")
 
 
 def get_debug_task_configs(base_url: str = "http://localhost:8000/miniwob") -> list[MiniWobTaskConfig]:
@@ -77,7 +94,7 @@ def get_debug_task_configs(base_url: str = "http://localhost:8000/miniwob") -> l
         MiniWobTaskConfig(
             task_id=tid,
             base_url=base_url,
-            tool_config=MockToolConfig(),
+            tool_config=PlaywrightConfig(headless=True, use_html=False, use_axtree=False, use_screenshot=False),
         )
         for tid in _DEBUG_TASK_IDS
     ]
@@ -93,8 +110,7 @@ if __name__ == "__main__":
         benchmark.setup()
         results = run_debug_suite("miniwob-cube", _this_module)
 
-        # Smoke test: fail only on errors, not on reward (agent stops immediately).
-        failed = [r for r in results if r["error"]]
+        failed = [r for r in results if r["error"] or r["reward"] < 1.0]
     finally:
         benchmark.close()
 
