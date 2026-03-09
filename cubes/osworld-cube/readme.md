@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-`osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.agentlab2`).
+`osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.cube`).
 
 **Before running any task**, follow the [OSWorld Setup Guide](https://github.com/xlang-ai/OSWorld/blob/main/SETUP_GUIDELINE.md) to install the required system dependencies for your chosen provider (Docker, VMware, etc.). In particular:
 
@@ -79,11 +79,37 @@ for task_config in bench.get_task_configs():
 ## Observations
 
 Each step returns a multimodal `Observation` with:
-- **screenshot** — PIL `Image` of the current desktop
-- **axtree_txt** — linearized accessibility tree as a tab-separated text table (default)
-- **terminal** — last terminal output (only included when `ComputerConfig(require_terminal=True)`)
+
+| Field | `ComputerConfig` flag | Default | Description |
+|-------|-----------------------|---------|-------------|
+| `screenshot` | *(always included)* | on | PIL `Image` of the current desktop |
+| `axtree_txt` | `require_a11y_tree=True` | on | Linearized accessibility tree as a tab-separated text table |
+| `terminal` | `require_terminal=True` | off | Last terminal output |
+
+The observation is captured after every action unless `observe_after_action=False` is set (useful when the agent drives observation timing manually).
 
 The raw XML accessibility tree from `desktop_env` is always post-processed before being returned to the agent.
+
+**Example `axtree_txt`** (Ubuntu desktop, idle state):
+
+```
+tag             name                             text  class  description  position (top-left x&y)  size (w&h)
+label           Home                                                        (1833, 1037)             (40, 17)
+menu            System                           ""                         (1814, 0)                (106, 27)
+push-button     Google Chrome                    ""                         (0, 33)                  (70, 64)
+push-button     Thunderbird Mail                 ""                         (0, 101)                 (70, 64)
+push-button     Visual Studio Code               ""                         (0, 169)                 (70, 64)
+push-button     VLC media player                 ""                         (0, 237)                 (70, 64)
+push-button     LibreOffice Writer               ""                         (0, 305)                 (70, 64)
+push-button     LibreOffice Calc                 ""                         (0, 373)                 (70, 64)
+push-button     LibreOffice Impress              ""                         (0, 441)                 (70, 64)
+push-button     GNU Image Manipulation Program   ""                         (0, 509)                 (70, 64)
+push-button     Files                            ""                         (0, 577)                 (70, 64)
+push-button     Ubuntu Software                  ""                         (0, 645)                 (70, 64)
+push-button     Help                             ""                         (0, 713)                 (70, 64)
+push-button     Trash                            ""                         (0, 784)                 (70, 64)
+toggle-button   Show Applications                ""                         (0, 1010)                (70, 70)
+```
 
 Set `use_som=True` on `OSWorldTask` / `OSWorldBenchmark` to switch to Set-of-Marks mode: the screenshot is annotated with numbered bounding boxes, and the axtree is replaced with an indexed element table (`som_elements`). In `pyautogui` mode, `tag_N` coordinate variables (bounding-box centres) are automatically prepended to the agent's code.
 
@@ -91,12 +117,45 @@ Set `use_som=True` on `OSWorldTask` / `OSWorldBenchmark` to switch to Set-of-Mar
 
 <!-- TODO: add a screenshot of an eval run once we have results -->
 
+## Reproducibility
+
+| Item | Value |
+|------|-------|
+| OSWorld repo | [`xlang-ai/OSWorld`](https://github.com/xlang-ai/OSWorld) |
+| Pinned commit | `e695a10` |
+| Task suite version | `1.0.0` (369 tasks) |
+| VM image | Ubuntu 22.04 |
+| Task index files | `test_all.json`, `test_small.json`, `test_nogdrive.json`, `test_infeasible.json` |
+
+The OSWorld repo is cloned once and pinned to commit `e695a10`. To use a different commit or a pre-existing clone, set `OSWORLD_REPO` to point at it (see [Environment Variables](#environment-variables)).
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CUBE_CACHE_DIR` | `~/.agentlab2` | Root directory for VMs and cache |
+| `CUBE_CACHE_DIR` | `~/.cube` | Root directory for VMs and cache |
 | `OSWORLD_REPO` | *(derived from `CUBE_CACHE_DIR`)* | Path used to resolve `settings_file` paths in task configs — override if you have an existing OSWorld clone |
+| `PROXY_CONFIG_FILE` | *(not set)* | Path to proxy config JSON for OSWorld network routing (e.g. `dataimpulse.json`) |
+
+### Example `.env`
+
+```bash
+# Root cache directory for VM images and cloned repos (default: ~/.cube)
+# CUBE_CACHE_DIR=~/.cube
+
+# Override if you already have an OSWorld clone somewhere
+# OSWORLD_REPO=~/.cube/benchmarks/osworld/OSWorld
+
+# Proxy config for OSWorld network routing (required for some tasks/providers)
+# PROXY_CONFIG_FILE=~/.cube/benchmarks/osworld/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json
+
+# LLM API key (whichever provider you use — passed through to LiteLLM)
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
+# AZURE_API_KEY=...
+# AZURE_API_BASE=https://your-resource.openai.azure.com/
+# AZURE_API_VERSION=2024-02-01
+```
 
 ## Debug / Testing
 
