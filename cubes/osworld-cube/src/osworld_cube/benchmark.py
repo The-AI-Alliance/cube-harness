@@ -75,6 +75,7 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
         f.write(f"\n{key}={value}\n")
     logger.info(f"Appended {key} to {env_path}")
 
+
 # ---------------------------------------------------------------------------
 # OSWorldTestSet
 # ---------------------------------------------------------------------------
@@ -160,7 +161,7 @@ class OSWorldBenchmark(Benchmark):
         use_som:              bool               — Set-of-Marks mode for all tasks
 
     To filter by domain or any other metadata field, call subset_from_glob() after setup():
-        bench.setup()   
+        bench.setup()
         chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
     """
 
@@ -244,7 +245,7 @@ class OSWorldBenchmark(Benchmark):
         self.install()
 
         logger.info(f"Setting up OSWorldBenchmark (provider={self._get_provider()})")
-        
+
         if not self.task_metadata:
             if self.tasks_file:
                 if not Path(self.tasks_file).exists():
