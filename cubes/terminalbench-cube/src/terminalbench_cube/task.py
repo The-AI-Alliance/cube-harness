@@ -118,6 +118,7 @@ class TerminalBenchTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> TerminalBenchTask:
+        # Import here to avoid circular import (benchmark imports task)
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
         if container_backend is None:
