@@ -1,8 +1,8 @@
-"""Test SWE-bench Verified cube: 10 tasks in parallel with React agent.
+"""Test SWE-bench Live cube: 10 tasks in parallel with React agent.
 
 Usage
 -----
-    DAYTONA_API_KEY=... OPENAI_API_KEY=... uv run recipes/test_swebench_10.py
+    DAYTONA_API_KEY=... OPENAI_API_KEY=... uv run recipes/test_swebench_live_10.py
 """
 
 import logging
@@ -14,7 +14,7 @@ from agentlab2.agents.react import ReactAgentConfig
 from agentlab2.exp_runner import run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
@@ -27,9 +27,10 @@ When you are confident the fix is correct, call final_step to submit."""
 
 backend = DaytonaContainerBackend()
 
-benchmark = SWEBenchVerifiedBenchmark(
+benchmark = SWEBenchLiveBenchmark(
     container_backend=backend,
     max_tasks=10,
+    split="lite",
 )
 
 agent_config = ReactAgentConfig(
@@ -38,8 +39,8 @@ agent_config = ReactAgentConfig(
 )
 
 experiment = Experiment(
-    name="swebench_verified_10",
-    output_dir=Path("results/swebench_verified_10"),
+    name="swebench_live_10",
+    output_dir=Path("results/swebench_live_10"),
     agent_config=agent_config,
     benchmark=benchmark,
     max_steps=30,

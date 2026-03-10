@@ -96,11 +96,9 @@ class SWEBenchLiveBenchmark(Benchmark):
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
         """Yield self-contained TaskConfigs with metadata snapshots for Ray workers."""
         for tm in self.task_metadata.values():
-            seed = next(self._seed_sequence) if self._seed_sequence else None
             yield SWEBenchLiveTaskConfig(
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
-                seed=seed,
                 task_metadata_snapshot=tm,
             )
 

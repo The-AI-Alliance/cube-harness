@@ -18,6 +18,11 @@ DEFAULT_DOCKER_NAMESPACE = "swebench"
 DEFAULT_IMAGE_TAG = "latest"
 
 
+def _normalize_instance_id(instance_id: str) -> str:
+    """Normalize instance_id for Docker image naming: replace __ with _1776_ and lowercase."""
+    return instance_id.replace("__", "_1776_").lower()
+
+
 class SWEBenchVerifiedBenchmark(Benchmark):
     """SWE-bench Verified — 500 real-world GitHub issues with test-based validation."""
 
@@ -87,11 +92,9 @@ class SWEBenchVerifiedBenchmark(Benchmark):
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
         """Yield self-contained TaskConfigs with metadata snapshots for Ray workers."""
         for tm in self.task_metadata.values():
-            seed = next(self._seed_sequence) if self._seed_sequence else None
             yield SWEBenchVerifiedTaskConfig(
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
-                seed=seed,
                 task_metadata_snapshot=tm,
             )
 
@@ -108,7 +111,8 @@ class SWEBenchVerifiedBenchmark(Benchmark):
 
     def _get_docker_image(self, instance_id: str) -> str:
         """Get the Docker image name for a given instance."""
-        return f"{self.docker_namespace}/sweb.eval.x86_64.{instance_id}:{self.image_tag}"
+        normalized = _normalize_instance_id(instance_id)
+        return f"{self.docker_namespace}/sweb.eval.x86_64.{normalized}:{self.image_tag}"
 
     def _filter_tasks(self, tasks_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Apply filtering, shuffling, and slicing to raw task data."""
