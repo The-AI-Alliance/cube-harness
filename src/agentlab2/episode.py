@@ -4,6 +4,7 @@ import warnings
 from pathlib import Path
 from typing import Callable, Self
 
+from cube.container import ContainerBackend
 from cube.core import EnvironmentOutput, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from cube.tool import ToolConfig
@@ -49,6 +50,7 @@ class Episode:
         exp_name: str = "default",
         max_steps: int = MAX_STEPS,
         storage: Storage | None = None,
+        container_backend: ContainerBackend | None = None,
     ) -> None:
         if task_config is None and env_config is None:
             raise ValueError("Provide either task_config (new) or env_config (deprecated).")
@@ -77,6 +79,7 @@ class Episode:
             tool_config=env_config.tool_config if env_config is not None else None,
         )
         self._env_config = env_config  # kept for the legacy run path
+        self._container_backend = container_backend  # passed to task_config.make()
         self.storage = storage or FileStorage(output_dir)
         self.allow_overwrite = False
 
@@ -169,7 +172,7 @@ class Episode:
             Trajectory containing the full history of the run.
         """
         if self.config.task_config is not None:
-            task = self.config.task_config.make()
+            task = self.config.task_config.make(container_backend=self._container_backend)
             action_set = task.action_set
             step_fn = task.step
             close_fn = task.close
