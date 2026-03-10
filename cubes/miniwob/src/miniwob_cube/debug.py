@@ -22,7 +22,7 @@ import sys
 from cube.core import Action, ActionSchema, Observation, TextContent
 from cube.testing import run_debug_suite
 
-from agentlab2.tools.playwright import PlaywrightConfig
+from cube_browser_tool import PlaywrightConfig
 
 from miniwob_cube.benchmark import MiniWobBenchmark
 from miniwob_cube.task import MiniWobTaskConfig
