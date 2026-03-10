@@ -301,11 +301,16 @@ class Computer13(ComputerBase):
     ) -> str:
         """Click the mouse button at optional coordinates.
 
-        Args:
-            button: Mouse button — "left", "right", or "middle"
-            x: X coordinate to click at (-1 = use current cursor position)
-            y: Y coordinate to click at (-1 = use current cursor position)
-            num_clicks: Number of clicks (1 for single, 2 for double, etc.)
+        Parameters
+        ----------
+        button : str
+            Mouse button — "left", "right", or "middle"
+        x : int
+            X coordinate to click at (-1 = use current cursor position)
+        y : int
+            Y coordinate to click at (-1 = use current cursor position)
+        num_clicks : int
+            Number of clicks (1 for single, 2 for double, etc.)
         """
         params: dict = {"button": button, "num_clicks": num_clicks}
         if x >= 0:
@@ -318,9 +323,12 @@ class Computer13(ComputerBase):
     def double_click(self, x: int = -1, y: int = -1) -> str:
         """Double-click the mouse at optional coordinates.
 
-        Args:
-            x: X coordinate (-1 = use current cursor position)
-            y: Y coordinate (-1 = use current cursor position)
+        Parameters
+        ----------
+        x : int
+            X coordinate (-1 = use current cursor position)
+        y : int
+            Y coordinate (-1 = use current cursor position)
         """
         return self.click(x=x, y=y, num_clicks=2)
 
@@ -328,9 +336,12 @@ class Computer13(ComputerBase):
     def right_click(self, x: int = -1, y: int = -1) -> str:
         """Right-click the mouse at optional coordinates.
 
-        Args:
-            x: X coordinate (-1 = use current cursor position)
-            y: Y coordinate (-1 = use current cursor position)
+        Parameters
+        ----------
+        x : int
+            X coordinate (-1 = use current cursor position)
+        y : int
+            Y coordinate (-1 = use current cursor position)
         """
         return self.click(button="right", x=x, y=y)
 
@@ -338,8 +349,10 @@ class Computer13(ComputerBase):
     def mouse_down(self, button: str = "left") -> str:
         """Press and hold a mouse button.
 
-        Args:
-            button: Mouse button — "left", "right", or "middle"
+        Parameters
+        ----------
+        button : str
+            Mouse button — "left", "right", or "middle"
         """
         return self._execute_desktop_action({"action_type": "MOUSE_DOWN", "parameters": {"button": button}})
 
@@ -347,8 +360,10 @@ class Computer13(ComputerBase):
     def mouse_up(self, button: str = "left") -> str:
         """Release a held mouse button.
 
-        Args:
-            button: Mouse button — "left", "right", or "middle"
+        Parameters
+        ----------
+        button : str
+            Mouse button — "left", "right", or "middle"
         """
         return self._execute_desktop_action({"action_type": "MOUSE_UP", "parameters": {"button": button}})
 
@@ -356,9 +371,12 @@ class Computer13(ComputerBase):
     def move_to(self, x: int, y: int) -> str:
         """Move the mouse cursor to pixel coordinates without clicking.
 
-        Args:
-            x: Target X coordinate
-            y: Target Y coordinate
+        Parameters
+        ----------
+        x : int
+            Target X coordinate
+        y : int
+            Target Y coordinate
         """
         return self._execute_desktop_action({"action_type": "MOVE_TO", "parameters": {"x": x, "y": y}})
 
@@ -366,9 +384,12 @@ class Computer13(ComputerBase):
     def drag_to(self, x: int, y: int) -> str:
         """Click-and-drag from the current cursor position to (x, y).
 
-        Args:
-            x: Target X coordinate
-            y: Target Y coordinate
+        Parameters
+        ----------
+        x : int
+            Target X coordinate
+        y : int
+            Target Y coordinate
         """
         return self._execute_desktop_action({"action_type": "DRAG_TO", "parameters": {"x": x, "y": y}})
 
@@ -376,9 +397,12 @@ class Computer13(ComputerBase):
     def scroll(self, dx: int, dy: int) -> str:
         """Scroll the mouse wheel.
 
-        Args:
-            dx: Horizontal scroll amount (positive = right)
-            dy: Vertical scroll amount (positive = down)
+        Parameters
+        ----------
+        dx : int
+            Horizontal scroll amount (positive = right)
+        dy : int
+            Vertical scroll amount (positive = down)
         """
         return self._execute_desktop_action({"action_type": "SCROLL", "parameters": {"dx": dx, "dy": dy}})
 
@@ -386,8 +410,10 @@ class Computer13(ComputerBase):
     def typing(self, text: str) -> str:
         """Type text into the currently focused element.
 
-        Args:
-            text: The text to type
+        Parameters
+        ----------
+        text : str
+            The text to type
         """
         return self._execute_desktop_action({"action_type": "TYPING", "parameters": {"text": text}})
 
@@ -395,8 +421,10 @@ class Computer13(ComputerBase):
     def press(self, key: str) -> str:
         """Press and release a single key.
 
-        Args:
-            key: Key name (e.g. "enter", "esc", "tab", "backspace", "space")
+        Parameters
+        ----------
+        key : str
+            Key name (e.g. "enter", "esc", "tab", "backspace", "space")
         """
         return self._execute_desktop_action({"action_type": "PRESS", "parameters": {"key": key}})
 
@@ -404,8 +432,10 @@ class Computer13(ComputerBase):
     def key_down(self, key: str) -> str:
         """Press a key down without releasing it.
 
-        Args:
-            key: Key name (e.g. "ctrl", "shift", "alt")
+        Parameters
+        ----------
+        key : str
+            Key name (e.g. "ctrl", "shift", "alt")
         """
         return self._execute_desktop_action({"action_type": "KEY_DOWN", "parameters": {"key": key}})
 
@@ -413,8 +443,10 @@ class Computer13(ComputerBase):
     def key_up(self, key: str) -> str:
         """Release a previously held key.
 
-        Args:
-            key: Key name (e.g. "ctrl", "shift", "alt")
+        Parameters
+        ----------
+        key : str
+            Key name (e.g. "ctrl", "shift", "alt")
         """
         return self._execute_desktop_action({"action_type": "KEY_UP", "parameters": {"key": key}})
 
@@ -422,8 +454,10 @@ class Computer13(ComputerBase):
     def hotkey(self, keys: str) -> str:
         """Press a key combination simultaneously (e.g. Ctrl+C).
 
-        Args:
-            keys: Key names joined by '+' (e.g. "ctrl+c", "ctrl+shift+t")
+        Parameters
+        ----------
+        keys : str
+            Key names joined by '+' (e.g. "ctrl+c", "ctrl+shift+t")
         """
         if isinstance(keys, str):
             keys = keys.split("+")
@@ -456,9 +490,11 @@ class PyAutoGUIComputer(ComputerBase):
         SoM tag_N variables (center coordinates of numbered bounding boxes) are
         automatically prepended to the code so agents can reference them by index.
 
-        Args:
-            code: Python code using pyautogui and optional tag_N variables
-                  (e.g. "pyautogui.click(*tag_3)")
+        Parameters
+        ----------
+        code : str
+            Python code using pyautogui and optional tag_N variables
+            (e.g. "pyautogui.click(*tag_3)")
         """
         from desktop_env.desktop_env import _fix_pyautogui_less_than_bug
 
