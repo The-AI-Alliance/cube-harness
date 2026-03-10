@@ -18,8 +18,10 @@ class ArithmeticTool(Tool):
     def submit_answer(self, answer: int) -> str:
         """Submit your integer answer to the arithmetic question.
 
-        Args:
-            answer: Your integer answer.
+        Parameters
+        ----------
+        answer : int
+            Your integer answer.
         """
         self._submitted = answer
         return f"Answer {answer} submitted."
