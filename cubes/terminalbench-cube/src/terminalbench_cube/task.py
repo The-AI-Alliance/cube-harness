@@ -113,12 +113,6 @@ class TerminalBenchTask(Task):
 class TerminalBenchTaskConfig(TaskConfig):
     """Serializable factory that produces a TerminalBenchTask."""
 
-    # Stored here because AgentLab2's Episode calls make() with no args.
-    # The base Benchmark.get_task_configs() doesn't pass container_backend,
-    # so we inject it via get_task_configs() override in the benchmark.
-    container_backend: ContainerBackend | None = None
-    model_config = {"arbitrary_types_allowed": True}
-
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
@@ -126,9 +120,11 @@ class TerminalBenchTaskConfig(TaskConfig):
     ) -> TerminalBenchTask:
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
+        if container_backend is None:
+            raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
         return TerminalBenchTask(
             metadata=TerminalBenchBenchmark.task_metadata[self.task_id],
             tool_config=self.tool_config or TerminalBenchToolConfig(),
             runtime_context=runtime_context,
-            container_backend=container_backend or self.container_backend,
+            container_backend=container_backend,
         )

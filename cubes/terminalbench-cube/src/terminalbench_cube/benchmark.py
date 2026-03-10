@@ -6,7 +6,6 @@ import subprocess
 import tarfile
 import tempfile
 import tomllib
-from collections.abc import Generator
 from pathlib import Path
 from random import Random
 from typing import ClassVar
@@ -102,15 +101,6 @@ class TerminalBenchBenchmark(Benchmark):
         # Set on the class so TaskConfig.make() can look it up
         TerminalBenchBenchmark.task_metadata = metadata
         logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
-
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield TaskConfigs with container_backend injected."""
-        for tm in self.task_metadata.values():
-            yield TerminalBenchTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
-                container_backend=self.container_backend,
-            )
 
     def close(self) -> None:
         pass
