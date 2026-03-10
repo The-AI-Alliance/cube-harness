@@ -186,6 +186,44 @@ class TestTool:
         assert "test" in results[2]
 
 
+class TestToolActionSchema:
+    """Tests for @tool_action schema generation from docstrings."""
+
+    def test_numpydoc_param_description_included_in_schema(self) -> None:
+        """NumPy-style Parameters section produces parameter descriptions in the LLM schema."""
+
+        class SampleTool(Tool):
+            @tool_action
+            def submit(self, answer: int) -> str:
+                """Submit an answer.
+
+                Parameters
+                ----------
+                answer : int
+                    The integer answer to submit.
+                """
+                return f"submitted {answer}"
+
+        schema = next(a for a in SampleTool().action_set if a.name == "submit")
+        assert "description" in schema.parameters["properties"]["answer"]
+
+    def test_google_style_args_not_parsed(self) -> None:
+        """Google-style Args: sections are silently ignored — description is absent."""
+
+        class SampleTool(Tool):
+            @tool_action
+            def submit(self, answer: int) -> str:
+                """Submit an answer.
+
+                Args:
+                    answer: The integer answer to submit.
+                """
+                return f"submitted {answer}"
+
+        schema = next(a for a in SampleTool().action_set if a.name == "submit")
+        assert "description" not in schema.parameters["properties"]["answer"]
+
+
 class TestToolExecutionSpans:
     """Tests for tool execution OpenTelemetry spans following GenAI conventions.
 
