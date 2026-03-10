@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from cube.benchmark import RuntimeContext
@@ -8,7 +9,7 @@ from cube.core import Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from webarena_verified.api.webarena_verified import WebArenaVerified
 from webarena_verified.types.config import WebArenaVerifiedConfig
-from webarena_verified.types.eval import EvalStatus, TaskEvalResult
+from webarena_verified.types.eval import EvalStatus, NetworkTrace, TaskEvalResult
 from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 
 from agentlab2.tools.playwright import SyncPlaywrightTool
@@ -53,12 +54,13 @@ class WebArenaVerifiedTask(Task):
         if submitted is None:
             return 0.0, {"eval_status": EvalStatus.FAILURE, "evaluators_results": []}
         self._playwright_tool.close()  # HAR is saved at context close
-        har_entries = self._get_har_entries()
+        har_path = Path(self._playwright_tool.config.context_kwargs["record_har_path"])
+        network_trace = NetworkTrace.from_har(har_path)
         wav = WebArenaVerified(config=self.wav_config)
         result: TaskEvalResult = wav.evaluate_task(
             task_id=self.wav_task.task_id,
             agent_response=submitted.model_dump(),
-            network_trace=har_entries,
+            network_trace=network_trace,
         )
         return result.score, {
             "eval_status": result.status,
@@ -67,12 +69,6 @@ class WebArenaVerifiedTask(Task):
 
     def finished(self, obs: Observation) -> bool:
         return self._submit_tool.get_submitted_response() is not None
-
-    def _get_har_entries(self) -> list[dict]:
-        har_path = self._playwright_tool.config.context_kwargs["record_har_path"]
-        with open(har_path) as f:
-            har = json.load(f)
-        return har["log"]["entries"]
 
 
 class WebArenaVerifiedTaskConfig(TaskConfig):
