@@ -12,6 +12,7 @@ import logging
 import os
 
 from cube.core import Action, ActionSchema, Observation
+
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 from swebench_verified_cube.task import SWEBenchVerifiedTaskConfig
 

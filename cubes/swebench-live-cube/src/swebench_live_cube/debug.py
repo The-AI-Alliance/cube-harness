@@ -12,6 +12,7 @@ import logging
 import os
 
 from cube.core import Action, ActionSchema, Observation
+
 from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 from swebench_live_cube.task import SWEBenchLiveTaskConfig
 
@@ -28,7 +29,12 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
     ],
     "deepset-ai__haystack-8489": [
         Action(name="bash", arguments={"command": "ls -la /testbed"}),
-        Action(name="bash", arguments={"command": "cat /testbed/setup.cfg 2>/dev/null || cat /testbed/pyproject.toml 2>/dev/null | head -20"}),
+        Action(
+            name="bash",
+            arguments={
+                "command": "cat /testbed/setup.cfg 2>/dev/null || cat /testbed/pyproject.toml 2>/dev/null | head -20"
+            },
+        ),
         Action(name="final_step", arguments={}),
     ],
 }
@@ -60,11 +66,7 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 
 
 def get_debug_task_configs() -> list[SWEBenchLiveTaskConfig]:
-    return [
-        SWEBenchLiveTaskConfig(task_id=tid)
-        for tid in _TASK_ACTIONS
-        if tid in SWEBenchLiveBenchmark.task_metadata
-    ]
+    return [SWEBenchLiveTaskConfig(task_id=tid) for tid in _TASK_ACTIONS if tid in SWEBenchLiveBenchmark.task_metadata]
 
 
 if __name__ == "__main__":

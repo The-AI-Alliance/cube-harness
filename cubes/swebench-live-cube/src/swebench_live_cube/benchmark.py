@@ -5,17 +5,17 @@ from collections.abc import Generator
 from random import Random
 from typing import Any, ClassVar
 
-from datasets import load_dataset
-
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerConfig
 from cube.task import TaskConfig, TaskMetadata
+from datasets import load_dataset
+
 from swebench_live_cube.task import SWEBenchLiveTaskConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DOCKER_NAMESPACE = "starryzhang"
-DEFAULT_IMAGE_TAG = "latest"
+_DOCKER_NAMESPACE = "starryzhang"
+_IMAGE_TAG = "latest"
 
 
 def _normalize_instance_id(instance_id: str) -> str:
@@ -39,8 +39,6 @@ class SWEBenchLiveBenchmark(Benchmark):
     # User-configurable fields
     dataset_name: str = "SWE-bench-Live/SWE-bench-Live"
     split: str = "lite"
-    docker_namespace: str = DEFAULT_DOCKER_NAMESPACE
-    image_tag: str = DEFAULT_IMAGE_TAG
     shuffle: bool = True
     shuffle_seed: int = 42
     max_tasks: int | None = None
@@ -116,7 +114,7 @@ class SWEBenchLiveBenchmark(Benchmark):
     def _get_docker_image(self, instance_id: str) -> str:
         """Get the Docker image name for a given instance."""
         normalized = _normalize_instance_id(instance_id)
-        return f"{self.docker_namespace}/sweb.eval.x86_64.{normalized}:{self.image_tag}"
+        return f"{_DOCKER_NAMESPACE}/sweb.eval.x86_64.{normalized}:{_IMAGE_TAG}"
 
     def _filter_tasks(self, tasks_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Apply filtering, shuffling, and slicing to raw task data."""
