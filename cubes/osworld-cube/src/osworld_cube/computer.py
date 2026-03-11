@@ -487,14 +487,12 @@ class PyAutoGUIComputer(ComputerBase):
     def run_pyautogui(self, code: str) -> str:
         """Execute Python code using pyautogui in the VM.
 
-        SoM tag_N variables (center coordinates of numbered bounding boxes) are
-        automatically prepended to the code so agents can reference them by index.
-
         Parameters
         ----------
         code : str
-            Python code using pyautogui and optional tag_N variables
-            (e.g. "pyautogui.click(*tag_3)")
+            Python code to execute (e.g. "pyautogui.click(100, 200)"). If SoM
+            bounding boxes are available, tag_1, tag_2, ... variables are
+            prepended as center coordinates (e.g. "pyautogui.click(*tag_3)").
         """
         from desktop_env.desktop_env import _fix_pyautogui_less_than_bug
 

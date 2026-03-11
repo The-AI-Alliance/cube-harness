@@ -19,7 +19,7 @@ from typing import List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 # XML namespace URLs for accessibility tree attributes
-attributes_ns_ubuntu = "https://accessibility.windows.example.org/ns/attributes"
+attributes_ns_ubuntu = "https://accessibility.ubuntu.example.org/ns/attributes"
 attributes_ns_windows = "https://accessibility.windows.example.org/ns/attributes"
 state_ns_ubuntu = "https://accessibility.ubuntu.example.org/ns/state"
 state_ns_windows = "https://accessibility.windows.example.org/ns/state"
