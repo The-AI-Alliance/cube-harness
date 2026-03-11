@@ -39,6 +39,11 @@ dependencies = [
 workarena = [
     "browsergym-workarena>=0.5.2",
 ]
+# SWE-bench benchmarks
+swebench = [
+    "swebench-verified-cube",
+    "swebench-live-cube",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
@@ -46,6 +51,10 @@ build-backend = "uv_build"
 
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
+
+[tool.uv.sources]
+swebench-verified-cube = { path = "cubes/swebench-verified-cube", editable = true }
+swebench-live-cube = { path = "cubes/swebench-live-cube", editable = true }
 
 [tool.ruff]
 fix = true
