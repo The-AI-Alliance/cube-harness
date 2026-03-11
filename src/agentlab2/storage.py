@@ -113,7 +113,7 @@ class FileStorage:
             step_to_save = self._extract_llm_calls(step, f"{trajectory_id}_step{step_num:03d}")
 
         with open(f"{cur_path}.jsonl", "a") as f:
-            line = step_to_save.model_dump_json(serialize_as_any=True)
+            line = step_to_save.model_dump_json()
             f.write(f"{line}\n")
 
     def _extract_llm_calls(self, step: TrajectoryStep, step_id: str) -> TrajectoryStep:
@@ -329,7 +329,7 @@ class FileStorage:
             )
 
         with open(config_path, "w") as f:
-            f.write(episode_config.model_dump_json(indent=2, serialize_as_any=True))
+            f.write(episode_config.model_dump_json(indent=2))
         logger.info(f"Saved episode config to {config_path}")
 
     def load_episode_config(self, config_path: Path) -> "EpisodeConfig":
