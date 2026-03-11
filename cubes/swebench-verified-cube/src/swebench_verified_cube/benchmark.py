@@ -52,7 +52,7 @@ class SWEBenchVerifiedBenchmark(Benchmark):
     def _setup(self) -> None:
         """Load dataset from HuggingFace, apply filters, and populate task_metadata."""
         ds = load_dataset(self.dataset_name, split="test")
-        tasks_data = self._filter_tasks(list(ds))
+        tasks_data = self._filter_tasks(list(ds))  # type: ignore[arg-type]
 
         metadata: dict[str, TaskMetadata] = {}
         for t in tasks_data:
