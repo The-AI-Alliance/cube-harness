@@ -12,7 +12,7 @@ import pytest
 @pytest.mark.integration
 def test_debug_tasks():
     """All OSWorld debug tasks must complete with reward == 1.0."""
-    import osworld_cube.debug_agent as mod
+    import osworld_cube.debug as mod
     from cube.testing import assert_debug_tasks_reward_one
 
     assert_debug_tasks_reward_one(mod, max_steps=20)

@@ -2,6 +2,7 @@
 
 Implements the module protocol expected by ``cube.testing.assert_debug_tasks_reward_one``:
 
+    ensure_resources()  — optional: download qcow2 from HuggingFace if not cached
     get_debug_task_configs() -> list[OSWorldDebugTaskConfig]
     make_debug_agent(task_id: str) -> Callable[[Observation, list[ActionSchema]], Action]
 
@@ -12,14 +13,18 @@ containing ``"Hello World"``.  The scripted agent opens a terminal with
 Usage (integration test — requires Docker + KVM + OSWorld qcow2)::
 
     from cube.testing import assert_debug_tasks_reward_one
-    import osworld_cube.debug_agent as mod
+    import osworld_cube.debug as mod
     assert_debug_tasks_reward_one(mod, max_steps=20)
+
+Or via the cube CLI (after ``pip install osworld-cube``)::
+
+    cube test osworld-cube
 
 Or as a standalone script::
 
     uv run python -c "
     from cube.testing import run_debug_suite
-    import osworld_cube.debug_agent as mod
+    import osworld_cube.debug as mod
     run_debug_suite('osworld-cube', mod)
     "
 """
@@ -172,6 +177,21 @@ class OSWorldDebugTaskConfig(TaskConfig):
 # ---------------------------------------------------------------------------
 # cube.testing module protocol
 # ---------------------------------------------------------------------------
+
+
+def ensure_resources() -> None:
+    """Download the OSWorld VM image from HuggingFace if not already cached.
+
+    Called automatically by ``cube test osworld-cube`` before running episodes.
+    Safe to call multiple times — skips the download if the file is already cached.
+
+    Requires ``huggingface-hub`` (installed with osworld-cube) and internet access
+    on first run.  The qcow2 is ~23 GB so the first call may take a while.
+    """
+    from osworld_cube.vm_utils import get_osworld_vm_image
+
+    image_path = get_osworld_vm_image()
+    logger.info("OSWorld VM image ready at: %s", image_path)
 
 
 def get_debug_task_configs() -> list[OSWorldDebugTaskConfig]:

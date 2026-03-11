@@ -419,5 +419,69 @@ class TestOSWorldBenchmark:
         )
 
 
+class TestDebugModule:
+    """Unit tests for the cube.testing module protocol in osworld_cube.debug."""
+
+    def test_debug_module_exports_required_callables(self):
+        """debug.py must expose get_debug_task_configs and make_debug_agent."""
+        import osworld_cube.debug as mod
+
+        assert callable(getattr(mod, "get_debug_task_configs", None))
+        assert callable(getattr(mod, "make_debug_agent", None))
+        assert callable(getattr(mod, "ensure_resources", None))
+
+    def test_get_debug_task_configs_returns_nonempty_list(self):
+        """get_debug_task_configs() returns at least one task config."""
+        from osworld_cube.debug import get_debug_task_configs
+
+        configs = get_debug_task_configs()
+        assert len(configs) >= 1
+        assert configs[0].task_id == "simple-create-file"
+
+    def test_make_debug_agent_returns_callable(self):
+        """make_debug_agent() returns a callable that returns Action objects."""
+        from cube.core import Action
+        from osworld_cube.debug import make_debug_agent
+
+        agent = make_debug_agent("simple-create-file")
+        assert callable(agent)
+        first_action = agent(None, [])
+        assert isinstance(first_action, Action)
+
+    def test_make_debug_agent_unknown_task_raises(self):
+        """make_debug_agent() raises ValueError for unknown task IDs."""
+        from osworld_cube.debug import make_debug_agent
+
+        with pytest.raises(ValueError, match="No debug script"):
+            make_debug_agent("nonexistent-task")
+
+    @patch("osworld_cube.vm_utils.get_osworld_vm_image")
+    def test_ensure_resources_calls_get_osworld_vm_image(self, mock_get_image):
+        """ensure_resources() triggers the qcow2 download helper."""
+        mock_get_image.return_value = "/cache/ubuntu.qcow2"
+        from osworld_cube.debug import ensure_resources
+
+        ensure_resources()
+
+        mock_get_image.assert_called_once()
+
+    def test_debug_script_covers_all_steps(self):
+        """The simple-create-file script ends with a done action."""
+        from cube.core import Action
+        from osworld_cube.debug import make_debug_agent
+
+        agent = make_debug_agent("simple-create-file")
+        actions = []
+        for _ in range(20):
+            a = agent(None, [])
+            actions.append(a)
+            if a.name == "done":
+                break
+
+        assert actions[-1].name == "done", "Script must end with a done action"
+        assert any(a.name == "hotkey" for a in actions), "Script must open terminal"
+        assert any(a.name == "typing" for a in actions), "Script must type the echo command"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
