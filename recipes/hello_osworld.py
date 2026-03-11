@@ -1,14 +1,16 @@
 """Hello OSWorld - Example script for running OSWorld benchmark.
 
-OSWorld evaluates agents on real desktop automation tasks using VMs/Docker.
+OSWorld evaluates agents on real desktop automation tasks using Docker+QEMU VMs.
+This recipe uses cube-computer-tool for VM management (no desktop_env dependency).
 
 Prerequisites:
-1. Install desktop_env: pip install desktop-env
-2. That's it! OSWorld repo clones automatically on first run.
+1. Docker installed and running
+2. /dev/kvm available (for hardware acceleration on Linux)
+3. pip install -e osworld-cube/  (installs this package + its dependencies)
 
 First-time run:
 - OSWorld repo is cloned to ~/.agentlab2/benchmarks/osworld/OSWorld
-- VM images (~23GB Ubuntu) download automatically on first task
+- Ubuntu VM disk image (~23GB) is downloaded to ~/.cube/osworld/ on first make()
 - Everything is cached for subsequent runs
 
 Usage:
@@ -17,12 +19,6 @@ Usage:
 
     # Full run (all tasks, parallel with Ray)
     python recipes/hello_osworld.py
-
-Optional pre-installation:
-    from agentlab2.benchmarks.osworld.benchmark import OSWorldBenchmark
-    OSWorldBenchmark().install()  # Pre-clone repo (auto-runs anyway)
-
-Note: Without desktop_env installed, this will fail with ImportError.
 """
 
 import sys
@@ -30,11 +26,10 @@ import time
 from pathlib import Path
 
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.osworld.benchmark import OSWORLD_SYSTEM_PROMPT_COMPUTER_13, OSWorldBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
-from agentlab2.tools.computer import ComputerConfig
+from osworld_cube import OSWORLD_SYSTEM_PROMPT_COMPUTER_13, OSWorldBenchmark, OSWorldComputerConfig
 
 
 def main(debug: bool):
@@ -48,23 +43,21 @@ def main(debug: bool):
         system_prompt=OSWORLD_SYSTEM_PROMPT_COMPUTER_13,
     )
 
-    # Configure Computer tool for OSWorld (VM/desktop automation)
-    tool_config = ComputerConfig(
-        provider="docker",  # Use Docker (fast) or "vmware" (full desktop)
+    # Configure Computer tool for OSWorld
+    # vm_image_path is auto-downloaded from HuggingFace if not provided
+    tool_config = OSWorldComputerConfig(
         headless=True,
         require_a11y_tree=True,
-        screen_size=(1920, 1080),
         observe_after_action=True,
     )
 
     # Configure OSWorld benchmark
-    # Use tasks_file for custom tasks, or omit it to use the full OSWorld repo
     benchmark = OSWorldBenchmark(
         tool_config=tool_config,
-        tasks_file="src/agentlab2/benchmarks/osworld/osworld_tasks.json",
-        domain="all",  # or specific: "chrome", "os", "libreoffice"
+        tasks_file="osworld-cube/src/osworld_cube/osworld_tasks.json",
+        domain="all",
         shuffle=True,
-        max_turns=15,  # Max turns per task (overrides per-task max_turns in config)
+        max_turns=15,
     )
 
     exp = Experiment(
@@ -79,7 +72,6 @@ def main(debug: bool):
         print("DEBUG MODE: Running 2 tasks sequentially")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
-        print(f"Provider: {tool_config.provider}")
         print(f"Domain: {benchmark.domain}")
         print("VM will start, wait 60s, then agent can interact")
         print("=" * 60 + "\n")

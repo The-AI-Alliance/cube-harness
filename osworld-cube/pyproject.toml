@@ -1,0 +1,44 @@
+[project]
+name = "osworld-cube"
+version = "0.1.0"
+description = "OSWorld benchmark integration for cube-standard and agentlab2"
+requires-python = ">=3.12"
+dependencies = [
+    "agentlab2",
+    "cube-computer-tool",
+    "cube-standard",
+    "huggingface-hub>=0.20",
+    "pillow>=9.0",
+    "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.6.0,<0.7.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "osworld_cube"
+
+[tool.uv.sources]
+agentlab2 = { path = ".." }
+cube-computer-tool = { path = "../../cube-standard/cube-tools/cube-computer-tool" }
+cube-standard = { path = "../../cube-standard" }
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-rs"
+markers = ["integration: requires Docker + KVM + OSWorld qcow2"]

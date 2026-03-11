@@ -19,7 +19,7 @@ Usage:
     python recipes/hello_osworld.py
 
 Optional pre-installation:
-    from agentlab2.benchmarks.osworld.benchmark import OSWorldBenchmark
+    from osworld_cube import OSWorldBenchmark
     OSWorldBenchmark().install()  # Pre-clone repo (auto-runs anyway)
 
 Note: Without desktop_env installed, this will fail with ImportError.
@@ -30,11 +30,11 @@ import time
 from pathlib import Path
 
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.osworld.benchmark import OSWORLD_SYSTEM_PROMPT_PYAUTOGUI, OSWorldBenchmark
+from osworld_cube import OSWorldBenchmark; from osworld_cube.benchmark import OSWORLD_SYSTEM_PROMPT_COMPUTER_13 as OSWORLD_SYSTEM_PROMPT_PYAUTOGUI
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
-from agentlab2.tools.computer import ComputerConfig
+from osworld_cube import OSWorldComputerConfig as ComputerConfig
 
 
 def main(debug: bool):

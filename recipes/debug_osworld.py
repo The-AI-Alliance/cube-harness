@@ -38,7 +38,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from agentlab2.tools.computer import Computer, ComputerConfig
+from osworld_cube import OSWorldComputerConfig as ComputerConfig
+from cube_computer_tool import Computer
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)

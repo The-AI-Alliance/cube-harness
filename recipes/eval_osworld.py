@@ -26,12 +26,12 @@ import time
 from collections import defaultdict
 
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.osworld.benchmark import OSWORLD_SYSTEM_PROMPT_COMPUTER_13, OSWorldBenchmark
-from agentlab2.benchmarks.osworld.task import OSWorldTask
+from osworld_cube import OSWORLD_SYSTEM_PROMPT_COMPUTER_13, OSWorldBenchmark
+from osworld_cube import OSWorldTask
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
-from agentlab2.tools.computer import ComputerConfig
+from osworld_cube import OSWorldComputerConfig as ComputerConfig
 
 
 class SampledOSWorldBenchmark(OSWorldBenchmark):
