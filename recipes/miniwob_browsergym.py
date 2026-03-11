@@ -11,9 +11,10 @@ Usage:
 
 import sys
 
+from miniwob_cube.benchmark import MiniWobBenchmark
+
 from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
@@ -26,13 +27,13 @@ def main(debug: bool) -> None:
     llm_config = LLMConfig(model_name="azure/gpt-5-mini")
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    # Use BrowserGym tool instead of Playwright
-    tool_config = BrowsergymConfig(
-        use_screenshot=True,
-        use_html=True,
-        use_axtree=False,
+    benchmark = MiniWobBenchmark(
+        default_tool_config=BrowsergymConfig(
+            use_screenshot=True,
+            use_html=True,
+            use_axtree=False,
+        )
     )
-    benchmark = MiniWobBenchmark(tool_config=tool_config)
     exp = Experiment(
         name="miniwob_bgym",
         output_dir=output_dir,
