@@ -7,8 +7,9 @@ dependencies = [
     "agentlab2",
     "cube-computer-tool",
     "cube-standard",
-    "huggingface-hub>=0.20",
     "pillow>=9.0",
+    "requests>=2.0",
+    "tqdm>=4.0",
     "pytest>=8.0.0",
 ]
 

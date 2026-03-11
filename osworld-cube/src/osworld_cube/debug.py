@@ -37,6 +37,8 @@ from typing import Any, Optional
 
 from pydantic import Field
 
+from cube.benchmark import RuntimeContext  # noqa: F401 — needed for Pydantic forward-ref resolution
+from cube.container import ContainerBackend
 from cube.core import Action, ActionSchema, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import ToolConfig
@@ -162,7 +164,7 @@ class OSWorldDebugTaskConfig(TaskConfig):
         default_factory=OSWorldCubeToolConfig
     )
 
-    def make(self, runtime_context: Any = None, container_backend: Any = None) -> OSWorldCubeTask:
+    def make(self, runtime_context: RuntimeContext | None = None, container_backend: ContainerBackend | None = None) -> OSWorldCubeTask:
         return OSWorldCubeTask(
             metadata=TaskMetadata(
                 id=self.task_id,
