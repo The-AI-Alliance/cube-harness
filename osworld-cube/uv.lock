@@ -1959,9 +1959,10 @@ dependencies = [
     { name = "agentlab2" },
     { name = "cube-computer-tool" },
     { name = "cube-standard" },
-    { name = "huggingface-hub" },
     { name = "pillow" },
     { name = "pytest" },
+    { name = "requests" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -1969,9 +1970,10 @@ requires-dist = [
     { name = "agentlab2", directory = "../" },
     { name = "cube-computer-tool", directory = "../../cube-standard/cube-tools/cube-computer-tool" },
     { name = "cube-standard", directory = "../../cube-standard" },
-    { name = "huggingface-hub", specifier = ">=0.20" },
     { name = "pillow", specifier = ">=9.0" },
     { name = "pytest", specifier = ">=8.0.0" },
+    { name = "requests", specifier = ">=2.0" },
+    { name = "tqdm", specifier = ">=4.0" },
 ]
 
 [[package]]

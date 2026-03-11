@@ -39,7 +39,7 @@ def get_osworld_vm_image() -> str:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     qcow2_path = cache_dir / OSWORLD_VM_QCOW2_NAME
-    if qcow2_path.exists():
+    if qcow2_path.is_file():
         logger.info("OSWorld VM image already cached at: %s", qcow2_path)
         return str(qcow2_path)
 
