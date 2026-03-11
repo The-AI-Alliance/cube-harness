@@ -65,7 +65,7 @@ class SWEBenchVerifiedBenchmark(Benchmark):
                 container_config=ContainerConfig(
                     image=docker_image,
                     cpu_cores=2.0,
-                    ram_gb=8.0,
+                    ram_gb=4.0,
                     disk_gb=10.0,
                 ),
                 extra_info={
