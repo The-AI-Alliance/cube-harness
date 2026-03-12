@@ -39,9 +39,7 @@ from agentlab2.tools.browsergym import BrowsergymConfig
 try:
     from workarena_cube import WorkArenaBenchmark
 except ImportError:
-    print(
-        "WorkArena benchmark requires 'workarena-cube'. Run `make install` to install all optional dependencies."
-    )
+    print("WorkArena benchmark requires 'workarena-cube'. Run `make install` to install all optional dependencies.")
     sys.exit(1)
 
 _LLM = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
