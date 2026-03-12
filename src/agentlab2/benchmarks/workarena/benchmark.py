@@ -39,7 +39,7 @@ class WorkArenaBenchmark(Benchmark):
         from agentlab2.tools.browsergym import BrowsergymConfig
 
         benchmark = WorkArenaBenchmark(
-            tool_config=BrowsergymConfig(headless=False),
+            tool_config=BrowsergymConfig(browser_config=PlaywrightSessionConfig(headless=False)),
             level="l1",
             n_seeds=5,
         )
