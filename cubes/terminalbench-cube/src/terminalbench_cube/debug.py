@@ -2,8 +2,7 @@
 
 Public API
 ----------
-setup_debug_suite()           → None  (called by ``cube test`` before running tasks)
-teardown_debug_suite()        → None  (called by ``cube test`` after running tasks)
+setup_benchmark()             → TerminalBenchBenchmark  (called by ``cube.testing`` before running tasks)
 make_debug_agent(task_id)     → DebugAgent
 get_debug_task_configs()      → list[TerminalBenchTaskConfig]
 """
@@ -15,11 +14,10 @@ import os
 
 from cube.core import Action, ActionSchema, Observation
 from terminalbench_cube.task import TerminalBenchTaskConfig
+from cube.backends.daytona import DaytonaContainerBackend
+from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
 logger = logging.getLogger(__name__)
-
-# Module-level benchmark set by setup_debug_suite() and cleared by teardown_debug_suite()
-_benchmark = None
 
 # Each debug task replays a fixed action sequence.
 # These actions explore the environment and then stop — they don't solve
@@ -64,43 +62,22 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-class _DebugTaskConfig(TerminalBenchTaskConfig):
-    """TaskConfig subclass that injects the module-level debug backend into make()."""
-
-    def make(self, runtime_context=None, container_backend=None):
-        return super().make(runtime_context=runtime_context, container_backend=_benchmark.container_backend)
-
-    # TODO: Remove this class. This is until cube-standard.testing module becomes more flexible and allows passing args to make().
-
-
-def setup_debug_suite() -> None:
+def setup_benchmark() -> TerminalBenchBenchmark:
     """Create a Daytona backend and populate task_metadata via bench.setup()."""
-    global _benchmark
-    from cube.backends.daytona import DaytonaContainerBackend
-    from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
     api_key = os.environ.get("DAYTONA_API_KEY")
     if not api_key:
         raise RuntimeError("DAYTONA_API_KEY environment variable is required for cube test terminalbench-cube")
 
-    _benchmark = TerminalBenchBenchmark(
+    return TerminalBenchBenchmark(
         container_backend=DaytonaContainerBackend(api_key=api_key),
         difficulty_filter="easy",
         max_tasks=10,
     )
-    _benchmark.install()
-    _benchmark.setup()
-
-
-def teardown_debug_suite() -> None:
-    global _benchmark
-    if _benchmark is not None:
-        _benchmark.close()
-        _benchmark = None
 
 
 def get_debug_task_configs() -> list[TerminalBenchTaskConfig]:
-    return [_DebugTaskConfig(task_id=tid) for tid in _TASK_ACTIONS]
+    return [TerminalBenchTaskConfig(task_id=tid) for tid in _TASK_ACTIONS]
 
 
 if __name__ == "__main__":
