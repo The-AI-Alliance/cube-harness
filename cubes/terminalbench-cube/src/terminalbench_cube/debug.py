@@ -64,7 +64,6 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-
 class _DebugTaskConfig(TerminalBenchTaskConfig):
     """TaskConfig subclass that injects the module-level debug backend into make()."""
 
