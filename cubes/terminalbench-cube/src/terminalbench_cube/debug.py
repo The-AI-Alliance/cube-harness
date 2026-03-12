@@ -2,7 +2,7 @@
 
 Public API
 ----------
-setup_benchmark()             → TerminalBenchBenchmark  (called by ``cube.testing`` before running tasks)
+get_benchmark()               → TerminalBenchBenchmark
 make_debug_agent(task_id)     → DebugAgent
 get_debug_task_configs()      → list[TerminalBenchTaskConfig]
 """
@@ -62,8 +62,8 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-def setup_benchmark() -> TerminalBenchBenchmark:
-    """Create a Daytona backend and populate task_metadata via bench.setup()."""
+def get_benchmark() -> TerminalBenchBenchmark:
+    """Create and return a TerminalBenchBenchmark with a Daytona backend."""
 
     api_key = os.environ.get("DAYTONA_API_KEY")
     if not api_key:
