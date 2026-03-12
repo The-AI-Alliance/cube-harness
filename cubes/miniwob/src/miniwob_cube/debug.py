@@ -6,6 +6,7 @@ the debug tasks.
 
 Public API (cube.testing protocol)
 -----------------------------------
+get_benchmark()                    -> MiniWobBenchmark
 get_debug_task_configs()           -> list[MiniWobTaskConfig]
 make_debug_agent(task_id: str)     -> ClickButtonAgent | ClickCheckboxesAgent
 
@@ -89,29 +90,16 @@ def make_debug_agent(task_id: str) -> ClickButtonAgent | ClickCheckboxesAgent:
     raise ValueError(f"No hardcoded agent for task: {task_id}")
 
 
-_benchmark: MiniWobBenchmark | None = None
+def get_benchmark() -> MiniWobBenchmark:
+    return MiniWobBenchmark()
 
 
-def setup_debug_suite() -> None:
-    global _benchmark
-    _benchmark = MiniWobBenchmark()
-    _benchmark.setup()
-
-
-def teardown_debug_suite() -> None:
-    global _benchmark
-    if _benchmark is not None:
-        _benchmark.close()
-        _benchmark = None
-
-
-def get_debug_task_configs(base_url: str = "http://localhost:8000/miniwob") -> list[MiniWobTaskConfig]:
+def get_debug_task_configs() -> list[MiniWobTaskConfig]:
     from cube_browser_tool import PlaywrightConfig
 
     return [
         MiniWobTaskConfig(
             task_id=tid,
-            base_url=base_url,
             tool_config=PlaywrightConfig(headless=True, use_html=False, use_axtree=False, use_screenshot=False),
         )
         for tid in _DEBUG_TASK_IDS
@@ -124,5 +112,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
     results = run_debug_suite("miniwob-cube", _this_module)
-    failed = [r for r in results if r["error"] or r["reward"] < 1.0]
+    failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
     sys.exit(1 if failed else 0)
