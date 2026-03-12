@@ -58,7 +58,10 @@ class SyncPlaywrightTool(ToolWithTelemetry, BrowserActionSpace):
         result = super()._execute_action(action)
         if isinstance(result, StepError):
             return result
-        result += self.page_obs()
+        try:
+            result += self.page_obs()
+        except Exception as e:
+            return StepError.from_exception(e)
         return result
 
     @property
@@ -178,7 +181,10 @@ class AsyncPlaywrightTool(AsyncToolWithTelemetry, BrowserActionSpace):
         result = await super()._execute_action(action)
         if isinstance(result, StepError):
             return result
-        result += await self.page_obs()
+        try:
+            result += await self.page_obs()
+        except Exception as e:
+            return StepError.from_exception(e)
         return result
 
     async def browser_press_key(self, key: str):
