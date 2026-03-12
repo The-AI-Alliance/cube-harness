@@ -122,6 +122,18 @@ class DebugAgent:
 # ---------------------------------------------------------------------------
 
 
+def ensure_resources() -> None:
+    """Download the OSWorld VM image from HuggingFace if not already cached.
+
+    Called automatically by ``cube test osworld-cube`` before running episodes.
+    Safe to call multiple times — skips the download if the file is already cached.
+    """
+    from osworld_cube.vm_utils import get_osworld_vm_image
+
+    image_path = get_osworld_vm_image()
+    logger.info("OSWorld VM image ready at: %s", image_path)
+
+
 def make_debug_agent(task_id: str) -> DebugAgent:
     """Return a fresh DebugAgent for the given task_id."""
     return DebugAgent(task_id)

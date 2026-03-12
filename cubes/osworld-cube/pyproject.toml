@@ -5,8 +5,10 @@ description = "OSWorld benchmark ported to the CUBE protocol"
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard",
-    "desktop-env",   # OSWorld's VM/container driver
+    "cube-computer-tool",
     "pillow>=9.0",
+    "requests>=2.0",
+    "tqdm>=4.0",
 ]
 
 [project.entry-points."cube.benchmarks"]
@@ -24,7 +26,19 @@ dev = [
 [tool.uv]
 override-dependencies = ["protobuf>=6.33.5"]
 
+[tool.uv.sources]
+cube-computer-tool = { path = "../../../cube-standard/cube-tools/cube-computer-tool" }
+cube-standard = { path = "../../../cube-standard" }
+
 [tool.ruff]
 fix = true
 line-length = 120
 indent-width = 4
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-rs"
+markers = ["integration: requires Docker + KVM + OSWorld qcow2"]

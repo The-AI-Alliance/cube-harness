@@ -197,6 +197,9 @@ class OSWorldBenchmark(Benchmark):
     tasks_file: str | None = None
     """Path to a flat JSON array of task dicts (overrides OSWorld repo structure)."""
 
+    test_set_path: str | None = None
+    """Path to an evaluation_examples directory for testing (overrides OSWORLD_REPO_DIR)."""
+
     test_set_name: OSWorldTestSet = OSWorldTestSet.TEST_ALL
     """Filename of the test set index inside <evaluation_examples>/."""
 
@@ -317,7 +320,7 @@ class OSWorldBenchmark(Benchmark):
         Reads test_set_path/test_set_name → {domain: [task_id, ...]}
         Then reads test_set_path/examples/<domain>/<task_id>.json per task.
         """
-        eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
+        eval_examples_dir = Path(self.test_set_path) if self.test_set_path else OSWORLD_REPO_DIR / "evaluation_examples"
         test_set_file = eval_examples_dir / self.test_set_name
 
         if not test_set_file.exists():
@@ -389,9 +392,10 @@ class OSWorldBenchmark(Benchmark):
 
     def _get_provider(self) -> str:
         """Return provider name from default_tool_config, if set."""
-        if self.default_tool_config and isinstance(self.default_tool_config, ComputerConfig):
-            return self.default_tool_config.provider.value
-        return "unknown"
+        if self.default_tool_config and hasattr(self.default_tool_config, "provider"):
+            provider = self.default_tool_config.provider
+            return provider.value if hasattr(provider, "value") else str(provider)
+        return "local_qemu"
 
     # ------------------------------------------------------------------
     # install() — available for manual invocation; called from _setup()
