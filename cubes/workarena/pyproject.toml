@@ -7,6 +7,7 @@ dependencies = [
     "cube-standard",
     "browsergym-workarena",
     "termcolor",
+    "cube-browser-tool",
 ]
 
 [project.entry-points."cube.benchmarks"]

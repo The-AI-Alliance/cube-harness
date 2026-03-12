@@ -11,8 +11,6 @@ from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from pydantic import PrivateAttr
-from termcolor import colored
-
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_ACTION_NAMES = frozenset(
@@ -47,16 +45,16 @@ class WorkArenaTask(Task):
         self._workarena_task = task_class(seed=self.seed)
         _apply_task_runtime_preferences(self.tool, self._workarena_task)
         self.tool.reset()
-        page = getattr(self.tool, "page")
+        page = self.tool.page
         goal, task_info = self._workarena_task.setup(page)
 
         logger.info(f"WorkArena page URL after setup: {page.url}")
         logger.info(f"WorkArena page title: {page.title()}")
         logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
-        logger.info(colored(f"WorkArena task goal: {goal}", "green"))
 
         self.tool.noop()
         time.sleep(self.wait_first_page_time)
+        logger.info(f"WorkArena task goal: {goal}")
 
         obs = Observation.from_text(goal) + self.tool.page_obs()
         info = {
@@ -72,7 +70,7 @@ class WorkArenaTask(Task):
         """Score the current task state via WorkArena's validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
-        page = getattr(self.tool, "page")
+        page = self.tool.page
         reward, done, _user_message, task_info = self._workarena_task.validate(page, [])
         return reward, {"done": done, **task_info}
 
@@ -80,7 +78,7 @@ class WorkArenaTask(Task):
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = getattr(self.tool, "page")
+        page = self.tool.page
         _reward, done, _user_message, _task_info = self._workarena_task.validate(page, [])
         return done
 
@@ -129,18 +127,22 @@ def _load_task_class(class_path: str) -> type:
 
 def _apply_task_runtime_preferences(tool: Any, workarena_task: AbstractServiceNowTask) -> None:
     """Apply WorkArena task runtime defaults to the tool config when not explicitly set."""
-    config = getattr(tool, "config", None)
-    if config is None:
-        return
-    updated_config = config.model_copy(
-        update={
-            "viewport": config.viewport if config.viewport is not None else getattr(workarena_task, "viewport", None),
-            "slow_mo": config.slow_mo if config.slow_mo is not None else getattr(workarena_task, "slow_mo", None),
-            "timeout": config.timeout if config.timeout is not None else getattr(workarena_task, "timeout", None),
-            "locale": config.locale if config.locale is not None else getattr(workarena_task, "locale", None),
-            "timezone_id": config.timezone_id
-            if config.timezone_id is not None
-            else getattr(workarena_task, "timezone_id", None),
-        }
-    )
-    tool.config = updated_config
+    browser_config = tool.config.pw_kwargs
+    updated_browser_config = {
+        "viewport": browser_config.viewport
+        if "viewport" in browser_config
+        else getattr(workarena_task, "viewport", None),
+        "slow_mo": browser_config.slow_mo
+        if "slow_mo" in browser_config
+        else getattr(workarena_task, "slow_mo", None),
+        "timeout": browser_config.timeout
+        if "timeout" in browser_config
+        else getattr(workarena_task, "timeout", None),
+        "locale": browser_config.locale
+        if "locale" in browser_config
+        else getattr(workarena_task, "locale", None),
+        "timezone_id": browser_config.timezone_id
+        if "timezone_id" in browser_config
+        else getattr(workarena_task, "timezone_id", None),
+    }
+    tool.config.pw_kwargs.update(updated_browser_config)

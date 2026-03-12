@@ -19,14 +19,12 @@ from __future__ import annotations
 
 import logging
 import sys
-from unittest.mock import MagicMock
 
 from browsergym.workarena import get_all_tasks_agents
-from cube.container import Container
 from cube.core import Action, ActionSchema, Observation
 from cube.task import TaskMetadata
 from cube.testing import run_debug_suite
-from cube.tool import AbstractTool, ToolConfig
+from cube_browser_tool import PlaywrightConfig
 
 from workarena_cube.benchmark import WorkArenaBenchmark
 from workarena_cube.task import WorkArenaTaskConfig
@@ -34,48 +32,6 @@ from workarena_cube.task import WorkArenaTaskConfig
 logger = logging.getLogger(__name__)
 
 _DEBUG_N_TASKS = 2
-
-
-class MockToolConfig(ToolConfig):
-    """Minimal tool config for smoke testing without a real browser."""
-
-    viewport: dict | None = None
-    slow_mo: int | None = None
-    timeout: int | None = None
-    locale: str | None = None
-    timezone_id: str | None = None
-
-    def make(self, container: Container | None = None) -> "MockTool":
-        _ = container
-        return MockTool(config=self)
-
-
-class MockTool(AbstractTool):
-    """Stub tool that satisfies the WorkArenaTask interface without launching a browser."""
-
-    def __init__(self, config: MockToolConfig) -> None:
-        self.config = config
-        self._page = MagicMock()
-
-    @property
-    def page(self) -> MagicMock:
-        return self._page
-
-    def reset(self) -> None:
-        pass
-
-    def noop(self) -> str:
-        return "Success"
-
-    def page_obs(self) -> Observation:
-        return Observation(contents=[])
-
-    def execute_action(self, action: Action) -> Observation:
-        return Observation(contents=[])
-
-    @property
-    def action_set(self) -> list[ActionSchema]:
-        return []
 
 
 class DebugAgent:
@@ -100,7 +56,7 @@ def get_debug_task_configs() -> list[WorkArenaTaskConfig]:
         WorkArenaTaskConfig(
             task_id=task_class.get_task_id(),
             seed=seed,
-            tool_config=MockToolConfig(),
+            tool_config=PlaywrightConfig(),
             task_metadata=TaskMetadata(
                 id=task_class.get_task_id(),
                 extra_info={
