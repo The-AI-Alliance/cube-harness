@@ -2,9 +2,8 @@
 
 Public API
 ----------
-get_benchmark()               → TerminalBenchBenchmark
+get_debug_benchmark()         → TerminalBenchBenchmark
 make_debug_agent(task_id)     → DebugAgent
-get_debug_task_configs()      → list[TerminalBenchTaskConfig]
 """
 
 from __future__ import annotations
@@ -12,8 +11,8 @@ from __future__ import annotations
 import logging
 import os
 
+from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from terminalbench_cube.task import TerminalBenchTaskConfig
 from cube.backends.daytona import DaytonaContainerBackend
 from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
@@ -58,26 +57,24 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def make_debug_agent(task_id: str) -> DebugAgent:
-    return DebugAgent(task_id)
+def get_debug_benchmark() -> "Benchmark":
+    """Return a TerminalBenchBenchmark scoped to the debug tasks.
 
-
-def get_benchmark() -> TerminalBenchBenchmark:
-    """Create and return a TerminalBenchBenchmark with a Daytona backend."""
-
+    The harness will call benchmark.install() and benchmark.setup() on the
+    returned instance, iterate benchmark.get_task_configs() to discover tasks,
+    and call benchmark.close() at the end to free resources.
+    """
     api_key = os.environ.get("DAYTONA_API_KEY")
     if not api_key:
         raise RuntimeError("DAYTONA_API_KEY environment variable is required for cube test terminalbench-cube")
 
     return TerminalBenchBenchmark(
         container_backend=DaytonaContainerBackend(api_key=api_key),
-        difficulty_filter="easy",
-        max_tasks=10,
-    )
+    ).subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
 
 
-def get_debug_task_configs() -> list[TerminalBenchTaskConfig]:
-    return [TerminalBenchTaskConfig(task_id=tid) for tid in _TASK_ACTIONS]
+def make_debug_agent(task_id: str) -> DebugAgent:
+    return DebugAgent(task_id)
 
 
 if __name__ == "__main__":
