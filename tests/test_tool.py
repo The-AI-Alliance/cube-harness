@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from cube.core import Action, ActionSchema, Observation, StepError
-from cube.tool import Tool, tool_action
+from cube.tool import AsyncTool, Tool, tool_action
+
+from agentlab2.tool import AsyncToolWithTelemetry
 
 
 class TestAbstractTool:
@@ -240,6 +242,91 @@ class TestToolExecutionSpans:
 
         action = Action(name="click", arguments={"element_id": "nonexistent"})
         mock_tool.execute_action(action)
+
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        assert "Error executing action click" in set_attr_calls["gen_ai.tool.call.result"]
+        assert "Element not found" in set_attr_calls["gen_ai.tool.call.result"]
+
+
+class MockAsyncTool(AsyncToolWithTelemetry):
+    """Async mock tool for telemetry tests."""
+
+    def __init__(self):
+        self.click_count = 0
+
+    @tool_action
+    async def click(self, element_id: str) -> str:
+        """Click on an element.
+
+        Args:
+            element_id: The element to click.
+
+        Returns:
+            Click confirmation message.
+        """
+        self.click_count += 1
+        return f"Clicked on {element_id}"
+
+
+@pytest.fixture
+def mock_async_tool() -> MockAsyncTool:
+    return MockAsyncTool()
+
+
+class TestAsyncToolExecutionSpans:
+    """Tests for AsyncToolWithTelemetry OpenTelemetry spans."""
+
+    @patch("agentlab2.metrics.tracer._tool_tracer")
+    @pytest.mark.asyncio
+    async def test_execute_action_creates_span(self, mock_tracer, mock_async_tool) -> None:
+        """Test that execute_action creates a span with correct name and kind."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        action = Action(name="click", arguments={"element_id": "btn1"})
+        await mock_async_tool.execute_action(action)
+
+        mock_tracer.start_as_current_span.assert_called_once()
+        call_args = mock_tracer.start_as_current_span.call_args
+        assert call_args[0][0] == "execute_tool click"
+        from opentelemetry.trace import SpanKind
+
+        assert call_args[1]["kind"] == SpanKind.INTERNAL
+
+    @patch("agentlab2.metrics.tracer._tool_tracer")
+    @pytest.mark.asyncio
+    async def test_execute_action_sets_required_attributes(self, mock_tracer, mock_async_tool) -> None:
+        """Test that execute_action sets required GenAI tool attributes."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        action = Action(id="call_123", name="click", arguments={"element_id": "btn1"})
+        await mock_async_tool.execute_action(action)
+
+        set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
+        assert set_attr_calls["gen_ai.tool.name"] == "click"
+        assert set_attr_calls["gen_ai.tool.call.id"] == "call_123"
+        assert set_attr_calls["gen_ai.tool.call.arguments"] == '{"element_id": "btn1"}'
+        assert set_attr_calls["gen_ai.tool.call.result"] == "Clicked on btn1"
+
+    @patch("agentlab2.metrics.tracer._tool_tracer")
+    @pytest.mark.asyncio
+    async def test_execute_action_traces_error_result(self, mock_tracer, mock_async_tool) -> None:
+        """Test that error results are traced."""
+        mock_span = MagicMock()
+        mock_tracer.start_as_current_span.return_value.__enter__ = MagicMock(return_value=mock_span)
+        mock_tracer.start_as_current_span.return_value.__exit__ = MagicMock(return_value=False)
+
+        async def raise_error(element_id: str) -> str:
+            """Click stub that always raises."""
+            raise ValueError("Element not found")
+
+        mock_async_tool.click = raise_error
+
+        action = Action(name="click", arguments={"element_id": "nonexistent"})
+        await mock_async_tool.execute_action(action)
 
         set_attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert "Error executing action click" in set_attr_calls["gen_ai.tool.call.result"]
