@@ -10,6 +10,8 @@ from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
+from cube.tool import tool_action
+from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 from pydantic import PrivateAttr
 logger = logging.getLogger(__name__)
 
@@ -26,8 +28,32 @@ _SUPPORTED_ACTION_NAMES = frozenset(
         "browser_back",
         "browser_forward",
         "noop",
+        "workarena_cheat",
     }
 )
+
+
+class WorkArenaCheatTool(SyncPlaywrightTool):
+    """SyncPlaywrightTool with an additional workarena_cheat action — for debug use only."""
+
+    def __init__(self, config: PlaywrightConfig) -> None:
+        super().__init__(config)
+        self._workarena_task: AbstractServiceNowTask | None = None
+
+    @tool_action
+    def workarena_cheat(self) -> str:
+        """Execute the WorkArena built-in cheat to solve the task automatically."""
+        if self._workarena_task is None:
+            return "No WorkArena task initialized — cheat unavailable."
+        self._workarena_task.cheat(self._page, [])
+        return "WorkArena cheat executed."
+
+
+class WorkArenaCheatToolConfig(PlaywrightConfig):
+    """PlaywrightConfig variant that creates a WorkArenaCheatTool."""
+
+    def make(self, container: Any = None) -> WorkArenaCheatTool:
+        return WorkArenaCheatTool(self)
 
 
 class WorkArenaTask(Task):
@@ -44,6 +70,8 @@ class WorkArenaTask(Task):
         task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
         self._workarena_task = task_class(seed=self.seed)
         _apply_task_runtime_preferences(self.tool, self._workarena_task)
+        if isinstance(self.tool, WorkArenaCheatTool):
+            self.tool._workarena_task = self._workarena_task
         self.tool.reset()
         page = self.tool.page
         goal, task_info = self._workarena_task.setup(page)

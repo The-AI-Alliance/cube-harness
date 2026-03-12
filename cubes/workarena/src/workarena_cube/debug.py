@@ -9,7 +9,7 @@ SNOW_INSTANCE_PWD) or HUGGING_FACE_HUB_TOKEN for the hosted instance pool.
 Public API (cube.testing protocol)
 -----------------------------------
 get_debug_task_configs()           -> list[WorkArenaTaskConfig]
-make_debug_agent(task_id: str)     -> DebugAgent
+make_debug_agent(task_id: str)     -> CheatAgent
 
 Usage:
     uv run python -m workarena_cube.debug
@@ -24,28 +24,31 @@ from browsergym.workarena import get_all_tasks_agents
 from cube.core import Action, ActionSchema, Observation
 from cube.task import TaskMetadata
 from cube.testing import run_debug_suite
-from cube_browser_tool import PlaywrightConfig
 
 from workarena_cube.benchmark import WorkArenaBenchmark
-from workarena_cube.task import WorkArenaTaskConfig
+from workarena_cube.task import WorkArenaCheatToolConfig, WorkArenaTaskConfig
 
 logger = logging.getLogger(__name__)
 
 _DEBUG_N_TASKS = 2
 
 
-class DebugAgent:
-    """Minimal agent that stops immediately — validates infrastructure, not task solving."""
+class CheatAgent:
+    """Agent that calls WorkArena's cheat action to solve the task, then stops."""
 
     def __init__(self, task_id: str) -> None:
         self._task_id = task_id
+        self._cheated: bool = False
 
     def __call__(self, obs: Observation, action_set: list[ActionSchema]) -> Action:
+        if not self._cheated:
+            self._cheated = True
+            return Action(name="workarena_cheat", arguments={})
         return Action(name="final_step", arguments={})
 
 
-def make_debug_agent(task_id: str) -> DebugAgent:
-    return DebugAgent(task_id)
+def make_debug_agent(task_id: str) -> CheatAgent:
+    return CheatAgent(task_id)
 
 
 def get_debug_task_configs() -> list[WorkArenaTaskConfig]:
@@ -56,7 +59,7 @@ def get_debug_task_configs() -> list[WorkArenaTaskConfig]:
         WorkArenaTaskConfig(
             task_id=task_class.get_task_id(),
             seed=seed,
-            tool_config=PlaywrightConfig(),
+            tool_config=WorkArenaCheatToolConfig(),
             task_metadata=TaskMetadata(
                 id=task_class.get_task_id(),
                 extra_info={
