@@ -2,8 +2,8 @@
 
 Public API
 ----------
+get_debug_benchmark()         → ArithmeticBenchmark
 make_debug_agent(task_id)     → DebugAgent
-get_debug_task_configs()      → list[ArithmeticTaskConfig]
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ import logging
 
 from cube.core import Action, ActionSchema, Observation
 from arithmetic_cube.benchmark import ArithmeticBenchmark
-from arithmetic_cube.task import ArithmeticTaskConfig
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +44,12 @@ class DebugAgent:
         return self.get_action(obs)
 
 
+def get_debug_benchmark() -> ArithmeticBenchmark:
+    return ArithmeticBenchmark()
+
+
 def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
-
-
-def get_debug_task_configs() -> list[ArithmeticTaskConfig]:
-    return [ArithmeticTaskConfig(task_id=tid) for tid in _TASK_ACTIONS if tid in ArithmeticBenchmark.task_metadata]
 
 
 if __name__ == "__main__":
