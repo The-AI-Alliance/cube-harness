@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from cube.core import Action, ActionSchema, Observation, StepError
-from cube.tool import AsyncTool, Tool, tool_action
+from cube.tool import Tool, tool_action
 
 from agentlab2.tool import AsyncToolWithTelemetry
 
