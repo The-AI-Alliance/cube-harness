@@ -1,25 +1,28 @@
-"""OSWorld Eval — Genny agent with GPT-5 and accessibility tree observations.
+"""OSWorld Eval — Claude Haiku with screenshot + axtree observations, rolling 3-step context, 100 actions.
 
-Uses the Genny agent (explicit context management, rolling summaries) with
-the linearized accessibility tree for element coordinates, without screenshots
-or Set-of-Marks scaffolding.
+Uses the Genny agent with Claude Haiku (claude-haiku-4-5-20251001) as a multimodal agent.
+Observations include a screenshot and a linearized accessibility tree element table.
+Unlike eval_osworld_haiku.py (which keeps only the last observation), this recipe keeps
+the last 3 observations in context, giving the agent more history to reason from.
+Unlike eval_osworld_haiku_3obs.py, this recipe allows up to 100 actions per episode.
+
+v2: Updated system prompt — adds sudo password, environment context, and tips from
+the OSWorld reference prompt (home dir, curl vs wget, zoom, large-output handling, date).
 
 Prerequisites:
     OSWorld repo cloned to ~/.agentlab2/OSWorld/
     (auto-cloned on first run if missing)
 
 Usage:
-    # Debug mode (2 tasks, sequential)
-    uv run recipes/eval_osworld.py debug
+    # Debug mode (debug_tasks.json, sequential)
+    uv run recipes/eval_osworld_haiku_3obs_100actions_v2.py debug
 
-    # Eval mode (all tasks, 3 workers)
-    uv run recipes/eval_osworld.py
-
-    # Custom task subset via tasks_file
-    TASKS_FILE=/path/to/tasks.json uv run recipes/eval_osworld.py
+    # Eval mode (test_small without gdrive, 3 workers)
+    uv run recipes/eval_osworld_haiku_3obs_100actions_v2.py
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import osworld_cube
@@ -38,15 +41,27 @@ GDRIVE_TASK_IDS = {
     "46407397-a7d5-4c6b-92c6-dbe038b1457b",
 }
 
-OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
-You are a desktop automation agent controlling a real Ubuntu computer.
+HAIKU_SYSTEM_PROMPT = """\
+You are a desktop automation agent controlling a real Ubuntu (x86_64) computer with internet access.
+
+## Environment
+- OS: Ubuntu, home directory is `/home/user`
+- Browser: Google Chrome — click the Chrome icon to open it
+- For sudo commands, the password is `password`
+- Use `curl` instead of `wget` for downloads
+- Today's date: {today}
 
 ## Observations
-Each step you receive an element table listing interactive UI elements with columns:
-index, tag, name, text, x, y, w, h
+Each step you receive:
+1. A screenshot of the current screen (1920×1080)
+2. An element table listing interactive UI elements with columns:
+   index, tag, name, text, x, y, w, h
 
 Where (x, y) is the top-left corner and (w, h) is the size of each element.
 To click the center of element at row i: center_x = x + w//2, center_y = y + h//2
+
+Prefer the element table for precise coordinates; use the screenshot for visual context.
+You will see the last 3 observations in context — use this history to track progress.
 
 ## Actions
 You control the computer by calling run_pyautogui(code) with valid Python/pyautogui code.
@@ -58,8 +73,11 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 - pyautogui.typewrite('text', interval=0.05)  — type text character by character
 - pyautogui.hotkey('ctrl', 'c')               — press key combination
 - pyautogui.press('enter')                    — press a single key
-- pyautogui.scroll(x, y, clicks=-3)           — scroll (negative clicks = down)
+- pyautogui.scroll(x, y, clicks=-3)           — scroll (negative = down)
 - pyautogui.dragTo(x, y, button='left')       — drag to coordinates
+
+### Modifier-key clicks (correct pattern)
+- pyautogui.keyDown('shift'); pyautogui.click(x, y); pyautogui.keyUp('shift')
 
 ### Ending the task
 - Call fail() if the task CANNOT be completed (infeasible tasks)
@@ -68,22 +86,31 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 ## Strategy
 1. Study the element table carefully to find the element you need to interact with
 2. Calculate center coordinates: center_x = x + w//2, center_y = y + h//2
-3. If the task is clearly impossible, call fail() immediately
-4. Prefer hotkey shortcuts over mouse clicks when practical
-5. After completing the task, verify by checking the next observation then call done()
-6. Do not loop — if an action has no effect after 2 attempts, try a different approach\
+3. If an unexpected dialog or popup is blocking your task, dismiss it before proceeding
+4. If the task is clearly impossible (missing app, contradictory requirements), call fail() immediately
+5. Prefer hotkey shortcuts over mouse clicks when practical
+6. When viewing a web page, zoom out (pyautogui.hotkey('ctrl', '-')) if content seems cut off
+7. When a terminal command produces large output, redirect to a file:
+   pyautogui.typewrite('command > /tmp/out.txt', interval=0.02)
+   then read it with grep/head/tail
+8. Do NOT ask for clarification — always proceed with available information
+9. After completing the task, verify by checking the next observation then call done()
+10. Do not loop — if an action has no effect after 2 attempts, try a completely different approach\
 """
 
 
 def main(debug: bool) -> None:
-    output_dir = make_experiment_output_dir("genny", "osworld-cube")
+    today = datetime.today().strftime("%A, %B %d, %Y")
+    system_prompt = HAIKU_SYSTEM_PROMPT.format(today=today)
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    output_dir = make_experiment_output_dir("genny_haiku_3obs_100actions_v2", "osworld-cube")
+
+    llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
-        system_prompt=OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE,
-        max_actions=15,
-        render_last_n_obs=1,
+        system_prompt=system_prompt,
+        max_actions=100,
+        render_last_n_obs=3,
         enable_summarize=False,
         tools_as_text=False,
     )
@@ -109,11 +136,11 @@ def main(debug: bool) -> None:
     benchmark = benchmark.subset_from_list(keep_ids)
 
     exp = Experiment(
-        name="osworld_genny_gpt5",
+        name="osworld_genny_haiku_3obs_100actions_v2",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
-        max_steps=15,
+        max_steps=100,
     )
 
     if debug:

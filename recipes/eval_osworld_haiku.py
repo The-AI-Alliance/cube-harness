@@ -1,22 +1,20 @@
-"""OSWorld Eval — Genny agent with GPT-5 and accessibility tree observations.
+"""OSWorld Eval — Claude Haiku with screenshot + accessibility tree observations and pyautogui actions.
 
-Uses the Genny agent (explicit context management, rolling summaries) with
-the linearized accessibility tree for element coordinates, without screenshots
-or Set-of-Marks scaffolding.
+Uses the Genny agent with Claude Haiku (claude-haiku-4-5-20251001) as a multimodal agent.
+Observations include a screenshot and a linearized accessibility tree element table.
+The system prompt describes both: the agent can use the element table for precise coordinates
+or the screenshot for visual context.
 
 Prerequisites:
     OSWorld repo cloned to ~/.agentlab2/OSWorld/
     (auto-cloned on first run if missing)
 
 Usage:
-    # Debug mode (2 tasks, sequential)
-    uv run recipes/eval_osworld.py debug
+    # Debug mode (debug_tasks.json, sequential)
+    uv run recipes/eval_osworld_haiku.py debug
 
-    # Eval mode (all tasks, 3 workers)
-    uv run recipes/eval_osworld.py
-
-    # Custom task subset via tasks_file
-    TASKS_FILE=/path/to/tasks.json uv run recipes/eval_osworld.py
+    # Eval mode (test_small, 3 workers)
+    uv run recipes/eval_osworld_haiku.py
 """
 
 import sys
@@ -38,15 +36,19 @@ GDRIVE_TASK_IDS = {
     "46407397-a7d5-4c6b-92c6-dbe038b1457b",
 }
 
-OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
+HAIKU_SYSTEM_PROMPT = """\
 You are a desktop automation agent controlling a real Ubuntu computer.
 
 ## Observations
-Each step you receive an element table listing interactive UI elements with columns:
-index, tag, name, text, x, y, w, h
+Each step you receive:
+1. A screenshot of the current screen (1920×1080)
+2. An element table listing interactive UI elements with columns:
+   index, tag, name, text, x, y, w, h
 
 Where (x, y) is the top-left corner and (w, h) is the size of each element.
 To click the center of element at row i: center_x = x + w//2, center_y = y + h//2
+
+Prefer the element table for precise coordinates; use the screenshot for visual context.
 
 ## Actions
 You control the computer by calling run_pyautogui(code) with valid Python/pyautogui code.
@@ -58,7 +60,7 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 - pyautogui.typewrite('text', interval=0.05)  — type text character by character
 - pyautogui.hotkey('ctrl', 'c')               — press key combination
 - pyautogui.press('enter')                    — press a single key
-- pyautogui.scroll(x, y, clicks=-3)           — scroll (negative clicks = down)
+- pyautogui.scroll(x, y, clicks=-3)           — scroll (negative = down)
 - pyautogui.dragTo(x, y, button='left')       — drag to coordinates
 
 ### Ending the task
@@ -76,12 +78,12 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 
 
 def main(debug: bool) -> None:
-    output_dir = make_experiment_output_dir("genny", "osworld-cube")
+    output_dir = make_experiment_output_dir("genny_haiku", "osworld-cube")
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
-        system_prompt=OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE,
+        system_prompt=HAIKU_SYSTEM_PROMPT,
         max_actions=15,
         render_last_n_obs=1,
         enable_summarize=False,
@@ -109,7 +111,7 @@ def main(debug: bool) -> None:
     benchmark = benchmark.subset_from_list(keep_ids)
 
     exp = Experiment(
-        name="osworld_genny_gpt5",
+        name="osworld_genny_haiku",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
