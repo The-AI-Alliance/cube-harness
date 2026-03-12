@@ -1,0 +1,24 @@
+[project]
+name = "miniwob-cube"
+version = "1.0.0"
+description = "MiniWob++ benchmark for cube"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-standard",
+    "miniwob>=1.0",
+]
+
+[project.optional-dependencies]
+debug = ["cube-browser-tool"]
+
+[project.entry-points."cube.benchmarks"]
+miniwob-cube = "miniwob_cube.benchmark:MiniWobBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4

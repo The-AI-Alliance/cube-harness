@@ -4,6 +4,8 @@ from typing import Any, Protocol, runtime_checkable
 
 from cube.core import Observation
 
+from agentlab2.tools.browser_session import BrowserSession
+
 
 @runtime_checkable
 class BrowserTaskTool(Protocol):
@@ -22,6 +24,14 @@ class BrowserTaskTool(Protocol):
     Note: This protocol may need revisiting if we add fundamentally different tool types
     (e.g., mobile apps, desktop automation) that don't fit the browser paradigm.
     """
+
+    @property
+    def session(self) -> BrowserSession:
+        """
+        The live browser session. Provides access to the underlying browser handle,
+        including get_playwright_session() and cdp_url for cross-backend scenarios.
+        """
+        ...
 
     def reset(self) -> None:
         """
@@ -56,6 +66,12 @@ class BrowserTaskTool(Protocol):
 
         Returns:
             Observation containing the current page state.
+        """
+        ...
+
+    def noop(self) -> None:
+        """
+        Perform a no-op step to sync the browser state (e.g. flush pending observations).
         """
         ...
 

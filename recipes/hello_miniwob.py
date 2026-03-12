@@ -1,22 +1,23 @@
 import sys
 
+from miniwob_cube.benchmark import MiniWobBenchmark
+
 from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.benchmarks.miniwob.benchmark import MiniWobBenchmark
 from agentlab2.exp_runner import run_sequentially, run_with_ray
 from agentlab2.experiment import Experiment
 from agentlab2.llm import LLMConfig
 from agentlab2.tools.playwright import PlaywrightConfig
 
 
-def main(debug: bool):
+def main(debug: bool) -> None:
     output_dir = make_experiment_output_dir("react", "miniwob")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
-    benchmark = MiniWobBenchmark(tool_config=tool_config)
+    benchmark = MiniWobBenchmark(default_tool_config=tool_config)
 
     exp = Experiment(
         name="miniwob",
