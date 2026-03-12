@@ -200,6 +200,9 @@ class OSWorldBenchmark(Benchmark):
     test_set_name: OSWorldTestSet = OSWorldTestSet.TEST_ALL
     """Filename of the test set index inside <evaluation_examples>/."""
 
+    test_set_path: str | None = None
+    """Override the evaluation_examples directory (used for testing with a custom repo path)."""
+
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
@@ -242,7 +245,9 @@ class OSWorldBenchmark(Benchmark):
           2. Ensure OSWorld repo is cloned (or validate tasks_file)
           3. Load task metadata from JSON files → populate instance shadow of task_metadata
         """
-        self.install()
+        # Skip install when a custom test_set_path is provided (e.g. in tests)
+        if not self.test_set_path and not self.tasks_file:
+            self.install()
 
         logger.info(f"Setting up OSWorldBenchmark (provider={self._get_provider()})")
 
@@ -252,7 +257,7 @@ class OSWorldBenchmark(Benchmark):
                     raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
                 loaded = self._load_task_metadata_from_file(self.tasks_file)
             else:
-                if not OSWORLD_REPO_DIR.exists():
+                if not self.test_set_path and not OSWORLD_REPO_DIR.exists():
                     logger.info("OSWorld repo not found — cloning...")
                     self._clone_osworld_repo()
                 loaded = self._load_task_metadata_from_repo()
@@ -314,10 +319,10 @@ class OSWorldBenchmark(Benchmark):
         """
         Load TaskMetadata from the OSWorld repo directory structure.
 
-        Reads test_set_path/test_set_name → {domain: [task_id, ...]}
-        Then reads test_set_path/examples/<domain>/<task_id>.json per task.
+        Reads <eval_examples_dir>/test_set_name → {domain: [task_id, ...]}
+        Then reads <eval_examples_dir>/examples/<domain>/<task_id>.json per task.
         """
-        eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
+        eval_examples_dir = Path(self.test_set_path) if self.test_set_path else (OSWORLD_REPO_DIR / "evaluation_examples")
         test_set_file = eval_examples_dir / self.test_set_name
 
         if not test_set_file.exists():
@@ -389,9 +394,7 @@ class OSWorldBenchmark(Benchmark):
 
     def _get_provider(self) -> str:
         """Return provider name from default_tool_config, if set."""
-        if self.default_tool_config and isinstance(self.default_tool_config, ComputerConfig):
-            return self.default_tool_config.provider.value
-        return "unknown"
+        return "qemu"
 
     # ------------------------------------------------------------------
     # install() — available for manual invocation; called from _setup()

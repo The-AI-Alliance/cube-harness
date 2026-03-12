@@ -1,5 +1,5 @@
 """
-Computer tool — CUBE tool wrapping desktop_env for VM-based desktop automation.
+Computer tool — CUBE tool wrapping the vm_backend for VM-based desktop automation.
 
 Two variants selected by ComputerConfig.action_space:
     Computer13        — 13 mouse/keyboard primitives + wait/done/fail
@@ -10,8 +10,8 @@ import logging
 import time
 from enum import Enum
 from io import BytesIO
-from typing import Literal
 from pathlib import Path
+from typing import Literal
 
 from PIL import Image
 
@@ -19,8 +19,12 @@ import cube
 from cube.container import Container
 from cube.core import Action, Content, ImageContent, Observation, StepError, TextContent
 from cube.tool import Tool, ToolConfig, tool_action
-from desktop_env.desktop_env import DesktopEnv
-import desktop_env.providers.docker.manager as docker_manager
+
+from osworld_cube.vm_backend.evaluator import Evaluator
+from osworld_cube.vm_backend.guest_agent import GuestAgent
+from osworld_cube.vm_backend.pyautogui_utils import fix_pyautogui_less_than_bug
+from osworld_cube.vm_backend.qemu_manager import QEMUConfig, QEMUManager, ensure_base_image
+from osworld_cube.vm_backend.setup_controller import SetupController
 
 logger = logging.getLogger(__name__)
 
@@ -28,28 +32,12 @@ _CUBE_CACHE_ROOT = cube.get_cache_dir("osworld-cube")
 
 
 # ---------------------------------------------------------------------------
-# Provider enum
+# Enums
 # ---------------------------------------------------------------------------
 
 
-class VMProvider(str, Enum):
-    """Supported desktop_env VM providers."""
-
-    DOCKER = "docker"
-    VMWARE = "vmware"
-    VIRTUALBOX = "virtualbox"
-    AWS = "aws"
-    AZURE = "azure"
-    GCP = "gcp"
-    ALIYUN = "aliyun"
-    VOLCENGINE = "volcengine"
-
-
 class ActionSpace(str, Enum):
-    """desktop_env action space variants.
-
-    Values match the desktop_env action_space string passed to DesktopEnv().
-    """
+    """Action space variants for the Computer tool."""
 
     COMPUTER_13 = "computer_13"
     PYAUTOGUI = "pyautogui"
@@ -64,10 +52,10 @@ class ComputerConfig(ToolConfig):
     """
     Serializable configuration for Computer tool variants.
 
-    Maps to desktop_env.DesktopEnv constructor arguments.
-
-    cache_dir and vm_dir default to $CUBE_CACHE_DIR/benchmarks/osworld/{cache,vm_data}.
-    Override CUBE_CACHE_DIR env var to change the root data directory.
+    path_to_vm  — explicit path to the base qcow2 image. If None, the image is
+                  auto-downloaded to vm_dir on first use.
+    cache_dir   — per-task reference file cache.
+    vm_dir      — directory holding the base qcow2 and per-task overlays.
 
     action_space selects the tool variant:
       "computer_13" → Computer13 (13 mouse/keyboard primitives + wait/done/fail)
@@ -75,10 +63,8 @@ class ComputerConfig(ToolConfig):
     """
 
     action_space: ActionSpace = ActionSpace.COMPUTER_13
-    provider: VMProvider = VMProvider.DOCKER
-    region: str | None = None
     path_to_vm: str | None = None
-    snapshot_name: str = "init_state"
+    snapshot_name: str = "init_state"  # kept for API compatibility; overlays replace snapshots
     cache_dir: str = str(_CUBE_CACHE_ROOT / "cache")
     vm_dir: str = str(_CUBE_CACHE_ROOT / "vm_data")
     screen_size: tuple[int, int] = (1920, 1080)
@@ -86,15 +72,16 @@ class ComputerConfig(ToolConfig):
     require_a11y_tree: bool = True
     require_terminal: bool = False
     os_type: Literal["Ubuntu", "Windows"] = "Ubuntu"
-    enable_proxy: bool = False
     observe_after_action: bool = True
+    vm_memory: str = "4G"
+    vm_cpus: int = 4
 
     def make(self, container: Container | None = None) -> "ComputerBase":
         if container is not None:
             logger.warning(
                 "ComputerConfig.make() received a cube Container, but the OSWorld "
-                "Computer tool manages its own VM via desktop_env. The container "
-                "argument will be ignored."
+                "Computer tool manages its own VM via QEMUManager. "
+                "The container argument will be ignored."
             )
         if self.action_space == ActionSpace.PYAUTOGUI:
             return PyAutoGUIComputer(self)
@@ -114,45 +101,55 @@ class ComputerBase(Tool):
     and the three terminal @tool_action signals shared by both action spaces:
     wait, done, fail.
 
-    Subclasses add the action-space-specific @tool_action methods and are
-    paired with their own Config class.
-
+    Subclasses add the action-space-specific @tool_action methods.
     """
 
     def __init__(self, config: ComputerConfig) -> None:
-        """
-        Create Computer and initialise desktop_env.DesktopEnv.
-
-        DesktopEnv is created eagerly here (inside Task.model_post_init).
-        The VM boots at this point; the snapshot restore happens later in setup_task().
-        Marked for revisiting: consider lazy init if boot time is a problem.
-        """
         self.config = config
         self._current_task_config: dict | None = None
         self._last_marks: list[list[int]] = []
         self._is_done: bool = False
+        self._action_history: list = []
 
-        if docker_manager is not None:
-            vm_dir = Path(config.vm_dir)
-            vm_dir.mkdir(parents=True, exist_ok=True)
-            docker_manager.VMS_DIR = str(vm_dir)
-            logger.info(f"desktop_env will download VMs to: {vm_dir}")
+        # Resolve the base qcow2 path (auto-download if not specified)
+        vm_dir = Path(config.vm_dir)
+        if config.path_to_vm:
+            base_image = Path(config.path_to_vm)
+        else:
+            base_image = ensure_base_image(vm_dir, config.os_type)
 
-        self._env = DesktopEnv(
-            action_space=self._desktop_env_action_space,
-            provider_name=config.provider.value,
-            region=config.region,
-            path_to_vm=config.path_to_vm,
-            snapshot_name=config.snapshot_name,
-            cache_dir=config.cache_dir,
-            screen_size=config.screen_size,
+        qemu_config = QEMUConfig(
+            base_image=base_image,
+            overlay_dir=vm_dir / "overlays",
+            memory=config.vm_memory,
+            cpus=config.vm_cpus,
             headless=config.headless,
-            require_a11y_tree=config.require_a11y_tree,
-            require_terminal=config.require_terminal,
-            os_type=config.os_type,
+            screen_width=config.screen_size[0],
+            screen_height=config.screen_size[1],
         )
 
-    _desktop_env_action_space: ActionSpace = ActionSpace.COMPUTER_13
+        self._qemu = QEMUManager(qemu_config)
+        self._qemu.start()
+
+        self._guest = GuestAgent(host="localhost", port=self._qemu.server_port)
+
+        Path(config.cache_dir).mkdir(parents=True, exist_ok=True)
+
+        self._setup_ctrl = SetupController(
+            guest=self._guest,
+            chromium_port=self._qemu.chromium_port,
+            vlc_port=self._qemu.vlc_port,
+            cache_dir=config.cache_dir,
+            screen_width=config.screen_size[0],
+            screen_height=config.screen_size[1],
+        )
+        self._evaluator = Evaluator(
+            guest=self._guest,
+            cache_dir_base=Path(config.cache_dir),
+            chromium_port=self._qemu.chromium_port,
+            vlc_port=self._qemu.vlc_port,
+            server_port=self._qemu.server_port,
+        )
 
     def execute_action(self, action: Action) -> Observation | StepError:
         """Execute action; append full VM observation if observe_after_action=True."""
@@ -165,62 +162,79 @@ class ComputerBase(Tool):
 
     def setup_task(self, task_config: dict, seed: int | None = None) -> Observation:
         """
-        Restore VM snapshot, run setup scripts, wait for stabilisation,
+        Restore VM to initial state, run setup scripts, wait for stabilisation,
         then return the initial observation.
 
         Called by OSWorldTask.reset().
 
-        Args:
-            task_config: dict with keys id, instruction, config, evaluator,
-                         snapshot, related_apps — matches desktop_env format.
-            seed: Optional random seed passed through to desktop_env.
+        Parameters
+        ----------
+        task_config : dict
+            Task configuration dict with keys id, instruction, config, evaluator,
+            snapshot, related_apps.
+        seed : int | None
+            Optional random seed (not used by QEMU backend; kept for API compat).
         """
-        logger.info(f"Setting up task: {task_config.get('id', 'unknown')}")
-        logger.info(f"Instruction: {task_config.get('instruction', '')}")
+        logger.info("Setting up task: %s", task_config.get("id", "unknown"))
+        logger.info("Instruction: %s", task_config.get("instruction", ""))
 
-        self._env.reset(task_config=task_config, seed=seed)
+        # Reset VM to clean state (stop → delete overlay → create overlay → boot)
+        self._qemu.reset()
+
+        # Run task-specific setup steps
+        setup_steps = task_config.get("config") or []
+        task_cache_dir = str(Path(self.config.cache_dir) / task_config.get("id", "task"))
+        Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
+        self._setup_ctrl.reset_cache_dir(task_cache_dir)
+        if setup_steps:
+            self._setup_ctrl.setup(setup_steps)
 
         logger.info("Waiting 60s for VM to stabilise...")
         time.sleep(60)
 
         self._is_done = False
+        self._action_history = []
         self._current_task_config = task_config
         return self.get_observation()
 
     def evaluate_task(self) -> float:
         """
-        Run desktop_env's built-in evaluator and return reward ∈ [0.0, 1.0].
+        Run the task evaluator and return reward ∈ [0.0, 1.0].
 
         Called by OSWorldTask.evaluate(). Partial credit is preserved.
         """
+        if self._current_task_config is None:
+            logger.error("evaluate_task() called before setup_task()")
+            return 0.0
         try:
-            reward = self._env.evaluate()
-            logger.info(f"Task evaluation result: {reward}")
+            reward = self._evaluator.evaluate(self._current_task_config, self._action_history)
+            logger.info("Task evaluation result: %f", reward)
             return reward
-        except Exception as e:
-            logger.error(f"Evaluation failed: {e}")
+        except Exception as exc:
+            logger.error("Evaluation failed: %s", exc)
             return 0.0
 
     def get_observation(self) -> Observation:
-        """Read current screen state from desktop_env and return as Observation."""
-        raw_obs = self._env._get_obs()
+        """Read current screen state from the VM and return as Observation."""
+        raw_obs = {
+            "screenshot": self._guest.get_screenshot(),
+            "accessibility_tree": self._guest.get_accessibility_tree() if self.config.require_a11y_tree else None,
+            "terminal": self._guest.get_terminal_output() if self.config.require_terminal else None,
+        }
         return self._convert_observation(raw_obs)
 
     def _convert_observation(self, raw_obs: dict) -> Observation:
         """
-        Convert desktop_env observation dict to a cube Observation.
+        Convert VM observation dict to a cube Observation.
 
-        desktop_env keys:
+        Keys:
             "screenshot"         → bytes (PNG) → PIL.Image stored as ImageContent
             "accessibility_tree" → XML string  → TextContent (named "accessibility_tree")
             "terminal"           → str         → TextContent (named "terminal")
-
-        Screenshot bytes are decoded to PIL.Image so that ImageContent can
-        serialise them as base64 and pass them to multimodal LLMs.
         """
         contents: list[Content] = []
 
-        if "screenshot" in raw_obs:
+        if raw_obs.get("screenshot"):
             img = Image.open(BytesIO(raw_obs["screenshot"])).convert("RGB")
             contents.append(ImageContent(data=img, name="screenshot"))
 
@@ -233,43 +247,47 @@ class ComputerBase(Tool):
         return Observation(contents=contents)
 
     def _execute_desktop_action(self, action_dict: dict | str) -> str:
-        """Send an action dict to desktop_env and return a success string."""
-        self._env.step(action_dict)
+        """Send an action to the guest VM and return a success string."""
+        if isinstance(action_dict, dict):
+            self._guest.execute_action(action_dict)
+        else:
+            self._guest.execute_python_command(str(action_dict))
+        self._action_history.append(action_dict)
         return "Success"
 
     def update_marks(self, marks: list[list[int]]) -> None:
-        """
-        Store SoM bounding-box marks produced by tag_screenshot().
-        Used by run_pyautogui() to resolve tag_N variables.
-        """
+        """Store SoM bounding-box marks for tag_N variable resolution in run_pyautogui."""
         self._last_marks = marks
 
     def reset(self) -> None:
         """Reset tool state between tasks (cube AbstractTool.reset() override)."""
         self._last_marks = []
         self._is_done = False
+        self._action_history = []
 
     def close(self) -> None:
         """Shut down the VM and release resources."""
-        if self._env:
-            logger.info("Closing desktop environment")
-            self._env.close()
+        logger.info("Closing desktop environment")
+        self._qemu.stop()
 
     @tool_action
     def wait(self) -> str:
         """Wait one step without taking any action."""
-        return self._execute_desktop_action("WAIT")
+        self._action_history.append("WAIT")
+        return "Success"
 
     @tool_action
     def done(self) -> str:
-        """Signal that the task has been completed successfuly."""
+        """Signal that the task has been completed successfully."""
         self._is_done = True
+        self._action_history.append("DONE")
         return "Task marked as done"
 
     @tool_action
     def fail(self) -> str:
         """Signal that the task cannot be completed (infeasible or failed)."""
         self._is_done = True
+        self._action_history.append("FAIL")
         return "Task marked as failed"
 
 
@@ -284,12 +302,7 @@ class Computer13(ComputerBase):
 
     Exposes 13 mouse/keyboard primitives as @tool_action methods, plus the
     shared wait/done/fail terminal signals inherited from ComputerBase.
-
-    Action methods are decorated with @tool_action so that cube.tool.Tool
-    auto-discovers them for action_set and execute_action dispatch.
     """
-
-    _desktop_env_action_space = ActionSpace.COMPUTER_13
 
     @tool_action
     def click(
@@ -481,8 +494,6 @@ class PyAutoGUIComputer(ComputerBase):
     so agents can reference screen elements by index.
     """
 
-    _desktop_env_action_space = ActionSpace.PYAUTOGUI
-
     @tool_action
     def run_pyautogui(self, code: str) -> str:
         """Execute Python code using pyautogui in the VM.
@@ -494,15 +505,13 @@ class PyAutoGUIComputer(ComputerBase):
             bounding boxes are available, tag_1, tag_2, ... variables are
             prepended as center coordinates (e.g. "pyautogui.click(*tag_3)").
         """
-        from desktop_env.desktop_env import _fix_pyautogui_less_than_bug
-
         tag_vars = ""
         for i, mark in enumerate(self._last_marks):
             x, y, w, h = mark
             tag_vars += f"tag_{i + 1} = ({int(x + w // 2)}, {int(y + h // 2)})\n"
 
-        fixed_code = _fix_pyautogui_less_than_bug(tag_vars + code)
-        result = self._env.controller.execute_python_command(fixed_code)
+        fixed_code = fix_pyautogui_less_than_bug(tag_vars + code)
+        result = self._guest.execute_python_command(fixed_code)
         time.sleep(2)  # replicate desktop_env.step()'s default pause
 
         if result:
@@ -511,4 +520,5 @@ class PyAutoGUIComputer(ComputerBase):
             if returncode != 0 and error:
                 return f"Error executing code:\n{error.strip()}"
 
+        self._action_history.append(code)
         return "Success"
