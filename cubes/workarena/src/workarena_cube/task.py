@@ -13,6 +13,7 @@ from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import tool_action
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 from pydantic import PrivateAttr
+
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_ACTION_NAMES = frozenset(
@@ -160,15 +161,9 @@ def _apply_task_runtime_preferences(tool: Any, workarena_task: AbstractServiceNo
         "viewport": browser_config.viewport
         if "viewport" in browser_config
         else getattr(workarena_task, "viewport", None),
-        "slow_mo": browser_config.slow_mo
-        if "slow_mo" in browser_config
-        else getattr(workarena_task, "slow_mo", None),
-        "timeout": browser_config.timeout
-        if "timeout" in browser_config
-        else getattr(workarena_task, "timeout", None),
-        "locale": browser_config.locale
-        if "locale" in browser_config
-        else getattr(workarena_task, "locale", None),
+        "slow_mo": browser_config.slow_mo if "slow_mo" in browser_config else getattr(workarena_task, "slow_mo", None),
+        "timeout": browser_config.timeout if "timeout" in browser_config else getattr(workarena_task, "timeout", None),
+        "locale": browser_config.locale if "locale" in browser_config else getattr(workarena_task, "locale", None),
         "timezone_id": browser_config.timezone_id
         if "timezone_id" in browser_config
         else getattr(workarena_task, "timezone_id", None),
