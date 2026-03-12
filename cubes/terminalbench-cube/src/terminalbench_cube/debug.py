@@ -2,6 +2,8 @@
 
 Public API
 ----------
+setup_debug_suite()           → None  (called by ``cube test`` before running tasks)
+teardown_debug_suite()        → None  (called by ``cube test`` after running tasks)
 make_debug_agent(task_id)     → DebugAgent
 get_debug_task_configs()      → list[TerminalBenchTaskConfig]
 """
@@ -12,10 +14,12 @@ import logging
 import os
 
 from cube.core import Action, ActionSchema, Observation
-from terminalbench_cube.benchmark import TerminalBenchBenchmark
 from terminalbench_cube.task import TerminalBenchTaskConfig
 
 logger = logging.getLogger(__name__)
+
+# Module-level benchmark set by setup_debug_suite() and cleared by teardown_debug_suite()
+_benchmark = None
 
 # Each debug task replays a fixed action sequence.
 # These actions explore the environment and then stop — they don't solve
@@ -60,56 +64,54 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
+
+class _DebugTaskConfig(TerminalBenchTaskConfig):
+    """TaskConfig subclass that injects the module-level debug backend into make()."""
+
+    def make(self, runtime_context=None, container_backend=None):
+        return super().make(runtime_context=runtime_context, container_backend=_benchmark.container_backend)
+
+    # TODO: Remove this class. This is until cube-standard.testing module becomes more flexible and allows passing args to make().
+
+
+def setup_debug_suite() -> None:
+    """Create a Daytona backend and populate task_metadata via bench.setup()."""
+    global _benchmark
+    from cube.backends.daytona import DaytonaContainerBackend
+    from terminalbench_cube.benchmark import TerminalBenchBenchmark
+
+    api_key = os.environ.get("DAYTONA_API_KEY")
+    if not api_key:
+        raise RuntimeError("DAYTONA_API_KEY environment variable is required for cube test terminalbench-cube")
+
+    _benchmark = TerminalBenchBenchmark(
+        container_backend=DaytonaContainerBackend(api_key=api_key),
+        difficulty_filter="easy",
+        max_tasks=10,
+    )
+    _benchmark.install()
+    _benchmark.setup()
+
+
+def teardown_debug_suite() -> None:
+    global _benchmark
+    if _benchmark is not None:
+        _benchmark.close()
+        _benchmark = None
+
+
 def get_debug_task_configs() -> list[TerminalBenchTaskConfig]:
-    return [
-        TerminalBenchTaskConfig(task_id=tid) for tid in _TASK_ACTIONS if tid in TerminalBenchBenchmark.task_metadata
-    ]
+    return [_DebugTaskConfig(task_id=tid) for tid in _TASK_ACTIONS]
 
 
 if __name__ == "__main__":
     import sys
 
-    from cube.backends.daytona import DaytonaContainerBackend
-    from cube.testing import run_debug_episode
+    import terminalbench_cube.debug as _this_module
+    from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    api_key = os.environ.get("DAYTONA_API_KEY")
-    if not api_key:
-        logger.error("DAYTONA_API_KEY is required to run debug tasks")
-        sys.exit(1)
-
-    backend = DaytonaContainerBackend(api_key=api_key)
-
-    # Install + setup to populate task_metadata
-    bench = TerminalBenchBenchmark(
-        container_backend=backend,
-        difficulty_filter="easy",
-        max_tasks=10,
-    )
-    bench.install()
-    bench.setup()
-
-    # run_debug_suite calls tc.make() with no args, which requires container_backend.
-    # So we run episodes manually, passing the backend explicitly.
-    configs = get_debug_task_configs()
-    if not configs:
-        logger.error("No debug task configs found — are the tasks in the dataset?")
-        sys.exit(1)
-
-    results = []
-    for tc in configs:
-        task = tc.make(container_backend=backend)
-        agent = make_debug_agent(tc.task_id)
-        report = run_debug_episode(task, agent)
-        results.append(report)
-
+    results = run_debug_suite("terminalbench-cube", _this_module)
     failed = [r for r in results if r["error"]]
-    if failed:
-        logger.error(f"{len(failed)} debug episode(s) had errors")
-        for r in failed:
-            logger.error(f"  {r['task_id']}: {r['error']}")
-    else:
-        logger.info(f"All {len(results)} debug episodes completed without errors")
-
     sys.exit(1 if failed else 0)
