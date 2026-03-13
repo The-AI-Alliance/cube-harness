@@ -3,7 +3,6 @@ import time
 from typing import Any, Callable
 
 import numpy as np
-from browsergym.core import _get_global_playwright
 from browsergym.core.action.base import execute_python_code
 from browsergym.core.action.highlevel import HighLevelActionSet
 from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE, EXTRACT_OBS_MAX_TRIES
@@ -20,6 +19,8 @@ from browsergym.core.observation import (
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from cube.core import Action, Content, Observation, StepError
 from cube.tool import ToolConfig
+from cube.resources.browser_session import BrowserConfig, BrowserSession
+from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from PIL import Image
 from playwright.sync_api import Error, Frame, Page
 from pydantic import Field
@@ -27,7 +28,6 @@ from termcolor import colored
 
 from cube_harness.action_spaces.browser_action_space import BidBrowserActionSpace
 from cube_harness.tool import ToolWithTelemetry
-from cube_harness.tools.browser_session import BrowserConfig, BrowserSession, PlaywrightSessionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +102,8 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         return self._last_terminated
 
     def _create_runtime(self) -> None:
-        pw = _get_global_playwright()
-        pw.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
         self.session = self.config.browser_config.make()
+        self.session.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:
         if self.session is not None:
