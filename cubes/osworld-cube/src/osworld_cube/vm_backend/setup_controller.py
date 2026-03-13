@@ -449,7 +449,7 @@ class SetupController:
                 try:
                     browser = p.chromium.connect_over_cdp(remote_debugging_url)
                     break
-                except Exception as exc:
+                except Exception:
                     if attempt < 14:
                         time.sleep(5)
                     else:

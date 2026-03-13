@@ -20,9 +20,7 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 
-import osworld_cube
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
 from osworld_cube.computer import ComputerConfig
 

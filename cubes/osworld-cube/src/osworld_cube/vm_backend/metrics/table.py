@@ -5,7 +5,7 @@ import os.path
 
 # import operator
 from numbers import Number
-from typing import Any, Union, cast, Callable, Iterable
+from typing import Any, Union, cast, Callable
 from typing import Dict, List, Tuple, Set
 
 import openpyxl
@@ -170,7 +170,7 @@ def _safe_read_file(file_path: str) -> List[str]:
             lines = f.read().splitlines()
             logger.warning(f"Read file {file_path} with UTF-8 and error replacement")
             return lines
-    except Exception as e:
+    except Exception:
         logger.error(
             f"Failed to read file {file_path} with any encoding. Last error: {last_error}"
         )

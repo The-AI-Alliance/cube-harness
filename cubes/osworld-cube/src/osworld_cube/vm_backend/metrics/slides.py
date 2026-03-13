@@ -196,7 +196,7 @@ def compare_pptx_files(file1_path, file2_path, **options):
     enable_debug = options.get("enable_debug", True)
     if enable_debug:
         enable_debug_logging()
-        debug_logger.debug(f"=== COMPARING PPTX FILES ===")
+        debug_logger.debug("=== COMPARING PPTX FILES ===")
         debug_logger.debug(f"File 1: {file1_path}")
         debug_logger.debug(f"File 2: {file2_path}")
         debug_logger.debug(f"File 1 slides: {len(prs1.slides)}")
@@ -714,7 +714,7 @@ def compare_pptx_files(file1_path, file2_path, **options):
             return 0
     
     if enable_debug:
-        debug_logger.debug(f"=== COMPARISON SUCCESSFUL - Files match ===")
+        debug_logger.debug("=== COMPARISON SUCCESSFUL - Files match ===")
     return 1
 
 

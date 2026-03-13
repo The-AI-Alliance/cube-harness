@@ -1,11 +1,9 @@
 import logging
 import os
-import subprocess
 from typing import Dict
 from xml.etree import ElementTree
 from urllib.parse import urlparse
 
-import acoustid
 import cv2
 import imagehash
 import librosa
@@ -250,7 +248,7 @@ def compare_audios(audio_path_1, audio_path_2):
         return 1.0
     
     if is_y1_bad or is_y2_bad:
-        logger.warning(f"One audio file is empty/corrupt, the other is not. Similarity is 0.")
+        logger.warning("One audio file is empty/corrupt, the other is not. Similarity is 0.")
         return 0.0
 
     try:
@@ -267,7 +265,7 @@ def compare_audios(audio_path_1, audio_path_2):
     # Normalize the MFCC features
     mfcc1 = librosa.util.normalize(mfcc1, axis=1)
     mfcc2 = librosa.util.normalize(mfcc2, axis=1)
-    logger.info(f"MFCCs normalized.")
+    logger.info("MFCCs normalized.")
 
     # Define a lambda function to compute cosine distance
     dist_func = lambda x, y: cosine(x, y)
