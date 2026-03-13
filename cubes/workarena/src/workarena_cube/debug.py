@@ -72,17 +72,17 @@ def get_debug_task_configs() -> list[WorkArenaTaskConfig]:
     ]
 
 
+def get_benchmark() -> WorkArenaBenchmark:
+    return WorkArenaBenchmark()
+
+
 if __name__ == "__main__":
     import workarena_cube.debug as _this_module
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    benchmark = WorkArenaBenchmark()
-    try:
-        benchmark.setup()
-        results = run_debug_suite("workarena-cube", _this_module)
-        failed = [r for r in results if r["error"]]
-    finally:
-        benchmark.close()
+    results = run_debug_suite("workarena-cube", _this_module)
+    failed = [r for r in results if r["error"]]
+
 
     sys.exit(1 if failed else 0)
