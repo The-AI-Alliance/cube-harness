@@ -26,7 +26,7 @@ def flibulate_the_ganzinator(how_much):
 
 * [Contributing](contributing.markdown): We welcome your contributions! Here's how you can contribute.
 * [About Us](about.markdown): More about the AI Alliance and this project.
-* [Project GitHub Repo](https://github.com/The-AI-Alliance/AgentLab2)
+* [Project GitHub Repo](https://github.com/The-AI-Alliance/cube-harness)
 * [The AI Alliance](https://thealliance.ai): The AI Alliance website.
 
 

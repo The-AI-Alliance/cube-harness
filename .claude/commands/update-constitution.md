@@ -1,6 +1,6 @@
 # Update Constitution
 
-This command updates the AgentLab2 Constitution and propagates changes to all dependent files.
+This command updates the cube-harness Constitution and propagates changes to all dependent files.
 
 ## Instructions
 

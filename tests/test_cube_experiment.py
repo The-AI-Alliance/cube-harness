@@ -4,7 +4,7 @@ import warnings
 
 import pytest
 
-from agentlab2.experiment import Experiment
+from cube_harness.experiment import Experiment
 from tests.conftest import MockCubeTaskConfig
 
 

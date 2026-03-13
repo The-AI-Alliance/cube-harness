@@ -1,4 +1,4 @@
-"""Tests for cube.tool.Tool used in agentlab2."""
+"""Tests for cube.tool.Tool used in cube_harness."""
 
 from unittest.mock import MagicMock, patch
 
@@ -192,7 +192,7 @@ class TestToolExecutionSpans:
     Reference: https://opentelemetry.io/docs/specs/semconv/gen-ai/
     """
 
-    @patch("agentlab2.metrics.tracer._tool_tracer")
+    @patch("cube_harness.metrics.tracer._tool_tracer")
     def test_execute_action_creates_span(self, mock_tracer, mock_tool) -> None:
         """Test that execute_action creates a span with correct name and kind."""
         mock_span = MagicMock()
@@ -209,7 +209,7 @@ class TestToolExecutionSpans:
 
         assert call_args[1]["kind"] == SpanKind.INTERNAL
 
-    @patch("agentlab2.metrics.tracer._tool_tracer")
+    @patch("cube_harness.metrics.tracer._tool_tracer")
     def test_execute_action_sets_required_attributes(self, mock_tracer, mock_tool) -> None:
         """Test that execute_action sets required GenAI tool attributes."""
         mock_span = MagicMock()
@@ -225,7 +225,7 @@ class TestToolExecutionSpans:
         assert set_attr_calls["gen_ai.tool.call.arguments"] == '{"element_id": "btn1"}'
         assert set_attr_calls["gen_ai.tool.call.result"] == "Clicked on btn1"
 
-    @patch("agentlab2.metrics.tracer._tool_tracer")
+    @patch("cube_harness.metrics.tracer._tool_tracer")
     def test_execute_action_traces_error_result(self, mock_tracer, mock_tool) -> None:
         """Test that error results are traced."""
         mock_span = MagicMock()
