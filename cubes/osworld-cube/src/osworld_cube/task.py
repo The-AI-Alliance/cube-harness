@@ -159,11 +159,11 @@ class OSWorldTask(Task):
     def _postprocess_linearize(self, obs: Observation) -> Observation:
         """Replace raw axtree XML with a linearized tab-separated table.
 
-        The platform string is read from ComputerConfig.os_type.
+        The platform string is read from ComputerConfig.vm_config.os_type.
         """
         from osworld_cube.axtree import linearize_accessibility_tree
 
-        platform = self._computer.config.os_type.lower()
+        platform = self._computer.config.vm_config.os_type.lower()
         new_contents = []
         for content in obs.contents:
             if content.name == "accessibility_tree":
@@ -186,7 +186,7 @@ class OSWorldTask(Task):
         """
         from osworld_cube.axtree import tag_screenshot
 
-        platform = self._computer.config.os_type.lower()
+        platform = self._computer.config.vm_config.os_type.lower()
 
         screenshot_content = None
         axtree_content = None
