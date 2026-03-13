@@ -1,4 +1,4 @@
-"""Tests for agentlab2.tools.browsergym module."""
+"""Tests for cube_harness.tools.browsergym module."""
 
 from unittest.mock import MagicMock, patch
 
@@ -7,8 +7,8 @@ import pytest
 from cube.core import Action, Observation
 from PIL import Image
 
-from agentlab2.tools.browser_session import PlaywrightSession, PlaywrightSessionConfig
-from agentlab2.tools.browsergym import BrowsergymConfig, BrowsergymTool
+from cube_harness.tools.browser_session import PlaywrightSession, PlaywrightSessionConfig
+from cube_harness.tools.browsergym import BrowsergymConfig, BrowsergymTool
 
 
 class TestBrowsergymConfig:
@@ -106,7 +106,7 @@ class TestBrowsergymToolInitialization:
 
 
 class TestBrowsergymToolObservationConversion:
-    """Tests for _bgym_obs_to_agentlab_obs conversion."""
+    """Tests for _bgym_obs_to_cube_obs conversion."""
 
     def test_empty_observation(self) -> None:
         """Test conversion of empty BrowserGym observation."""
@@ -114,12 +114,12 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs: dict = {}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert isinstance(obs, Observation)
         assert len(obs.contents) == 0
 
-    @patch("agentlab2.tools.browsergym.flatten_dom_to_str")
+    @patch("cube_harness.tools.browsergym.flatten_dom_to_str")
     def test_html_observation(self, mock_flatten_dom: MagicMock) -> None:
         """Test conversion of HTML observation."""
         mock_flatten_dom.return_value = "<html><body>Test</body></html>"
@@ -129,14 +129,14 @@ class TestBrowsergymToolObservationConversion:
 
         dom_obj = {"documents": [], "strings": []}
         bgym_obs = {"dom_object": dom_obj}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 1
         assert obs.contents[0].name == "pruned_html"
         assert obs.contents[0].data == "<html><body>Test</body></html>"
 
-    @patch("agentlab2.tools.browsergym.prune_html")
-    @patch("agentlab2.tools.browsergym.flatten_dom_to_str")
+    @patch("cube_harness.tools.browsergym.prune_html")
+    @patch("cube_harness.tools.browsergym.flatten_dom_to_str")
     def test_html_observation_with_pruning(self, mock_flatten_dom: MagicMock, mock_prune_html: MagicMock) -> None:
         """Test that HTML is pruned when prune_html is True."""
         mock_flatten_dom.return_value = "<html><body>Full HTML</body></html>"
@@ -146,12 +146,12 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"dom_object": {"documents": [], "strings": []}}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         mock_prune_html.assert_called_once_with("<html><body>Full HTML</body></html>")
         assert obs.contents[0].data == "<body>Pruned</body>"
 
-    @patch("agentlab2.tools.browsergym.flatten_axtree_to_str")
+    @patch("cube_harness.tools.browsergym.flatten_axtree_to_str")
     def test_axtree_observation(self, mock_flatten_axtree: MagicMock) -> None:
         """Test conversion of accessibility tree observation."""
         mock_flatten_axtree.return_value = "[a1] button 'Submit'"
@@ -161,7 +161,7 @@ class TestBrowsergymToolObservationConversion:
 
         axtree_obj = {"nodes": []}
         bgym_obs = {"axtree_object": axtree_obj}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 1
         assert obs.contents[0].name == "axtree_txt"
@@ -173,7 +173,7 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"axtree_object": None}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 0
 
@@ -187,7 +187,7 @@ class TestBrowsergymToolObservationConversion:
         screenshot_array[:, :, 0] = 255  # Red channel
 
         bgym_obs = {"screenshot": screenshot_array}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 1
         assert obs.contents[0].name == "screenshot"
@@ -201,14 +201,14 @@ class TestBrowsergymToolObservationConversion:
 
         screenshot_img = Image.new("RGB", (200, 150), color="blue")
         bgym_obs = {"screenshot": screenshot_img}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 1
         assert obs.contents[0].name == "screenshot"
         assert obs.contents[0].data is screenshot_img
 
-    @patch("agentlab2.tools.browsergym.flatten_axtree_to_str")
-    @patch("agentlab2.tools.browsergym.flatten_dom_to_str")
+    @patch("cube_harness.tools.browsergym.flatten_axtree_to_str")
+    @patch("cube_harness.tools.browsergym.flatten_dom_to_str")
     def test_full_observation(self, mock_flatten_dom: MagicMock, mock_flatten_axtree: MagicMock) -> None:
         """Test conversion with all observation types enabled."""
         mock_flatten_dom.return_value = "<html>...</html>"
@@ -223,7 +223,7 @@ class TestBrowsergymToolObservationConversion:
             "axtree_object": {"nodes": []},
             "screenshot": screenshot_img,
         }
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 3
         content_names = {c.name for c in obs.contents}
@@ -235,7 +235,7 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"focused_element_bid": "a123"}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 1
         assert obs.contents[0].name == "focused_element"
@@ -247,7 +247,7 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"focused_element_bid": None}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 0
 
@@ -257,7 +257,7 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"last_action_error": "Element not found: bid='xyz'"}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 1
         assert obs.contents[0].name == "last_action_error"
@@ -269,7 +269,7 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"last_action_error": None}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 0
 
@@ -279,7 +279,7 @@ class TestBrowsergymToolObservationConversion:
         tool = BrowsergymTool(config)
 
         bgym_obs = {"last_action_error": ""}
-        obs = tool._bgym_obs_to_agentlab_obs(bgym_obs)
+        obs = tool._bgym_obs_to_cube_obs(bgym_obs)
 
         assert len(obs.contents) == 0
 
@@ -451,7 +451,7 @@ class TestBrowsergymToolStepResults:
         tool = self._create_tool_with_mock_page()
 
         with (
-            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch("cube_harness.tools.browsergym.execute_python_code"),
             patch.object(tool, "_extract_bgym_obs", return_value={}),
         ):
             result = tool._execute_bgym_step("noop()")
@@ -463,7 +463,7 @@ class TestBrowsergymToolStepResults:
         tool = self._create_tool_with_mock_page()
 
         with (
-            patch("agentlab2.tools.browsergym.execute_python_code", side_effect=Exception("Some error")),
+            patch("cube_harness.tools.browsergym.execute_python_code", side_effect=Exception("Some error")),
             patch.object(tool, "_extract_bgym_obs", return_value={}),
         ):
             result = tool._execute_bgym_step("noop()")
@@ -476,7 +476,7 @@ class TestBrowsergymToolStepResults:
         new_obs = {"screenshot": np.zeros((10, 10, 3))}
 
         with (
-            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch("cube_harness.tools.browsergym.execute_python_code"),
             patch.object(tool, "_extract_bgym_obs", return_value=new_obs),
         ):
             tool._execute_bgym_step("noop()")
@@ -488,7 +488,7 @@ class TestBrowsergymToolStepResults:
         tool = self._create_tool_with_mock_page()
 
         with (
-            patch("agentlab2.tools.browsergym.execute_python_code"),
+            patch("cube_harness.tools.browsergym.execute_python_code"),
             patch.object(tool, "_extract_bgym_obs", return_value={}),
         ):
             tool._execute_bgym_step("noop()")

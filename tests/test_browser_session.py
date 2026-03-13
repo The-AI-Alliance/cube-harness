@@ -1,10 +1,10 @@
-"""Tests for agentlab2.tools.browser_session module."""
+"""Tests for cube_harness.tools.browser_session module."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentlab2.tools.browser_session import (
+from cube_harness.tools.browser_session import (
     BrowserConfig,
     BrowserSession,
     PlaywrightSession,
@@ -62,8 +62,8 @@ class TestPlaywrightSessionConfig:
     def test_make_returns_playwright_session(self) -> None:
         mock_pw = self._make_mock_pw()
         with (
-            patch("agentlab2.tools.browser_session._get_global_playwright", return_value=mock_pw),
-            patch("agentlab2.tools.browser_session._read_cdp_url", return_value="http://localhost:1234"),
+            patch("cube_harness.tools.browser_session._get_global_playwright", return_value=mock_pw),
+            patch("cube_harness.tools.browser_session._read_cdp_url", return_value="http://localhost:1234"),
         ):
             session = PlaywrightSessionConfig().make()
         assert isinstance(session, PlaywrightSession)
@@ -71,8 +71,8 @@ class TestPlaywrightSessionConfig:
     def test_make_injects_remote_debugging_port_0(self) -> None:
         mock_pw = self._make_mock_pw()
         with (
-            patch("agentlab2.tools.browser_session._get_global_playwright", return_value=mock_pw),
-            patch("agentlab2.tools.browser_session._read_cdp_url", return_value="http://localhost:1234"),
+            patch("cube_harness.tools.browser_session._get_global_playwright", return_value=mock_pw),
+            patch("cube_harness.tools.browser_session._read_cdp_url", return_value="http://localhost:1234"),
         ):
             PlaywrightSessionConfig().make()
         launch_args = mock_pw.chromium.launch_persistent_context.call_args[1]["args"]
@@ -81,8 +81,10 @@ class TestPlaywrightSessionConfig:
     def test_make_cdp_url_comes_from_read_cdp_url(self) -> None:
         mock_pw = self._make_mock_pw()
         with (
-            patch("agentlab2.tools.browser_session._get_global_playwright", return_value=mock_pw),
-            patch("agentlab2.tools.browser_session._read_cdp_url", return_value="http://localhost:9876") as mock_read,
+            patch("cube_harness.tools.browser_session._get_global_playwright", return_value=mock_pw),
+            patch(
+                "cube_harness.tools.browser_session._read_cdp_url", return_value="http://localhost:9876"
+            ) as mock_read,
         ):
             session = PlaywrightSessionConfig().make()
         mock_read.assert_called_once()
@@ -91,8 +93,8 @@ class TestPlaywrightSessionConfig:
     def test_make_passes_headless_flag(self) -> None:
         mock_pw = self._make_mock_pw()
         with (
-            patch("agentlab2.tools.browser_session._get_global_playwright", return_value=mock_pw),
-            patch("agentlab2.tools.browser_session._read_cdp_url", return_value="http://localhost:1234"),
+            patch("cube_harness.tools.browser_session._get_global_playwright", return_value=mock_pw),
+            patch("cube_harness.tools.browser_session._read_cdp_url", return_value="http://localhost:1234"),
         ):
             PlaywrightSessionConfig(headless=False).make()
         assert mock_pw.chromium.launch_persistent_context.call_args[1]["headless"] is False

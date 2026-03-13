@@ -1,11 +1,11 @@
-"""Tests for agentlab2.environment module."""
+"""Tests for cube_harness.environment module."""
 
 import pytest
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from cube.task import STOP_ACTION
 
-from agentlab2.legacy import EnvConfig, Environment
-from agentlab2.tools.toolbox import Toolbox
+from cube_harness.legacy import EnvConfig, Environment
+from cube_harness.tools.toolbox import Toolbox
 from tests.conftest import MockTool
 
 

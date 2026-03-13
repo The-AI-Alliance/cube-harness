@@ -1,12 +1,12 @@
-"""Tests for agentlab2.agent module."""
+"""Tests for cube_harness.agent module."""
 
 import json
 
 from cube.core import Action, Content, Observation
 from PIL import Image
 
-from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import AgentOutput
+from cube_harness.agent import Agent, AgentConfig
+from cube_harness.core import AgentOutput
 
 
 class TestAgentConfig:

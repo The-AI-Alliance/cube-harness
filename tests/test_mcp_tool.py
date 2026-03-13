@@ -1,4 +1,4 @@
-"""Tests for agentlab2.tools.mcp module."""
+"""Tests for cube_harness.tools.mcp module."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,7 +7,7 @@ import pytest
 from cube.core import Action, ActionSchema
 from mcp.client.stdio import StdioServerParameters
 
-from agentlab2.tools.mcp import (
+from cube_harness.tools.mcp import (
     MCPServerConfig,
     MCPToolConfig,
     _AsyncBridge,
@@ -254,7 +254,7 @@ class TestMCPToolWithMockCore:
         assert tool.config is config
         assert not tool._connected
 
-    @patch("agentlab2.tools.mcp._MCPToolCore")
+    @patch("cube_harness.tools.mcp._MCPToolCore")
     def test_reset_connects(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
         mock_core.start = AsyncMock(return_value=[ActionSchema(name="test_tool", description="A test tool")])
@@ -270,7 +270,7 @@ class TestMCPToolWithMockCore:
         assert tool.action_set[0].name == "test_tool"
         tool.close()
 
-    @patch("agentlab2.tools.mcp._MCPToolCore")
+    @patch("cube_harness.tools.mcp._MCPToolCore")
     def test_execute_action_text_result(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
         mock_core.start = AsyncMock(return_value=[ActionSchema(name="greet", description="Greet")])
@@ -290,7 +290,7 @@ class TestMCPToolWithMockCore:
         assert obs.contents[0].tool_call_id == "call_1"
         tool.close()
 
-    @patch("agentlab2.tools.mcp._MCPToolCore")
+    @patch("cube_harness.tools.mcp._MCPToolCore")
     def test_execute_action_list_result(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
         mock_core.start = AsyncMock(return_value=[ActionSchema(name="screenshot", description="Take screenshot")])
@@ -311,7 +311,7 @@ class TestMCPToolWithMockCore:
         assert obs.contents[1].name == "extra"
         tool.close()
 
-    @patch("agentlab2.tools.mcp._MCPToolCore")
+    @patch("cube_harness.tools.mcp._MCPToolCore")
     def test_execute_action_error_handling(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
         mock_core.start = AsyncMock(return_value=[ActionSchema(name="fail", description="Fail")])
@@ -330,7 +330,7 @@ class TestMCPToolWithMockCore:
         assert "Server crashed" in obs.contents[0].data
         tool.close()
 
-    @patch("agentlab2.tools.mcp._MCPToolCore")
+    @patch("cube_harness.tools.mcp._MCPToolCore")
     def test_close_resets_state(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
         mock_core.start = AsyncMock(return_value=[ActionSchema(name="t", description="t")])
@@ -347,7 +347,7 @@ class TestMCPToolWithMockCore:
         assert tool._action_schemas == []
         assert tool._core is None
 
-    @patch("agentlab2.tools.mcp._MCPToolCore")
+    @patch("cube_harness.tools.mcp._MCPToolCore")
     def test_action_set_triggers_connect(self, mock_core_cls: MagicMock) -> None:
         mock_core = MagicMock()
         mock_core.start = AsyncMock(

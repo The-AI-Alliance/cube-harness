@@ -43,7 +43,7 @@ Confirm that the following have been completed:
 
 ## Constitution Compliance
 
-Confirm adherence to the [AgentLab2 Constitution](/.claude/rules/constitution.md):
+Confirm adherence to the [cube-harness Constitution](/.claude/rules/constitution.md):
 
 * [ ] No imports inside functions/classes (Pillar II: Explicitness)
 * [ ] No global mutable state (Pillar II: Explicitness)
