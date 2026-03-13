@@ -521,7 +521,7 @@ class TestOSWorldBenchmark:
             assert len(chrome_bench.task_metadata) == 1
             assert "chrome-1" in chrome_bench.task_metadata
 
-    def test_get_task_configs_carries_metadata(self):
+    def test_get_task_configs_are_lightweight(self):
         from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
         from osworld_cube.computer import ComputerConfig
 
@@ -537,8 +537,10 @@ class TestOSWorldBenchmark:
             assert len(configs) == 2
             for cfg in configs:
                 assert isinstance(cfg, OSWorldTaskConfig)
-                assert cfg.metadata is not None
-                assert cfg.task_id == cfg.metadata.id
+                # TaskConfig must not embed TaskMetadata — it stays in the ClassVar.
+                assert not hasattr(cfg, "metadata")
+                # The ClassVar must be populated so make() can look up the task.
+                assert cfg.task_id in OSWorldBenchmark.task_metadata
 
     def test_task_config_make_produces_osworld_task(self):
         from osworld_cube.benchmark import OSWorldBenchmark

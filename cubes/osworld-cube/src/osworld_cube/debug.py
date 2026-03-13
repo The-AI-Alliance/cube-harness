@@ -18,13 +18,11 @@ Usage::
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
 from cube.core import Action, ActionSchema, Observation
-from cube.task import TaskMetadata
-from osworld_cube.benchmark import OSWorldTaskConfig
+from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 from osworld_cube.computer import ComputerConfig
 
 logger = logging.getLogger(__name__)
@@ -131,27 +129,14 @@ def get_debug_task_configs() -> list[OSWorldTaskConfig]:
     """
     Load debug task definitions from debug_tasks.json and return as OSWorldTaskConfig list.
 
-    Each config carries a ComputerConfig() as tool_config and the full TaskMetadata,
-    so callers can instantiate the task with task_config.make().
-
-    These are the configs exposed by benchmark.get_debug_task_configs()
-    (stress_test_specs.md §1.1).
+    Creates an OSWorldBenchmark backed by debug_tasks.json and calls setup() so
+    that OSWorldBenchmark.task_metadata is populated.  make() on each returned
+    config will find the metadata via the class-level registry without needing it
+    embedded in the config.
     """
-    raw: list[dict] = json.loads(_TASKS_FILE.read_text())
-    configs = []
-    for entry in raw:
-        meta = TaskMetadata(
-            id=entry["id"],
-            abstract_description=entry["instruction"],
-            extra_info={
-                "domain": entry.get("domain", "os"),
-                "snapshot": entry.get("snapshot", "init_state"),
-                "config": entry.get("config", []),
-                "evaluator": entry.get("evaluator", {}),
-                "related_apps": entry.get("related_apps", []),
-            },
-        )
-        configs.append(OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta))
+    bench = OSWorldBenchmark(tasks_file=str(_TASKS_FILE), default_tool_config=ComputerConfig())
+    bench.setup()
+    configs = [cfg for cfg in bench.get_task_configs() if isinstance(cfg, OSWorldTaskConfig)]
     logger.debug("[get_debug_task_configs] Loaded %d configs from %s", len(configs), _TASKS_FILE)
     return configs
 
