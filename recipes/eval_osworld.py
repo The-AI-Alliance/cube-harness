@@ -83,7 +83,6 @@ def main(debug: bool) -> None:
     )
 
     tool_config = ComputerConfig(
-        provider="docker",
         action_space="pyautogui",
         headless=True,
         require_a11y_tree=True,
@@ -91,7 +90,8 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
+    # tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
+    tasks_file = None  # Use all tasks in both debug and eval modes
     benchmark = OSWorldBenchmark(
         default_tool_config=tool_config,
         use_som=False,
@@ -113,7 +113,6 @@ def main(debug: bool) -> None:
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print(f"Provider: {tool_config.provider}")
         print("=" * 60 + "\n")
         run_sequentially(exp)
     else:
@@ -122,7 +121,6 @@ def main(debug: bool) -> None:
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print(f"Provider: {tool_config.provider}")
         print("Parallelism: 3 workers")
         print("=" * 60 + "\n")
         run_with_ray(exp, n_cpus=3)
