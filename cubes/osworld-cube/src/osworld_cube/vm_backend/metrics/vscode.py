@@ -1,4 +1,3 @@
-import copy
 import importlib.util
 import json
 import sys
@@ -61,7 +60,7 @@ def check_json_settings(actual: str, expected: str, **options) -> float:
     try:
         with open(actual, 'r') as f:
             data = json.load(f)
-    except Exception as e:
+    except Exception:
         return 0.0
 
     expect = expected['expected']

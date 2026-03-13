@@ -317,7 +317,7 @@ def check_json(result: str, rules: Dict[str, List[Dict[str, Union[List[str], str
                         return 0.
                 except yaml.YAMLError as e:
                     logger.error(f"YAML parsing error in file {result}: {e}")
-                    logger.error(f"File content might be corrupted or have invalid YAML syntax")
+                    logger.error("File content might be corrupted or have invalid YAML syntax")
                     return 0.
                 except Exception as e:
                     logger.error(f"Unexpected error parsing YAML file {result}: {e}")

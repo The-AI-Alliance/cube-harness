@@ -12,7 +12,6 @@ VM image download logic is ported from desktop_env's DockerVMManager.
 import json
 import logging
 import os
-import platform
 import socket
 import subprocess
 import tempfile

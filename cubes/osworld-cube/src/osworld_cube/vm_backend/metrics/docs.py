@@ -134,7 +134,7 @@ def contains_page_break(docx_file, rules):
 
     try:
         expected_page_break_count = rules["page_break_count"]
-    except Exception as e:
+    except Exception:
         expected_page_break_count = None
 
     namespaces = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
@@ -398,7 +398,7 @@ def compare_image_text(image_path, rule):
                 img = Image.open(image_path)
                 img.save(temp_image_path, 'PNG')
                 actual_image_path = temp_image_path
-                logger.info(f"Successfully converted X11 image using PIL")
+                logger.info("Successfully converted X11 image using PIL")
             except Exception as pil_error:
                 logger.warning(f"PIL conversion failed: {pil_error}")
                 
@@ -408,7 +408,7 @@ def compare_image_text(image_path, rule):
                     x11_image = read_x11_image(image_path)
                     x11_image.save(temp_image_path, 'PNG')
                     actual_image_path = temp_image_path
-                    logger.info(f"✅ Successfully converted X11 image using custom reader")
+                    logger.info("✅ Successfully converted X11 image using custom reader")
                 except Exception as custom_error:
                     logger.warning(f"Custom X11 conversion failed: {custom_error}")
                     
@@ -426,7 +426,7 @@ def compare_image_text(image_path, rule):
                                                        input=result.stdout, 
                                                        stdout=f, check=True)
                             actual_image_path = temp_image_path
-                            logger.info(f"Successfully converted X11 image using netpbm tools")
+                            logger.info("Successfully converted X11 image using netpbm tools")
                         else:
                             raise Exception("netpbm tools not available")
                     except Exception as netpbm_error:
@@ -434,9 +434,9 @@ def compare_image_text(image_path, rule):
                         
                         # All conversions failed
                         logger.error(
-                            f"❌ All X11 conversion methods failed.\n"
-                            f"Attempted: PIL → Custom Python reader → netpbm tools\n"
-                            f"💡 The image might be corrupted or in an unsupported X11 variant"
+                            "❌ All X11 conversion methods failed.\n"
+                            "Attempted: PIL → Custom Python reader → netpbm tools\n"
+                            "💡 The image might be corrupted or in an unsupported X11 variant"
                         )
                         
                         # If all conversions fail, try to use the original file anyway
@@ -445,7 +445,7 @@ def compare_image_text(image_path, rule):
                             os.unlink(temp_image_path)
                             temp_image_path = None
                         actual_image_path = image_path
-                        logger.info(f"Will attempt OCR on original file format (likely to fail)")
+                        logger.info("Will attempt OCR on original file format (likely to fail)")
         
         # Now attempt OCR with error handling
         try:
@@ -479,11 +479,11 @@ def compare_image_text(image_path, rule):
             # Check if this is specifically an X11 format issue
             if 'x-window screen dump' in file_info or 'xwd' in file_info:
                 logger.error(
-                    f"🚨 OCR failed on X11 screen dump after all conversion attempts.\n"
-                    f"This might indicate:\n"
-                    f"   1. The X11 file is corrupted or in an unsupported variant\n"
-                    f"   2. Missing dependencies (numpy, PIL)\n"
-                    f"   3. Insufficient memory for large images"
+                    "🚨 OCR failed on X11 screen dump after all conversion attempts.\n"
+                    "This might indicate:\n"
+                    "   1. The X11 file is corrupted or in an unsupported variant\n"
+                    "   2. Missing dependencies (numpy, PIL)\n"
+                    "   3. Insufficient memory for large images"
                 )
             
             return 0
