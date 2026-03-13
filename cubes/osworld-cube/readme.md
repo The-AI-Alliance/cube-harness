@@ -10,6 +10,14 @@
 
 - **Docker** (recommended): install Docker. VM images are downloaded automatically by `desktop_env` on first use.
 - **VMware / VirtualBox**: install the hypervisor and follow the VM import steps in the guide.
+- **QEMU** (default provider): install QEMU — `qemu-img` must be on your `PATH` for VM overlay creation.
+
+  ```bash
+  # macOS
+  brew install qemu
+  # Ubuntu/Debian
+  sudo apt install qemu-utils
+  ```
 
 ## Overview
 
