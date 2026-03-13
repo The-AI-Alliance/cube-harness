@@ -22,8 +22,8 @@ from typing import Any
 
 from mcp.types import TextContent
 
-from agentlab2.mcp.server import McpServer
-from agentlab2.tools.playwright import PlaywrightConfig
+from cube_harness.mcp.server import McpServer
+from cube_harness.tools.playwright import PlaywrightConfig
 
 
 def _get_content_blocks(call_tool_result: Any) -> list:

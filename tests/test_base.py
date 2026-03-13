@@ -1,9 +1,9 @@
 import json
 
-from agentlab2.agent import AgentConfig
-from agentlab2.core import TypedBaseModel
-from agentlab2.experiment import Experiment
-from agentlab2.legacy import Benchmark
+from cube_harness.agent import AgentConfig
+from cube_harness.core import TypedBaseModel
+from cube_harness.experiment import Experiment
+from cube_harness.legacy import Benchmark
 from tests.conftest import MockAgentConfig, MockToolConfig, SerializableBenchmark
 
 
