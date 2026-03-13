@@ -6,7 +6,7 @@ Show the current status of a running Ray evaluation.
 
 1. **Check Ray cluster status** by running `ray status` to see active nodes, CPU usage, and pending tasks.
 
-2. **Find the latest experiment output directory** under `~/agentlab_results/al2/` (most recent by modification time).
+2. **Find the latest experiment output directory** under `~/cube_harness_results/al2/` (most recent by modification time).
 
 3. **Extract reward summary from all trajectory JSONL files** in that directory. For each trajectory:
    - Parse the JSONL file and find the last `EnvironmentOutput` (entries with a `"reward"` field in `output`)
@@ -27,7 +27,7 @@ python3 -c "
 import json, glob, os
 
 # Find latest experiment dir
-base = os.path.expanduser('~/agentlab_results/al2')
+base = os.path.expanduser('~/cube_harness_results/al2')
 exp_dirs = sorted([d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))],
                   key=lambda d: os.path.getmtime(os.path.join(base, d)), reverse=True)
 if not exp_dirs:
