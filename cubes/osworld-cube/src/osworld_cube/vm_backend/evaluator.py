@@ -9,8 +9,9 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
+from cube_computer_tool.guest_agent import GuestAgent
+
 from osworld_cube.vm_backend import getters, metrics
-from osworld_cube.vm_backend.guest_agent import GuestAgent
 
 logger = logging.getLogger(__name__)
 

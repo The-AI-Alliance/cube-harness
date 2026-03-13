@@ -22,7 +22,7 @@ from typing import Any, Union
 import requests
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
-from osworld_cube.vm_backend.guest_agent import GuestAgent
+from cube_computer_tool.guest_agent import GuestAgent
 
 logger = logging.getLogger(__name__)
 
