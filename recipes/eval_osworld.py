@@ -23,6 +23,7 @@ import sys
 
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
 from osworld_cube.computer import ComputerConfig
+from osworld_cube.vm_backend import VMConfig
 
 from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.genny import GennyConfig
@@ -82,9 +83,13 @@ def main(debug: bool) -> None:
 
     tool_config = ComputerConfig(
         action_space="pyautogui",
-        headless=True,
+        vm_config=VMConfig(
+            memory="4G",
+            cpus=4,
+            headless=True,
+            screen_size=(1920, 1080),
+        ),
         require_a11y_tree=True,
-        screen_size=(1920, 1080),
         observe_after_action=True,
     )
 

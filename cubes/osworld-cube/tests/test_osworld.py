@@ -97,23 +97,26 @@ def _backend(
 class TestComputerConfig:
     def test_defaults(self) -> None:
         from osworld_cube.computer import ComputerConfig
+        from osworld_cube.vm_backend import VMConfig
 
         cfg = ComputerConfig()
-        assert cfg.screen_size == (1920, 1080)
-        assert cfg.headless is True
+        assert isinstance(cfg.vm_config, VMConfig)
+        assert cfg.vm_config.screen_size == (1920, 1080)
+        assert cfg.vm_config.headless is True
         assert cfg.require_a11y_tree is True
         assert cfg.observe_after_action is True
-        assert cfg.vm_memory == "4G"
-        assert cfg.vm_cpus == 4
+        assert cfg.vm_config.memory == "4G"
+        assert cfg.vm_config.cpus == 4
 
     def test_custom_values(self) -> None:
         from osworld_cube.computer import ComputerConfig
+        from osworld_cube.vm_backend import VMConfig
 
-        cfg = ComputerConfig(headless=False, screen_size=(1280, 720), vm_memory="8G", vm_cpus=8)
-        assert cfg.headless is False
-        assert cfg.screen_size == (1280, 720)
-        assert cfg.vm_memory == "8G"
-        assert cfg.vm_cpus == 8
+        cfg = ComputerConfig(vm_config=VMConfig(headless=False, screen_size=(1280, 720), memory="8G", cpus=8))
+        assert cfg.vm_config.headless is False
+        assert cfg.vm_config.screen_size == (1280, 720)
+        assert cfg.vm_config.memory == "8G"
+        assert cfg.vm_config.cpus == 8
 
     def test_action_space_default(self) -> None:
         from osworld_cube.computer import ActionSpace, ComputerConfig

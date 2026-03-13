@@ -11,7 +11,6 @@ import time
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
 
 from PIL import Image
 
@@ -20,6 +19,7 @@ from cube.container import Container
 from cube.core import Action, Content, ImageContent, Observation, StepError, TextContent
 from cube.tool import Tool, ToolConfig, tool_action
 
+from osworld_cube.vm_backend import VMConfig, VMInstance
 from osworld_cube.vm_backend.evaluator import Evaluator
 from osworld_cube.vm_backend.guest_agent import GuestAgent
 from osworld_cube.vm_backend.pyautogui_utils import fix_pyautogui_less_than_bug
@@ -52,10 +52,8 @@ class ComputerConfig(ToolConfig):
     """
     Serializable configuration for Computer tool variants.
 
-    path_to_vm  — explicit path to the base qcow2 image. If None, the image is
-                  auto-downloaded to vm_dir on first use.
-    cache_dir   — per-task reference file cache.
-    vm_dir      — directory holding the base qcow2 and per-task overlays.
+    vm_config    — VM parameters (image path, memory, CPUs, screen size, etc.).
+    cache_dir    — per-task reference file cache.
 
     action_space selects the tool variant:
       "computer_13" → Computer13 (13 mouse/keyboard primitives + wait/done/fail)
@@ -63,20 +61,14 @@ class ComputerConfig(ToolConfig):
     """
 
     action_space: ActionSpace = ActionSpace.COMPUTER_13
-    path_to_vm: str | None = None
+    vm_config: VMConfig = VMConfig()
     snapshot_name: str = "init_state"  # kept for API compatibility; overlays replace snapshots
     cache_dir: str = str(_CUBE_CACHE_ROOT / "cache")
-    vm_dir: str = str(_CUBE_CACHE_ROOT / "vm_data")
-    screen_size: tuple[int, int] = (1920, 1080)
-    headless: bool = True
     require_a11y_tree: bool = True
     require_terminal: bool = False
-    os_type: Literal["Ubuntu", "Windows"] = "Ubuntu"
     observe_after_action: bool = True
-    vm_memory: str = "4G"
-    vm_cpus: int = 4
 
-    def make(self, container: Container | None = None) -> "ComputerBase":
+    def make(self, container: Container | None = None, vm: VMInstance | None = None) -> "ComputerBase":
         if container is not None:
             logger.warning(
                 "ComputerConfig.make() received a cube Container, but the OSWorld "
@@ -84,8 +76,8 @@ class ComputerConfig(ToolConfig):
                 "The container argument will be ignored."
             )
         if self.action_space == ActionSpace.PYAUTOGUI:
-            return PyAutoGUIComputer(self)
-        return Computer13(self)
+            return PyAutoGUIComputer(self, vm=vm)
+        return Computer13(self, vm=vm)
 
 
 # ---------------------------------------------------------------------------
@@ -104,32 +96,30 @@ class ComputerBase(Tool):
     Subclasses add the action-space-specific @tool_action methods.
     """
 
-    def __init__(self, config: ComputerConfig) -> None:
+    def __init__(self, config: ComputerConfig, vm: VMInstance | None = None) -> None:
         self.config = config
         self._current_task_config: dict | None = None
         self._last_marks: list[list[int]] = []
         self._is_done: bool = False
         self._action_history: list = []
 
-        # Resolve the base qcow2 path (auto-download if not specified)
-        vm_dir = Path(config.vm_dir)
-        if config.path_to_vm:
-            base_image = Path(config.path_to_vm)
+        if vm is not None:
+            self._qemu = vm
         else:
-            base_image = ensure_base_image(vm_dir, config.os_type)
-
-        qemu_config = QEMUConfig(
-            base_image=base_image,
-            overlay_dir=vm_dir / "overlays",
-            memory=config.vm_memory,
-            cpus=config.vm_cpus,
-            headless=config.headless,
-            screen_width=config.screen_size[0],
-            screen_height=config.screen_size[1],
-        )
-
-        self._qemu = QEMUManager(qemu_config)
-        self._qemu.start()
+            vc = config.vm_config
+            vm_dir = Path(vc.vm_dir)
+            base_image = Path(vc.path_to_vm) if vc.path_to_vm else ensure_base_image(vm_dir, vc.os_type)
+            qemu_config = QEMUConfig(
+                base_image=base_image,
+                overlay_dir=vm_dir / "overlays",
+                memory=vc.memory,
+                cpus=vc.cpus,
+                headless=vc.headless,
+                screen_width=vc.screen_size[0],
+                screen_height=vc.screen_size[1],
+            )
+            self._qemu = QEMUManager(qemu_config)
+            self._qemu.start()
 
         self._guest = GuestAgent(host="localhost", port=self._qemu.server_port)
 
@@ -140,8 +130,8 @@ class ComputerBase(Tool):
             chromium_port=self._qemu.chromium_port,
             vlc_port=self._qemu.vlc_port,
             cache_dir=config.cache_dir,
-            screen_width=config.screen_size[0],
-            screen_height=config.screen_size[1],
+            screen_width=config.vm_config.screen_size[0],
+            screen_height=config.vm_config.screen_size[1],
         )
         self._evaluator = Evaluator(
             guest=self._guest,
