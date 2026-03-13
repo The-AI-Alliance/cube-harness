@@ -27,13 +27,14 @@ Usage:
 
 import sys
 
+from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
+
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
-from cube_harness.tools.browser_session import PlaywrightSessionConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
 
 try:

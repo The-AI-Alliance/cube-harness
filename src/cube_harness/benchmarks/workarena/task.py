@@ -5,11 +5,11 @@ import time
 
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.core import ActionSchema, Observation
+from cube_harness.tools.base import BrowserTaskTool
 
 from cube_harness.action_spaces.browser_action_space import BidBrowserActionSpace
 from cube_harness.core import ActionSpace
 from cube_harness.legacy import Task
-from cube_harness.tools.base import BrowserTaskTool
 
 logger = logging.getLogger(__name__)
 

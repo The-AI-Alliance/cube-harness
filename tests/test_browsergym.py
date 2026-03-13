@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from cube.core import Action, Observation
+from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
 
-from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from cube_harness.tools.browsergym import BrowsergymConfig, BrowsergymTool
 
 

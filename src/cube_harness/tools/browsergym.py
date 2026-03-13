@@ -18,8 +18,8 @@ from browsergym.core.observation import (
 )
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from cube.core import Action, Content, Observation, StepError
-from cube.tool import ToolConfig
 from cube.resources.browser_session import BrowserConfig, BrowserSession
+from cube.tool import ToolConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from PIL import Image
 from playwright.sync_api import Error, Frame, Page
