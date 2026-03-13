@@ -31,6 +31,7 @@ from pydantic import model_validator
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
 from cube.task import TaskConfig, TaskMetadata
+from cube.vm import VMBackend
 
 from osworld_cube.computer import ComputerConfig, _CUBE_CACHE_ROOT
 
@@ -110,6 +111,7 @@ class OSWorldTaskConfig(TaskConfig):
     """
 
     metadata: TaskMetadata | None = None
+    vm_backend: VMBackend | None = None
 
     def make(
         self,
@@ -133,6 +135,7 @@ class OSWorldTaskConfig(TaskConfig):
         return OSWorldTask(
             metadata=self.metadata,
             tool_config=self.tool_config,
+            vm_backend=self.vm_backend,
             runtime_context=runtime_context,
             container_backend=container_backend,
         )

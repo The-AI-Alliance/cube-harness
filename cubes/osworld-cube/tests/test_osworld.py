@@ -15,15 +15,15 @@ from PIL import Image
 from cube.core import Action, Observation, TextContent
 
 # ---------------------------------------------------------------------------
-# Patch targets
+# Patch targets — pointing at cube_computer_tool and osworld_cube.task
 # ---------------------------------------------------------------------------
 
-PATCH_QEMU_MGR = "osworld_cube.computer.QEMUManager"
-PATCH_GUEST_AGENT = "osworld_cube.computer.GuestAgent"
-PATCH_EVALUATOR = "osworld_cube.computer.Evaluator"
-PATCH_SETUP_CTRL = "osworld_cube.computer.SetupController"
-PATCH_ENSURE_IMAGE = "osworld_cube.computer.ensure_base_image"
-PATCH_SLEEP = "osworld_cube.computer.time.sleep"
+PATCH_QEMU_MGR = "cube_vm_backend.local.QEMUManager"
+PATCH_GUEST_AGENT = "cube_computer_tool.computer.GuestAgent"
+PATCH_EVALUATOR = "osworld_cube.task.Evaluator"
+PATCH_SETUP_CTRL = "osworld_cube.task.SetupController"
+PATCH_ENSURE_IMAGE = "cube_vm_backend.local.ensure_base_image"
+PATCH_SLEEP = "osworld_cube.task.time.sleep"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -97,26 +97,10 @@ def _backend(
 class TestComputerConfig:
     def test_defaults(self) -> None:
         from osworld_cube.computer import ComputerConfig
-        from osworld_cube.vm_backend import VMConfig
 
         cfg = ComputerConfig()
-        assert isinstance(cfg.vm_config, VMConfig)
-        assert cfg.vm_config.screen_size == (1920, 1080)
-        assert cfg.vm_config.headless is True
         assert cfg.require_a11y_tree is True
         assert cfg.observe_after_action is True
-        assert cfg.vm_config.memory == "4G"
-        assert cfg.vm_config.cpus == 4
-
-    def test_custom_values(self) -> None:
-        from osworld_cube.computer import ComputerConfig
-        from osworld_cube.vm_backend import VMConfig
-
-        cfg = ComputerConfig(vm_config=VMConfig(headless=False, screen_size=(1280, 720), memory="8G", cpus=8))
-        assert cfg.vm_config.headless is False
-        assert cfg.vm_config.screen_size == (1280, 720)
-        assert cfg.vm_config.memory == "8G"
-        assert cfg.vm_config.cpus == 8
 
     def test_action_space_default(self) -> None:
         from osworld_cube.computer import ActionSpace, ComputerConfig
@@ -131,144 +115,133 @@ class TestComputerConfig:
 
 
 class TestComputer:
-    def test_init_starts_qemu(self) -> None:
+    def test_make_without_vm_succeeds(self) -> None:
+        """ComputerConfig.make() with no vm creates a tool in unattached state."""
         from osworld_cube.computer import ComputerConfig
 
-        with _backend() as (mock_qemu, mock_guest, _):
-            computer = ComputerConfig().make()
-            mock_qemu.start.assert_called_once()
-            assert computer.config is not None
+        cfg = ComputerConfig()
+        computer = cfg.make()
+        assert computer.config is not None
+        assert computer._vm is None
+        assert computer._guest is None
 
     def test_action_set_computer13(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend():
-            computer = ComputerConfig(action_space="computer_13").make()
-            names = {a.name for a in computer.action_set}
-            for expected in (
-                "click",
-                "double_click",
-                "right_click",
-                "drag_to",
-                "scroll",
-                "typing",
-                "press",
-                "hotkey",
-                "wait",
-                "done",
-                "fail",
-            ):
-                assert expected in names, f"Missing action: {expected}"
-            assert "run_pyautogui" not in names
+        computer = ComputerConfig(action_space="computer_13").make()
+        names = {a.name for a in computer.action_set}
+        for expected in (
+            "click",
+            "double_click",
+            "right_click",
+            "drag_to",
+            "scroll",
+            "typing",
+            "press",
+            "hotkey",
+            "wait",
+            "done",
+            "fail",
+        ):
+            assert expected in names, f"Missing action: {expected}"
+        assert "run_pyautogui" not in names
 
     def test_action_set_pyautogui(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend():
-            computer = ComputerConfig(action_space="pyautogui").make()
-            names = {a.name for a in computer.action_set}
-            assert "run_pyautogui" in names
-            for terminal in ("wait", "done", "fail"):
-                assert terminal in names, f"Missing action: {terminal}"
-            assert "click" not in names
+        computer = ComputerConfig(action_space="pyautogui").make()
+        names = {a.name for a in computer.action_set}
+        assert "run_pyautogui" in names
+        for terminal in ("wait", "done", "fail"):
+            assert terminal in names, f"Missing action: {terminal}"
+        assert "click" not in names
 
-    def test_setup_task_returns_observation(self) -> None:
+    def test_attach_vm_connects_guest(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend() as (mock_qemu, _, _), patch(PATCH_SLEEP) as mock_sleep:
-            computer = ComputerConfig().make()
-            obs = computer.setup_task(
-                {"id": "t1", "instruction": "test", "config": [], "evaluator": {}, "snapshot": "init_state"}
-            )
-            assert isinstance(obs, Observation)
-            mock_qemu.reset.assert_called_once()
-            mock_sleep.assert_called_once_with(60)
+        computer = ComputerConfig().make()
+        mock_vm = MagicMock()
+        mock_vm.endpoint = "http://localhost:15000"
 
-    def test_evaluate_task_returns_float(self) -> None:
-        from osworld_cube.computer import ComputerConfig
+        with patch(PATCH_GUEST_AGENT) as mock_ga_cls:
+            mock_ga_cls.return_value = MagicMock()
+            computer.attach_vm(mock_vm)
 
-        with _backend(reward=0.75) as (_, _, mock_evaluator):
-            computer = ComputerConfig().make()
-            computer._current_task_config = {"id": "t1", "evaluator": {}}
-            reward = computer.evaluate_task()
-            assert reward == 0.75
-
-    def test_evaluate_task_returns_zero_on_exception(self) -> None:
-        from osworld_cube.computer import ComputerConfig
-
-        with _backend() as (_, _, mock_evaluator):
-            mock_evaluator.evaluate.side_effect = RuntimeError("eval failed")
-            computer = ComputerConfig().make()
-            computer._current_task_config = {"id": "t1", "evaluator": {}}
-            reward = computer.evaluate_task()
-            assert reward == 0.0
+        assert computer._vm is mock_vm
+        assert computer._guest is not None
 
     def test_click_dispatches_to_guest(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend() as (_, mock_guest, _):
-            computer = ComputerConfig(observe_after_action=False).make()
-            result = computer.click(x=100, y=200)
-            assert result == "Success"
-            mock_guest.execute_action.assert_called_once()
-            call_args = mock_guest.execute_action.call_args[0][0]
-            assert call_args["action_type"] == "CLICK"
-            assert call_args["parameters"]["x"] == 100
-            assert call_args["parameters"]["y"] == 200
+        computer = ComputerConfig(observe_after_action=False).make()
+        mock_guest = _make_mock_guest()
+        computer._guest = mock_guest
+
+        result = computer.click(x=100, y=200)
+        assert result == "Success"
+        mock_guest.execute_action.assert_called_once()
+        call_args = mock_guest.execute_action.call_args[0][0]
+        assert call_args["action_type"] == "CLICK"
+        assert call_args["parameters"]["x"] == 100
+        assert call_args["parameters"]["y"] == 200
 
     def test_done_sets_is_done(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend():
-            computer = ComputerConfig(observe_after_action=False).make()
-            assert computer._is_done is False
-            computer.done()
-            assert computer._is_done is True
+        computer = ComputerConfig(observe_after_action=False).make()
+        assert computer._is_done is False
+        computer.done()
+        assert computer._is_done is True
 
     def test_fail_sets_is_done(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend():
-            computer = ComputerConfig(observe_after_action=False).make()
-            computer.fail()
-            assert computer._is_done is True
+        computer = ComputerConfig(observe_after_action=False).make()
+        computer.fail()
+        assert computer._is_done is True
 
     def test_update_marks_and_run_pyautogui(self) -> None:
         from osworld_cube.computer import ComputerConfig
 
-        with _backend() as (_, mock_guest, _):
-            computer = ComputerConfig(action_space="pyautogui", observe_after_action=False).make()
-            computer.update_marks([[10, 20, 30, 40], [50, 60, 10, 10]])
-            computer.run_pyautogui("pyautogui.click(*tag_1)")
+        computer = ComputerConfig(action_space="pyautogui", observe_after_action=False).make()
+        mock_guest = _make_mock_guest()
+        computer._guest = mock_guest
 
-            # tag_1 center: (10 + 30//2, 20 + 40//2) = (25, 40)
-            # tag_2 center: (50 + 10//2, 60 + 10//2) = (55, 65)
-            call_code = mock_guest.execute_python_command.call_args[0][0]
-            assert "tag_1 = (25, 40)" in call_code
-            assert "tag_2 = (55, 65)" in call_code
-            assert "pyautogui.click(*tag_1)" in call_code
+        computer.update_marks([[10, 20, 30, 40], [50, 60, 10, 10]])
+        computer.run_pyautogui("pyautogui.click(*tag_1)")
+
+        # tag_1 center: (10 + 30//2, 20 + 40//2) = (25, 40)
+        # tag_2 center: (50 + 10//2, 60 + 10//2) = (55, 65)
+        call_code = mock_guest.execute_python_command.call_args[0][0]
+        assert "tag_1 = (25, 40)" in call_code
+        assert "tag_2 = (55, 65)" in call_code
+        assert "pyautogui.click(*tag_1)" in call_code
 
     def test_execute_action_dispatches_via_cube(self) -> None:
         """cube.tool.Tool.execute_action routes by action name to the correct @tool_action."""
         from osworld_cube.computer import ComputerConfig
 
-        with _backend() as (_, mock_guest, _):
-            computer = ComputerConfig(observe_after_action=False).make()
-            result = computer.execute_action(Action(name="typing", arguments={"text": "hello"}))
-            assert isinstance(result, Observation)
-            mock_guest.execute_action.assert_called_once()
+        computer = ComputerConfig(observe_after_action=False).make()
+        mock_guest = _make_mock_guest()
+        computer._guest = mock_guest
 
-    def test_close_stops_qemu(self) -> None:
+        result = computer.execute_action(Action(name="typing", arguments={"text": "hello"}))
+        assert isinstance(result, Observation)
+        mock_guest.execute_action.assert_called_once()
+
+    def test_close_does_not_stop_vm(self) -> None:
+        """ComputerBase.close() must NOT stop the VM -- caller owns VM lifecycle."""
         from osworld_cube.computer import ComputerConfig
 
-        with _backend() as (mock_qemu, _, _):
-            computer = ComputerConfig().make()
-            computer.close()
-            mock_qemu.stop.assert_called_once()
+        computer = ComputerConfig().make()
+        mock_vm = MagicMock()
+        computer._vm = mock_vm
+        computer.close()
+        mock_vm.stop.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
-# OSWorldTask
+# OSWorldTask helpers
 # ---------------------------------------------------------------------------
 
 
@@ -288,52 +261,119 @@ def _make_task_metadata(task_id: str = "t1", instruction: str = "Do something"):
     )
 
 
+def _make_mock_vm(server_port: int = 15000, chromium_port: int = 19222, vlc_port: int = 18080) -> MagicMock:
+    """Return a Mock that looks like LocalQEMUVM."""
+    vm = MagicMock()
+    vm.endpoint = f"http://localhost:{server_port}"
+    vm.server_port = server_port
+    vm.chromium_port = chromium_port
+    vm.vlc_port = vlc_port
+    return vm
+
+
+# ---------------------------------------------------------------------------
+# OSWorldTask
+# ---------------------------------------------------------------------------
+
+
 class TestOSWorldTask:
+    def test_model_post_init_creates_tool_without_vm(self) -> None:
+        from osworld_cube.computer import ComputerConfig
+        from osworld_cube.task import OSWorldTask
+
+        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        assert task._computer is not None
+        assert task._computer._vm is None
+        assert task._vm is None
+
+    def test_reset_with_vm_backend_launches_vm(self) -> None:
+        from osworld_cube.computer import ComputerConfig
+        from osworld_cube.task import OSWorldTask
+        from osworld_cube.vm_backend import LocalQEMUVMBackend
+
+        mock_vm = _make_mock_vm()
+        mock_backend = MagicMock(spec=LocalQEMUVMBackend)
+        mock_backend.launch.return_value = mock_vm
+
+        with (
+            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
+            patch(PATCH_SETUP_CTRL),
+            patch(PATCH_SLEEP),
+        ):
+            mock_guest = _make_mock_guest()
+            mock_ga_cls.return_value = mock_guest
+
+            task = OSWorldTask(
+                metadata=_make_task_metadata(),
+                tool_config=ComputerConfig(),
+                vm_backend=mock_backend,
+            )
+            obs, info = task.reset()
+
+        mock_backend.launch.assert_called_once()
+        assert task._vm is mock_vm
+        assert isinstance(obs, Observation)
+
     def test_reset_returns_obs_and_info(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend(), patch(PATCH_SLEEP):
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(),
-            )
+        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        mock_vm = _make_mock_vm()
+        task._vm = mock_vm
+
+        with (
+            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
+            patch(PATCH_SETUP_CTRL),
+            patch(PATCH_SLEEP),
+        ):
+            mock_guest = _make_mock_guest()
+            mock_ga_cls.return_value = mock_guest
+            task._computer.attach_vm(mock_vm)
+
             obs, info = task.reset()
 
-            assert isinstance(obs, Observation)
-            texts = [c.data for c in obs.contents if isinstance(c, TextContent)]
-            assert any("Do something" in t for t in texts)
-            assert info["task_id"] == "t1"
-            assert info["task_domain"] == "os"
+        assert isinstance(obs, Observation)
+        texts = [c.data for c in obs.contents if isinstance(c, TextContent)]
+        assert any("Do something" in t for t in texts)
+        assert info["task_id"] == "t1"
+        assert info["task_domain"] == "os"
 
     def test_reset_resets_is_done(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend(), patch(PATCH_SLEEP):
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(),
-            )
+        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        mock_vm = _make_mock_vm()
+        task._vm = mock_vm
+
+        with (
+            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
+            patch(PATCH_SETUP_CTRL),
+            patch(PATCH_SLEEP),
+        ):
+            mock_ga_cls.return_value = _make_mock_guest()
+            task._computer.attach_vm(mock_vm)
             task._computer._is_done = True
             task.reset()
             assert task._computer._is_done is False
 
-    def test_evaluate_returns_reward_and_info(self) -> None:
+    def test_evaluate_calls_evaluator(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend(reward=0.5):
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(),
-            )
-            task._computer._current_task_config = {"id": "t1", "evaluator": {"func": "check_file"}}
-            obs = Observation.from_text("state")
-            reward, info = task.evaluate(obs)
+        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        mock_vm = _make_mock_vm()
+        task._vm = mock_vm
+        task._current_task_config = {"id": "t1", "evaluator": {"func": "check_file"}}
+        task._computer._guest = _make_mock_guest()
 
-            assert reward == 0.5
-            assert "evaluator" in info
+        with patch(PATCH_EVALUATOR) as mock_eval_cls:
+            mock_eval_cls.return_value.evaluate.return_value = 0.5
+            reward, info = task.evaluate(Observation.from_text("state"))
+
+        assert reward == 0.5
+        assert "evaluator" in info
 
     def test_evaluate_no_evaluator_returns_zero(self) -> None:
         from cube.task import TaskMetadata
@@ -341,75 +381,87 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend():
-            task = OSWorldTask(
-                metadata=TaskMetadata(id="no-eval", extra_info={}),
-                tool_config=ComputerConfig(),
-            )
-            reward, info = task.evaluate(Observation())
-            assert reward == 0.0
-            assert info.get("error") == "no_evaluator"
+        task = OSWorldTask(
+            metadata=TaskMetadata(id="no-eval", extra_info={}),
+            tool_config=ComputerConfig(),
+        )
+        reward, info = task.evaluate(Observation())
+        assert reward == 0.0
+        assert info.get("error") == "no_evaluator"
 
     def test_finished_reflects_computer_is_done(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend():
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(),
-            )
-            assert task.finished(Observation()) is False
-            task._computer._is_done = True
-            assert task.finished(Observation()) is True
+        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        assert task.finished(Observation()) is False
+        task._computer._is_done = True
+        assert task.finished(Observation()) is True
 
     def test_step_done_action_triggers_evaluate(self) -> None:
-        """
-        Full step loop: agent calls done() → task.step() sets done=True →
-        evaluate() is called → EnvironmentOutput.done is True.
-        """
+        """Full step loop: agent calls done() -> task.step() -> EnvironmentOutput.done is True."""
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend(reward=1.0), patch(PATCH_SLEEP):
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(observe_after_action=False),
-            )
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            tool_config=ComputerConfig(observe_after_action=False),
+        )
+        mock_vm = _make_mock_vm()
+        task._vm = mock_vm
+
+        with (
+            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
+            patch(PATCH_SETUP_CTRL),
+            patch(PATCH_SLEEP),
+            patch(PATCH_EVALUATOR) as mock_eval_cls,
+        ):
+            mock_ga_cls.return_value = _make_mock_guest()
+            mock_eval_cls.return_value.evaluate.return_value = 1.0
+            task._computer.attach_vm(mock_vm)
             task.reset()
 
             env_out = task.step(Action(name="done", arguments={}))
 
-            assert env_out.done is True
-            assert env_out.reward == 1.0
+        assert env_out.done is True
+        assert env_out.reward == 1.0
 
     def test_step_click_not_done(self) -> None:
         """A regular action does not set done."""
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend(), patch(PATCH_SLEEP):
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(observe_after_action=False),
-            )
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            tool_config=ComputerConfig(observe_after_action=False),
+        )
+        mock_vm = _make_mock_vm()
+        task._vm = mock_vm
+
+        with (
+            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
+            patch(PATCH_SETUP_CTRL),
+            patch(PATCH_SLEEP),
+        ):
+            mock_ga_cls.return_value = _make_mock_guest()
+            task._computer.attach_vm(mock_vm)
             task.reset()
 
             env_out = task.step(Action(name="click", arguments={"x": 10, "y": 20}))
-            assert env_out.done is False
+        assert env_out.done is False
 
-    def test_close_stops_qemu(self) -> None:
+    def test_close_stops_vm(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with _backend() as (mock_qemu, _, _), patch(PATCH_SLEEP):
-            task = OSWorldTask(
-                metadata=_make_task_metadata(),
-                tool_config=ComputerConfig(),
-            )
-            task.reset()
-            task.close()
-            mock_qemu.stop.assert_called_once()
+        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        mock_vm = _make_mock_vm()
+        task._vm = mock_vm
+        task._computer._guest = _make_mock_guest()
+
+        task.close()
+        mock_vm.stop.assert_called_once()
+        assert task._vm is None
 
 
 # ---------------------------------------------------------------------------
@@ -553,9 +605,7 @@ class TestOSWorldBenchmark:
             bench.setup()
 
             cfg = next(bench.get_task_configs())
-
-            with _backend():
-                task = cfg.make()
+            task = cfg.make()
 
             assert isinstance(task, OSWorldTask)
             assert task.metadata.id == cfg.task_id

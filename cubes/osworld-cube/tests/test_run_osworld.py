@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from cube.core import ImageContent, Observation, TextContent
 from cube.task import TaskMetadata
-from osworld_cube.computer import ComputerConfig, VMProvider
+from cube_vm_backend import LocalQEMUVMBackend
+from osworld_cube.computer import ComputerConfig
 from osworld_cube.task import OSWorldTask
 
 
@@ -32,13 +33,13 @@ def test_instantiate_and_get_first_obs():
         },
     )
     tool_config = ComputerConfig(
-        provider=VMProvider.DOCKER,
         headless=True,
         require_a11y_tree=True,
         observe_after_action=False,
     )
+    vm_backend = LocalQEMUVMBackend()
 
-    task = OSWorldTask(metadata=metadata, tool_config=tool_config)
+    task = OSWorldTask(metadata=metadata, tool_config=tool_config, vm_backend=vm_backend)
 
     try:
         # task.id and action_set populated immediately after construction

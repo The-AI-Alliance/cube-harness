@@ -1,8 +1,9 @@
 import pytest
 
+from cube_vm_backend import LocalQEMUVMBackend
 from osworld_cube.debug import get_debug_task_configs, make_debug_agent
 
-_DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in get_debug_task_configs()}
+_DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in get_debug_task_configs(vm_backend=LocalQEMUVMBackend())}
 
 
 def run_debug_episode(task_id: str, max_steps: int = 20) -> dict:

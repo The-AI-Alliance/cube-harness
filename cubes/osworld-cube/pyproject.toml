@@ -5,6 +5,8 @@ description = "OSWorld benchmark ported to the CUBE protocol"
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard",
+    "cube-computer-tool",
+    "cube-vm-backend",
     "pillow>=9.0",
     "requests>=2.28",
     "requests-toolbelt>=0.10",
@@ -61,6 +63,11 @@ dev = [
 
 [tool.uv]
 override-dependencies = ["protobuf>=6.33.5"]
+
+[tool.uv.sources]
+cube-standard = { path = "../../../cube-standard", editable = true }
+cube-computer-tool = { path = "../../../cube-standard/cube-tools/cube-computer-tool", editable = true }
+cube-vm-backend = { path = "../../../cube-standard/cube-tools/cube-vm-backend", editable = true }
 
 [tool.ruff]
 fix = true

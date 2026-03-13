@@ -24,6 +24,7 @@ from pathlib import Path
 
 from cube.core import Action, ActionSchema, Observation
 from cube.task import TaskMetadata
+from cube.vm import VMBackend
 from osworld_cube.benchmark import OSWorldTaskConfig
 from osworld_cube.computer import ComputerConfig
 
@@ -127,12 +128,16 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-def get_debug_task_configs() -> list[OSWorldTaskConfig]:
+def get_debug_task_configs(vm_backend: VMBackend | None = None) -> list[OSWorldTaskConfig]:
     """
     Load debug task definitions from debug_tasks.json and return as OSWorldTaskConfig list.
 
     Each config carries a ComputerConfig() as tool_config and the full TaskMetadata,
     so callers can instantiate the task with task_config.make().
+
+    Args:
+        vm_backend: Optional VMBackend to attach to each task config. Required for
+                    live integration tests that actually run a VM.
 
     These are the configs exposed by benchmark.get_debug_task_configs()
     (stress_test_specs.md §1.1).
@@ -151,7 +156,7 @@ def get_debug_task_configs() -> list[OSWorldTaskConfig]:
                 "related_apps": entry.get("related_apps", []),
             },
         )
-        configs.append(OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta))
+        configs.append(OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta, vm_backend=vm_backend))
     logger.debug("[get_debug_task_configs] Loaded %d configs from %s", len(configs), _TASKS_FILE)
     return configs
 
