@@ -1,4 +1,4 @@
-"""Tests for agentlab2.analyze.xray_utils module."""
+"""Tests for cube_harness.analyze.xray_utils module."""
 
 from pathlib import Path
 
@@ -6,13 +6,13 @@ import pytest
 from cube.core import Action, Content, EnvironmentOutput, Observation, StepError
 from PIL import Image
 
-from agentlab2.analyze import xray_utils
-from agentlab2.core import (
+from cube_harness.analyze import xray_utils
+from cube_harness.core import (
     AgentOutput,
     Trajectory,
     TrajectoryStep,
 )
-from agentlab2.llm import LLMCall, LLMConfig, Message, Prompt, Usage
+from cube_harness.llm import LLMCall, LLMConfig, Message, Prompt, Usage
 
 # ---------------------------------------------------------------------------
 # Additional fixtures (complement conftest.py)

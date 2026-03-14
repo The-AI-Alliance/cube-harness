@@ -13,9 +13,9 @@ We welcome your contributions!
 TODO: more specific ways to contribute.
 
 Ways to suggest ideas:
-* Post a [pull request](https://github.com/The-AI-Alliance/AgentLab2/pulls)!
-* Post a [discussion topic](https://github.com/The-AI-Alliance/AgentLab2/discussions)
-* Post an [issue](https://github.com/The-AI-Alliance/AgentLab2/issues)
+* Post a [pull request](https://github.com/The-AI-Alliance/cube-harness/pulls)!
+* Post a [discussion topic](https://github.com/The-AI-Alliance/cube-harness/discussions)
+* Post an [issue](https://github.com/The-AI-Alliance/cube-harness/issues)
 * Send us [email](mailto:contact@thealliance.ai?subject=Suggestions for Agent Lab 2). This is a general email address, so be sure to mention this particular project.
 
 For general information about contributing to AI Alliance projects, visit [this `community` repo](https://github.com/The-AI-Alliance/community/), specifically the [`CONTRIBUTING` page](https://github.com/The-AI-Alliance/community/blob/main/CONTRIBUTING.md) for general information about contributing. 
@@ -33,8 +33,8 @@ If your organization would like to join the AI Alliance, go [here](https://theal
 
 ## Other Notes on Contributing
 
-The sources for this website are in the GitHub repo's [`docs`](https://github.com/The-AI-Alliance/AgentLab2/tree/main/docs){:target="repo-docs"} directory. 
+The sources for this website are in the GitHub repo's [`docs`](https://github.com/The-AI-Alliance/cube-harness/tree/main/docs){:target="repo-docs"} directory. 
 
 Notice that every page on this website has an _Edit this page on GitHub_ link to the corresponding location for the page in the GitHub repo, making it easy to view a page, then go straight to the source, make edits, and submit a PR! This is the best way to help us fix typos and make other small improvements.
 
-This documentation is built with [GitHub Pages](https://pages.github.com/){:target="github-pages"}, which uses [Jekyll](https://github.com/jekyll/jekyll){:target="gh-jekyll"} to serve the website. We use the [Just the Docs](https://just-the-docs.github.io/just-the-docs/){:target="just-the-docs"} Jekyll theme. See the repo file [`GITHUB_PAGES.md`](https://github.com/The-AI-Alliance/AgentLab2/tree/main/GITHUB_PAGES.md){:target="_blank"} for more information.
+This documentation is built with [GitHub Pages](https://pages.github.com/){:target="github-pages"}, which uses [Jekyll](https://github.com/jekyll/jekyll){:target="gh-jekyll"} to serve the website. We use the [Just the Docs](https://just-the-docs.github.io/just-the-docs/){:target="just-the-docs"} Jekyll theme. See the repo file [`GITHUB_PAGES.md`](https://github.com/The-AI-Alliance/cube-harness/tree/main/GITHUB_PAGES.md){:target="_blank"} for more information.

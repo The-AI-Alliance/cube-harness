@@ -5,8 +5,8 @@ import warnings
 import pytest
 from cube.core import EnvironmentOutput
 
-from agentlab2.core import AgentOutput
-from agentlab2.episode import Episode
+from cube_harness.core import AgentOutput
+from cube_harness.episode import Episode
 
 
 class TestCubeEpisode:
