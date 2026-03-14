@@ -18,9 +18,8 @@ from browsergym.core.observation import (
 )
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from cube.core import Action, Content, Observation, StepError
-from cube.resources.browser_session import BrowserConfig, BrowserSession
 from cube.tool import BrowserTool, ToolConfig
-from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
+from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
 from playwright.sync_api import Error, Frame, Page
 from pydantic import Field
@@ -36,7 +35,7 @@ class BrowsergymConfig(ToolConfig):
     """Configuration for BrowserGym-style Playwright tool."""
 
     # Browser configuration (launch parameters)
-    browser_config: BrowserConfig = Field(default_factory=PlaywrightSessionConfig)
+    browser_config: PlaywrightSessionConfig = Field(default_factory=PlaywrightSessionConfig)
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
@@ -75,7 +74,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         super().__init__()
         self.config = config
         self._action_set = HighLevelActionSet()
-        self._session: BrowserSession | None = None
+        self._session: PlaywrightSession | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
@@ -88,7 +87,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         return page
 
     @property
-    def session(self) -> BrowserSession:
+    def session(self) -> PlaywrightSession:
+        if self._session is None:
+            raise RuntimeError("Browser is not initialized. Call reset() first.")
         return self._session
 
     @property
@@ -107,9 +108,10 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser_config.make()
+        self._session._playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:
-        if self.session is not None:
+        if self._session is not None:
             self.session.stop()
             self._session = None
 
@@ -227,7 +229,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
             if i > 0:
                 frame_bid = bid[:i]  # bid of the next frame to select
                 try:
-                    frame_elem = current_frame.locator(f'[{BROWSERGYM_ID_ATTRIBUTE}="{frame_bid}"]')
+                    frame_elem = current_frame.get_by_test_id(frame_bid)
                     if frame_elem.count() > 0:
                         current_frame = frame_elem.frame_locator(":scope")
                     else:
@@ -245,7 +247,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         try:
             # Navigate to the correct frame for this BID
             frame = self._get_frame_for_bid(bid)
-            locator = frame.locator(f'[{BROWSERGYM_ID_ATTRIBUTE}="{bid}"]')
+            locator = frame.get_by_test_id(bid)
             if locator.count() == 0:
                 return None
             # Get the element's properties via evaluate
@@ -275,7 +277,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         """
         try:
             frame = self._get_frame_for_bid(bid)
-            locator = frame.locator(f'[{BROWSERGYM_ID_ATTRIBUTE}="{bid}"]')
+            locator = frame.get_by_test_id(bid)
             js_code = """
             (elem, checked) => {
                 if (elem.type === 'checkbox' || elem.type === 'radio') {

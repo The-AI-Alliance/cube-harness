@@ -84,7 +84,7 @@ class TestBrowsergymToolInitialization:
         tool = BrowsergymTool(config)
 
         assert tool.config is config
-        assert tool.session is None
+        assert tool._session is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
@@ -307,7 +307,7 @@ class TestBrowsergymToolActionMethods:
         """Helper to create a tool with a mocked page for action testing."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = mock_playwright_session
+        tool._session = mock_playwright_session
         return tool
 
     def test_browser_click_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
@@ -416,7 +416,7 @@ class TestBrowsergymToolActionMethods:
         """Test that browser_wait clamps to max_wait value."""
         config = BrowsergymConfig(max_wait=10)
         tool = BrowsergymTool(config)
-        tool.session = mock_playwright_session
+        tool._session = mock_playwright_session
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_wait(120)  # Request 120 seconds, but max_wait is 10
@@ -458,7 +458,7 @@ class TestBrowsergymToolStepResults:
         """Helper to create a tool with a mocked page."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = mock_playwright_session
+        tool._session = mock_playwright_session
         tool._action_set = MagicMock()
         return tool
 
@@ -520,7 +520,7 @@ class TestBrowsergymToolExecuteAction:
         """Test that execute_action combines action result and page observation."""
         config = BrowsergymConfig(use_html=True, use_axtree=False, use_screenshot=False, prune_html=False)
         tool = BrowsergymTool(config)
-        tool.session = mock_playwright_session
+        tool._session = mock_playwright_session
 
         action = Action(name="browser_click", arguments={"bid": "a1"})
 
@@ -561,7 +561,7 @@ class TestBrowsergymToolLifecycle:
         """Test that reset closes existing runtime before creating new one."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = mock_playwright_session
+        tool._session = mock_playwright_session
 
         with (
             patch.object(tool, "_close_runtime") as mock_close,
@@ -578,13 +578,13 @@ class TestBrowsergymToolLifecycle:
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        tool.session = mock_playwright_session
+        tool._session = mock_playwright_session
         tool._last_obs = {"some": "data"}
         tool._last_info = {"info": "data"}
 
         tool.close()
 
-        assert tool.session is None
+        assert tool._session is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
@@ -595,7 +595,7 @@ class TestBrowsergymToolLifecycle:
 
         mock_context = MagicMock()
         mock_context.close.side_effect = Exception("Close failed")
-        tool.session = PlaywrightSession(
+        tool._session = PlaywrightSession(
             playwright=MagicMock(),
             page=MagicMock(),
             context=mock_context,
@@ -608,7 +608,7 @@ class TestBrowsergymToolLifecycle:
         tool.close()
 
         # State should still be cleaned up
-        assert tool.session is None
+        assert tool._session is None
         assert tool._last_obs is None
 
     def test_close_noop_when_no_browser(self) -> None:
@@ -686,7 +686,7 @@ class TestBrowsergymToolCheckboxJsFallback:
         mock_page._mock_element_locator = mock_element_locator
         mock_page._mock_frame = mock_frame
 
-        tool.session = PlaywrightSession(
+        tool._session = PlaywrightSession(
             playwright=MagicMock(),
             page=mock_page,
             context=MagicMock(),
