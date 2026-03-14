@@ -2,6 +2,8 @@
 
 Open source harness for building and evaluating AI agents using the [CUBE Standard](https://github.com/The-AI-Alliance/cube-standard).
 
+**[CUBE Standard](https://github.com/The-AI-Alliance/cube-standard)** defines the benchmark protocol. **cube-harness** is the evaluation runtime: it runs agents against any CUBE-compatible benchmark, records trajectories, and scales execution with Ray.
+
 > [!NOTE]
 > **cube-harness is in active development (alpha).** Interfaces may change. We welcome early adopters and contributors who want to shape the framework, not just use it.
 > See our [Roadmap](ROADMAP.md) and [Contributing Guide](CONTRIBUTING.md). Serious contributors can [apply here](https://forms.gle/JFiBi4ynfVLMghAH8).
@@ -23,12 +25,11 @@ make install
 
 ### API Keys
 
-Set up your API keys in a `.env` file at the project root. The hello-world recipe uses an Azure endpoint by default — swap it for any supported provider:
+Copy `.env.example` to `.env` and fill in your keys. The hello-world recipe uses Azure by default, but any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe:
 
 ```bash
-export AZURE_API_KEY=
-export AZURE_API_BASE=
-export AZURE_API_VERSION=
+cp .env.example .env
+# Edit .env with your API keys
 ```
 
 ### Run Tests
@@ -39,25 +40,19 @@ make test
 
 ### Run Hello Example
 
-The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark:
+The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark.
+
+**Start here** — 2 tasks, sequential (fast, no Ray required):
 
 ```bash
-# Full benchmark (all 125 tasks, parallel via Ray)
-uv run recipes/hello_miniwob.py
+make debug
+# or: uv run recipes/hello_miniwob.py debug
 ```
 
-Or use the Makefile shortcut:
+Full benchmark (all 125 tasks, parallel via Ray):
 
 ```bash
 make hello
-```
-
-For quicker debugging:
-
-```bash
-# 2 tasks, sequential execution
-make debug
-# or: uv run recipes/hello_miniwob.py debug
 ```
 
 This will:
