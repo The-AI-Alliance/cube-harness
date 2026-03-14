@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolWithTelemetry(Tool):
-    """AL2 Tool subclass that wraps execute_action with OpenTelemetry tracing.
+    """Tool subclass that wraps execute_action with OpenTelemetry tracing.
 
     Subclasses must override _execute_action instead of execute_action so that
     the telemetry span always wraps the complete execution, including any
@@ -32,7 +32,7 @@ class ToolWithTelemetry(Tool):
 
 
 class AsyncToolWithTelemetry(AsyncTool):
-    """AL2 AsyncTool subclass that wraps execute_action with OpenTelemetry tracing.
+    """AsyncTool subclass that wraps execute_action with OpenTelemetry tracing.
 
     Subclasses must override _execute_action instead of execute_action so that
     the telemetry span always wraps the complete execution, including any
