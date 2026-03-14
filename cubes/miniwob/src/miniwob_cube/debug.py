@@ -6,7 +6,7 @@ the debug tasks.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_task_configs()           -> list[MiniWobTaskConfig]
+get_debug_benchmark()              -> MiniWobBenchmark
 make_debug_agent(task_id: str)     -> ClickButtonAgent | ClickCheckboxesAgent
 
 Usage:
@@ -22,8 +22,9 @@ import sys
 from cube.core import Action, ActionSchema, Observation, TextContent
 from cube.testing import run_debug_suite
 
-from miniwob_cube.benchmark import MiniWobBenchmark
-from miniwob_cube.task import MiniWobTaskConfig
+from cube_browser_tool import PlaywrightConfig
+
+from miniwob_cube.benchmark import Benchmark, MiniWobBenchmark
 
 
 logger = logging.getLogger(__name__)
@@ -89,33 +90,10 @@ def make_debug_agent(task_id: str) -> ClickButtonAgent | ClickCheckboxesAgent:
     raise ValueError(f"No hardcoded agent for task: {task_id}")
 
 
-_benchmark: MiniWobBenchmark | None = None
-
-
-def setup_debug_suite() -> None:
-    global _benchmark
-    _benchmark = MiniWobBenchmark()
-    _benchmark.setup()
-
-
-def teardown_debug_suite() -> None:
-    global _benchmark
-    if _benchmark is not None:
-        _benchmark.close()
-        _benchmark = None
-
-
-def get_debug_task_configs(base_url: str = "http://localhost:8000/miniwob") -> list[MiniWobTaskConfig]:
-    from cube_browser_tool import PlaywrightConfig
-
-    return [
-        MiniWobTaskConfig(
-            task_id=tid,
-            base_url=base_url,
-            tool_config=PlaywrightConfig(headless=True, use_html=False, use_axtree=False, use_screenshot=False),
-        )
-        for tid in _DEBUG_TASK_IDS
-    ]
+def get_debug_benchmark() -> Benchmark:
+    return MiniWobBenchmark(
+        default_tool_config=PlaywrightConfig(headless=True, use_html=True, use_axtree=False, use_screenshot=False),
+    ).subset_from_list(_DEBUG_TASK_IDS, benchmark_name_suffix="debug")
 
 
 if __name__ == "__main__":
@@ -124,5 +102,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
     results = run_debug_suite("miniwob-cube", _this_module)
-    failed = [r for r in results if r["error"] or r["reward"] < 1.0]
+    failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
     sys.exit(1 if failed else 0)
