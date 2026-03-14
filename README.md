@@ -1,7 +1,7 @@
-# AgentLab2
+# cube-harness
 
 Open source framework for building and evaluating UI agents.
-<!-- [Published Documentation](https://the-ai-alliance.github.io/AgentLab2/) -->
+<!-- [Published Documentation](https://the-ai-alliance.github.io/cube-harness/) -->
 Published Documentation - Coming soon.
 
 ## Quickstart
@@ -10,8 +10,8 @@ Published Documentation - Coming soon.
 
 ```bash
 # Clone the repository
-git clone https://github.com/The-AI-Alliance/AgentLab2.git
-cd AgentLab2
+git clone https://github.com/The-AI-Alliance/cube-harness.git
+cd cube-harness
 
 # Install dependencies
 make install
@@ -55,7 +55,7 @@ make debug
 This will:
 1. Launch a headless browser environment
 2. Run a ReAct agent powered by GPT-5-mini on MiniWob tasks
-3. Save trajectories and results to `~/agentlab_results/al2/hello_miniwob/`
+3. Save trajectories and results to `~/cube_harness_results/al2/hello_miniwob/`
 
 ### Configuration
 
@@ -67,11 +67,11 @@ You can customize the experiment by editing recipe [`recipes/hello_miniwob.py`](
 
 ## Experiment Viewer
 
-AgentLab2 includes a Gradio-based UI for exploring experiment results and trajectories:
+cube-harness includes a Gradio-based UI for exploring experiment results and trajectories:
 
 ```bash
 make viewer
-# or: uv run al2-viewer
+# or: uv run ch-viewer
 ```
 
 The viewer displays:
@@ -81,16 +81,16 @@ The viewer displays:
 - **Step details** - observations, agent actions, and LLM reasoning
 - **Debug data** - raw JSON, LLM calls, and tool configurations
 
-![AgentLab2 Viewer Screenshot](docs/assets/images/al2_viewer.png)
+![cube-harness Viewer Screenshot](docs/assets/images/al2_viewer.png)
 
 
 ## Architecture Overview
 
-AgentLab2 is designed as a **universal evaluation platform** for multiple agentic benchmarks and serves as the foundation for **RL data generation** pipelines.
+cube-harness is designed as a **universal evaluation platform** for multiple agentic benchmarks and serves as the foundation for **RL data generation** pipelines.
 
 ### Core Components
 
-![AgentLab2 Overview](docs/assets/images/al2_overview.png)
+![cube-harness Overview](docs/assets/images/al2_overview.png)
 
 - **Agent** - LLM-powered decision maker that receives observations and produces actions
 - **Environment** - Executes actions, provides observations and rewards. Created through composition of the tool and the task
@@ -125,8 +125,8 @@ make coverage  # Run tests with coverage report
 ## Project Structure
 
 ```
-AgentLab2/
-├── src/agentlab2/       # Source code for the framework
+cube-harness/
+├── src/cube_harness/       # Source code for the framework
 ├── tests/               # Test suite
 ├── recipes/             # Example recipes and configurations
 ├── docs/                # Project documentation
