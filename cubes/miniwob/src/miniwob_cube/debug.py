@@ -22,7 +22,9 @@ import sys
 from cube.core import Action, ActionSchema, Observation, TextContent
 from cube.testing import run_debug_suite
 
-from miniwob_cube.benchmark import MiniWobBenchmark
+from cube_browser_tool import PlaywrightConfig
+
+from miniwob_cube.benchmark import Benchmark, MiniWobBenchmark
 
 
 logger = logging.getLogger(__name__)
@@ -88,11 +90,9 @@ def make_debug_agent(task_id: str) -> ClickButtonAgent | ClickCheckboxesAgent:
     raise ValueError(f"No hardcoded agent for task: {task_id}")
 
 
-def get_debug_benchmark() -> MiniWobBenchmark:
-    from cube_browser_tool import PlaywrightConfig
-
-    return MiniWobBenchmark(  # type: ignore[return-value]
-        default_tool_config=PlaywrightConfig(headless=True, use_html=False, use_axtree=False, use_screenshot=False),
+def get_debug_benchmark() -> Benchmark:
+    return MiniWobBenchmark(
+        default_tool_config=PlaywrightConfig(headless=True, use_html=True, use_axtree=False, use_screenshot=False),
     ).subset_from_list(_DEBUG_TASK_IDS, benchmark_name_suffix="debug")
 
 
