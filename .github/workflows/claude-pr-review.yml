@@ -39,7 +39,7 @@ jobs:
           prompt: |
             Run /code-review --comment
             
-            Review this PR against the AgentLab2 constitution defined in:
+            Review this PR against the cube-harness constitution defined in:
             - .claude/rules/constitution.md (the full constitution with pillars and directives)
             - .claude/rules/review-rules.md (enforceable rules with severity levels and examples)
           # Tools for /code-review command (from official plugin documentation)
