@@ -58,7 +58,7 @@ make hello
 
 This will:
 1. Launch a headless browser environment
-2. Run a ReAct agent powered by GPT-4.5-mini on MiniWob tasks
+2. Run a ReAct agent powered by GPT-5.2-mini on MiniWob tasks
 3. Save trajectories and results to `~/cube_harness_results/al2/hello_miniwob/`
 
 ### Configuration

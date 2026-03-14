@@ -9,7 +9,7 @@ In cube-harness, **a recipe is your configuration**. There is no separate config
 ```python
 # recipes/my_experiment.py  <-- this is your config file
 
-llm_config    = LLMConfig(model_name="gpt-4.5-mini", temperature=0.0)
+llm_config    = LLMConfig(model_name="gpt-5.2-mini", temperature=0.0)
 agent_config  = ReactAgentConfig(llm_config=llm_config)
 tool_config   = PlaywrightConfig(use_screenshot=True, headless=True)
 benchmark     = MiniWobBenchmark(default_tool_config=tool_config)
@@ -59,7 +59,7 @@ for temperature in [0.0, 0.5, 1.0]:
     exp = Experiment(
         name=f"sweep_temp_{temperature}",
         agent_config=ReactAgentConfig(
-            llm_config=LLMConfig(model_name="gpt-4.5-mini", temperature=temperature)
+            llm_config=LLMConfig(model_name="gpt-5.2-mini", temperature=temperature)
         ),
         ...
     )
