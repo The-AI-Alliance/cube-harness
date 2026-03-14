@@ -1,8 +1,12 @@
 # cube-harness
 
-Open source framework for building and evaluating UI agents.
+Open source harness for building and evaluating AI agents using the [CUBE Standard](https://github.com/The-AI-Alliance/cube-standard).
+
+> [!NOTE]
+> **cube-harness is in active development (alpha).** Interfaces may change. We welcome early adopters and contributors who want to shape the framework, not just use it.
+> See our [Roadmap](ROADMAP.md) and [Contributing Guide](CONTRIBUTING.md). Serious contributors can [apply here](https://forms.gle/JFiBi4ynfVLMghAH8).
+
 <!-- [Published Documentation](https://the-ai-alliance.github.io/cube-harness/) -->
-Published Documentation - Coming soon.
 
 ## Quickstart
 
@@ -18,9 +22,9 @@ make install
 ```
 
 ### API Keys
-* Set up your api keys in your `.env` of this project
-* Current hello world recipe is using an azure endpoint. You may change it for your needs (don't commit)
-* For azure, you need to provide these:
+
+Set up your API keys in a `.env` file at the project root. The hello-world recipe uses an Azure endpoint by default — swap it for any supported provider:
+
 ```bash
 export AZURE_API_KEY=
 export AZURE_API_BASE=
@@ -28,6 +32,7 @@ export AZURE_API_VERSION=
 ```
 
 ### Run Tests
+
 ```bash
 make test
 ```
@@ -37,17 +42,20 @@ make test
 The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark:
 
 ```bash
-# Run full benchmark (all 125 tasks, parallel execution with Ray)
+# Full benchmark (all 125 tasks, parallel via Ray)
 uv run recipes/hello_miniwob.py
 ```
-or you can use the Makefile shortcut:
+
+Or use the Makefile shortcut:
+
 ```bash
 make hello
 ```
 
-For quicker debugging, you can run a smaller subset of tasks sequentially:
+For quicker debugging:
+
 ```bash
-# Run in debug mode (2 tasks, sequential execution)
+# 2 tasks, sequential execution
 make debug
 # or: uv run recipes/hello_miniwob.py debug
 ```
@@ -59,11 +67,9 @@ This will:
 
 ### Configuration
 
-You can customize the experiment by editing recipe [`recipes/hello_miniwob.py`](recipes/hello_miniwob.py) or making your own recipe. Key configuration options include:
-- `LLMConfig` - model name, temperature, max tokens
-- `BrowserEnvConfig` - env class and its options: headless mode, screenshot capture, html pruning etc.
-- `ReactAgentConfig` - agent behavior
-- `MiniWobBenchmark` - bencmark selection
+Recipes are the configuration. Copy one from [`recipes/`](recipes/), edit what you need, and run it. Config objects are typed Pydantic models — serialized to disk with every experiment so results are always reproducible.
+
+See **[docs/configuration.md](docs/configuration.md)** for the full philosophy, a comparison with Hydra/YAML/CLI approaches, and how to run sweeps.
 
 ## Experiment Viewer
 
@@ -75,42 +81,40 @@ make viewer
 ```
 
 The viewer displays:
-- **Trajectory list** - all runs with task ID, steps, reward, and duration
-- **Visual timeline** - color-coded steps (blue=environment, green=agent) with duration-based widths
-- **Screenshots** - browser state at each environment step
-- **Step details** - observations, agent actions, and LLM reasoning
-- **Debug data** - raw JSON, LLM calls, and tool configurations
+- **Trajectory list** — all runs with task ID, steps, reward, and duration
+- **Visual timeline** — color-coded steps (blue=environment, green=agent) with duration-based widths
+- **Screenshots** — environment state at each step
+- **Step details** — observations, agent actions, and LLM reasoning
+- **Debug data** — raw JSON, LLM calls, and tool configurations
 
 ![cube-harness Viewer Screenshot](docs/assets/images/al2_viewer.png)
 
-
 ## Architecture Overview
 
-cube-harness is designed as a **universal evaluation platform** for multiple agentic benchmarks and serves as the foundation for **RL data generation** pipelines.
+cube-harness is a **universal evaluation platform** for agentic benchmarks and an **RL data generation** framework built on top of the CUBE Standard.
 
 ### Core Components
 
 ![cube-harness Overview](docs/assets/images/al2_overview.png)
 
-- **Agent** - LLM-powered decision maker that receives observations and produces actions
-- **Environment** - Executes actions, provides observations and rewards. Created through composition of the tool and the task
-- **Tool** - Modular action provider that exposes an action space and can be reused across different benchmarks (e.g., web browser, OS container)
-- **ActionSpace** - Defines the set of possible actions that a tool can execute
-- **Task** - Defines goals, validation logic, and action subsets. Sets up the tool for a specific scenario
-- **Benchmark** - Collection of tasks with methods for common setup/teardown; produces env configs for episodes
-- **Episode** - Single agent-environment execution loop for one task, records trajectory
-- **Trajectory** - Stores interaction history (observations, actions, rewards)
-- **Experiment** - Coordinates execution of multiple episodes across a benchmark and collects results
-- **ExpRunner** - Execution runtime (sequential or parallel via Ray)
-
+- **Agent** — LLM-powered decision maker that receives observations and produces actions
+- **Environment** — Executes actions, provides observations and rewards (tool + task composition)
+- **Tool** — Modular action provider that exposes an action space, reusable across benchmarks
+- **ActionSpace** — Defines the set of possible actions a tool can execute
+- **Task** — Defines goals, validation logic, and action subsets
+- **Benchmark** — Collection of tasks; produces env configs for episodes
+- **Episode** — Single agent-environment loop for one task; records a trajectory
+- **Trajectory** — Stores interaction history (observations, actions, rewards)
+- **Experiment** — Coordinates execution of multiple episodes across a benchmark
+- **ExpRunner** — Execution runtime (sequential or parallel via Ray)
 
 ### Design Goals
 
-1. **Benchmark Agnostic** - Plug in any benchmark (MiniWob, WebArena, OSWorld, etc.) via the `Benchmark` interface
-2. **Agent Agnostic** - Support any agent architecture by implementing the `Agent` protocol
-3. **RL-Ready** - Trajectory format designed for training data generation with full LLM call logging
-4. **Scalable** - Ray integration for parallel episode execution across multiple workers
-5. **Observable** - Structured trajectory output for analysis and debugging
+1. **Benchmark Agnostic** — Plug in any CUBE-standard benchmark (MiniWob, WebArena, OSWorld, …) via the `Benchmark` interface
+2. **Agent Agnostic** — Support any agent architecture by implementing the `Agent` protocol
+3. **RL-Ready** — Trajectory format designed for training data generation with full LLM call logging
+4. **Scalable** — Ray integration for parallel episode execution across multiple workers
+5. **Observable** — Structured trajectory output for analysis and debugging
 
 ## Development
 
@@ -126,9 +130,17 @@ make coverage  # Run tests with coverage report
 
 ```
 cube-harness/
-├── src/cube_harness/       # Source code for the framework
-├── tests/               # Test suite
-├── recipes/             # Example recipes and configurations
-├── docs/                # Project documentation
-└── Makefile             # Common task shortcuts
+├── src/cube_harness/   # Source code for the framework
+├── tests/              # Test suite
+├── recipes/            # Example recipes and configurations
+├── docs/               # Project documentation
+└── Makefile            # Common task shortcuts
 ```
+
+## Getting Involved
+
+All contributions are welcome — open an issue, submit a PR, or wrap a new benchmark. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development guide, DCO requirements, and RFC process.
+
+Want deeper involvement? Join the core team, shape the roadmap, and get credit for what you build. [Apply here](https://forms.gle/JFiBi4ynfVLMghAH8).
+
+For general AI Alliance contribution guidelines, see the [community repo](https://github.com/The-AI-Alliance/community/).
