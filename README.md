@@ -25,11 +25,10 @@ make install
 
 ### API Keys
 
-Copy `.env.example` to `.env` and fill in your OpenAI key:
+Set your OpenAI API key:
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys
+export OPENAI_API_KEY=your-key-here
 ```
 
 Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe.
@@ -59,7 +58,7 @@ make hello
 
 This will:
 1. Launch a headless browser environment
-2. Run a ReAct agent powered by GPT-4o-mini on MiniWob tasks
+2. Run a ReAct agent powered by GPT-4.1-mini on MiniWob tasks
 3. Save trajectories and results to `~/cube_harness_results/al2/hello_miniwob/`
 
 ### Configuration
