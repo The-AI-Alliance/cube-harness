@@ -25,12 +25,14 @@ make install
 
 ### API Keys
 
-Copy `.env.example` to `.env` and fill in your keys. The hello-world recipe uses Azure by default, but any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe:
+Copy `.env.example` to `.env` and fill in your OpenAI key:
 
 ```bash
 cp .env.example .env
 # Edit .env with your API keys
 ```
+
+Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe.
 
 ### Run Tests
 
@@ -57,7 +59,7 @@ make hello
 
 This will:
 1. Launch a headless browser environment
-2. Run a ReAct agent powered by GPT-5-mini on MiniWob tasks
+2. Run a ReAct agent powered by GPT-4o-mini on MiniWob tasks
 3. Save trajectories and results to `~/cube_harness_results/al2/hello_miniwob/`
 
 ### Configuration
