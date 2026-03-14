@@ -1,12 +1,12 @@
-# AgentLab2 - Project Structure for Coding Agents
+# cube-harness - Project Structure for Coding Agents
 
-AgentLab2 is an open-source framework for building and evaluating UI agents. It serves as a universal evaluation platform for agentic benchmarks and as the foundation for RL data generation pipelines.
+cube-harness is an open-source framework for building and evaluating UI agents. It serves as a universal evaluation platform for agentic benchmarks and as the foundation for RL data generation pipelines.
 
 ## Directory Structure
 
 ```
-AgentLab2/
-├── src/agentlab2/           # Core framework source code
+cube-harness/
+├── src/cube_harness/           # Core framework source code
 │   ├── __init__.py          # Package metadata and version
 │   ├── base.py              # TypedBaseModel for serialization with type info
 │   ├── core.py              # Data structures: Action, Observation, Trajectory, Task
@@ -170,7 +170,7 @@ Benchmark → Episode(s) → Agent ↔ Environment → Trajectory
   - Implements BrowserTaskTool protocol (goto, evaluate_js, page_obs)
   - Frame/iframe navigation for BID-based element access
   - Checkbox/radio fallback to JavaScript when needed
-  - Observation conversion from BrowserGym to AgentLab2 format
+  - Observation conversion from BrowserGym to cube-harness format
 
 ### tools/computer.py - Computer Use Tool
 - **Computer**: Docker-based computer interaction tool
@@ -213,8 +213,8 @@ Benchmark → Episode(s) → Agent ↔ Environment → Trajectory
 
 ### Creating a New Agent
 ```python
-from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import ActionSchema, AgentOutput, Observation
+from cube_harness.agent import Agent, AgentConfig
+from cube_harness.core import ActionSchema, AgentOutput, Observation
 
 class MyAgentConfig(AgentConfig):
     # Add config fields
@@ -234,7 +234,7 @@ class MyAgent(Agent):
 ### Creating a New Tool
 ```python
 from typing import Protocol
-from agentlab2.tool import Tool, ToolConfig
+from cube_harness.tool import Tool, ToolConfig
 
 class MyActionSpace(Protocol):
     def my_action(self, arg: str) -> None: ...
@@ -257,8 +257,8 @@ class MyTool(Tool):
 
 ### Creating a New Task
 ```python
-from agentlab2.core import ActionSchema, Observation, Task
-from agentlab2.tool import AbstractTool
+from cube_harness.core import ActionSchema, Observation, Task
+from cube_harness.tool import AbstractTool
 
 class MyTask(Task):
     id: str
@@ -283,9 +283,9 @@ class MyTask(Task):
 
 ### Creating a New Benchmark
 ```python
-from agentlab2.benchmark import Benchmark
-from agentlab2.core import Task
-from agentlab2.tool import ToolConfig
+from cube_harness.benchmark import Benchmark
+from cube_harness.core import Task
+from cube_harness.tool import ToolConfig
 
 class MyBenchmark(Benchmark):
     tool_config: ToolConfig  # Required field
@@ -305,8 +305,8 @@ class MyBenchmark(Benchmark):
 
 ### Running an Experiment
 ```python
-from agentlab2.experiment import Experiment
-from agentlab2.exp_runner import run_sequentially, run_with_ray
+from cube_harness.experiment import Experiment
+from cube_harness.exp_runner import run_sequentially, run_with_ray
 
 exp = Experiment(
     name="my_exp",
@@ -331,7 +331,7 @@ We're using make commands for most tasks. Look into `Makefile` for development c
 - **Tool**: `uv` (fast Python package manager)
 - **Python**: >= 3.13 required
 - **Virtual env**: `.venv/` in project root
-- **Source layout**: `src/agentlab2/` (src-layout)
+- **Source layout**: `src/cube_harness/` (src-layout)
 
 ### Code Style
 - **Formatter**: Ruff
@@ -345,7 +345,7 @@ Always use `uv run` to execute Python scripts:
 uv sync --all-extras                   # install all optional dependencies
 uv run recipes/hello_miniwob.py        # Run a recipe
 uv run pytest tests/ -v                 # Run tests
-uv run python -c "import agentlab2"    # Quick import test
+uv run python -c "import cube_harness"    # Quick import test
 ```
 
 ## Environment Variables
@@ -361,7 +361,7 @@ make test
 uv run pytest tests/test_core.py -v
 
 # Run with coverage (if configured)
-uv run pytest tests/ --cov=agentlab2
+uv run pytest tests/ --cov=cube_harness
 ```
 
 ## Development Notes
@@ -371,6 +371,6 @@ uv run pytest tests/ --cov=agentlab2
 
 ## Constitution: Code Review Rules
 
-All PRs are reviewed against the [AgentLab2 Constitution](/.claude/rules/constitution.md).
+All PRs are reviewed against the [cube-harness Constitution](/.claude/rules/constitution.md).
 
 See `.claude/rules/` for the full constitution and detailed review rules with examples.

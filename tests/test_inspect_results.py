@@ -1,10 +1,10 @@
-"""Tests for agentlab2.analyze.inspect_results module."""
+"""Tests for cube_harness.analyze.inspect_results module."""
 
 import numpy as np
 import pytest
 from cube.core import EnvironmentOutput, Observation, StepError
 
-from agentlab2.analyze.inspect_results import (
+from cube_harness.analyze.inspect_results import (
     _extract_error_from_trajectory,
     error_report,
     format_constants_and_variables,
@@ -15,7 +15,7 @@ from agentlab2.analyze.inspect_results import (
     summarize,
     trajectories_to_df,
 )
-from agentlab2.core import (
+from cube_harness.core import (
     AgentOutput,
     Trajectory,
     TrajectoryStep,
