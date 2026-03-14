@@ -595,7 +595,13 @@ class TestBrowsergymToolLifecycle:
 
         mock_context = MagicMock()
         mock_context.close.side_effect = Exception("Close failed")
-        tool.session = mock_playwright_session
+        tool.session = PlaywrightSession(
+            playwright=MagicMock(),
+            page=MagicMock(),
+            context=mock_context,
+            cdp_url="http://localhost:9222",
+            user_data_dir=tempfile.mkdtemp(prefix="cube_harness_"),
+        )
         tool._last_obs = {"some": "data"}
 
         # Should not raise

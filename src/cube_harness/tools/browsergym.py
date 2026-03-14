@@ -19,7 +19,7 @@ from browsergym.core.observation import (
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from cube.core import Action, Content, Observation, StepError
 from cube.resources.browser_session import BrowserConfig, BrowserSession
-from cube.tool import ToolConfig
+from cube.tool import BrowserTool, ToolConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from PIL import Image
 from playwright.sync_api import Error, Frame, Page
@@ -59,7 +59,7 @@ class BrowsergymConfig(ToolConfig):
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
+class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
     """BrowserGym tool wrapper that adapts BrowserGym's observation utilities to the cube-harness Tool interface.
 
     This tool manages the browser lifecycle directly (without BrowserEnv) and provides:
@@ -75,7 +75,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         super().__init__()
         self.config = config
         self._action_set = HighLevelActionSet()
-        self.session: BrowserSession | None = None
+        self._session: BrowserSession | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
@@ -86,6 +86,10 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
             raise RuntimeError("Browser is not initialized. Call reset() first.")
         page, _ = self.session.get_playwright_session()
         return page
+
+    @property
+    def session(self) -> BrowserSession:
+        return self._session
 
     @property
     def page(self) -> Page:
@@ -102,13 +106,12 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         return self._last_terminated
 
     def _create_runtime(self) -> None:
-        self.session = self.config.browser_config.make()
-        self.session.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
+        self._session = self.config.browser_config.make()
 
     def _close_runtime(self) -> None:
         if self.session is not None:
             self.session.stop()
-            self.session = None
+            self._session = None
 
     def _wait_dom_loaded(self) -> None:
         if self.session is None:
@@ -224,7 +227,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
             if i > 0:
                 frame_bid = bid[:i]  # bid of the next frame to select
                 try:
-                    frame_elem = current_frame.get_by_test_id(frame_bid)
+                    frame_elem = current_frame.locator(f'[{BROWSERGYM_ID_ATTRIBUTE}="{frame_bid}"]')
                     if frame_elem.count() > 0:
                         current_frame = frame_elem.frame_locator(":scope")
                     else:
@@ -242,7 +245,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         try:
             # Navigate to the correct frame for this BID
             frame = self._get_frame_for_bid(bid)
-            locator = frame.get_by_test_id(bid)
+            locator = frame.locator(f'[{BROWSERGYM_ID_ATTRIBUTE}="{bid}"]')
             if locator.count() == 0:
                 return None
             # Get the element's properties via evaluate
@@ -272,7 +275,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         """
         try:
             frame = self._get_frame_for_bid(bid)
-            locator = frame.get_by_test_id(bid)
+            locator = frame.locator(f'[{BROWSERGYM_ID_ATTRIBUTE}="{bid}"]')
             js_code = """
             (elem, checked) => {
                 if (elem.type === 'checkbox' || elem.type === 'radio') {
@@ -433,7 +436,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
 
         return obs
 
-    # === BrowserTaskTool utility methods ===
+    # === BrowserTool utility methods ===
 
     def evaluate_js(self, js: str) -> Any:
         """Evaluate JavaScript in the browser context and return the result."""
