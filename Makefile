@@ -31,6 +31,7 @@ install:
 	uv run playwright install chromium --with-deps
 
 update:
+	@echo "🔄 Updating dependencies"
 	uv sync --all-extras --upgrade
 	uv run playwright install chromium --with-deps
 
