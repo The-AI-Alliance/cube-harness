@@ -36,6 +36,7 @@ update:
 	uv run playwright install chromium --with-deps
 
 lint:
+	@echo "🧹 Linting code"
 	uv run ruff check --fix .
 	uv run ruff format .
 
