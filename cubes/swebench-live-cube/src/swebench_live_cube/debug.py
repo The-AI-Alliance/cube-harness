@@ -11,10 +11,11 @@ from __future__ import annotations
 import logging
 import os
 
+from cube.backends.daytona import DaytonaContainerBackend
 from cube.core import Action, ActionSchema, Observation
+from cube.task import TaskConfig
 
 from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
-from swebench_live_cube.task import SWEBenchLiveTaskConfig
 
 logger = logging.getLogger(__name__)
 
@@ -65,52 +66,38 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-def get_debug_task_configs() -> list[SWEBenchLiveTaskConfig]:
-    return [SWEBenchLiveTaskConfig(task_id=tid) for tid in _TASK_ACTIONS if tid in SWEBenchLiveBenchmark.task_metadata]
+def get_debug_task_configs() -> list[TaskConfig]:
+    """Return TaskConfigs for the debug tasks (cube.testing protocol).
+
+    Creates the benchmark, installs + sets up (to populate task_metadata),
+    then returns configs with container_backend pre-set so make() works without args.
+    """
+    api_key = os.environ.get("DAYTONA_API_KEY")
+    if not api_key:
+        raise RuntimeError("DAYTONA_API_KEY environment variable is required for cube test swebench-live-cube")
+
+    backend = DaytonaContainerBackend(api_key=api_key)
+    benchmark = SWEBenchLiveBenchmark(
+        container_backend=backend,
+        instance_ids=list(_TASK_ACTIONS),
+        split="lite",
+    )
+    benchmark.install()
+    benchmark.setup()
+    configs = list(benchmark.get_task_configs())
+    for tc in configs:
+        tc._container_backend = backend
+    return configs
 
 
 if __name__ == "__main__":
     import sys
 
-    from cube.backends.daytona import DaytonaContainerBackend
-    from cube.testing import run_debug_episode
+    import swebench_live_cube.debug as _this_module
+    from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    api_key = os.environ.get("DAYTONA_API_KEY")
-    if not api_key:
-        logger.error("DAYTONA_API_KEY is required to run debug tasks")
-        sys.exit(1)
-
-    backend = DaytonaContainerBackend(api_key=api_key)
-
-    # Install + setup to populate task_metadata
-    bench = SWEBenchLiveBenchmark(
-        container_backend=backend,
-        instance_ids=list(_TASK_ACTIONS.keys()),
-        split="lite",
-    )
-    bench.install()
-    bench.setup()
-
-    configs = get_debug_task_configs()
-    if not configs:
-        logger.error("No debug task configs found — are the tasks in the dataset?")
-        sys.exit(1)
-
-    results = []
-    for tc in configs:
-        task = tc.make(container_backend=backend)
-        agent = make_debug_agent(tc.task_id)
-        report = run_debug_episode(task, agent)
-        results.append(report)
-
+    results = run_debug_suite("swebench-live-cube", _this_module)
     failed = [r for r in results if r["error"]]
-    if failed:
-        logger.error(f"{len(failed)} debug episode(s) had errors")
-        for r in failed:
-            logger.error(f"  {r['task_id']}: {r['error']}")
-    else:
-        logger.info(f"All {len(results)} debug episodes completed without errors")
-
     sys.exit(1 if failed else 0)

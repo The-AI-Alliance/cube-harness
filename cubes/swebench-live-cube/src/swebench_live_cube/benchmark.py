@@ -88,7 +88,9 @@ class SWEBenchLiveBenchmark(Benchmark):
                 },
             )
 
-        SWEBenchLiveBenchmark.task_metadata = metadata
+        # Set on the class so TaskConfig.make() can look it up (skip if already populated)
+        if not SWEBenchLiveBenchmark.task_metadata:
+            SWEBenchLiveBenchmark.task_metadata = metadata
         logger.info(f"SWE-bench Live setup complete: {len(metadata)} tasks (split={self.split})")
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
@@ -101,13 +103,17 @@ class SWEBenchLiveBenchmark(Benchmark):
             )
 
     def close(self) -> None:
-        pass
+        SWEBenchLiveBenchmark.task_metadata = {}
 
     def install(self) -> None:
         """Pre-download the SWE-bench Live dataset from HuggingFace."""
         logger.info(f"Downloading {self.dataset_name} (split={self.split}) from HuggingFace...")
         load_dataset(self.dataset_name, split=self.split)
         logger.info("Dataset download complete")
+
+    def uninstall(self) -> None:
+        """Remove cached HuggingFace dataset (delegates to HF cache management)."""
+        logger.info(f"To free disk space, remove the HuggingFace cache for {self.dataset_name}")
 
     # ── Private helpers ────────────────────────────────────────────
 

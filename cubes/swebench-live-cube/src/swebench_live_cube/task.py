@@ -73,6 +73,13 @@ class SWEBenchLiveTask(Task):
             "test_output": test_output[:2000],
         }
 
+    def close(self) -> None:
+        super().close()
+        if self._container is not None:
+            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
+            self._container.stop()
+            self._container = None
+
     # ── Private helpers ────────────────────────────────────────────
 
     def _apply_patch(self, patch: str) -> str:
@@ -142,12 +149,18 @@ class SWEBenchLiveTaskConfig(TaskConfig):
 
     task_metadata_snapshot: TaskMetadata | None = None
 
+    # Pre-set for debug/testing when make() is called without arguments
+    _container_backend: ContainerBackend | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
+
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchLiveTask:
-        if container_backend is None:
+        backend = container_backend or self._container_backend
+        if backend is None:
             raise ValueError("SWEBenchLiveTaskConfig.make() requires a container_backend")
 
         metadata = self.task_metadata_snapshot
@@ -161,5 +174,5 @@ class SWEBenchLiveTaskConfig(TaskConfig):
             metadata=metadata,
             tool_config=self.tool_config or SWEBenchToolConfig(),
             runtime_context=runtime_context,
-            container_backend=container_backend,
+            container_backend=backend,
         )
