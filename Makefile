@@ -41,6 +41,7 @@ lint:
 	uv run ruff format .
 
 lint-check:
+	@echo "🧹 Checking lint"
 	uvx ruff check --diff .
 	uvx ruff format --diff .
 
