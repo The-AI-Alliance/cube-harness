@@ -13,9 +13,11 @@ help:
 	@echo "make xray       - Run AL2 XRay viewer in debug mode"
 
 hello:
+	uv pip install -e "cubes/miniwob[debug]"
 	uv run recipes/hello_miniwob.py
 
 debug:
+	uv pip install -e "cubes/miniwob[debug]"
 	uv run recipes/hello_miniwob.py debug
 
 viewer:
