@@ -98,9 +98,9 @@ cube-harness is a **universal evaluation platform** for agentic benchmarks and a
 - **Tool** — Modular action provider that exposes an action space, reusable across benchmarks
 - **ActionSpace** — Defines the set of possible actions a tool can execute
 - **Task** — Defines goals, validation logic, and action subsets
-- **Benchmark** — Collection of tasks; produces env configs for episodes
-- **Episode** — Single agent-environment loop for one task; records a trajectory
 - **Trajectory** — Stores interaction history (observations, actions, rewards)
+- **Episode** — Single agent-environment loop for one task; records a trajectory
+- **Benchmark** — Collection of tasks; produces env configs for episodes
 - **Experiment** — Coordinates execution of multiple episodes across a benchmark
 - **ExpRunner** — Execution runtime (sequential or parallel via Ray)
 
