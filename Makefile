@@ -43,6 +43,7 @@ lint-check:
 	uvx ruff format --diff .
 
 test: install
+	@echo "🧪 Running unit tests"
 	uv run pytest -n 10 tests/ -v
 
 coverage:
