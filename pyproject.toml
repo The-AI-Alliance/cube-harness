@@ -38,6 +38,10 @@ dependencies = [
 workarena = [
     "browsergym-workarena>=0.5.2",
 ]
+# Terminal-Bench cube dependencies
+terminalbench = [
+    "terminalbench-cube",
+]
 # Miniwob cube dependencies
 miniwob = [
     "miniwob-cube",
@@ -51,6 +55,7 @@ build-backend = "uv_build"
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
 [tool.uv.sources]
+terminalbench-cube = { path = "cubes/terminalbench-cube", editable = true }
 miniwob-cube = { path = "cubes/miniwob", editable = true }
 
 [tool.ruff]
