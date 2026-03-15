@@ -22,7 +22,7 @@ All commits need a DCO sign-off: `git commit -s -m "..."`.
 
 ```
 src/cube_harness/
-  core/        # Agent, Environment, Episode, Trajectory, Experiment protocols
+  core/        # Agent, Episode, Trajectory, Experiment protocols
   runners/     # ExpRunner (sequential + Ray)
   viewer/      # Gradio experiment viewer
 cubes/         # Built-in CUBE-standard benchmark wrappers
