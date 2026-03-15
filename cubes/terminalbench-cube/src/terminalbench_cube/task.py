@@ -93,6 +93,10 @@ class TerminalBenchTask(Task):
             self._temp_dir = None
             self._task_path = None
         super().close()
+        if self._container is not None:
+            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
+            self._container.stop()
+            self._container = None
 
     def _parse_pytest_output(self, output: str) -> dict[str, str]:
         """Parse pytest output, falling back to regex heuristics."""
@@ -113,6 +117,11 @@ class TerminalBenchTask(Task):
 class TerminalBenchTaskConfig(TaskConfig):
     """Serializable factory that produces a TerminalBenchTask."""
 
+    # Pre-set for debug/testing when make() is called without arguments
+    _container_backend: ContainerBackend | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
+
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
@@ -121,11 +130,12 @@ class TerminalBenchTaskConfig(TaskConfig):
         # Import here to avoid circular import (benchmark imports task)
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
-        if container_backend is None:
+        backend = container_backend or self._container_backend
+        if backend is None:
             raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
         return TerminalBenchTask(
             metadata=TerminalBenchBenchmark.task_metadata[self.task_id],
             tool_config=self.tool_config or TerminalBenchToolConfig(),
             runtime_context=runtime_context,
-            container_backend=container_backend,
+            container_backend=backend,
         )

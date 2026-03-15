@@ -13,6 +13,7 @@ import os
 
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
+from cube.task import TaskConfig
 from cube.backends.daytona import DaytonaContainerBackend
 from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
@@ -71,6 +72,29 @@ def get_debug_benchmark() -> "Benchmark":
     return TerminalBenchBenchmark(
         container_backend=DaytonaContainerBackend(api_key=api_key),
     ).subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+
+
+def get_debug_task_configs() -> list[TaskConfig]:
+    """Return TaskConfigs for the debug tasks (cube.testing protocol).
+
+    Creates the full benchmark, installs + sets up (to populate task_metadata),
+    then returns configs with container_backend pre-set so make() works without args.
+    """
+    api_key = os.environ.get("DAYTONA_API_KEY")
+    if not api_key:
+        raise RuntimeError("DAYTONA_API_KEY environment variable is required for cube test terminalbench-cube")
+
+    backend = DaytonaContainerBackend(api_key=api_key)
+    benchmark = TerminalBenchBenchmark(
+        container_backend=backend,
+        task_ids=list(_TASK_ACTIONS),
+    )
+    benchmark.install()
+    benchmark.setup()
+    configs = list(benchmark.get_task_configs())
+    for tc in configs:
+        tc._container_backend = backend
+    return configs
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

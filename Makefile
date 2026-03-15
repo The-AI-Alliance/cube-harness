@@ -19,19 +19,17 @@ debug:
 	uv run recipes/hello_miniwob.py debug
 
 viewer:
-	uv run al2-viewer --debug
+	uv run ch-viewer --debug
 
 xray:
-	uv run al2-xray --debug
+	uv run ch-xray --debug
 
 install:
 	uv sync --all-extras
-	uv pip install -e .
 	uv run playwright install chromium --with-deps
 
 update:
-	uv sync --all-extras --update
-	uv pip install -e . --upgrade
+	uv sync --all-extras --upgrade
 	uv run playwright install chromium --with-deps
 
 lint:
@@ -46,4 +44,4 @@ test: install
 	uv run pytest -n 10 tests/ -v
 
 coverage:
-	uv run pytest tests/ --cov=agentlab2 --cov-report=term-missing
+	uv run pytest tests/ --cov=cube_harness --cov-report=term-missing

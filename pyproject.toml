@@ -1,8 +1,8 @@
 
 [project]
-name = "agentlab2"
+name = "cube-harness"
 version = "0.1.0"
-description = "agentlab2, open source agentic evaluation and data generation framework."
+description = "cube-harness, open source agentic evaluation and data generation framework."
 readme = "README.md"
 authors = [
     { name = "Aman Jaiswal", email = "amanjaiswal73892@gmail.com" },
@@ -42,6 +42,10 @@ workarena = [
 terminalbench = [
     "terminalbench-cube",
 ]
+# Miniwob cube dependencies
+miniwob = [
+    "miniwob-cube",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
@@ -52,6 +56,7 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 
 [tool.uv.sources]
 terminalbench-cube = { path = "cubes/terminalbench-cube", editable = true }
+miniwob-cube = { path = "cubes/miniwob", editable = true }
 
 [tool.ruff]
 fix = true
@@ -68,9 +73,9 @@ line-ending = "auto"
 extend-select = ["I"] # sort imports
 
 [project.scripts]
-al2-viewer = "agentlab2.deprecated_viewer:main"
-al2-mcp-server = "agentlab2.mcp.server:main"
-al2-xray = "agentlab2.analyze.xray:main"
+ch-viewer = "cube_harness.deprecated_viewer:main"
+ch-mcp-server = "cube_harness.mcp.server:main"
+ch-xray = "cube_harness.analyze.xray:main"
 
 [dependency-groups]
 dev = [

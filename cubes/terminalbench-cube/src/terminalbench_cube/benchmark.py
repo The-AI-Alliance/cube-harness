@@ -2,6 +2,7 @@
 
 import io
 import logging
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -98,12 +99,13 @@ class TerminalBenchBenchmark(Benchmark):
                 },
             )
 
-        # Set on the class so TaskConfig.make() can look it up
-        TerminalBenchBenchmark.task_metadata = metadata
+        # Set on the class so TaskConfig.make() can look it up (skip if already populated)
+        if not TerminalBenchBenchmark.task_metadata:
+            TerminalBenchBenchmark.task_metadata = metadata
         logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
 
     def close(self) -> None:
-        pass
+        TerminalBenchBenchmark.task_metadata = {}
 
     # ── Dataset installation ───────────────────────────────────────
 
@@ -135,6 +137,15 @@ class TerminalBenchBenchmark(Benchmark):
             outdir.mkdir(parents=True, exist_ok=True)
             ds.save_to_disk(str(outdir))
         logger.info(f"Dataset saved to: {outdir}")
+
+    def uninstall(self) -> None:
+        """Remove the locally cached Terminal-Bench dataset."""
+        outdir = Path(self.dataset_path).resolve()
+        if outdir.exists():
+            shutil.rmtree(outdir)
+            logger.info(f"Removed dataset at {outdir}")
+        else:
+            logger.info(f"No dataset found at {outdir}, nothing to uninstall")
 
     # ── Private helpers ────────────────────────────────────────────
 
