@@ -6,7 +6,7 @@
 
 Goal: stable harness, first wave of cubes running end-to-end.
 
-- [x] Core loop: `Agent`, `Environment`, `Episode`, `Trajectory`, `Experiment`
+- [x] Core loop: `Agent`, `Episode`, `Trajectory`, `Experiment`
 - [x] Ray-based parallel execution (`ExpRunner`)
 - [x] Gradio experiment viewer
 - [x] Silverstream.ai Bench viewer integration
