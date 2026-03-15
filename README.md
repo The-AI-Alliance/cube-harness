@@ -87,7 +87,7 @@ The viewer displays:
 
 ## Architecture Overview
 
-cube-harness is a **universal evaluation platform** for agentic benchmarks and an **RL data generation** framework built on top of the CUBE Standard.
+cube-harness is a **universal evaluation platform** for agentic benchmarks and an **RL data generation** framework built on top of the [CUBE Standard](https://github.com/The-AI-Alliance/cube-standard).
 
 ### Core Components
 
