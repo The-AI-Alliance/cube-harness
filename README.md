@@ -1,3 +1,5 @@
+<img alt="cube-harness banner" src="docs/assets/images/cube_harness_banner.png" />
+
 # cube-harness
 
 Open source harness for building and evaluating AI agents using the [CUBE Standard](https://github.com/The-AI-Alliance/cube-standard).
