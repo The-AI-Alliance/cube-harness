@@ -142,7 +142,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
 
     def _execute_bgym_step(self, action_str: str) -> str:
         """Execute a BrowserGym action string and return result message."""
-        page = self._ensure_page()
         logger.info(f"Execute bgym step: {action_str}")
         result = "Success"
 
@@ -150,7 +149,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
             code = self._action_set.to_python_code(action_str)
             execute_python_code(
                 code=code,
-                page=page,
+                page=self.page,
                 send_message_to_user=lambda message: logger.info(f"BrowserGym message: {message}"),
                 report_infeasible_instructions=lambda message: logger.warning(f"Infeasible instruction: {message}"),
             )
