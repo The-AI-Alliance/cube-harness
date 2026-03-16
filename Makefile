@@ -29,6 +29,7 @@ install:
 	@echo "Install requires sudo permissions to install Playwright dependencies. You may be prompted for your password."
 	uv sync --all-extras
 	uv run playwright install chromium --with-deps
+	git config core.hooksPath .githooks
 
 update:
 	@echo "🔄 Updating dependencies"
