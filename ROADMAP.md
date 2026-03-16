@@ -9,7 +9,7 @@ Goal: stable harness, first wave of cubes running end-to-end.
 - [x] Core loop: `Agent`, `Episode`, `Trajectory`, `Experiment`
 - [x] Ray-based parallel execution (`ExpRunner`)
 - [x] Gradio experiment viewer
-- [x] Silverstream.ai Bench viewer integration
+- [x] XRay trajectory viewer integration
 - [x] First cubes landing:
   - *Web agents:* MiniWob ✅, WebArena-Verified ✅ ([#214](https://github.com/The-AI-Alliance/cube-harness/pull/214)), WorkArena ✅
   - *Computer use (CUA):* OSWorld ✅

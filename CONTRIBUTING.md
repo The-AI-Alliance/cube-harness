@@ -22,12 +22,13 @@ All commits need a [DCO sign-off](https://developercertificate.org/): `git commi
 
 ```
 src/cube_harness/
-  core/        # Agent, Episode, Trajectory, Experiment protocols
-  runners/     # ExpRunner (sequential + Ray)
-  viewer/      # Gradio experiment viewer
-cubes/         # Built-in CUBE-standard benchmark wrappers
-recipes/       # Example experiment scripts
-tests/         # Test suite
+  agents/           # Agent implementations (ReAct, Genny, …)
+  tools/            # Tool implementations (Playwright, BrowserGym, …)
+  benchmarks/       # Benchmark wrappers (MiniWob, WorkArena, …)
+  metrics/          # Telemetry and tracing (OpenTelemetry-based)
+  action_spaces/    # Browser action space protocols
+recipes/            # Example experiment scripts
+tests/              # Test suite
 ```
 
 ## Licenses
