@@ -762,7 +762,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
     { name = "browsergym-workarena", marker = "extra == 'workarena'", specifier = ">=0.5.2" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard.git?branch=main" },
+    { name = "cube-standard" },
     { name = "gradio", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "matplotlib", specifier = ">=3.8" },
@@ -796,16 +796,19 @@ dev = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc1"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard.git?branch=main#32ad4b2d7679a00f900e9ab0d11aef493faaca92" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "docstring-parser" },
     { name = "fastapi" },
+    { name = "numpydoc" },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
-    { name = "rich" },
     { name = "uvicorn", extra = ["standard"] },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5a/e1/8e8fd100d7e1465894385a3462ae69df2ac38b6952a0fbbf06d811c22398/cube_standard-0.1.0rc1.tar.gz", hash = "sha256:e4641c6eef22cc3bdb1c1b13fdbfc9b49c2a52943b2f69f75513cf24e8f85292", size = 32545, upload-time = "2026-03-04T19:09:17.79Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/a4/78f8a2a3fbfc1d0933f6114ee48e9e79f74cf896c991e38d751b06409b69/cube_standard-0.1.0rc1-py3-none-any.whl", hash = "sha256:7c2494337e4ee453a55826bd71cf2706ea1b3f81fcf6b9483dcd02de4a7595cb", size = 41567, upload-time = "2026-03-04T19:09:15.383Z" },
 ]
 
 [[package]]
@@ -833,15 +836,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
-]
-
-[[package]]
-name = "docstring-parser"
-version = "0.17.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b2/9d/c3b43da9515bd270df0f80548d9944e389870713cc1fe2b8fb35fe2bcefd/docstring_parser-0.17.0.tar.gz", hash = "sha256:583de4a309722b3315439bb31d64ba3eebada841f2e2cee23b99df001434c912", size = 27442, upload-time = "2025-07-21T07:35:01.868Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/55/e2/2537ebcff11c1ee1ff17d8d0b6f4db75873e3b0fb32c2d4a2ee31ecb310a/docstring_parser-0.17.0-py3-none-any.whl", hash = "sha256:cf2569abd23dce8099b300f9b4fa8191e9582dda731fd533daf54c4551658708", size = 36896, upload-time = "2025-07-21T07:35:00.684Z" },
 ]
 
 [[package]]
