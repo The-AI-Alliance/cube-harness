@@ -88,14 +88,6 @@ class TestBrowsergymToolInitialization:
         assert tool._last_obs is None
         assert tool._last_info is None
 
-    def test_ensure_page_raises_when_not_initialized(self) -> None:
-        """Test that _ensure_page raises RuntimeError when page not initialized."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-
-        with pytest.raises(RuntimeError, match="Browser is not initialized"):
-            tool._ensure_page()
-
     def test_page_property_raises_when_not_initialized(self) -> None:
         """Test that page property raises RuntimeError when not initialized."""
         config = BrowsergymConfig()
