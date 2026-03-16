@@ -3,7 +3,6 @@ import time
 from typing import Any, Callable
 
 import numpy as np
-from browsergym.core import _get_global_playwright
 from browsergym.core.action.base import execute_python_code
 from browsergym.core.action.highlevel import HighLevelActionSet
 from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE, EXTRACT_OBS_MAX_TRIES
@@ -19,7 +18,8 @@ from browsergym.core.observation import (
 )
 from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prune_html
 from cube.core import Action, Content, Observation, StepError
-from cube.tool import ToolConfig
+from cube.tool import BrowserTool, ToolConfig
+from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
 from playwright.sync_api import Error, Frame, Page
 from pydantic import Field
@@ -27,7 +27,6 @@ from termcolor import colored
 
 from cube_harness.action_spaces.browser_action_space import BidBrowserActionSpace
 from cube_harness.tool import ToolWithTelemetry
-from cube_harness.tools.browser_session import BrowserConfig, BrowserSession, PlaywrightSessionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class BrowsergymConfig(ToolConfig):
     """Configuration for BrowserGym-style Playwright tool."""
 
     # Browser configuration (launch parameters)
-    browser: BrowserConfig = Field(default_factory=PlaywrightSessionConfig)
+    browser: PlaywrightSessionConfig = Field(default_factory=PlaywrightSessionConfig)
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
@@ -59,7 +58,7 @@ class BrowsergymConfig(ToolConfig):
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
+class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
     """BrowserGym tool wrapper that adapts BrowserGym's observation utilities to the cube-harness Tool interface.
 
     This tool manages the browser lifecycle directly (without BrowserEnv) and provides:
@@ -75,21 +74,21 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         super().__init__()
         self.config = config
         self._action_set = HighLevelActionSet()
-        self.session: BrowserSession | None = None
+        self._session: PlaywrightSession | None = None
         self._last_obs: dict | None = None
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
 
-    def _ensure_page(self) -> Page:
-        if self.session is None:
+    @property
+    def session(self) -> PlaywrightSession:
+        if self._session is None:
             raise RuntimeError("Browser is not initialized. Call reset() first.")
-        page, _ = self.session.get_playwright_session()
-        return page
+        return self._session
 
     @property
     def page(self) -> Page:
-        return self._ensure_page()
+        return self.session.page
 
     @property
     def last_reward(self) -> float:
@@ -102,20 +101,18 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
         return self._last_terminated
 
     def _create_runtime(self) -> None:
-        pw = _get_global_playwright()
-        pw.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
-        self.session = self.config.browser.make()
+        self._session = self.config.browser.make()
+        self._session.playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:
-        if self.session is not None:
+        if self._session is not None:
             self.session.stop()
-            self.session = None
+            self._session = None
 
     def _wait_dom_loaded(self) -> None:
         if self.session is None:
             return
-        _, context = self.session.get_playwright_session()
-        for page in context.pages:
+        for page in self.session.context.pages:
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=3000)
             except Error:
@@ -145,7 +142,6 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
 
     def _execute_bgym_step(self, action_str: str) -> str:
         """Execute a BrowserGym action string and return result message."""
-        page = self._ensure_page()
         logger.info(f"Execute bgym step: {action_str}")
         result = "Success"
 
@@ -153,7 +149,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
             code = self._action_set.to_python_code(action_str)
             execute_python_code(
                 code=code,
-                page=page,
+                page=self.page,
                 send_message_to_user=lambda message: logger.info(f"BrowserGym message: {message}"),
                 report_infeasible_instructions=lambda message: logger.warning(f"Infeasible instruction: {message}"),
             )
@@ -434,7 +430,7 @@ class BrowsergymTool(ToolWithTelemetry, BidBrowserActionSpace):
 
         return obs
 
-    # === BrowserTaskTool utility methods ===
+    # === BrowserTool utility methods ===
 
     def evaluate_js(self, js: str) -> Any:
         """Evaluate JavaScript in the browser context and return the result."""
