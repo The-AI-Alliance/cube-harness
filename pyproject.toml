@@ -30,7 +30,6 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
     "mcp[cli]>=1.26",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
 ]
 
 [project.optional-dependencies]
