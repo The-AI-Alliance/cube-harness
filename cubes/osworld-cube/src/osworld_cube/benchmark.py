@@ -209,6 +209,10 @@ class OSWorldBenchmark(Benchmark):
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
+    vm_backend: VMBackend | None = None
+    """VM backend used to provision VMs for each task. If None, tasks will fail
+    unless a VM is attached externally via computer.attach_vm()."""
+
     @model_validator(mode="after")
     def _warn_on_conflicting_task_source(self) -> "OSWorldBenchmark":
         if self.tasks_file is not None and "test_set_name" in self.model_fields_set:
@@ -233,6 +237,7 @@ class OSWorldBenchmark(Benchmark):
                 tool_config=self.default_tool_config,
                 seed=None,
                 metadata=tm,
+                vm_backend=self.vm_backend,
             )
 
     # ------------------------------------------------------------------
