@@ -47,7 +47,6 @@ The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a Re
 
 ```bash
 make debug
-# or: uv run recipes/hello_miniwob.py debug
 ```
 
 Full benchmark (all 125 tasks, parallel via Ray):
@@ -58,7 +57,7 @@ make hello
 
 This will:
 1. Launch a headless browser environment
-2. Run a ReAct agent powered by GPT-5.2-mini on MiniWob tasks
+2. Run a ReAct agent powered by gpt-5-mini on MiniWob tasks
 3. Save trajectories and results to `~/cube_harness_results/{YYYYMMDD_HHMMSS}_react_miniwob/`
 
 ### Configuration
@@ -72,8 +71,8 @@ See **[docs/configuration.md](docs/configuration.md)** for the full philosophy, 
 cube-harness includes a Gradio-based UI for exploring experiment results and trajectories:
 
 ```bash
-make viewer
-# or: uv run ch-viewer
+make xray
+# or: uv run ch-xray
 ```
 
 The viewer displays:
