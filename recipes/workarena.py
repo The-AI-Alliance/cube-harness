@@ -1,4 +1,4 @@
-"""Example recipe for running WorkArena benchmark with AgentLab2.
+"""Example recipe for running WorkArena benchmark with cube-harness.
 
 This recipe demonstrates how to run WorkArena tasks using the BrowserGym tool.
 
@@ -27,17 +27,17 @@ Usage:
 
 import sys
 
-from agentlab2 import make_experiment_output_dir
-from agentlab2.agents.genny import GennyConfig
-from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.exp_runner import run_sequentially, run_with_ray
-from agentlab2.experiment import Experiment
-from agentlab2.llm import LLMConfig
-from agentlab2.tools.browser_session import PlaywrightSessionConfig
-from agentlab2.tools.browsergym import BrowsergymConfig
+from cube_harness import make_experiment_output_dir
+from cube_harness.agents.genny import GennyConfig
+from cube_harness.agents.react import ReactAgentConfig
+from cube_harness.exp_runner import run_sequentially, run_with_ray
+from cube_harness.experiment import Experiment
+from cube_harness.llm import LLMConfig
+from cube_harness.tools.browser_session import PlaywrightSessionConfig
+from cube_harness.tools.browsergym import BrowsergymConfig
 
 try:
-    from workarena_cube import WorkArenaBenchmark
+    from cube_harness.benchmarks.workarena import WorkArenaBenchmark
 except ImportError:
     print("WorkArena benchmark requires 'workarena-cube'. Run `make install` to install all optional dependencies.")
     sys.exit(1)
