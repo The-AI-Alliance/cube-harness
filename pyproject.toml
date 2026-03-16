@@ -30,7 +30,6 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
     "mcp[cli]>=1.26",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +51,6 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 
 [tool.uv.sources]
 miniwob-cube = { path = "cubes/miniwob", editable = true }
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard.git", branch = "main" }
 
 [tool.ruff]
 fix = true
