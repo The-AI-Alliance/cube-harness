@@ -16,7 +16,7 @@ make lint    # ruff check + format (auto-fix)
 make test    # pytest tests/
 ```
 
-All commits need a DCO sign-off: `git commit -s -m "..."`.
+All commits need a [DCO sign-off](https://developercertificate.org/): `git commit -s -m "..."`. Running `make install` sets up a git hook that adds this automatically.
 
 ## Repo Layout
 
