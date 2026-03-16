@@ -11,6 +11,7 @@ from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import tool_action
+from cube_browser_playwright import PlaywrightSession, Viewport
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 from pydantic import PrivateAttr
 
@@ -37,8 +38,8 @@ _SUPPORTED_ACTION_NAMES = frozenset(
 class WorkArenaCheatTool(SyncPlaywrightTool):
     """SyncPlaywrightTool with an additional workarena_cheat action — for debug use only."""
 
-    def __init__(self, config: PlaywrightConfig) -> None:
-        super().__init__(config)
+    def __init__(self, config: PlaywrightConfig, session: PlaywrightSession) -> None:
+        super().__init__(config, session)
         self._workarena_task: AbstractServiceNowTask | None = None
 
     @tool_action
@@ -46,7 +47,7 @@ class WorkArenaCheatTool(SyncPlaywrightTool):
         """Execute the WorkArena built-in cheat to solve the task automatically."""
         if self._workarena_task is None:
             return "No WorkArena task initialized — cheat unavailable."
-        self._workarena_task.cheat(self._page, [])
+        self._workarena_task.cheat(self.page, [])
         return "WorkArena cheat executed."
 
 
@@ -54,7 +55,8 @@ class WorkArenaCheatToolConfig(PlaywrightConfig):
     """PlaywrightConfig variant that creates a WorkArenaCheatTool."""
 
     def make(self, container: Any = None) -> WorkArenaCheatTool:
-        return WorkArenaCheatTool(self)
+        session = self.browser.make()
+        return WorkArenaCheatTool(self, session)
 
 
 class WorkArenaTask(Task):
@@ -156,16 +158,17 @@ def _load_task_class(class_path: str) -> type:
 
 def _apply_task_runtime_preferences(tool: Any, workarena_task: AbstractServiceNowTask) -> None:
     """Apply WorkArena task runtime defaults to the tool config when not explicitly set."""
-    browser_config = tool.config.pw_kwargs
-    updated_browser_config = {
-        "viewport": browser_config.viewport
-        if "viewport" in browser_config
-        else getattr(workarena_task, "viewport", None),
-        "slow_mo": browser_config.slow_mo if "slow_mo" in browser_config else getattr(workarena_task, "slow_mo", None),
-        "timeout": browser_config.timeout if "timeout" in browser_config else getattr(workarena_task, "timeout", None),
-        "locale": browser_config.locale if "locale" in browser_config else getattr(workarena_task, "locale", None),
-        "timezone_id": browser_config.timezone_id
-        if "timezone_id" in browser_config
-        else getattr(workarena_task, "timezone_id", None),
-    }
-    tool.config.pw_kwargs.update(updated_browser_config)
+    browser_config = tool.config.browser
+    explicitly_set = browser_config.model_fields_set
+    updates: dict[str, Any] = {}
+    for field in ("slow_mo", "timeout", "locale", "timezone_id"):
+        if field not in explicitly_set and getattr(workarena_task, field, None) is not None:
+            updates[field] = getattr(workarena_task, field)
+    if "viewport" not in explicitly_set:
+        raw_vp = getattr(workarena_task, "viewport", None)
+        if isinstance(raw_vp, dict):
+            updates["viewport"] = Viewport(**raw_vp)
+        elif isinstance(raw_vp, Viewport):
+            updates["viewport"] = raw_vp
+    if updates:
+        tool.config.browser = browser_config.model_copy(update=updates)

@@ -18,7 +18,7 @@ class TestBrowsergymConfig:
         """Test that default configuration values are set correctly."""
         config = BrowsergymConfig()
 
-        assert config.browser_config.headless is True
+        assert config.browser.headless is True
         assert config.use_html is True
         assert config.use_axtree is True
         assert config.use_screenshot is True
@@ -28,19 +28,19 @@ class TestBrowsergymConfig:
     def test_custom_config_values(self) -> None:
         """Test that custom configuration values are applied."""
         config = BrowsergymConfig(
-            browser_config=PlaywrightSessionConfig(headless=False, viewport={"width": 1920, "height": 1080}),
+            browser=PlaywrightSessionConfig(headless=False, viewport={"width": 1920, "height": 1080}),
             use_html=False,
             use_axtree=False,
             use_screenshot=False,
             max_wait=30,
         )
 
-        assert config.browser_config.headless is False
+        assert config.browser.headless is False
         assert config.use_html is False
         assert config.use_axtree is False
         assert config.use_screenshot is False
         assert config.max_wait == 30
-        assert config.browser_config.viewport == {"width": 1920, "height": 1080}
+        assert config.browser.viewport == {"width": 1920, "height": 1080}
 
     def test_make_creates_tool_instance(self) -> None:
         """Test that make() creates a proper BrowsergymTool instance."""
@@ -52,10 +52,10 @@ class TestBrowsergymConfig:
 
     def test_make_passes_config_to_tool(self) -> None:
         """Test that make() passes configuration to the tool."""
-        config = BrowsergymConfig(browser_config=PlaywrightSessionConfig(headless=False), max_wait=120)
+        config = BrowsergymConfig(browser=PlaywrightSessionConfig(headless=False), max_wait=120)
         tool = config.make()
 
-        assert tool.config.browser_config.headless is False
+        assert tool.config.browser.headless is False
         assert tool.config.max_wait == 120
 
 

@@ -72,8 +72,8 @@ def get_debug_task_configs() -> list[WorkArenaTaskConfig]:
     ]
 
 
-def get_benchmark() -> WorkArenaBenchmark:
-    return WorkArenaBenchmark()
+def get_debug_benchmark() -> WorkArenaBenchmark:
+    return WorkArenaBenchmark(n_seeds_l1=1)
 
 
 if __name__ == "__main__":
