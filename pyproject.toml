@@ -36,7 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 # WorkArena benchmark dependencies
 workarena = [
-    "browsergym-workarena>=0.5.2",
+    "workarena-cube",
 ]
 # Miniwob cube dependencies
 miniwob = [
