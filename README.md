@@ -68,7 +68,7 @@ See **[docs/configuration.md](docs/configuration.md)** for the full philosophy, 
 
 ## Experiment Viewer
 
-cube-harness includes a Gradio-based UI for exploring experiment results and trajectories:
+cube-harness includes a Gradio-based XRay UI for exploring experiment results, trajectories, and OpenTelemetry spans:
 
 ```bash
 make xray
