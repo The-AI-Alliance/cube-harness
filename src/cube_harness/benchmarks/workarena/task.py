@@ -83,7 +83,7 @@ class WorkArenaTask(Task):
         _apply_task_runtime_preferences(self._tool, self._workarena_task)
         self._tool.reset()
 
-        page, _ = self._tool.session.get_playwright_session()
+        page = self._tool.session.page
         goal, task_info = self._workarena_task.setup(page)
 
         logger.info(f"WorkArena page URL after setup: {page.url}")
@@ -118,7 +118,7 @@ class WorkArenaTask(Task):
         """
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
-        page, _ = self._tool.session.get_playwright_session()
+        page = self._tool.session.page
         reward, done, _user_message, task_info = self._workarena_task.validate(page, [])
         return reward, {"done": done, **task_info}
 
@@ -140,7 +140,7 @@ class WorkArenaTask(Task):
         """Check task completion via WorkArena validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
-        page, _ = self._tool.session.get_playwright_session()
+        page = self._tool.session.page
         _, done, _, _ = self._workarena_task.validate(page, [])
         return done
 

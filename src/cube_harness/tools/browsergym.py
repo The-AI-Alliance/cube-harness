@@ -80,12 +80,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
 
-    def _ensure_page(self) -> Page:
-        if self.session is None:
-            raise RuntimeError("Browser is not initialized. Call reset() first.")
-        page, _ = self.session.get_playwright_session()
-        return page
-
     @property
     def session(self) -> PlaywrightSession:
         if self._session is None:
@@ -94,7 +88,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
 
     @property
     def page(self) -> Page:
-        return self._ensure_page()
+        return self.session.page
 
     @property
     def last_reward(self) -> float:
@@ -108,7 +102,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser_config.make()
-        self._session._playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
+        self._session.playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:
         if self._session is not None:
@@ -118,8 +112,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
     def _wait_dom_loaded(self) -> None:
         if self.session is None:
             return
-        _, context = self.session.get_playwright_session()
-        for page in context.pages:
+        for page in self.session.context.pages:
             try:
                 page.wait_for_load_state("domcontentloaded", timeout=3000)
             except Error:
