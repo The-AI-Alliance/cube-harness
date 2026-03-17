@@ -28,6 +28,7 @@ from pathlib import Path
 import osworld_cube
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
 from osworld_cube.computer import ComputerConfig
+from osworld_cube.vm_backend import LocalQEMUVMBackend
 
 from agentlab2 import make_experiment_output_dir
 from agentlab2.agents.genny import GennyConfig
@@ -116,11 +117,8 @@ def main(debug: bool) -> None:
     )
 
     tool_config = ComputerConfig(
-        provider="docker",
         action_space="pyautogui",
-        headless=True,
         require_a11y_tree=True,
-        screen_size=(1920, 1080),
         observe_after_action=True,
     )
 
@@ -130,6 +128,7 @@ def main(debug: bool) -> None:
         use_som=False,
         tasks_file=tasks_file,
         test_set_name=OSWorldTestSet.TEST_SMALL,
+        vm_backend=LocalQEMUVMBackend(),
     )
     benchmark.setup()
     keep_ids = [tid for tid in benchmark.task_metadata if tid not in GDRIVE_TASK_IDS]
@@ -149,7 +148,6 @@ def main(debug: bool) -> None:
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print(f"Provider: {tool_config.provider}")
         print("=" * 60 + "\n")
         run_sequentially(exp)
     else:
@@ -158,7 +156,6 @@ def main(debug: bool) -> None:
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print(f"Provider: {tool_config.provider}")
         print("Parallelism: 3 workers")
         print("=" * 60 + "\n")
         run_with_ray(exp, n_cpus=3)
