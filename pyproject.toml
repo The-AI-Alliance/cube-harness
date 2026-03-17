@@ -1,8 +1,8 @@
 
 [project]
-name = "agentlab2"
+name = "cube-harness"
 version = "0.1.0"
-description = "agentlab2, open source agentic evaluation and data generation framework."
+description = "cube-harness, open source agentic evaluation and data generation framework."
 readme = "README.md"
 authors = [
     { name = "Aman Jaiswal", email = "amanjaiswal73892@gmail.com" },
@@ -19,10 +19,9 @@ dependencies = [
     "numpy~=2.3.5",
     "numpydoc~=1.10.0",
     "ray[default]>=2.52.1",
-    "tenacity~=8.5.0",
+    "tenacity>=8.5.0",
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
-    "miniwob>=1.0",
     "gradio~=5.49",
     "matplotlib>=3.8",
     "opentelemetry-api>=1.20.0",
@@ -31,13 +30,16 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
     "mcp[cli]>=1.26",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
 ]
 
 [project.optional-dependencies]
 # WorkArena benchmark dependencies
 workarena = [
     "browsergym-workarena>=0.5.2",
+]
+# Miniwob cube dependencies
+miniwob = [
+    "miniwob-cube",
 ]
 
 [build-system]
@@ -46,6 +48,9 @@ build-backend = "uv_build"
 
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
+
+[tool.uv.sources]
+miniwob-cube = { path = "cubes/miniwob", editable = true }
 
 [tool.ruff]
 fix = true
@@ -62,9 +67,9 @@ line-ending = "auto"
 extend-select = ["I"] # sort imports
 
 [project.scripts]
-al2-viewer = "agentlab2.deprecated_viewer:main"
-al2-mcp-server = "agentlab2.mcp.server:main"
-al2-xray = "agentlab2.analyze.xray:main"
+ch-viewer = "cube_harness.deprecated_viewer:main"
+ch-mcp-server = "cube_harness.mcp.server:main"
+ch-xray = "cube_harness.analyze.xray:main"
 
 [dependency-groups]
 dev = [

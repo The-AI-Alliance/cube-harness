@@ -22,9 +22,9 @@ from cube.task import STOP_ACTION
 from dotenv import load_dotenv
 from termcolor import colored
 
-from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.llm import LLMConfig
-from agentlab2.tools.mcp import MCPServerConfig, MCPToolConfig
+from cube_harness.agents.react import ReactAgentConfig
+from cube_harness.llm import LLMConfig
+from cube_harness.tools.mcp import MCPServerConfig, MCPToolConfig
 
 load_dotenv()
 
@@ -40,7 +40,7 @@ def setup_demo_directory(demo_dir: Path) -> None:
     demo_dir.mkdir(parents=True, exist_ok=True)
 
     (demo_dir / "readme.txt").write_text(
-        "Welcome to AgentLab2!\nThis is a demo directory managed by the MCP filesystem server.\n"
+        "Welcome to cube-harness!\nThis is a demo directory managed by the MCP filesystem server.\n"
     )
     (demo_dir / "shopping_list.txt").write_text("eggs\nbread\nmilk\napples\n")
     notes = demo_dir / "notes"
@@ -50,7 +50,7 @@ def setup_demo_directory(demo_dir: Path) -> None:
 
 def main() -> None:
     # -- 1. Prepare a temp directory with demo files --
-    demo_dir = Path(tempfile.mkdtemp(prefix="agentlab_mcp_"))
+    demo_dir = Path(tempfile.mkdtemp(prefix="cube_harness_mcp_"))
     setup_demo_directory(demo_dir)
     logger.info(f"Demo directory: {demo_dir}")
 
