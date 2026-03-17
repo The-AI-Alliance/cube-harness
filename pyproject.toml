@@ -38,6 +38,10 @@ workarena = [
 miniwob = [
     "miniwob-cube",
 ]
+# WebArena recipe dependency
+webarena = [
+    "webarena-verified-cube",
+]
 # XRay trajectory viewer
 analyze = [
     "gradio~=5.49",
@@ -52,6 +56,7 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 
 [tool.uv.sources]
 miniwob-cube = { path = "cubes/miniwob", editable = true }
+webarena-verified-cube = { path = "cubes/webarena-verified", editable = true }
 
 [tool.ruff]
 fix = true

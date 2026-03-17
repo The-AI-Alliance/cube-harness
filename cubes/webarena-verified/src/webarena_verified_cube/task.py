@@ -12,8 +12,8 @@ from webarena_verified.types.config import WebArenaVerifiedConfig
 from webarena_verified.types.eval import EvalStatus, NetworkTrace, TaskEvalResult
 from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 
-from agentlab2.tools.playwright import SyncPlaywrightTool
-from agentlab2.tools.toolbox import Toolbox
+from cube_harness.tools.playwright import SyncPlaywrightTool
+from cube_harness.tools.toolbox import Toolbox
 from webarena_verified_cube.tool import SubmitResponseTool, WebArenaToolConfig
 
 logger = logging.getLogger(__name__)

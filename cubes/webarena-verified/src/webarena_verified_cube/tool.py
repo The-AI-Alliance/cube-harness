@@ -2,9 +2,9 @@ import tempfile
 
 from cube.tool import ToolConfig, tool_action
 
-from agentlab2.tool import ToolWithTelemetry
-from agentlab2.tools.playwright import PlaywrightConfig, SyncPlaywrightTool
-from agentlab2.tools.toolbox import ToolboxConfig
+from cube_harness.tool import ToolWithTelemetry
+from cube_harness.tools.playwright import PlaywrightConfig, SyncPlaywrightTool
+from cube_harness.tools.toolbox import ToolboxConfig
 from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, Status
 
 

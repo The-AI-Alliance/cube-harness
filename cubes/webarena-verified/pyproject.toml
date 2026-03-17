@@ -5,8 +5,8 @@ description = "WebArena-Verified benchmark cube — 812 verified web automation 
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard",
+    "cube-harness",
     "webarena-verified",
-    "agentlab2",
     "Pillow",
 ]
 
