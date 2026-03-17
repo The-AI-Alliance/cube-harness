@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import ClassVar, Generator
 
-from browsergym.workarena import get_all_tasks_agents
+from cube.benchmark import BenchmarkMetadata
 from cube.core import Action, ActionSchema, Observation
-from cube.task import TaskMetadata
+from cube.task import TaskConfig, TaskMetadata
 from cube.testing import run_debug_suite
 
 from workarena_cube.benchmark import WorkArenaBenchmark
@@ -47,34 +48,22 @@ class CheatAgent:
         return Action(name="final_step", arguments={})
 
 
+class DebugBenchmark(WorkArenaBenchmark):
+    benchmark_metadata: ClassVar[BenchmarkMetadata] = WorkArenaBenchmark.benchmark_metadata
+    task_metadata: ClassVar[dict[str, TaskMetadata]] = WorkArenaBenchmark.task_metadata
+    task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
+
+    def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
+        yield from list(super().get_task_configs())[:_DEBUG_N_TASKS]
+
+
 def make_debug_agent(task_id: str) -> CheatAgent:
     return CheatAgent(task_id)
 
 
-def get_debug_task_configs() -> list[WorkArenaTaskConfig]:
-    task_tuples = get_all_tasks_agents(filter="l1", meta_seed=42, n_seed_l1=1, is_agent_curriculum=False)[
-        :_DEBUG_N_TASKS
-    ]
-    return [
-        WorkArenaTaskConfig(
-            task_id=task_class.get_task_id(),
-            seed=seed,
-            tool_config=WorkArenaCheatToolConfig(),
-            task_metadata=TaskMetadata(
-                id=task_class.get_task_id(),
-                extra_info={
-                    "task_class_path": f"{task_class.__module__}.{task_class.__qualname__}",
-                    "level": "l1",
-                },
-            ),
-        )
-        for task_class, seed in task_tuples
-    ]
-
-
 def get_debug_benchmark() -> WorkArenaBenchmark:
-    return WorkArenaBenchmark(
-        n_seeds_l1=1, 
+    return DebugBenchmark(
+        n_seeds_l1=1,
         default_tool_config=WorkArenaCheatToolConfig(),
     )
 
@@ -86,6 +75,5 @@ if __name__ == "__main__":
 
     results = run_debug_suite("workarena-cube", _this_module)
     failed = [r for r in results if r["error"]]
-
 
     sys.exit(1 if failed else 0)
