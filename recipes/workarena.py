@@ -45,7 +45,7 @@ except ImportError:
     )
     sys.exit(1)
 
-_LLM = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+_LLM = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
 
 AGENTS = {
     "genny": GennyConfig(
