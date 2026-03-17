@@ -24,7 +24,7 @@ from cube_harness.tools.browsergym import BrowsergymConfig
 def main(debug: bool) -> None:
     output_dir = make_experiment_output_dir("react", "miniwob_browsergym")
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini")
+    llm_config = LLMConfig(model_name="gpt-5-mini")
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     benchmark = MiniWobBenchmark(

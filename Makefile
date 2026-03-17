@@ -43,8 +43,8 @@ lint:
 
 lint-check:
 	@echo "🧹 Checking lint"
-	uvx ruff check --diff .
-	uvx ruff format --diff .
+	uv run ruff check --diff .
+	uv run ruff format --diff .
 
 test: install
 	@echo "🧪 Running unit tests"
