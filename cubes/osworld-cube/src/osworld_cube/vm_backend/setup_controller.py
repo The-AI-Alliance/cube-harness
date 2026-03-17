@@ -344,13 +344,15 @@ class SetupController:
     ) -> dict[str, Any]:
         if not command:
             raise ValueError("Empty command")
-        payload = json.dumps({
-            "command": command,
-            "shell": shell,
-            "verification": verification or {},
-            "max_wait_time": max_wait_time,
-            "check_interval": check_interval,
-        })
+        payload = json.dumps(
+            {
+                "command": command,
+                "shell": shell,
+                "verification": verification or {},
+                "max_wait_time": max_wait_time,
+                "check_interval": check_interval,
+            }
+        )
         try:
             resp = requests.post(
                 self.http_server_setup_root + "/execute_with_verification",
@@ -384,7 +386,9 @@ class SetupController:
                 folders = drive.ListFile({"q": q}).GetList()
                 if not folders:
                     parents_meta: dict = {} if parent_id == "root" else {"parents": [{"id": parent_id}]}
-                    folder_file = drive.CreateFile({"title": p, "mimeType": "application/vnd.google-apps.folder", **parents_meta})
+                    folder_file = drive.CreateFile(
+                        {"title": p, "mimeType": "application/vnd.google-apps.folder", **parents_meta}
+                    )
                     folder_file.Upload()
                     parent_id = folder_file["id"]
                 else:
@@ -396,9 +400,21 @@ class SetupController:
             if operation == "delete":
                 q = params.get("query", "")
                 trash = params.get("trash", False)
-                for item in drive.ListFile({"q": f"( {q} ) and mimeType != 'application/vnd.google-apps.folder'" if q else "mimeType != 'application/vnd.google-apps.folder'"}).GetList():
+                for item in drive.ListFile(
+                    {
+                        "q": f"( {q} ) and mimeType != 'application/vnd.google-apps.folder'"
+                        if q
+                        else "mimeType != 'application/vnd.google-apps.folder'"
+                    }
+                ).GetList():
                     item.Trash() if trash else item.Delete()
-                for item in drive.ListFile({"q": f"( {q} ) and mimeType = 'application/vnd.google-apps.folder'" if q else "mimeType = 'application/vnd.google-apps.folder'"}).GetList():
+                for item in drive.ListFile(
+                    {
+                        "q": f"( {q} ) and mimeType = 'application/vnd.google-apps.folder'"
+                        if q
+                        else "mimeType = 'application/vnd.google-apps.folder'"
+                    }
+                ).GetList():
                     item.Trash() if trash else item.Delete()
             elif operation == "mkdirs":
                 mkdir_in_googledrive(params["path"])
@@ -529,7 +545,9 @@ class SetupController:
                         )
                         if resp.status_code == 200:
                             break
-                        last_err: Exception = requests.RequestException(f"Upload failed ({resp.status_code}): {resp.text}")
+                        last_err: Exception = requests.RequestException(
+                            f"Upload failed ({resp.status_code}): {resp.text}"
+                        )
                 except requests.RequestException as exc:
                     last_err = exc
                     time.sleep(2**attempt)
@@ -602,10 +620,12 @@ class SetupController:
 
             chrome_history_path = result["output"].strip() if result else ""
 
-            form = MultipartEncoder({
-                "file_path": chrome_history_path,
-                "file_data": (os.path.basename(chrome_history_path), open(db_path, "rb")),
-            })
+            form = MultipartEncoder(
+                {
+                    "file_path": chrome_history_path,
+                    "file_data": (os.path.basename(chrome_history_path), open(db_path, "rb")),
+                }
+            )
             resp = requests.post(
                 self.http_server_setup_root + "/upload",
                 headers={"Content-Type": form.content_type},
@@ -636,9 +656,9 @@ class SetupController:
             return command
         return [
             token.replace("{CLIENT_PASSWORD}", replacements["{CLIENT_PASSWORD}"])
-                  .replace("{SCREEN_WIDTH_HALF}", replacements["{SCREEN_WIDTH_HALF}"])
-                  .replace("{SCREEN_HEIGHT_HALF}", replacements["{SCREEN_HEIGHT_HALF}"])
-                  .replace("{SCREEN_WIDTH}", replacements["{SCREEN_WIDTH}"])
-                  .replace("{SCREEN_HEIGHT}", replacements["{SCREEN_HEIGHT}"])
+            .replace("{SCREEN_WIDTH_HALF}", replacements["{SCREEN_WIDTH_HALF}"])
+            .replace("{SCREEN_HEIGHT_HALF}", replacements["{SCREEN_HEIGHT_HALF}"])
+            .replace("{SCREEN_WIDTH}", replacements["{SCREEN_WIDTH}"])
+            .replace("{SCREEN_HEIGHT}", replacements["{SCREEN_HEIGHT}"])
             for token in command
         ]

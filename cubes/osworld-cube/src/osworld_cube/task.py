@@ -137,9 +137,7 @@ class OSWorldTask(Task):
         setup_steps = task_config.get("config") or []
         if setup_steps:
             chromium_port, vlc_port, _ = self._get_vm_ports()
-            task_cache_dir = str(
-                Path(self._computer.config.cache_dir) / task_config.get("id", "task")
-            )
+            task_cache_dir = str(Path(self._computer.config.cache_dir) / task_config.get("id", "task"))
             Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
             setup_ctrl = SetupController(
                 guest=self._computer._guest,

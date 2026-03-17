@@ -330,7 +330,9 @@ class OSWorldBenchmark(Benchmark):
         Reads <eval_examples_dir>/test_set_name → {domain: [task_id, ...]}
         Then reads <eval_examples_dir>/examples/<domain>/<task_id>.json per task.
         """
-        eval_examples_dir = Path(self.test_set_path) if self.test_set_path else (OSWORLD_REPO_DIR / "evaluation_examples")
+        eval_examples_dir = (
+            Path(self.test_set_path) if self.test_set_path else (OSWORLD_REPO_DIR / "evaluation_examples")
+        )
         test_set_file = eval_examples_dir / self.test_set_name
 
         if not test_set_file.exists():

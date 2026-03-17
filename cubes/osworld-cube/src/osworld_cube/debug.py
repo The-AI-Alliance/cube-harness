@@ -156,7 +156,9 @@ def get_debug_task_configs(vm_backend: VMBackend | None = None) -> list[OSWorldT
                 "related_apps": entry.get("related_apps", []),
             },
         )
-        configs.append(OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta, vm_backend=vm_backend))
+        configs.append(
+            OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta, vm_backend=vm_backend)
+        )
     logger.debug("[get_debug_task_configs] Loaded %d configs from %s", len(configs), _TASKS_FILE)
     return configs
 

@@ -29,71 +29,73 @@ def read_x11_image(filepath):
     """
     Pure Python X11 (XWD) format reader that converts to PIL Image.
     No external dependencies required.
-    
+
     Args:
         filepath: Path to the X11/XWD format image file
-        
+
     Returns:
         PIL.Image: Converted image in RGB format
-        
+
     Raises:
         ValueError: If the format is not supported
         IOError: If file cannot be read
     """
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         # Read X11 header
         header_data = f.read(100)
-        
+
         # Parse header (big endian format)
-        header_size = struct.unpack('>I', header_data[0:4])[0]
-        version = struct.unpack('>I', header_data[4:8])[0]
-        pixmap_format = struct.unpack('>I', header_data[8:12])[0]
-        pixmap_depth = struct.unpack('>I', header_data[12:16])[0]
-        pixmap_width = struct.unpack('>I', header_data[16:20])[0]
-        pixmap_height = struct.unpack('>I', header_data[20:24])[0]
-        
+        header_size = struct.unpack(">I", header_data[0:4])[0]
+        struct.unpack(">I", header_data[4:8])[0]
+        struct.unpack(">I", header_data[8:12])[0]
+        pixmap_depth = struct.unpack(">I", header_data[12:16])[0]
+        pixmap_width = struct.unpack(">I", header_data[16:20])[0]
+        pixmap_height = struct.unpack(">I", header_data[20:24])[0]
+
         logger.debug(f"X11 image info: {pixmap_width}x{pixmap_height}, depth={pixmap_depth}")
-        
+
         # Skip to the end of header
         f.seek(header_size)
-        
+
         # Read pixel data based on depth
         if pixmap_depth == 32:
             # 32-bit RGBA format
             bytes_per_pixel = 4
             total_pixels = pixmap_width * pixmap_height
             pixel_data = f.read(total_pixels * bytes_per_pixel)
-            
+
             # Convert to numpy array
             pixels = np.frombuffer(pixel_data, dtype=np.uint8)
-            
+
             # Reshape to image dimensions
             pixels = pixels.reshape((pixmap_height, pixmap_width, bytes_per_pixel))
-            
+
             # X11 format is typically BGRA, convert to RGB
             # Swap B and R channels, ignore alpha
             rgb_pixels = pixels[:, :, [2, 1, 0]]  # BGR -> RGB
-            
+
             # Create PIL image
-            image = Image.fromarray(rgb_pixels, 'RGB')
+            image = Image.fromarray(rgb_pixels, "RGB")
             return image
-            
+
         elif pixmap_depth == 24:
             # 24-bit RGB format
             bytes_per_pixel = 3
             total_pixels = pixmap_width * pixmap_height
             pixel_data = f.read(total_pixels * bytes_per_pixel)
-            
+
             # Convert to numpy array and reshape
             pixels = np.frombuffer(pixel_data, dtype=np.uint8)
             pixels = pixels.reshape((pixmap_height, pixmap_width, bytes_per_pixel))
-            
+
             # Create PIL image (assuming RGB order)
-            image = Image.fromarray(pixels, 'RGB')
+            image = Image.fromarray(pixels, "RGB")
             return image
-            
+
         else:
-            raise ValueError(f'Unsupported X11 pixel depth: {pixmap_depth}. Only 24-bit and 32-bit formats are supported.')
+            raise ValueError(
+                f"Unsupported X11 pixel depth: {pixmap_depth}. Only 24-bit and 32-bit formats are supported."
+            )
 
 
 def find_default_font(config_file_path, rules):
@@ -109,12 +111,12 @@ def find_default_font(config_file_path, rules):
         root = tree.getroot()
 
         # Define the XML namespace used in the file
-        namespace = {'oor': 'http://openoffice.org/2001/registry'}
+        namespace = {"oor": "http://openoffice.org/2001/registry"}
 
         # Search for the node containing the default font setting for LibreOffice Writer
         for elem in root.findall('.//item[@oor:path="/org.openoffice.Office.Writer/DefaultFont"]', namespace):
             for prop in elem.findall('.//prop[@oor:name="Standard"]', namespace):
-                for value in prop.findall('value', namespace):
+                for value in prop.findall("value", namespace):
                     default_font = value.text
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -137,32 +139,36 @@ def contains_page_break(docx_file, rules):
     except Exception:
         expected_page_break_count = None
 
-    namespaces = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    namespaces = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 
     page_break_count = 0
     for paragraph in doc.paragraphs:
         for run in paragraph.runs:
-            br_elems = run.element.findall('.//w:br', namespaces)
+            br_elems = run.element.findall(".//w:br", namespaces)
             for br in br_elems:
-                if br is not None and '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type' in br.attrib and \
-                        br.attrib['{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type'] == 'page':
+                if (
+                    br is not None
+                    and "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type" in br.attrib
+                    and br.attrib["{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type"] == "page"
+                ):
                     page_break_count += 1
-    
+
     if expected_page_break_count is not None and page_break_count != expected_page_break_count:
-        return 0    
+        return 0
 
     if page_break_count > 0:
         return 1
     else:
         return 0
 
+
 def compare_docx_files(file1, file2, **options):
-    ignore_blanks = options.get('ignore_blanks', True)
-    ignore_case = options.get('ignore_case', False)
-    ignore_order = options.get('ignore_order', False)
-    content_only = options.get('content_only', False)
-    fuzzy_match = options.get('fuzzy_match', False)
-    delete_empty_lines = options.get('delete_empty_lines', False)
+    ignore_blanks = options.get("ignore_blanks", True)
+    ignore_case = options.get("ignore_case", False)
+    ignore_order = options.get("ignore_order", False)
+    content_only = options.get("content_only", False)
+    fuzzy_match = options.get("fuzzy_match", False)
+    delete_empty_lines = options.get("delete_empty_lines", False)
 
     if not file1 or not file2:
         return 0
@@ -175,16 +181,16 @@ def compare_docx_files(file1, file2, **options):
             for node in paragraph.childNodes:
                 if node.nodeType == node.TEXT_NODE:
                     text_parts.append(node.data)
-                elif node.nodeType == node.ELEMENT_NODE and node.tagName == 'text:span':
+                elif node.nodeType == node.ELEMENT_NODE and node.tagName == "text:span":
                     # Assuming direct text content in <text:span>, for simplicity
                     for child in node.childNodes:
                         if child.nodeType == child.TEXT_NODE:
                             text_parts.append(child.data)
-            paragraph_texts.append(''.join(text_parts))
+            paragraph_texts.append("".join(text_parts))
         return paragraph_texts
 
     # Determine file types and load documents
-    if file1.endswith('.docx') and file2.endswith('.docx'):
+    if file1.endswith(".docx") and file2.endswith(".docx"):
         try:
             doc1 = Document(file1)
             doc2 = Document(file2)
@@ -199,7 +205,7 @@ def compare_docx_files(file1, file2, **options):
         if delete_empty_lines:
             doc1_paragraphs = [p for p in doc1_paragraphs if p.strip()]
             doc2_paragraphs = [p for p in doc2_paragraphs if p.strip()]
-    elif file1.endswith('.odt') and file2.endswith('.odt'):
+    elif file1.endswith(".odt") and file2.endswith(".odt"):
         try:
             doc1 = load(file1)
             doc2 = load(file2)
@@ -221,8 +227,8 @@ def compare_docx_files(file1, file2, **options):
 
     if content_only:
         # Compare the content of the documents
-        text1 = re.sub(r'\s+', ' ', '\n'.join(doc1_paragraphs)).strip()
-        text2 = re.sub(r'\s+', ' ', '\n'.join(doc2_paragraphs)).strip()
+        text1 = re.sub(r"\s+", " ", "\n".join(doc1_paragraphs)).strip()
+        text2 = re.sub(r"\s+", " ", "\n".join(doc2_paragraphs)).strip()
         if ignore_case:
             text1, text2 = text1.lower(), text2.lower()
         similarity = fuzz.ratio(text1, text2) / 100.0
@@ -230,8 +236,8 @@ def compare_docx_files(file1, file2, **options):
 
     # Process and compare documents
     if ignore_blanks:
-        text1 = re.sub(r'\s+', ' ', '\n'.join(doc1_paragraphs)).strip()
-        text2 = re.sub(r'\s+', ' ', '\n'.join(doc2_paragraphs)).strip()
+        text1 = re.sub(r"\s+", " ", "\n".join(doc1_paragraphs)).strip()
+        text2 = re.sub(r"\s+", " ", "\n".join(doc2_paragraphs)).strip()
         if ignore_case:
             text1, text2 = text1.lower(), text2.lower()
 
@@ -248,7 +254,7 @@ def compare_docx_files(file1, file2, **options):
             print(len(doc1_paragraphs))
             print(len(doc2_paragraphs))
             return 0
-        
+
         if fuzzy_match:
             total_similarity = 0
             if not doc1_paragraphs:
@@ -257,7 +263,7 @@ def compare_docx_files(file1, file2, **options):
                 if ignore_case:
                     p1, p2 = p1.lower(), p2.lower()
                 total_similarity += fuzz.ratio(p1, p2) / 100.0
-            
+
             if len(doc1_paragraphs) == 0:
                 return 1.0 if len(doc2_paragraphs) == 0 else 0.0
 
@@ -324,7 +330,6 @@ def compare_docx_tables(docx_file1, docx_file2):
 
     # Compare each table content
     for table1, table2 in zip(tables1, tables2):
-
         if len(table1.rows) != len(table2.rows) or len(table1.columns) != len(table2.columns):
             return 0
 
@@ -369,76 +374,72 @@ def compare_docx_images(docx_file1, docx_file2):
 def compare_image_text(image_path, rule):
     if not image_path:
         return 0
-    
+
     # Check if the image file exists
     if not os.path.exists(image_path):
         logger.error(f"Image file not found: {image_path}")
         return 0
-    
+
     # Check image format and convert if necessary
     temp_image_path = None
     actual_image_path = image_path
-    
+
     try:
         # First, try to identify the file format
-        result = subprocess.run(['file', image_path], capture_output=True, text=True)
+        result = subprocess.run(["file", image_path], capture_output=True, text=True)
         file_info = result.stdout.lower()
-        
+
         # If it's an X11 screen dump, we need to convert it
-        if 'x-window screen dump' in file_info or 'xwd' in file_info:
+        if "x-window screen dump" in file_info or "xwd" in file_info:
             logger.info(f"Detected X11 screen dump format in {image_path}, attempting conversion...")
-            
+
             # Create a temporary file for the converted image
-            temp_fd, temp_image_path = tempfile.mkstemp(suffix='.png')
+            temp_fd, temp_image_path = tempfile.mkstemp(suffix=".png")
             os.close(temp_fd)
-            
+
             # Try to convert using PIL with xwd support or other methods
             try:
                 # First try with PIL directly (sometimes it can handle xwd)
                 img = Image.open(image_path)
-                img.save(temp_image_path, 'PNG')
+                img.save(temp_image_path, "PNG")
                 actual_image_path = temp_image_path
                 logger.info("Successfully converted X11 image using PIL")
             except Exception as pil_error:
                 logger.warning(f"PIL conversion failed: {pil_error}")
-                
+
                 # Try our custom X11 reader (pure Python solution)
                 try:
                     logger.info("Attempting conversion using custom X11 reader...")
                     x11_image = read_x11_image(image_path)
-                    x11_image.save(temp_image_path, 'PNG')
+                    x11_image.save(temp_image_path, "PNG")
                     actual_image_path = temp_image_path
                     logger.info("✅ Successfully converted X11 image using custom reader")
                 except Exception as custom_error:
                     logger.warning(f"Custom X11 conversion failed: {custom_error}")
-                    
+
                     # Try with netpbm tools if available (fallback)
                     try:
-                        result = subprocess.run(['which', 'xwdtopnm'], capture_output=True)
+                        result = subprocess.run(["which", "xwdtopnm"], capture_output=True)
                         if result.returncode == 0:
                             # Use netpbm tools chain: xwdtopnm -> pnmtopng
-                            subprocess.run(['xwdtopnm', image_path], 
-                                         stdout=subprocess.PIPE, check=True)
-                            with open(temp_image_path, 'wb') as f:
-                                result = subprocess.run(['xwdtopnm', image_path], 
-                                                      stdout=subprocess.PIPE, check=True)
-                                result2 = subprocess.run(['pnmtopng'], 
-                                                       input=result.stdout, 
-                                                       stdout=f, check=True)
+                            subprocess.run(["xwdtopnm", image_path], stdout=subprocess.PIPE, check=True)
+                            with open(temp_image_path, "wb") as f:
+                                result = subprocess.run(["xwdtopnm", image_path], stdout=subprocess.PIPE, check=True)
+                                subprocess.run(["pnmtopng"], input=result.stdout, stdout=f, check=True)
                             actual_image_path = temp_image_path
                             logger.info("Successfully converted X11 image using netpbm tools")
                         else:
                             raise Exception("netpbm tools not available")
                     except Exception as netpbm_error:
                         logger.warning(f"netpbm conversion failed: {netpbm_error}")
-                        
+
                         # All conversions failed
                         logger.error(
                             "❌ All X11 conversion methods failed.\n"
                             "Attempted: PIL → Custom Python reader → netpbm tools\n"
                             "💡 The image might be corrupted or in an unsupported X11 variant"
                         )
-                        
+
                         # If all conversions fail, try to use the original file anyway
                         # Sometimes easyocr might handle it better than PIL
                         if temp_image_path:
@@ -446,21 +447,21 @@ def compare_image_text(image_path, rule):
                             temp_image_path = None
                         actual_image_path = image_path
                         logger.info("Will attempt OCR on original file format (likely to fail)")
-        
+
         # Now attempt OCR with error handling
         try:
-            reader = easyocr.Reader(['en'])
+            reader = easyocr.Reader(["en"])
             result = reader.readtext(actual_image_path)
-            extracted_text = ' '.join([entry[1] for entry in result])
-            
+            extracted_text = " ".join([entry[1] for entry in result])
+
             # Log OCR results
             logger.info(f"OCR extracted texts: {[entry[1] for entry in result]}")
             logger.info(f"Combined extracted text: {extracted_text}")
-            
-            if rule['type'] == 'text':
-                target_text = rule['text']
+
+            if rule["type"] == "text":
+                target_text = rule["text"]
                 match_found = target_text in extracted_text
-                
+
                 # Log matching results
                 logger.info(f"Target text: '{target_text}'")
                 logger.info(f"Match found: {match_found}")
@@ -468,16 +469,16 @@ def compare_image_text(image_path, rule):
                     logger.info("✅ Text matching successful!")
                 else:
                     logger.info("❌ Text matching failed!")
-                
+
                 return 1 if match_found else 0
             else:
                 raise ValueError("Unsupported rule type")
-                
+
         except Exception as ocr_error:
             logger.error(f"OCR processing failed for {actual_image_path}: {ocr_error}")
-            
+
             # Check if this is specifically an X11 format issue
-            if 'x-window screen dump' in file_info or 'xwd' in file_info:
+            if "x-window screen dump" in file_info or "xwd" in file_info:
                 logger.error(
                     "🚨 OCR failed on X11 screen dump after all conversion attempts.\n"
                     "This might indicate:\n"
@@ -485,19 +486,19 @@ def compare_image_text(image_path, rule):
                     "   2. Missing dependencies (numpy, PIL)\n"
                     "   3. Insufficient memory for large images"
                 )
-            
+
             return 0
-            
+
     except Exception as e:
         logger.error(f"Error processing image {image_path}: {e}")
         return 0
-        
+
     finally:
         # Clean up temporary file if created
         if temp_image_path and os.path.exists(temp_image_path):
             try:
                 os.unlink(temp_image_path)
-            except:
+            except Exception:
                 pass
 
 
@@ -520,7 +521,6 @@ def compare_line_spacing(docx_file1, docx_file2):
 
     # Compare each paragraph line spacing
     for para1, para2 in zip(doc1.paragraphs, doc2.paragraphs):
-
         spacing1 = para1.paragraph_format.line_spacing
         spacing2 = para2.paragraph_format.line_spacing
 
@@ -547,7 +547,7 @@ def compare_insert_equation(docx_file1, docx_file2):
     # Compare each paragraph if it contains equation
     for para1, para2 in zip(doc1.paragraphs, doc2.paragraphs):
         for run1, run2 in zip(para1.runs, para2.runs):
-            if run1.element.xpath('.//w:object') and run2.element.xpath('.//w:object'):
+            if run1.element.xpath(".//w:object") and run2.element.xpath(".//w:object"):
                 return 1
     return 0
 
@@ -605,7 +605,7 @@ def has_page_numbers_in_footers(docx_file):
         footer = section.footer
         if footer is None:
             return 0
-        footer_text = footer.paragraphs[0].text if footer.paragraphs else ''
+        footer_text = footer.paragraphs[0].text if footer.paragraphs else ""
         if not any(char.isdigit() for char in footer_text):
             # if no digit in footer, then no page number
             return 0
@@ -637,41 +637,48 @@ def check_file_exists(directory, filename):
 
 def check_tabstops(docx_file1, docx_file2, **kwargs) -> float:
     if not docx_file1 or not docx_file2:
-        return .0
+        return 0.0
 
     try:
         doc1: Document = Document(docx_file1)
         doc2: Document = Document(docx_file2)
     except Exception as e:
         logger.error(f"Error: {e}")
-        return .0
+        return 0.0
 
     para1 = [p for p in doc1.paragraphs if p.text.strip()]
     para2 = [p for p in doc2.paragraphs if p.text.strip()]
-    if len(para1) != len(para2): return .0
+    if len(para1) != len(para2):
+        return 0.0
 
-    if kwargs.get('word_number_split_by_tabstop', None) is not None:
-        number = kwargs['word_number_split_by_tabstop']
-        index = kwargs.get('index', 0)
+    if kwargs.get("word_number_split_by_tabstop", None) is not None:
+        number = kwargs["word_number_split_by_tabstop"]
+        index = kwargs.get("index", 0)
         for p1 in para1:
-            splits = p1.text.split('\t')
-            if len(splits) == 0: return .0
-            words = list(filter(lambda x: x.strip(), re.split(r'\s', splits[index])))
-            if len(words) != number: return .0
+            splits = p1.text.split("\t")
+            if len(splits) == 0:
+                return 0.0
+            words = list(filter(lambda x: x.strip(), re.split(r"\s", splits[index])))
+            if len(words) != number:
+                return 0.0
 
     section = doc2.sections[0]
     paragraph_width = section.page_width - section.left_margin - section.right_margin
-    ignore_tabs = lambda x: x.alignment == WD_TAB_ALIGNMENT.CLEAR or (
-            x.alignment == WD_TAB_ALIGNMENT.LEFT and x.position == 0)
-    minus = .0
+
+    def ignore_tabs(x):
+        return x.alignment == WD_TAB_ALIGNMENT.CLEAR or (x.alignment == WD_TAB_ALIGNMENT.LEFT and x.position == 0)
+
+    minus = 0.0
     for p1, p2 in zip(para1, para2):
         # filter CLEAR tabstop and default left-0 tabstop
         tabs1 = [tst for tst in p1.paragraph_format.tab_stops if not ignore_tabs(tst)]
         tabs2 = [tst for tst in p2.paragraph_format.tab_stops if not ignore_tabs(tst)]
-        if len(tabs1) != len(tabs2): return .0
-        difference = .0
+        if len(tabs1) != len(tabs2):
+            return 0.0
+        difference = 0.0
         for t1, t2 in zip(tabs1, tabs2):
-            if t1.alignment != t2.alignment: return .0
+            if t1.alignment != t2.alignment:
+                return 0.0
             difference += abs(t1.position - t2.position)
         minus += difference / paragraph_width
     score = 1 - (minus / len(para1))
@@ -691,8 +698,9 @@ def compare_contains_image(docx_file1, docx_file2):
 
     for para1, para2 in zip(doc1.paragraphs, doc2.paragraphs):
         for run1, run2 in zip(para1.runs, para2.runs):
-            if ('graphicData' in run1._element.xml and 'graphicData' not in run2._element.xml) or (
-                    'graphicData' not in run1._element.xml and 'graphicData' in run2._element.xml):
+            if ("graphicData" in run1._element.xml and "graphicData" not in run2._element.xml) or (
+                "graphicData" not in run1._element.xml and "graphicData" in run2._element.xml
+            ):
                 return 0
     return 1
 
@@ -710,7 +718,7 @@ def evaluate_colored_words_in_tables(file_path1, file_path2, **kwargs):
         logger.error(f"Error: {e}")
         return 0
 
-    threshold = kwargs.get('threshold', 3.5)
+    threshold = kwargs.get("threshold", 3.5)
 
     def _calculate_color_difference(rgb1, rgb2):
         srgb1 = [rgb1[0] / 255.0, rgb1[1] / 255.0, rgb1[2] / 255.0]
@@ -729,12 +737,15 @@ def evaluate_colored_words_in_tables(file_path1, file_path2, **kwargs):
                         if word:
                             first_letter = word[0].lower()
 
-                            if first_letter in 'aeiou' and _calculate_color_difference(run.font.color.rgb,
-                                                                                       RGBColor(255, 0, 0)) > threshold:
+                            if (
+                                first_letter in "aeiou"
+                                and _calculate_color_difference(run.font.color.rgb, RGBColor(255, 0, 0)) > threshold
+                            ):
                                 return 0  # Vowel-colored words should be red
-                            elif first_letter not in 'aeiou' and _calculate_color_difference(run.font.color.rgb,
-                                                                                             RGBColor(0, 0,
-                                                                                                      255)) > threshold:
+                            elif (
+                                first_letter not in "aeiou"
+                                and _calculate_color_difference(run.font.color.rgb, RGBColor(0, 0, 255)) > threshold
+                            ):
                                 return 0  # Non-vowel-colored words should be blue
 
     return 1  # All words in tables are correctly colored
@@ -751,12 +762,12 @@ def check_highlighted_words(file_path1, file_path2):
     highlighted = False
 
     for span in doc.getElementsByType(Span):
-        style_name = span.getAttribute('stylename')
+        style_name = span.getAttribute("stylename")
         if style_name:
             for automatic_style in doc.automaticstyles.childNodes:
-                if automatic_style.getAttribute('name') == style_name:
+                if automatic_style.getAttribute("name") == style_name:
                     for property in automatic_style.childNodes:
-                        if property.getAttribute('backgroundcolor') == '#ffff00':
+                        if property.getAttribute("backgroundcolor") == "#ffff00":
                             highlighted = True
                             break
             if highlighted:
@@ -829,7 +840,7 @@ def evaluate_spacing(file_path):
     introduction_spacing = document.paragraphs[0].paragraph_format.line_spacing
     body_spacing = document.paragraphs[1].paragraph_format.line_spacing
     conclusion_spacing = document.paragraphs[2].paragraph_format.line_spacing
-    if (introduction_spacing == 1.0 and body_spacing == 2.0 and conclusion_spacing == 1.5):
+    if introduction_spacing == 1.0 and body_spacing == 2.0 and conclusion_spacing == 1.5:
         return 1
     else:
         return 0
@@ -871,7 +882,7 @@ def evaluate_alignment(docx_path):
     # Iterate through each paragraph in the document
     for para in doc.paragraphs:
         # Split the paragraph into individual sentences
-        sentences = para.text.split('.')
+        sentences = para.text.split(".")
 
         for sentence in sentences:
             # Split the sentence into words
@@ -882,12 +893,15 @@ def evaluate_alignment(docx_path):
                 continue  # Skip sentences with less than three words
 
             # The first three words should be separated from the rest
-            first_part = ' '.join(words[:3])
-            second_part = ' '.join(words[3:])
+            first_part = " ".join(words[:3])
+            second_part = " ".join(words[3:])
 
             # Check if the sentence structure matches the pattern: first part + large space/tab + second part
-            if not (first_part in sentence and second_part in sentence and sentence.find(first_part) < sentence.find(
-                    second_part)):
+            if not (
+                first_part in sentence
+                and second_part in sentence
+                and sentence.find(first_part) < sentence.find(second_part)
+            ):
                 return 0  # The sentence does not meet the alignment criteria
 
     return 1  # All sentences meet the alignment criteria
@@ -907,7 +921,7 @@ def get_unique_train_ids(initial_file):  # fixed standard
     processed_lines = 0
 
     for para in doc.paragraphs:
-        line_parts = para.text.split(',')
+        line_parts = para.text.split(",")
         if len(line_parts) == 4:
             train_id = line_parts[1].strip()
             if train_id not in train_ids:
@@ -936,7 +950,7 @@ def check_no_duplicates(initial_file, processed_file):
     # processed
     for para in doc_processed.paragraphs:
         # Each line has the format: time_HH:MM:SS, train_id, station_id, platform_no
-        line_parts = para.text.split(',')
+        line_parts = para.text.split(",")
         # Ensure the line has the correct format
         if len(line_parts) == 4:
             train_id = line_parts[1].strip()
@@ -978,13 +992,13 @@ def compare_docx_lines(file1, file2):
 
 
 def compare_docx_files_and_ignore_new_lines(file1, file2, **options):
-    ignore_blanks = options.get('ignore_blanks', True)
+    ignore_blanks = options.get("ignore_blanks", True)
 
     if not file1 or not file2:
         return 0
 
     # Determine file types and load documents
-    if file1.endswith('.docx') and file2.endswith('.docx'):
+    if file1.endswith(".docx") and file2.endswith(".docx"):
         try:
             doc1 = Document(file1)
             doc2 = Document(file2)
@@ -993,8 +1007,8 @@ def compare_docx_files_and_ignore_new_lines(file1, file2, **options):
             return 0
 
         # First, delete all the blank in paragraphs
-        doc1 = [p for p in doc1.paragraphs if p.text != '']
-        doc2 = [p for p in doc2.paragraphs if p.text != '']
+        doc1 = [p for p in doc1.paragraphs if p.text != ""]
+        doc2 = [p for p in doc2.paragraphs if p.text != ""]
         doc1_paragraphs = [p.text for p in doc1]
         doc2_paragraphs = [p.text for p in doc2]
     else:
@@ -1004,8 +1018,8 @@ def compare_docx_files_and_ignore_new_lines(file1, file2, **options):
 
     # Process and compare documents
     if ignore_blanks:
-        text1 = re.sub(r'\s+', ' ', '\n'.join(doc1_paragraphs)).strip()
-        text2 = re.sub(r'\s+', ' ', '\n'.join(doc2_paragraphs)).strip()
+        text1 = re.sub(r"\s+", " ", "\n".join(doc1_paragraphs)).strip()
+        text2 = re.sub(r"\s+", " ", "\n".join(doc2_paragraphs)).strip()
         if text1 != text2:
             return 0
     else:
@@ -1027,22 +1041,24 @@ def compare_highlighted_text(file1, file2):
         highlighted_texts = []
 
         # Open the .docx file as a zip file and read the document.xml
-        with zipfile.ZipFile(file_path, 'r') as docx:
-            with docx.open('word/document.xml') as document_xml:
+        with zipfile.ZipFile(file_path, "r") as docx:
+            with docx.open("word/document.xml") as document_xml:
                 tree = ET.parse(document_xml)
                 root = tree.getroot()
 
         # Define the namespaces
         namespaces = {
-            'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
         }
 
         # Find all runs with highlight property
-        for run in root.findall('.//w:r', namespaces):
-            highlight = run.find('.//w:highlight', namespaces)
-            if highlight is not None and highlight.get(
-                    '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val') != 'none':
-                text = run.find('.//w:t', namespaces)
+        for run in root.findall(".//w:r", namespaces):
+            highlight = run.find(".//w:highlight", namespaces)
+            if (
+                highlight is not None
+                and highlight.get("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val") != "none"
+            ):
+                text = run.find(".//w:t", namespaces)
                 if text is not None:
                     highlighted_texts.append(text.text)
 
@@ -1063,11 +1079,11 @@ def compare_references(file1, file2, **options):
     if not file1 or not file2:
         return 0
 
-    reference_indicator = options.get('reference_indicator', 'References')
-    reference_base_result = options.get('reference_base_result', 0.5)
+    reference_indicator = options.get("reference_indicator", "References")
+    reference_base_result = options.get("reference_base_result", 0.5)
 
     # Determine file types and load documents
-    if file1.endswith('.docx') and file2.endswith('.docx'):
+    if file1.endswith(".docx") and file2.endswith(".docx"):
         try:
             doc1 = Document(file1)
             doc2 = Document(file2)
@@ -1093,8 +1109,8 @@ def compare_references(file1, file2, **options):
         return 0
 
     # split the reference section into reference items, and remove the empty string items
-    ref1 = [p for p in doc1_paragraphs[ref1_idx + 1:] if p.strip()]
-    ref2 = [p for p in doc2_paragraphs[ref2_idx + 1:] if p.strip()]
+    ref1 = [p for p in doc1_paragraphs[ref1_idx + 1 :] if p.strip()]
+    ref2 = [p for p in doc2_paragraphs[ref2_idx + 1 :] if p.strip()]
 
     # Compare the references
 
@@ -1128,7 +1144,7 @@ def compare_unique_train_records(processed_file, expected_files, **kwargs):
     logger.info(f"DEBUG: processed_file type: {type(processed_file)}, value: {processed_file}")
     logger.info(f"DEBUG: expected_files type: {type(expected_files)}, value: {expected_files}")
     logger.info(f"DEBUG: kwargs: {kwargs}")
-    
+
     if not processed_file or not isinstance(expected_files, list) or len(expected_files) < 2:
         logger.error("Invalid arguments: processed_file and a list of 2 expected_files are required.")
         return 0
@@ -1145,7 +1161,7 @@ def compare_unique_train_records(processed_file, expected_files, **kwargs):
         try:
             doc = Document(file_path)
             lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-            train_ids = [line.split(',')[1].strip() for line in lines if len(line.split(',')) == 4]
+            train_ids = [line.split(",")[1].strip() for line in lines if len(line.split(",")) == 4]
             return lines, train_ids
         except Exception as e:
             logger.error(f"Error opening or parsing file {file_path}: {e}")
@@ -1153,13 +1169,16 @@ def compare_unique_train_records(processed_file, expected_files, **kwargs):
 
     # Get data from all three files
     processed_lines, processed_train_ids = get_lines_and_ids_from_file(processed_file)
-    if processed_lines is None: return 0
+    if processed_lines is None:
+        return 0
 
     gold_lines, gold_train_ids = get_lines_and_ids_from_file(gold_file)
-    if gold_lines is None: return 0
+    if gold_lines is None:
+        return 0
 
     initial_lines, _ = get_lines_and_ids_from_file(initial_file)
-    if initial_lines is None: return 0
+    if initial_lines is None:
+        return 0
     initial_lines_set = set(initial_lines)
 
     # 1. Subset Check: Ensure every processed line was in the initial file
@@ -1185,9 +1204,7 @@ def compare_unique_train_records(processed_file, expected_files, **kwargs):
 
     return 1
 
+
 if __name__ == "__main__":
     image_path = "/home/ubuntu/OSWorld/cache/02ce9a50-7af2-47ed-8596-af0c230501f8/ls.png"
-    print(compare_image_text(image_path, {
-        "type": "text",
-        "text": "ls"
-      }))
+    print(compare_image_text(image_path, {"type": "text", "text": "ls"}))
