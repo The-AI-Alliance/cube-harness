@@ -1,3 +1,9 @@
+# /// script
+# dependencies = [
+#   "osworld-cube",
+#   "cube-harness",
+# ]
+# ///
 """OSWorld Eval — Genny agent with GPT-5 and accessibility tree observations.
 
 Uses the Genny agent (explicit context management, rolling summaries) with
@@ -10,13 +16,13 @@ Prerequisites:
 
 Usage:
     # Debug mode (2 tasks, sequential)
-    uv run recipes/eval_osworld.py debug
+    uv run recipes/osworld/eval_osworld.py debug
 
     # Eval mode (all tasks, 3 workers)
-    uv run recipes/eval_osworld.py
+    uv run recipes/osworld/eval_osworld.py
 
     # Custom task subset via tasks_file
-    TASKS_FILE=/path/to/tasks.json uv run recipes/eval_osworld.py
+    TASKS_FILE=/path/to/tasks.json uv run recipes/osworld/eval_osworld.py
 """
 
 import sys

@@ -9,28 +9,16 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 logger = logging.getLogger("desktopenv.metric.slides")
 
-# Add a new logger specifically for debugging PPTX comparisons
-debug_logger = logging.getLogger("desktopenv.metric.slides.debug")
-
-def enable_debug_logging():
-    """Enable debug logging for PPTX comparison"""
-    debug_logger.setLevel(logging.DEBUG)
-    if not debug_logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('[PPTX_DEBUG] %(message)s')
-        handler.setFormatter(formatter)
-        debug_logger.addHandler(handler)
-
 # Add debug logger for detailed comparison output
 debug_logger = logging.getLogger("desktopenv.metric.slides.debug")
+
 
 def enable_debug_logging():
     """Enable detailed debug logging for PPTX comparison"""
     debug_logger.setLevel(logging.DEBUG)
     if not debug_logger.handlers:
         handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         debug_logger.addHandler(handler)
 
@@ -40,23 +28,22 @@ def check_presenter_console_disable(config_file_path):
         tree = ET.parse(config_file_path)
         root = tree.getroot()
 
-        namespaces = {
-            'oor': 'http://openoffice.org/2001/registry'
-        }
+        namespaces = {"oor": "http://openoffice.org/2001/registry"}
 
         for item in root.findall(
-                ".//item[@oor:path='/org.openoffice.Office.Impress/Misc/Start']/prop[@oor:name='EnablePresenterScreen']",
-                namespaces):
+            ".//item[@oor:path='/org.openoffice.Office.Impress/Misc/Start']/prop[@oor:name='EnablePresenterScreen']",
+            namespaces,
+        ):
             # Check if the value of the configuration item indicates that the presenter console has been disabled
-            presenter_screen_enabled = item.find('value').text
-            if presenter_screen_enabled.lower() == 'false':
-                return 1.
+            presenter_screen_enabled = item.find("value").text
+            if presenter_screen_enabled.lower() == "false":
+                return 1.0
             else:
-                return 0.
-        return 0.
+                return 0.0
+        return 0.0
     except Exception as e:
         logger.error(f"Error: {e}")
-        return 0.
+        return 0.0
 
 
 def check_image_stretch_and_center(modified_ppt, original_ppt):
@@ -74,8 +61,8 @@ def check_image_stretch_and_center(modified_ppt, original_ppt):
     modified_slide_images = [shape for shape in modified_slide.shapes if shape.shape_type == 13]
 
     if not original_slide_images:
-        return 0.
-    
+        return 0.0
+
     the_image = original_slide_images[0]
 
     the_modified_image = None
@@ -86,15 +73,17 @@ def check_image_stretch_and_center(modified_ppt, original_ppt):
             the_modified_image = modified_image
 
     if the_modified_image is None:
-        return 0.
+        return 0.0
 
-    if (abs(the_modified_image.width - original_pres.slide_width) > Inches(0.5) or
-            abs(the_modified_image.height - original_pres.slide_height) > Inches(0.5) or
-            abs(the_modified_image.left - (original_pres.slide_width - the_modified_image.width) / 2) > Inches(0.5) or
-            abs(the_modified_image.top - (original_pres.slide_height - the_modified_image.height) / 2) > Inches(0.5)):
-        return 0.
+    if (
+        abs(the_modified_image.width - original_pres.slide_width) > Inches(0.5)
+        or abs(the_modified_image.height - original_pres.slide_height) > Inches(0.5)
+        or abs(the_modified_image.left - (original_pres.slide_width - the_modified_image.width) / 2) > Inches(0.5)
+        or abs(the_modified_image.top - (original_pres.slide_height - the_modified_image.height) / 2) > Inches(0.5)
+    ):
+        return 0.0
 
-    return 1.
+    return 1.0
 
 
 def is_red_color(color):
@@ -125,7 +114,6 @@ def check_slide_numbers_color(pptx_file_path):
             if hasattr(shape, "text"):
                 if shape.text.isdigit():
                     # "SlidePlaceholder" is the name of the placeholder in the master slide
-                    page_number_text = shape.text
                     font_color = get_master_placeholder_color(presentation)
                     return 1 if font_color is not None and is_red_color(font_color) else 0
 
@@ -163,27 +151,28 @@ def check_slide_numbers_color(pptx_file_path):
 
 #     return similarity_index
 
+
 def get_all_text_shapes(slide):
     """递归获取slide中所有包含文本的shapes，包括GROUP内部的"""
-    
+
     def extract_text_shapes(shape):
         results = []
-        
+
         # 检查当前shape是否有文本
         if hasattr(shape, "text") and hasattr(shape, "text_frame"):
             results.append(shape)
-        
+
         # 如果是GROUP，递归检查内部shapes
-        if hasattr(shape, 'shapes'):
+        if hasattr(shape, "shapes"):
             for sub_shape in shape.shapes:
                 results.extend(extract_text_shapes(sub_shape))
-        
+
         return results
-    
+
     all_text_shapes = []
     for shape in slide.shapes:
         all_text_shapes.extend(extract_text_shapes(shape))
-    
+
     return all_text_shapes
 
 
@@ -203,6 +192,7 @@ def compare_pptx_files(file1_path, file2_path, **options):
         debug_logger.debug(f"File 2 slides: {len(prs2.slides)}")
 
     approximately_tolerance = options.get("approximately_tolerance", 0.005)
+
     def is_approximately_equal(val1, val2, tolerance=approximately_tolerance):
         """Compare two values with a tolerance of 0.1% (0.005)"""
         if val1 == val2:
@@ -239,7 +229,9 @@ def compare_pptx_files(file1_path, file2_path, **options):
     # compare the number of slides
     if len(prs1.slides) != len(prs2.slides) and examine_number_of_slides:
         if enable_debug:
-            debug_logger.debug(f"MISMATCH: Number of slides differ - File1: {len(prs1.slides)}, File2: {len(prs2.slides)}")
+            debug_logger.debug(
+                f"MISMATCH: Number of slides differ - File1: {len(prs1.slides)}, File2: {len(prs2.slides)}"
+            )
         return 0
 
     slide_idx = 0
@@ -248,7 +240,9 @@ def compare_pptx_files(file1_path, file2_path, **options):
         slide_idx += 1
         if enable_debug:
             debug_logger.debug(f"--- Comparing Slide {slide_idx} ---")
-            debug_logger.debug(f"Slide {slide_idx} - Shapes count: File1={len(slide1.shapes)}, File2={len(slide2.shapes)}")
+            debug_logger.debug(
+                f"Slide {slide_idx} - Shapes count: File1={len(slide1.shapes)}, File2={len(slide2.shapes)}"
+            )
 
         def get_slide_background_color(slide):
             # background = slide.background
@@ -288,14 +282,18 @@ def compare_pptx_files(file1_path, file2_path, **options):
         # Get all text shapes including those inside GROUPs
         text_shapes1 = get_all_text_shapes(slide1)
         text_shapes2 = get_all_text_shapes(slide2)
-        
+
         if enable_debug:
-            debug_logger.debug(f"Slide {slide_idx} - Text shapes found: File1={len(text_shapes1)}, File2={len(text_shapes2)}")
-        
+            debug_logger.debug(
+                f"Slide {slide_idx} - Text shapes found: File1={len(text_shapes1)}, File2={len(text_shapes2)}"
+            )
+
         # check if the number of slides is the same
         if len(slide1.shapes) != len(slide2.shapes):
             if enable_debug:
-                debug_logger.debug(f"MISMATCH: Slide {slide_idx} - Different number of shapes: File1={len(slide1.shapes)}, File2={len(slide2.shapes)}")
+                debug_logger.debug(
+                    f"MISMATCH: Slide {slide_idx} - Different number of shapes: File1={len(slide1.shapes)}, File2={len(slide2.shapes)}"
+                )
             return 0
 
         # check if the shapes are the same
@@ -305,27 +303,37 @@ def compare_pptx_files(file1_path, file2_path, **options):
             if enable_debug:
                 debug_logger.debug(f"  Shape {shape_idx} - Type: {shape1.shape_type} vs {shape2.shape_type}")
                 if hasattr(shape1, "text") and hasattr(shape2, "text"):
-                    debug_logger.debug(f"  Shape {shape_idx} - Text: '{shape1.text.strip()}' vs '{shape2.text.strip()}'")
-                    debug_logger.debug(f"  Shape {shape_idx} - Position: ({shape1.left}, {shape1.top}) vs ({shape2.left}, {shape2.top})")
-                    debug_logger.debug(f"  Shape {shape_idx} - Size: ({shape1.width}, {shape1.height}) vs ({shape2.width}, {shape2.height})")
+                    debug_logger.debug(
+                        f"  Shape {shape_idx} - Text: '{shape1.text.strip()}' vs '{shape2.text.strip()}'"
+                    )
+                    debug_logger.debug(
+                        f"  Shape {shape_idx} - Position: ({shape1.left}, {shape1.top}) vs ({shape2.left}, {shape2.top})"
+                    )
+                    debug_logger.debug(
+                        f"  Shape {shape_idx} - Size: ({shape1.width}, {shape1.height}) vs ({shape2.width}, {shape2.height})"
+                    )
             if examine_title_bottom_position:
                 if hasattr(shape1, "text") and hasattr(shape2, "text") and shape1.text == shape2.text:
                     if shape1.text == "Product Comparison" and (shape1.top <= shape2.top or shape1.top < 3600000):
                         return 0
-                elif (not is_approximately_equal(shape1.left, shape2.left) or 
-                      not is_approximately_equal(shape1.top, shape2.top) or 
-                      not is_approximately_equal(shape1.width, shape2.width) or 
-                      not is_approximately_equal(shape1.height, shape2.height)):
+                elif (
+                    not is_approximately_equal(shape1.left, shape2.left)
+                    or not is_approximately_equal(shape1.top, shape2.top)
+                    or not is_approximately_equal(shape1.width, shape2.width)
+                    or not is_approximately_equal(shape1.height, shape2.height)
+                ):
                     return 0
 
             if examine_table_bottom_position:
                 if slide_idx == 3 and shape1.shape_type == 19 and shape2.shape_type == 19:
                     if shape1.top <= shape2.top or shape1.top < 3600000:
                         return 0
-                elif (not is_approximately_equal(shape1.left, shape2.left) or 
-                      not is_approximately_equal(shape1.top, shape2.top) or 
-                      not is_approximately_equal(shape1.width, shape2.width) or 
-                      not is_approximately_equal(shape1.height, shape2.height)):
+                elif (
+                    not is_approximately_equal(shape1.left, shape2.left)
+                    or not is_approximately_equal(shape1.top, shape2.top)
+                    or not is_approximately_equal(shape1.width, shape2.width)
+                    or not is_approximately_equal(shape1.height, shape2.height)
+                ):
                     return 0
 
             if examine_right_position:
@@ -338,14 +346,19 @@ def compare_pptx_files(file1_path, file2_path, **options):
                     if shape1.top >= shape2.top or shape1.top > 1980000:
                         return 0
 
-
             if examine_shape_for_shift_size:
-                if (not is_approximately_equal(shape1.left, shape2.left) or 
-                    not is_approximately_equal(shape1.top, shape2.top) or 
-                    not is_approximately_equal(shape1.width, shape2.width) or 
-                    not is_approximately_equal(shape1.height, shape2.height)):
-                    if not (hasattr(shape1, "text") and hasattr(shape2,
-                                                                "text") and shape1.text == shape2.text and shape1.text == "Elaborate on what you want to discuss."):
+                if (
+                    not is_approximately_equal(shape1.left, shape2.left)
+                    or not is_approximately_equal(shape1.top, shape2.top)
+                    or not is_approximately_equal(shape1.width, shape2.width)
+                    or not is_approximately_equal(shape1.height, shape2.height)
+                ):
+                    if not (
+                        hasattr(shape1, "text")
+                        and hasattr(shape2, "text")
+                        and shape1.text == shape2.text
+                        and shape1.text == "Elaborate on what you want to discuss."
+                    ):
                         return 0
 
             # CRITICAL: examine_shape check happens BEFORE examine_modify_height!
@@ -353,28 +366,41 @@ def compare_pptx_files(file1_path, file2_path, **options):
             # preventing examine_modify_height from ever being executed.
             # For height modification tasks, you MUST set examine_shape=False to allow examine_modify_height to work.
             if (
-                    not is_approximately_equal(shape1.left, shape2.left) or 
-                    not is_approximately_equal(shape1.top, shape2.top) or 
-                    not is_approximately_equal(shape1.width, shape2.width) or 
-                    not is_approximately_equal(shape1.height, shape2.height)) and examine_shape:
+                not is_approximately_equal(shape1.left, shape2.left)
+                or not is_approximately_equal(shape1.top, shape2.top)
+                or not is_approximately_equal(shape1.width, shape2.width)
+                or not is_approximately_equal(shape1.height, shape2.height)
+            ) and examine_shape:
                 if enable_debug:
                     debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} - Shape dimensions differ:")
-                    debug_logger.debug(f"      Left: {shape1.left} vs {shape2.left} (equal: {is_approximately_equal(shape1.left, shape2.left)})")
-                    debug_logger.debug(f"      Top: {shape1.top} vs {shape2.top} (equal: {is_approximately_equal(shape1.top, shape2.top)})")
-                    debug_logger.debug(f"      Width: {shape1.width} vs {shape2.width} (equal: {is_approximately_equal(shape1.width, shape2.width)})")
-                    debug_logger.debug(f"      Height: {shape1.height} vs {shape2.height} (equal: {is_approximately_equal(shape1.height, shape2.height)})")
+                    debug_logger.debug(
+                        f"      Left: {shape1.left} vs {shape2.left} (equal: {is_approximately_equal(shape1.left, shape2.left)})"
+                    )
+                    debug_logger.debug(
+                        f"      Top: {shape1.top} vs {shape2.top} (equal: {is_approximately_equal(shape1.top, shape2.top)})"
+                    )
+                    debug_logger.debug(
+                        f"      Width: {shape1.width} vs {shape2.width} (equal: {is_approximately_equal(shape1.width, shape2.width)})"
+                    )
+                    debug_logger.debug(
+                        f"      Height: {shape1.height} vs {shape2.height} (equal: {is_approximately_equal(shape1.height, shape2.height)})"
+                    )
                     if hasattr(shape1, "text") and hasattr(shape2, "text"):
                         debug_logger.debug(f"      Shape text: '{shape1.text.strip()}' vs '{shape2.text.strip()}'")
                 return 0
 
             if examine_image_size:
                 if shape1.shape_type == 13 and shape2.shape_type == 13:
-                    if not is_approximately_equal(shape1.width, shape2.width) or not is_approximately_equal(shape1.height, shape2.height):
+                    if not is_approximately_equal(shape1.width, shape2.width) or not is_approximately_equal(
+                        shape1.height, shape2.height
+                    ):
                         return 0
-                elif (not is_approximately_equal(shape1.left, shape2.left) or 
-                      not is_approximately_equal(shape1.top, shape2.top) or 
-                      not is_approximately_equal(shape1.width, shape2.width) or 
-                      not is_approximately_equal(shape1.height, shape2.height)):
+                elif (
+                    not is_approximately_equal(shape1.left, shape2.left)
+                    or not is_approximately_equal(shape1.top, shape2.top)
+                    or not is_approximately_equal(shape1.width, shape2.width)
+                    or not is_approximately_equal(shape1.height, shape2.height)
+                ):
                     return 0
 
             # examine_modify_height: Special logic for height modification tasks
@@ -383,31 +409,43 @@ def compare_pptx_files(file1_path, file2_path, **options):
             # WARNING: This check only works if examine_shape=False, otherwise examine_shape will
             # terminate the comparison before this code is reached!
             if examine_modify_height:
-                if not hasattr(shape1, "text") and not hasattr(shape2,
-                                                               "text") or shape1.shape_type == 5 and shape2.shape_type == 5:
+                if (
+                    not hasattr(shape1, "text")
+                    and not hasattr(shape2, "text")
+                    or shape1.shape_type == 5
+                    and shape2.shape_type == 5
+                ):
                     if not is_approximately_equal(shape1.height, shape2.height):
                         return 0
-                elif (not is_approximately_equal(shape1.left, shape2.left) or 
-                      not is_approximately_equal(shape1.top, shape2.top) or 
-                      not is_approximately_equal(shape1.width, shape2.width) or 
-                      not is_approximately_equal(shape1.height, shape2.height)):
+                elif (
+                    not is_approximately_equal(shape1.left, shape2.left)
+                    or not is_approximately_equal(shape1.top, shape2.top)
+                    or not is_approximately_equal(shape1.width, shape2.width)
+                    or not is_approximately_equal(shape1.height, shape2.height)
+                ):
                     return 0
 
             if shape1.shape_type == MSO_SHAPE_TYPE.TABLE:
                 table1 = shape1.table
                 table2 = shape2.table
                 if enable_debug:
-                    debug_logger.debug(f"  Shape {shape_idx} - Comparing TABLE with {len(table1.rows)} rows and {len(table1.columns)} columns")
-                    debug_logger.debug(f"  Shape {shape_idx} - Table2 has {len(table2.rows)} rows and {len(table2.columns)} columns")
-                
+                    debug_logger.debug(
+                        f"  Shape {shape_idx} - Comparing TABLE with {len(table1.rows)} rows and {len(table1.columns)} columns"
+                    )
+                    debug_logger.debug(
+                        f"  Shape {shape_idx} - Table2 has {len(table2.rows)} rows and {len(table2.columns)} columns"
+                    )
+
                 # Check if tables have the same dimensions
                 if len(table1.rows) != len(table2.rows) or len(table1.columns) != len(table2.columns):
                     if enable_debug:
-                        debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Table dimensions differ:")
+                        debug_logger.debug(
+                            f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Table dimensions differ:"
+                        )
                         debug_logger.debug(f"      Table1: {len(table1.rows)} rows x {len(table1.columns)} columns")
                         debug_logger.debug(f"      Table2: {len(table2.rows)} rows x {len(table2.columns)} columns")
                     return 0
-                
+
                 for row_idx in range(len(table1.rows)):
                     for col_idx in range(len(table1.columns)):
                         cell1 = table1.cell(row_idx, col_idx)
@@ -416,16 +454,22 @@ def compare_pptx_files(file1_path, file2_path, **options):
                         # Check if cells have the same number of paragraphs
                         if len(cell1.text_frame.paragraphs) != len(cell2.text_frame.paragraphs):
                             if enable_debug:
-                                debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}] - Different number of paragraphs:")
+                                debug_logger.debug(
+                                    f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}] - Different number of paragraphs:"
+                                )
                                 debug_logger.debug(f"      Cell1 paragraphs: {len(cell1.text_frame.paragraphs)}")
                                 debug_logger.debug(f"      Cell2 paragraphs: {len(cell2.text_frame.paragraphs)}")
                             return 0
 
-                        for para_idx, (para1, para2) in enumerate(zip(cell1.text_frame.paragraphs, cell2.text_frame.paragraphs)):
+                        for para_idx, (para1, para2) in enumerate(
+                            zip(cell1.text_frame.paragraphs, cell2.text_frame.paragraphs)
+                        ):
                             # Check if paragraphs have the same number of runs
                             if len(para1.runs) != len(para2.runs):
                                 if enable_debug:
-                                    debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx} - Different number of runs:")
+                                    debug_logger.debug(
+                                        f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx} - Different number of runs:"
+                                    )
                                     debug_logger.debug(f"      Para1 runs: {len(para1.runs)}")
                                     debug_logger.debug(f"      Para2 runs: {len(para2.runs)}")
                                 return 0
@@ -435,44 +479,72 @@ def compare_pptx_files(file1_path, file2_path, **options):
                                 if hasattr(run1.font.color, "rgb") and hasattr(run2.font.color, "rgb"):
                                     if run1.font.color.rgb != run2.font.color.rgb and examine_color_rgb:
                                         if enable_debug:
-                                            debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font color differs:")
-                                            debug_logger.debug(f"      Color1: {run1.font.color.rgb} vs Color2: {run2.font.color.rgb}")
-                                            debug_logger.debug(f"      Cell text: '{cell1.text.strip()}' vs '{cell2.text.strip()}'")
+                                            debug_logger.debug(
+                                                f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font color differs:"
+                                            )
+                                            debug_logger.debug(
+                                                f"      Color1: {run1.font.color.rgb} vs Color2: {run2.font.color.rgb}"
+                                            )
+                                            debug_logger.debug(
+                                                f"      Cell text: '{cell1.text.strip()}' vs '{cell2.text.strip()}'"
+                                            )
                                             debug_logger.debug(f"      Run text: '{run1.text}' vs '{run2.text}'")
                                         return 0
-                                
+
                                 # Check font bold
                                 if run1.font.bold != run2.font.bold:
-                                    if not ((run1.font.bold is None or run1.font.bold is False) and 
-                                           (run2.font.bold is None or run2.font.bold is False)):
+                                    if not (
+                                        (run1.font.bold is None or run1.font.bold is False)
+                                        and (run2.font.bold is None or run2.font.bold is False)
+                                    ):
                                         if enable_debug:
-                                            debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font bold differs:")
-                                            debug_logger.debug(f"      Bold1: {run1.font.bold} vs Bold2: {run2.font.bold}")
+                                            debug_logger.debug(
+                                                f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font bold differs:"
+                                            )
+                                            debug_logger.debug(
+                                                f"      Bold1: {run1.font.bold} vs Bold2: {run2.font.bold}"
+                                            )
                                             debug_logger.debug(f"      Run text: '{run1.text}' vs '{run2.text}'")
                                         return 0
-                                
+
                                 # Check font italic
                                 if run1.font.italic != run2.font.italic:
-                                    if not ((run1.font.italic is None or run1.font.italic is False) and 
-                                           (run2.font.italic is None or run2.font.italic is False)):
+                                    if not (
+                                        (run1.font.italic is None or run1.font.italic is False)
+                                        and (run2.font.italic is None or run2.font.italic is False)
+                                    ):
                                         if enable_debug:
-                                            debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font italic differs:")
-                                            debug_logger.debug(f"      Italic1: {run1.font.italic} vs Italic2: {run2.font.italic}")
+                                            debug_logger.debug(
+                                                f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font italic differs:"
+                                            )
+                                            debug_logger.debug(
+                                                f"      Italic1: {run1.font.italic} vs Italic2: {run2.font.italic}"
+                                            )
                                             debug_logger.debug(f"      Run text: '{run1.text}' vs '{run2.text}'")
                                         return 0
-                                
+
                                 # Check font underline
                                 if run1.font.underline != run2.font.underline:
                                     if run1.font.underline is not None and run2.font.underline is not None:
                                         if enable_debug:
-                                            debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font underline differs:")
-                                            debug_logger.debug(f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}")
+                                            debug_logger.debug(
+                                                f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font underline differs:"
+                                            )
+                                            debug_logger.debug(
+                                                f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}"
+                                            )
                                             debug_logger.debug(f"      Run text: '{run1.text}' vs '{run2.text}'")
                                         return 0
-                                    if (run1.font.underline is None and run2.font.underline is True) or (run1.font.underline is True and run2.font.underline is None):
+                                    if (run1.font.underline is None and run2.font.underline is True) or (
+                                        run1.font.underline is True and run2.font.underline is None
+                                    ):
                                         if enable_debug:
-                                            debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font underline differs (None vs True):")
-                                            debug_logger.debug(f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}")
+                                            debug_logger.debug(
+                                                f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} (TABLE) - Cell [{row_idx},{col_idx}], Para {para_idx}, Run {run_idx} - Font underline differs (None vs True):"
+                                            )
+                                            debug_logger.debug(
+                                                f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}"
+                                            )
                                             debug_logger.debug(f"      Run text: '{run1.text}' vs '{run2.text}'")
                                         return 0
 
@@ -483,7 +555,9 @@ def compare_pptx_files(file1_path, file2_path, **options):
                 # check if the number of paragraphs are the same
                 if len(shape1.text_frame.paragraphs) != len(shape2.text_frame.paragraphs):
                     if enable_debug:
-                        debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} - Different number of paragraphs:")
+                        debug_logger.debug(
+                            f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx} - Different number of paragraphs:"
+                        )
                         debug_logger.debug(f"      Shape1 paragraphs: {len(shape1.text_frame.paragraphs)}")
                         debug_logger.debug(f"      Shape2 paragraphs: {len(shape2.text_frame.paragraphs)}")
                     return 0
@@ -495,26 +569,33 @@ def compare_pptx_files(file1_path, file2_path, **options):
                     # Handle alignment comparison - treat None and LEFT (1) as equivalent
                     if examine_alignment:
                         from pptx.enum.text import PP_ALIGN
+
                         align1 = para1.alignment
                         align2 = para2.alignment
-                        
+
                         if enable_debug:
-                            align1_name = "None" if align1 is None else getattr(align1, 'name', str(align1))
-                            align2_name = "None" if align2 is None else getattr(align2, 'name', str(align2))
-                            debug_logger.debug(f"    Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Alignment: '{align1_name}' vs '{align2_name}'")
-                            debug_logger.debug(f"    Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Text: '{para1.text}' vs '{para2.text}'")
-                        
+                            align1_name = "None" if align1 is None else getattr(align1, "name", str(align1))
+                            align2_name = "None" if align2 is None else getattr(align2, "name", str(align2))
+                            debug_logger.debug(
+                                f"    Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Alignment: '{align1_name}' vs '{align2_name}'"
+                            )
+                            debug_logger.debug(
+                                f"    Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Text: '{para1.text}' vs '{para2.text}'"
+                            )
+
                         # Convert None to LEFT for comparison since None means default left alignment
                         if align1 is None:
                             align1 = PP_ALIGN.LEFT  # LEFT alignment
                         if align2 is None:
                             align2 = PP_ALIGN.LEFT  # LEFT alignment
-                            
+
                         if align1 != align2:
                             if enable_debug:
-                                align1_final = getattr(align1, 'name', str(align1))
-                                align2_final = getattr(align2, 'name', str(align2))
-                                debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Alignment differs: '{align1_final}' vs '{align2_final}'")
+                                align1_final = getattr(align1, "name", str(align1))
+                                align2_final = getattr(align2, "name", str(align2))
+                                debug_logger.debug(
+                                    f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Alignment differs: '{align1_final}' vs '{align2_final}'"
+                                )
                             return 0
 
                     # check if the runs are the same
@@ -527,99 +608,131 @@ def compare_pptx_files(file1_path, file2_path, **options):
                     # check if the number of runs are the same
                     if len(para1.runs) != len(para2.runs):
                         if enable_debug:
-                            debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Different number of runs:")
+                            debug_logger.debug(
+                                f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Different number of runs:"
+                            )
                             debug_logger.debug(f"      Para1 runs: {len(para1.runs)}")
                             debug_logger.debug(f"      Para2 runs: {len(para2.runs)}")
                         return 0
 
                     for run1, run2 in zip(para1.runs, para2.runs):
-
-                        # check if the font properties are the same                        
+                        # check if the font properties are the same
                         if run1.font.name != run2.font.name and examine_font_name:
                             if enable_debug:
-                                debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font name differs:")
+                                debug_logger.debug(
+                                    f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font name differs:"
+                                )
                                 debug_logger.debug(f"      Name1: '{run1.font.name}' vs Name2: '{run2.font.name}'")
                                 debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                             return 0
 
                         if run1.font.size != run2.font.size and examine_font_size:
                             if enable_debug:
-                                debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font size differs:")
+                                debug_logger.debug(
+                                    f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font size differs:"
+                                )
                                 debug_logger.debug(f"      Size1: {run1.font.size} vs Size2: {run2.font.size}")
                                 debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                             return 0
 
                         if run1.font.bold != run2.font.bold and examine_font_bold:
                             # Special handling for None vs False - both mean "not bold"
-                            if not ((run1.font.bold is None or run1.font.bold is False) and 
-                                   (run2.font.bold is None or run2.font.bold is False)):
+                            if not (
+                                (run1.font.bold is None or run1.font.bold is False)
+                                and (run2.font.bold is None or run2.font.bold is False)
+                            ):
                                 if enable_debug:
-                                    debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font bold differs:")
+                                    debug_logger.debug(
+                                        f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font bold differs:"
+                                    )
                                     debug_logger.debug(f"      Bold1: {run1.font.bold} vs Bold2: {run2.font.bold}")
                                     debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                                 return 0
 
                         if run1.font.italic != run2.font.italic and examine_font_italic:
                             # Special handling for None vs False - both mean "not italic"
-                            if not ((run1.font.italic is None or run1.font.italic is False) and 
-                                   (run2.font.italic is None or run2.font.italic is False)):
+                            if not (
+                                (run1.font.italic is None or run1.font.italic is False)
+                                and (run2.font.italic is None or run2.font.italic is False)
+                            ):
                                 if enable_debug:
-                                    debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font italic differs:")
-                                    debug_logger.debug(f"      Italic1: {run1.font.italic} vs Italic2: {run2.font.italic}")
+                                    debug_logger.debug(
+                                        f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font italic differs:"
+                                    )
+                                    debug_logger.debug(
+                                        f"      Italic1: {run1.font.italic} vs Italic2: {run2.font.italic}"
+                                    )
                                     debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                                 return 0
 
                         if hasattr(run1.font.color, "rgb") and hasattr(run2.font.color, "rgb"):
                             if run1.font.color.rgb != run2.font.color.rgb and examine_color_rgb:
                                 if enable_debug:
-                                    debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font color differs:")
-                                    debug_logger.debug(f"      Color1: {run1.font.color.rgb} vs Color2: {run2.font.color.rgb}")
+                                    debug_logger.debug(
+                                        f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font color differs:"
+                                    )
+                                    debug_logger.debug(
+                                        f"      Color1: {run1.font.color.rgb} vs Color2: {run2.font.color.rgb}"
+                                    )
                                     debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                                 return 0
 
                         if run1.font.underline != run2.font.underline and examine_font_underline:
                             if run1.font.underline is not None and run2.font.underline is not None:
                                 if enable_debug:
-                                    debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font underline differs:")
-                                    debug_logger.debug(f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}")
+                                    debug_logger.debug(
+                                        f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font underline differs:"
+                                    )
+                                    debug_logger.debug(
+                                        f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}"
+                                    )
                                     debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                                 return 0
-                            if (run1.font.underline is None and run2.font.underline is True) or (run1.font.underline is True and run2.font.underline is None):
+                            if (run1.font.underline is None and run2.font.underline is True) or (
+                                run1.font.underline is True and run2.font.underline is None
+                            ):
                                 if enable_debug:
-                                    debug_logger.debug(f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font underline differs (None vs True):")
-                                    debug_logger.debug(f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}")
+                                    debug_logger.debug(
+                                        f"    MISMATCH: Slide {slide_idx}, Shape {shape_idx}, Para {para_idx} - Font underline differs (None vs True):"
+                                    )
+                                    debug_logger.debug(
+                                        f"      Underline1: {run1.font.underline} vs Underline2: {run2.font.underline}"
+                                    )
                                     debug_logger.debug(f"      Text: '{run1.text}' vs '{run2.text}'")
                                 return 0
-                                
-                        if run1.font._element.attrib.get('strike', 'noStrike') != run2.font._element.attrib.get(
-                                'strike', 'noStrike') and examine_strike_through:
+
+                        if (
+                            run1.font._element.attrib.get("strike", "noStrike")
+                            != run2.font._element.attrib.get("strike", "noStrike")
+                            and examine_strike_through
+                        ):
                             return 0
 
                         def _extract_bullets(xml_data):
                             root = ET.fromstring(xml_data)
 
                             namespaces = {
-                                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
-                                'p': 'http://schemas.openxmlformats.org/presentationml/2006/main',
+                                "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+                                "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
                             }
 
                             bullets = []
 
-                            for paragraph in root.findall('.//a:p', namespaces):
-                                pPr = paragraph.find('a:pPr', namespaces)
+                            for paragraph in root.findall(".//a:p", namespaces):
+                                pPr = paragraph.find("a:pPr", namespaces)
                                 if pPr is not None:
-                                    lvl = pPr.get('lvl')
-                                    buChar = pPr.find('a:buChar', namespaces)
-                                    char = buChar.get('char') if buChar is not None else "No Bullet"
-                                    buClr = pPr.find('a:buClr/a:srgbClr', namespaces)
-                                    color = buClr.get('val') if buClr is not None else "No Color"
+                                    lvl = pPr.get("lvl")
+                                    buChar = pPr.find("a:buChar", namespaces)
+                                    char = buChar.get("char") if buChar is not None else "No Bullet"
+                                    buClr = pPr.find("a:buClr/a:srgbClr", namespaces)
+                                    color = buClr.get("val") if buClr is not None else "No Color"
                                 else:
                                     lvl = "No Level"
                                     char = "No Bullet"
                                     color = "No Color"
 
-                                text = "".join(t.text for t in paragraph.findall('.//a:t', namespaces))
-                                
+                                text = "".join(t.text for t in paragraph.findall(".//a:t", namespaces))
+
                                 # Only add non-empty paragraphs to bullets list
                                 if text.strip():
                                     bullets.append((lvl, char, text, color))
@@ -630,38 +743,38 @@ def compare_pptx_files(file1_path, file2_path, **options):
                             """Compare bullets with tolerance for minor differences"""
                             if len(bullets1) != len(bullets2):
                                 return False
-                            
+
                             for (lvl1, char1, text1, color1), (lvl2, char2, text2, color2) in zip(bullets1, bullets2):
                                 # Compare text (most important)
                                 if text1 != text2:
                                     return False
-                                
+
                                 # Compare bullet character
                                 if char1 != char2:
                                     return False
-                                
+
                                 # Compare level with tolerance (None and '0' are equivalent)
-                                normalized_lvl1 = '0' if lvl1 is None else lvl1
-                                normalized_lvl2 = '0' if lvl2 is None else lvl2
+                                normalized_lvl1 = "0" if lvl1 is None else lvl1
+                                normalized_lvl2 = "0" if lvl2 is None else lvl2
                                 if normalized_lvl1 != normalized_lvl2:
                                     return False
-                                
+
                                 # Color comparison is more lenient - we don't fail on color differences
                                 # since they might be due to theme or formatting differences
                                 # if color1 != color2:
                                 #     return False
-                            
+
                             return True
 
                         if examine_bullets:
                             try:
-                                bullets1 = _extract_bullets(run1.part.blob.decode('utf-8'))
-                                bullets2 = _extract_bullets(run2.part.blob.decode('utf-8'))
-                                
+                                bullets1 = _extract_bullets(run1.part.blob.decode("utf-8"))
+                                bullets2 = _extract_bullets(run2.part.blob.decode("utf-8"))
+
                                 # Compare bullets with tolerance for minor differences
                                 if not _compare_bullets_with_tolerance(bullets1, bullets2):
                                     return 0
-                            except:
+                            except Exception:
                                 # If bullet extraction fails, skip bullet comparison
                                 pass
 
@@ -671,48 +784,61 @@ def compare_pptx_files(file1_path, file2_path, **options):
         if examine_alignment and len(text_shapes1) == len(text_shapes2):
             for idx, (tshape1, tshape2) in enumerate(zip(text_shapes1, text_shapes2)):
                 if enable_debug:
-                    debug_logger.debug(f"  Additional text shape check {idx+1}: '{tshape1.text.strip()[:30]}' vs '{tshape2.text.strip()[:30]}'")
-                
+                    debug_logger.debug(
+                        f"  Additional text shape check {idx + 1}: '{tshape1.text.strip()[:30]}' vs '{tshape2.text.strip()[:30]}'"
+                    )
+
                 # Compare text content
                 if tshape1.text.strip() != tshape2.text.strip() and examine_text:
                     if enable_debug:
-                        debug_logger.debug(f"    MISMATCH: Text differs - '{tshape1.text.strip()}' vs '{tshape2.text.strip()}'")
+                        debug_logger.debug(
+                            f"    MISMATCH: Text differs - '{tshape1.text.strip()}' vs '{tshape2.text.strip()}'"
+                        )
                     return 0
-                
+
                 # Check if text shapes have the same number of paragraphs
                 if len(tshape1.text_frame.paragraphs) != len(tshape2.text_frame.paragraphs):
                     if enable_debug:
-                        debug_logger.debug(f"    MISMATCH: Different number of paragraphs - {len(tshape1.text_frame.paragraphs)} vs {len(tshape2.text_frame.paragraphs)}")
+                        debug_logger.debug(
+                            f"    MISMATCH: Different number of paragraphs - {len(tshape1.text_frame.paragraphs)} vs {len(tshape2.text_frame.paragraphs)}"
+                        )
                     return 0
-                
+
                 # Compare alignment of each paragraph
-                for para_idx, (para1, para2) in enumerate(zip(tshape1.text_frame.paragraphs, tshape2.text_frame.paragraphs)):
+                for para_idx, (para1, para2) in enumerate(
+                    zip(tshape1.text_frame.paragraphs, tshape2.text_frame.paragraphs)
+                ):
                     from pptx.enum.text import PP_ALIGN
+
                     align1 = para1.alignment
                     align2 = para2.alignment
-                    
+
                     if enable_debug:
-                        align1_name = "None" if align1 is None else getattr(align1, 'name', str(align1))
-                        align2_name = "None" if align2 is None else getattr(align2, 'name', str(align2))
-                        debug_logger.debug(f"    Para {para_idx+1}: Alignment '{align1_name}' vs '{align2_name}'")
-                    
+                        align1_name = "None" if align1 is None else getattr(align1, "name", str(align1))
+                        align2_name = "None" if align2 is None else getattr(align2, "name", str(align2))
+                        debug_logger.debug(f"    Para {para_idx + 1}: Alignment '{align1_name}' vs '{align2_name}'")
+
                     # Convert None to LEFT for comparison
                     if align1 is None:
                         align1 = PP_ALIGN.LEFT
                     if align2 is None:
                         align2 = PP_ALIGN.LEFT
-                        
+
                     if align1 != align2:
                         if enable_debug:
-                            align1_final = getattr(align1, 'name', str(align1))
-                            align2_final = getattr(align2, 'name', str(align2))
-                            debug_logger.debug(f"    MISMATCH: Alignment differs - '{align1_final}' vs '{align2_final}'")
+                            align1_final = getattr(align1, "name", str(align1))
+                            align2_final = getattr(align2, "name", str(align2))
+                            debug_logger.debug(
+                                f"    MISMATCH: Alignment differs - '{align1_final}' vs '{align2_final}'"
+                            )
                         return 0
         elif len(text_shapes1) != len(text_shapes2):
             if enable_debug:
-                debug_logger.debug(f"MISMATCH: Different number of text shapes - {len(text_shapes1)} vs {len(text_shapes2)}")
+                debug_logger.debug(
+                    f"MISMATCH: Different number of text shapes - {len(text_shapes1)} vs {len(text_shapes2)}"
+                )
             return 0
-    
+
     if enable_debug:
         debug_logger.debug("=== COMPARISON SUCCESSFUL - Files match ===")
     return 1
@@ -738,9 +864,8 @@ def check_strikethrough(pptx_path, rules):
                 for paragraph_index in paragraph_index_s:
                     paragraph = paragraphs[paragraph_index]
                     run = paragraph.runs[0]
-                    if 'strike' not in run.font._element.attrib:
+                    if "strike" not in run.font._element.attrib:
                         return 0
-
 
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -765,7 +890,7 @@ def evaluate_presentation_fill_to_rgb_distance(pptx_file, rules):
 
     try:
         original_rgb = rules["original_rgb"]
-    except:
+    except Exception:
         original_rgb = None
 
     def get_rgb_from_color(color):
@@ -774,7 +899,7 @@ def evaluate_presentation_fill_to_rgb_distance(pptx_file, rules):
                 return color.rgb
             else:
                 return None
-        except:
+        except Exception:
             return None
 
     def slide_fill_distance_to_rgb(_slide, _rgb, _original_rgb):
@@ -791,7 +916,7 @@ def evaluate_presentation_fill_to_rgb_distance(pptx_file, rules):
                 if r1 == r3 and g1 == g3 and b1 == b3:
                     return 1
 
-            return sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) / sqrt(255 ** 2 + 255 ** 2 + 255 ** 2)
+            return sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) / sqrt(255**2 + 255**2 + 255**2)
         elif fill.type == 5:
             master_fill = _slide.slide_layout.slide_master.background.fill
             if master_fill.type == 1:
@@ -808,7 +933,7 @@ def evaluate_presentation_fill_to_rgb_distance(pptx_file, rules):
                 if r1 == r3 and g1 == g3 and b1 == b3:
                     return 1
 
-            return sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) / sqrt(255 ** 2 + 255 ** 2 + 255 ** 2)
+            return sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) / sqrt(255**2 + 255**2 + 255**2)
 
         return 1
 
@@ -818,36 +943,31 @@ def evaluate_presentation_fill_to_rgb_distance(pptx_file, rules):
 
 
 def check_left_panel(accessibility_tree):
-    namespaces = {
-        'st': 'uri:deskat:state.at-spi.gnome.org',
-        'cp': 'uri:deskat:component.at-spi.gnome.org'
-    }
-
     root = ET.fromstring(accessibility_tree)
 
     # 遍历所有 document-frame 节点
-    for doc_frame in root.iter('document-frame'):
+    for doc_frame in root.iter("document-frame"):
         if doc_frame.attrib.get("name") == "Slides View":
             # 说明 Slides View 存在，即左侧面板已打开
-            return 1.
+            return 1.0
 
     # 没找到 Slides View，认为左侧面板未打开
-    return 0.
+    return 0.0
 
 
 def check_transition(pptx_file, rules):
-    slide_idx = rules['slide_idx']
-    transition_type = rules['transition_type']
+    slide_idx = rules["slide_idx"]
+    transition_type = rules["transition_type"]
 
     # Use the zipfile module to open the .pptx file
-    with zipfile.ZipFile(pptx_file, 'r') as zip_ref:
+    with zipfile.ZipFile(pptx_file, "r") as zip_ref:
         # Get the slide XML file
-        slide_name = 'ppt/slides/slide{}.xml'.format(slide_idx + 1)
+        slide_name = "ppt/slides/slide{}.xml".format(slide_idx + 1)
         try:
             zip_ref.getinfo(slide_name)
         except KeyError:
             # Slide does not exist
-            return 0.
+            return 0.0
 
         with zip_ref.open(slide_name) as slide_file:
             # 解析XML
@@ -856,21 +976,21 @@ def check_transition(pptx_file, rules):
 
             # XML namespace
             namespaces = {
-                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
-                'p': 'http://schemas.openxmlformats.org/presentationml/2006/main',
+                "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+                "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
             }
 
             # Search for the transition element
-            transition = root.find('.//p:transition', namespaces)
+            transition = root.find(".//p:transition", namespaces)
             if transition is not None:
                 # Check if the transition is an expected transition
-                dissolve = transition.find('.//p:{}'.format(transition_type), namespaces)
+                dissolve = transition.find(".//p:{}".format(transition_type), namespaces)
                 if dissolve is not None:
-                    return 1.
+                    return 1.0
                 else:
-                    return 0.
+                    return 0.0
             else:
-                return 0.
+                return 0.0
 
 
 def check_page_number_colors(pptx_file, rules):
@@ -892,19 +1012,19 @@ def check_page_number_colors(pptx_file, rules):
         r, g, b = int(rgb_str[1:3], 16), int(rgb_str[3:5], 16), int(rgb_str[5:7], 16)
         return r < threshold and g < threshold and b < threshold
 
-    with zipfile.ZipFile(pptx_file, 'r') as zip_ref:
-        slide_master_name = 'ppt/slideMasters/slideMaster1.xml'
+    with zipfile.ZipFile(pptx_file, "r") as zip_ref:
+        slide_master_name = "ppt/slideMasters/slideMaster1.xml"
         with zip_ref.open(slide_master_name) as slide_master_file:
             tree = ET.parse(slide_master_file)
             root = tree.getroot()
 
             namespaces = {
-                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
-                'p': 'http://schemas.openxmlformats.org/presentationml/2006/main',
+                "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+                "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
             }
 
-            color_elems = root.findall('.//a:solidFill//a:srgbClr', namespaces)
-            slides_color_val = color_elems[-2].get('val')
+            color_elems = root.findall(".//a:solidFill//a:srgbClr", namespaces)
+            slides_color_val = color_elems[-2].get("val")
 
     if slides_color_val is None:
         return 0
@@ -932,11 +1052,11 @@ def check_auto_saving_time(pptx_file, rules):
         autosave_time = None
         for item in root.findall(".//item"):
             # Check the path attribute
-            path = item.get('{http://openoffice.org/2001/registry}path')
+            path = item.get("{http://openoffice.org/2001/registry}path")
             if path == "/org.openoffice.Office.Common/Save/Document":
                 # Once the correct item is found, look for the prop element with the name "AutoSaveTimeIntervall"
                 for prop in item.findall(".//prop"):
-                    name = prop.get('{http://openoffice.org/2001/registry}name')
+                    name = prop.get("{http://openoffice.org/2001/registry}name")
                     if name == "AutoSaveTimeIntervall":
                         # Extract the value of the autosave time interval
                         autosave_time = prop.find(".//value").text

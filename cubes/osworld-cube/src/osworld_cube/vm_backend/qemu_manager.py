@@ -197,10 +197,14 @@ class QEMUManager:
     def _create_overlay(self) -> None:
         """Create a fresh qcow2 overlay on top of the read-only base image."""
         cmd = [
-            "qemu-img", "create",
-            "-f", "qcow2",
-            "-b", str(self.config.base_image),
-            "-F", "qcow2",
+            "qemu-img",
+            "create",
+            "-f",
+            "qcow2",
+            "-b",
+            str(self.config.base_image),
+            "-F",
+            "qcow2",
             str(self._overlay_path),
         ]
         logger.info("Creating overlay: %s", " ".join(cmd))
@@ -224,15 +228,19 @@ class QEMUManager:
         qemu_cmd += ["-drive", f"file={self._overlay_path},format=qcow2,if=virtio"]
 
         # Network: SLIRP user-mode with port forwarding
-        hostfwds = ",".join([
-            f"hostfwd=tcp::{self._server_port}-:5000",
-            f"hostfwd=tcp::{self._chromium_port}-:9222",
-            f"hostfwd=tcp::{self._vnc_port}-:8006",
-            f"hostfwd=tcp::{self._vlc_port}-:8080",
-        ])
+        hostfwds = ",".join(
+            [
+                f"hostfwd=tcp::{self._server_port}-:5000",
+                f"hostfwd=tcp::{self._chromium_port}-:9222",
+                f"hostfwd=tcp::{self._vnc_port}-:8006",
+                f"hostfwd=tcp::{self._vlc_port}-:8080",
+            ]
+        )
         qemu_cmd += [
-            "-netdev", f"user,id=net0,{hostfwds}",
-            "-device", "virtio-net-pci,netdev=net0",
+            "-netdev",
+            f"user,id=net0,{hostfwds}",
+            "-device",
+            "virtio-net-pci,netdev=net0",
         ]
 
         # Display
@@ -251,9 +259,7 @@ class QEMUManager:
         result = subprocess.run(qemu_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(
-                f"QEMU failed to start (exit {result.returncode}):\n"
-                f"stdout: {result.stdout}\n"
-                f"stderr: {result.stderr}"
+                f"QEMU failed to start (exit {result.returncode}):\nstdout: {result.stdout}\nstderr: {result.stderr}"
             )
         logger.info("QEMU launched (server_port=%d)", self._server_port)
 
@@ -436,15 +442,18 @@ def _download_file(url: str, dest: Path) -> None:
             resp.raise_for_status()
             total = int(resp.headers.get("content-length", 0))
 
-            with open(dest, "ab") as fp, tqdm(
-                desc=dest.name,
-                total=total,
-                unit="iB",
-                unit_scale=True,
-                unit_divisor=1024,
-                initial=downloaded_size,
-                ascii=True,
-            ) as bar:
+            with (
+                open(dest, "ab") as fp,
+                tqdm(
+                    desc=dest.name,
+                    total=total,
+                    unit="iB",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    initial=downloaded_size,
+                    ascii=True,
+                ) as bar,
+            ):
                 try:
                     for chunk in resp.iter_content(chunk_size=1024):
                         size = fp.write(chunk)

@@ -15,10 +15,10 @@ Prerequisites:
 
 Usage:
     # Debug mode (debug_tasks.json, sequential)
-    uv run recipes/eval_osworld_haiku_3obs_100actions_v2.py debug
+    uv run recipes/osworld/haiku.py debug
 
     # Eval mode (test_small without gdrive, 3 workers)
-    uv run recipes/eval_osworld_haiku_3obs_100actions_v2.py
+    uv run recipes/osworld/haiku.py
 """
 
 import sys
