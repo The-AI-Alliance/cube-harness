@@ -23,13 +23,13 @@ import sys
 
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import VMConfig
+from osworld_cube.vm_backend import LocalQEMUVMBackend
 
-from agentlab2 import make_experiment_output_dir
-from agentlab2.agents.genny import GennyConfig
-from agentlab2.exp_runner import run_sequentially, run_with_ray
-from agentlab2.experiment import Experiment
-from agentlab2.llm import LLMConfig
+from cube_harness import make_experiment_output_dir
+from cube_harness.agents.genny import GennyConfig
+from cube_harness.exp_runner import run_sequentially, run_with_ray
+from cube_harness.experiment import Experiment
+from cube_harness.llm import LLMConfig
 
 OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
 You are a desktop automation agent controlling a real Ubuntu computer.
@@ -83,12 +83,6 @@ def main(debug: bool) -> None:
 
     tool_config = ComputerConfig(
         action_space="pyautogui",
-        vm_config=VMConfig(
-            memory="4G",
-            cpus=4,
-            headless=True,
-            screen_size=(1920, 1080),
-        ),
         require_a11y_tree=True,
         observe_after_action=True,
     )
@@ -100,6 +94,7 @@ def main(debug: bool) -> None:
         use_som=False,
         tasks_file=tasks_file,
         test_set_name=OSWorldTestSet.TEST_SMALL,
+        vm_backend=LocalQEMUVMBackend(),
     )
 
     exp = Experiment(
