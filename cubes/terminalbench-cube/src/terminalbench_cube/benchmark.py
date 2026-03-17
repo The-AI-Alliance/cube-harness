@@ -66,6 +66,10 @@ class TerminalBenchBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Load dataset, apply filters, and populate task_metadata."""
+        if TerminalBenchBenchmark.task_metadata:
+            logger.info("Task metadata already loaded, skipping setup")
+            return
+
         dataset_path = Path(self.dataset_path)
         if not dataset_path.exists():
             raise FileNotFoundError(
@@ -99,9 +103,8 @@ class TerminalBenchBenchmark(Benchmark):
                 },
             )
 
-        # Set on the class so TaskConfig.make() can look it up (skip if already populated)
-        if not TerminalBenchBenchmark.task_metadata:
-            TerminalBenchBenchmark.task_metadata = metadata
+        # Set on the class so TaskConfig.make() can look it up
+        TerminalBenchBenchmark.task_metadata = metadata
         logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
 
     def close(self) -> None:
