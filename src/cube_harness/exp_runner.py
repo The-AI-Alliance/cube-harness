@@ -1,9 +1,9 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
-from typing import Any
 import time
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import ray
@@ -94,7 +94,9 @@ def _poll_ray(
     submit_fn: Any | None = None,
 ) -> ExpResult:
     n_slots = len(ref_to_id)
-    results = ExpResult(tasks_num=n_slots + len(episode_queue or []), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
+    results = ExpResult(
+        tasks_num=n_slots + len(episode_queue or []), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}"
+    )
     completed = 0
     episodes_in_progress = list(ref_to_id.keys())
     start_times = {ref: time.time() for ref in episodes_in_progress}
