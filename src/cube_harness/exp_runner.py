@@ -123,9 +123,9 @@ def _poll_ray(
                 running = {}
             now_ms = time.time() * 1000
             timed_out = [
-                ref for ref in episodes_in_progress
-                if ref.task_id().hex() in running
-                and now_ms - running[ref.task_id().hex()] > episode_timeout * 1000
+                ref
+                for ref in episodes_in_progress
+                if ref.task_id().hex() in running and now_ms - running[ref.task_id().hex()] > episode_timeout * 1000
             ]
             for ref in timed_out:
                 task_id = ref_to_id[ref]
