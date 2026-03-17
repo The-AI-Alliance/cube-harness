@@ -117,11 +117,6 @@ class TerminalBenchTask(Task):
 class TerminalBenchTaskConfig(TaskConfig):
     """Serializable factory that produces a TerminalBenchTask."""
 
-    # Pre-set for debug/testing when make() is called without arguments
-    _container_backend: ContainerBackend | None = None
-
-    model_config = {"arbitrary_types_allowed": True}
-
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
@@ -130,12 +125,11 @@ class TerminalBenchTaskConfig(TaskConfig):
         # Import here to avoid circular import (benchmark imports task)
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
-        backend = container_backend or self._container_backend
-        if backend is None:
+        if container_backend is None:
             raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
         return TerminalBenchTask(
             metadata=TerminalBenchBenchmark.task_metadata[self.task_id],
             tool_config=self.tool_config or TerminalBenchToolConfig(),
             runtime_context=runtime_context,
-            container_backend=backend,
+            container_backend=container_backend,
         )
