@@ -2,8 +2,8 @@
 
 Public API
 ----------
+get_debug_benchmark()         → ArithmeticBenchmark
 make_debug_agent(task_id)     → DebugAgent
-get_debug_task_configs()      → list[ArithmeticTaskConfig]
 """
 
 from __future__ import annotations
@@ -11,8 +11,7 @@ from __future__ import annotations
 import logging
 
 from cube.core import Action, ActionSchema, Observation
-from arithmetic_cube.benchmark import ArithmeticBenchmark
-from arithmetic_cube.task import ArithmeticTaskConfig
+from arithmetic_cube.benchmark import ArithmeticBenchmark, Benchmark
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +44,12 @@ class DebugAgent:
         return self.get_action(obs)
 
 
+def get_debug_benchmark() -> Benchmark:
+    return ArithmeticBenchmark().subset_from_list(list(_TASK_ACTIONS.keys()))
+
+
 def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
-
-
-def get_debug_task_configs() -> list[ArithmeticTaskConfig]:
-    return [ArithmeticTaskConfig(task_id=tid) for tid in _TASK_ACTIONS if tid in ArithmeticBenchmark.task_metadata]
 
 
 if __name__ == "__main__":
@@ -61,5 +60,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
     results = run_debug_suite("arithmetic-cube", _mod)
-    failed = [r for r in results if r["error"] or not r["done"] or r["reward"] <= 0]
+    failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
     sys.exit(1 if failed else 0)

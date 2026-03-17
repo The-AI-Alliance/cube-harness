@@ -1,6 +1,6 @@
-# AgentLab2 Review Rules
+# cube-harness Review Rules
 
-This document contains enforceable review rules derived from the [AgentLab2 Constitution](./constitution.md).
+This document contains enforceable review rules derived from the [cube-harness Constitution](./constitution.md).
 
 Each rule maps to a specific directive in the constitution and includes severity levels and code examples for automated review.
 
@@ -185,7 +185,7 @@ response = openai.chat.completions.create(...)  # Direct SDK call
 **Good**:
 
 ```python
-from agentlab2.llm import LLM
+from cube_harness.llm import LLM
 llm = LLM(config)
 response = llm.call(prompt)  # Uses LiteLLM internally
 ```
