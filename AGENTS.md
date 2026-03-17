@@ -329,7 +329,7 @@ We're using make commands for most tasks. Look into `Makefile` for development c
 
 ### Package Management
 - **Tool**: `uv` (fast Python package manager)
-- **Python**: >= 3.13 required
+- **Python**: >= 3.12 required
 - **Virtual env**: `.venv/` in project root
 - **Source layout**: `src/cube_harness/` (src-layout)
 

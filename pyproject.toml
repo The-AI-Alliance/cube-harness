@@ -67,7 +67,6 @@ line-ending = "auto"
 extend-select = ["I"] # sort imports
 
 [project.scripts]
-ch-viewer = "cube_harness.deprecated_viewer:main"
 ch-mcp-server = "cube_harness.mcp.server:main"
 ch-xray = "cube_harness.analyze.xray:main"
 
