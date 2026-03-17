@@ -3,6 +3,10 @@
 #   "osworld-cube",
 #   "cube-harness",
 # ]
+#
+# [tool.uv.sources]
+# osworld-cube = { path = "../../cubes/osworld-cube", editable = true }
+# cube-harness = { path = "../.." }
 # ///
 """OSWorld Eval — Claude Haiku with screenshot + axtree observations, rolling 3-step context, 100 actions.
 
@@ -21,10 +25,10 @@ Prerequisites:
 
 Usage:
     # Debug mode (debug_tasks.json, sequential)
-    uv run recipes/osworld/haiku.py debug
+    uv run recipes/osworld/haiku_v2.py debug
 
     # Eval mode (test_small without gdrive, 3 workers)
-    uv run recipes/osworld/haiku.py
+    uv run recipes/osworld/haiku_v2.py
 """
 
 import sys
