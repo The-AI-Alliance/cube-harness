@@ -1,6 +1,7 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
+from typing import Any
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -73,9 +74,10 @@ def _run_with_ray_impl(
     exp.benchmark.setup()
     try:
         episodes = exp.get_episodes_to_run()
-        ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
+        queue = list(episodes)
+        ref_to_id = {run_episode.remote(ep): ep.config.task_id for ep in queue[:n_cpus]}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
-        results = _poll_ray(exp, ref_to_id, ray_poll_timeout, episode_timeout)
+        results = _poll_ray(exp, ref_to_id, ray_poll_timeout, episode_timeout, queue[n_cpus:], run_episode)
         exp.print_stats(results)
         return results
     finally:
@@ -88,8 +90,11 @@ def _poll_ray(
     ref_to_id: dict[ray.ObjectRef, str],
     ray_poll_timeout: float,
     episode_timeout: float | None,
+    episode_queue: list[Episode] | None = None,
+    submit_fn: Any | None = None,
 ) -> ExpResult:
-    results = ExpResult(tasks_num=len(ref_to_id), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
+    n_slots = len(ref_to_id)
+    results = ExpResult(tasks_num=n_slots + len(episode_queue or []), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     completed = 0
     episodes_in_progress = list(ref_to_id.keys())
     start_times = {ref: time.time() for ref in episodes_in_progress}
@@ -121,6 +126,13 @@ def _poll_ray(
                 ray.cancel(ref, force=True)
                 results.failures[task_id] = f"Episode timed out after {elapsed:.0f}s"
                 episodes_in_progress.remove(ref)
+        if episode_queue and submit_fn is not None:
+            while episode_queue and len(episodes_in_progress) < n_slots:
+                ep = episode_queue.pop(0)
+                ref = submit_fn.remote(ep)
+                ref_to_id[ref] = ep.config.task_id
+                start_times[ref] = time.time()
+                episodes_in_progress.append(ref)
     return results
 
 
