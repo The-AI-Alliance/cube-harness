@@ -17,6 +17,8 @@ from cube_harness.metrics.tracer import get_trace_env_vars, get_tracer
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
+_CANCEL_GRACE_PERIOD_S = 60
+
 
 def _extract_model(exp: Experiment) -> str | None:
     llm_config = getattr(exp.agent_config, "llm_config", None)
@@ -84,6 +86,25 @@ def _run_with_ray_impl(
         exp.benchmark.close()
 
 
+def _get_running_elapsed_s(refs: list[ray.ObjectRef]) -> dict[ray.ObjectRef, float]:
+    """Return elapsed running time (seconds) for each ref that is actively executing.
+
+    Queries the Ray dashboard in bulk. Refs that are still queued (no start_time_ms)
+    are excluded. Returns an empty dict if the dashboard is unreachable.
+    """
+    try:
+        running = {
+            t.task_id: t.start_time_ms
+            for t in list_tasks(filters=[("state", "=", "RUNNING")])
+            if t.start_time_ms is not None
+        }
+    except Exception:
+        logger.warning("Could not reach Ray dashboard to check episode timeouts — skipping this cycle")
+        return {}
+    now_ms = time.time() * 1000
+    return {ref: (now_ms - running[ref.task_id().hex()]) / 1000 for ref in refs if ref.task_id().hex() in running}
+
+
 def _poll_ray(
     exp: Experiment,
     ref_to_id: dict[ray.ObjectRef, str],
@@ -112,28 +133,19 @@ def _poll_ray(
                 logger.exception(f"Run failed with exception: {e}")
                 results.failures[task_id] = str(e)
         if episode_timeout is not None:
-            try:
-                running = {
-                    t.task_id: t.start_time_ms
-                    for t in list_tasks(filters=[("state", "=", "RUNNING")])
-                    if t.start_time_ms is not None
-                }
-            except Exception:
-                logger.warning("Could not reach Ray dashboard to check episode timeouts — skipping this cycle")
-                running = {}
-            now_ms = time.time() * 1000
-            timed_out = [
-                ref
-                for ref in episodes_in_progress
-                if ref.task_id().hex() in running and now_ms - running[ref.task_id().hex()] > episode_timeout * 1000
-            ]
-            for ref in timed_out:
-                task_id = ref_to_id[ref]
-                elapsed = (now_ms - running[ref.task_id().hex()]) / 1000
-                logger.error(f"Episode {task_id} timed out after {elapsed:.0f}s — cancelling")
-                ray.cancel(ref, force=True)
-                results.failures[task_id] = f"Episode timed out after {elapsed:.0f}s"
-                episodes_in_progress.remove(ref)
+            for ref, elapsed in _get_running_elapsed_s(episodes_in_progress).items():
+                if elapsed > episode_timeout:
+                    task_id = ref_to_id[ref]
+                    if elapsed < episode_timeout + _CANCEL_GRACE_PERIOD_S:
+                        logger.warning(f"Episode {task_id} timed out after {elapsed:.0f}s — cancelling gracefully")
+                        ray.cancel(ref, force=False)
+                    else:
+                        logger.error(
+                            f"Episode {task_id} timed out after {elapsed:.0f}s — force killing after grace period"
+                        )
+                        ray.cancel(ref, force=True)
+                        results.failures[task_id] = f"Episode timed out after {elapsed:.0f}s"
+                        episodes_in_progress.remove(ref)
     return results
 
 
