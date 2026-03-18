@@ -9,9 +9,6 @@ dependencies = [
     "cube-browser-tool"
 ]
 
-[project.optional-dependencies]
-debug = []
-
 [project.entry-points."cube.benchmarks"]
 miniwob-cube = "miniwob_cube.benchmark:MiniWobBenchmark"
 
