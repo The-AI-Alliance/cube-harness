@@ -27,6 +27,7 @@ jobs:
           fi
 
   publish-cube-harness:
+    needs: create-github-release
     if: startsWith(github.ref, 'refs/tags/cube-harness/')
     runs-on: ubuntu-latest
     permissions:
@@ -45,6 +46,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
   publish-cube:
+    needs: create-github-release
     if: startsWith(github.ref, 'refs/tags/cubes/')
     runs-on: ubuntu-latest
     permissions:
