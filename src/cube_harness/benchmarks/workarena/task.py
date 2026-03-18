@@ -5,11 +5,11 @@ import time
 
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.core import ActionSchema, Observation
+from cube.tool import BrowserTool
 
 from cube_harness.action_spaces.browser_action_space import BidBrowserActionSpace
 from cube_harness.core import ActionSpace
 from cube_harness.legacy import Task
-from cube_harness.tools.base import BrowserTaskTool
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class WorkArenaTask(Task):
         BidBrowserActionSpace.browser_forward,
         BidBrowserActionSpace.noop,
     )
-    _tool: BrowserTaskTool
+    _tool: BrowserTool
 
     def __init__(
         self,
@@ -65,7 +65,7 @@ class WorkArenaTask(Task):
         self._workarena_task: AbstractServiceNowTask | None = None
         self.wait_first_page_time = wait_first_page_time
 
-    def setup(self, tool: BrowserTaskTool) -> tuple[Observation, dict]:
+    def setup(self, tool: BrowserTool) -> tuple[Observation, dict]:
         """Set up the WorkArena task.
 
         Applies task-specific browser preferences, resets the browser, then
@@ -83,7 +83,7 @@ class WorkArenaTask(Task):
         _apply_task_runtime_preferences(self._tool, self._workarena_task)
         self._tool.reset()
 
-        page, _ = self._tool.session.get_playwright_session()
+        page = self._tool.session.page
         goal, task_info = self._workarena_task.setup(page)
 
         logger.info(f"WorkArena page URL after setup: {page.url}")
@@ -118,7 +118,7 @@ class WorkArenaTask(Task):
         """
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
-        page, _ = self._tool.session.get_playwright_session()
+        page = self._tool.session.page
         reward, done, _user_message, task_info = self._workarena_task.validate(page, [])
         return reward, {"done": done, **task_info}
 
@@ -140,7 +140,7 @@ class WorkArenaTask(Task):
         """Check task completion via WorkArena validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call setup() first.")
-        page, _ = self._tool.session.get_playwright_session()
+        page = self._tool.session.page
         _, done, _, _ = self._workarena_task.validate(page, [])
         return done
 
@@ -155,7 +155,7 @@ class WorkArenaTask(Task):
                 self._workarena_task = None
 
 
-def _apply_task_runtime_preferences(tool: BrowserTaskTool, workarena_task: AbstractServiceNowTask) -> None:
+def _apply_task_runtime_preferences(tool: BrowserTool, workarena_task: AbstractServiceNowTask) -> None:
     """Apply WorkArena task browser preferences (locale, slow_mo, timeout) onto tool.config.browser_config.
 
     WorkArena tasks declare preferred viewport, locale, slow_mo, and timeout as class

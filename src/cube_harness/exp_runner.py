@@ -127,7 +127,13 @@ def _poll_ray(
             task_id = ref_to_id[task_ref]
             try:
                 traj: Trajectory = ray.get(task_ref)
-                logger.info(f"Completed trajectory for task {task_id} with {len(traj.steps)} steps")
+                logger.info(
+                    "Completed trajectory for task %s with %d steps (%d agent steps, %d environment steps)",
+                    task_id,
+                    len(traj.steps),
+                    traj.n_agent_steps,
+                    traj.n_env_steps,
+                )
                 results.trajectories[task_id] = traj
             except Exception as e:
                 logger.exception(f"Run failed with exception: {e}")
@@ -140,7 +146,9 @@ def _poll_ray(
                         logger.warning(f"Episode {task_id} timed out after {elapsed:.0f}s — cancelling gracefully")
                         ray.cancel(ref, force=False)
                     else:
-                        logger.error(f"Episode {task_id} timed out after {elapsed:.0f}s — force killing after grace period")
+                        logger.error(
+                            f"Episode {task_id} timed out after {elapsed:.0f}s — force killing after grace period"
+                        )
                         ray.cancel(ref, force=True)
                         results.failures[task_id] = f"Episode timed out after {elapsed:.0f}s"
                         episodes_in_progress.remove(ref)

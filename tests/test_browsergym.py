@@ -1,14 +1,29 @@
 """Tests for cube_harness.tools.browsergym module."""
 
+import tempfile
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from cube.core import Action, Observation
+from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
 
-from cube_harness.tools.browser_session import PlaywrightSession, PlaywrightSessionConfig
 from cube_harness.tools.browsergym import BrowsergymConfig, BrowsergymTool
+
+
+@pytest.fixture
+def mock_playwright_session() -> Generator[PlaywrightSession, None, None]:
+    session = PlaywrightSession(
+        playwright=MagicMock(),
+        page=MagicMock(),
+        context=MagicMock(),
+        cdp_url="http://localhost:9222",
+        user_data_dir=tempfile.mkdtemp(prefix="cube_harness_"),
+    )
+    yield session
+    session.stop()
 
 
 class TestBrowsergymConfig:
@@ -40,7 +55,8 @@ class TestBrowsergymConfig:
         assert config.use_axtree is False
         assert config.use_screenshot is False
         assert config.max_wait == 30
-        assert config.browser_config.viewport == {"width": 1920, "height": 1080}
+        assert config.browser_config.viewport.width == 1920
+        assert config.browser_config.viewport.height == 1080
 
     def test_make_creates_tool_instance(self) -> None:
         """Test that make() creates a proper BrowsergymTool instance."""
@@ -68,17 +84,9 @@ class TestBrowsergymToolInitialization:
         tool = BrowsergymTool(config)
 
         assert tool.config is config
-        assert tool.session is None
+        assert tool._session is None
         assert tool._last_obs is None
         assert tool._last_info is None
-
-    def test_ensure_page_raises_when_not_initialized(self) -> None:
-        """Test that _ensure_page raises RuntimeError when page not initialized."""
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-
-        with pytest.raises(RuntimeError, match="Browser is not initialized"):
-            tool._ensure_page()
 
     def test_page_property_raises_when_not_initialized(self) -> None:
         """Test that page property raises RuntimeError when not initialized."""
@@ -287,16 +295,16 @@ class TestBrowsergymToolObservationConversion:
 class TestBrowsergymToolActionMethods:
     """Tests for action method implementations."""
 
-    def _create_tool_with_mock_env(self) -> BrowsergymTool:
+    def _create_tool_with_mock_env(self, mock_playwright_session: PlaywrightSession) -> BrowsergymTool:
         """Helper to create a tool with a mocked page for action testing."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = mock_playwright_session
         return tool
 
-    def test_browser_click_action_string(self) -> None:
+    def test_browser_click_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_click constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with (
             patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step,
@@ -306,128 +314,128 @@ class TestBrowsergymToolActionMethods:
 
         mock_step.assert_called_once_with('click(bid="a51")')
 
-    def test_browser_type_action_string(self) -> None:
+    def test_browser_type_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_type constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_type("b12", "Hello World")
 
         mock_step.assert_called_once_with('fill(bid="b12", value="Hello World")')
 
-    def test_browser_type_escapes_quotes(self) -> None:
+    def test_browser_type_escapes_quotes(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_type properly escapes quotes in text."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_type("c1", 'Say "Hello"')
 
         mock_step.assert_called_once_with('fill(bid="c1", value="Say \\"Hello\\"")')
 
-    def test_browser_type_escapes_backslashes(self) -> None:
+    def test_browser_type_escapes_backslashes(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_type properly escapes backslashes."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_type("d1", "path\\to\\file")
 
         mock_step.assert_called_once_with('fill(bid="d1", value="path\\\\to\\\\file")')
 
-    def test_browser_press_key_action_string(self) -> None:
+    def test_browser_press_key_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_press_key constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_press_key("Enter")
 
         mock_step.assert_called_once_with('keyboard_press("Enter")')
 
-    def test_browser_drag_action_string(self) -> None:
+    def test_browser_drag_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_drag constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_drag("e1", "f2")
 
         mock_step.assert_called_once_with('drag_and_drop(from_bid="e1", to_bid="f2")')
 
-    def test_browser_hover_action_string(self) -> None:
+    def test_browser_hover_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_hover constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_hover("g3")
 
         mock_step.assert_called_once_with('hover(bid="g3")')
 
-    def test_browser_select_option_action_string(self) -> None:
+    def test_browser_select_option_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_select_option constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_select_option("h4", "option1")
 
         mock_step.assert_called_once_with('select_option(bid="h4", options="option1")')
 
-    def test_browser_select_option_escapes_quotes(self) -> None:
+    def test_browser_select_option_escapes_quotes(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_select_option escapes quotes in value."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_select_option("i5", 'value "with" quotes')
 
         mock_step.assert_called_once_with('select_option(bid="i5", options="value \\"with\\" quotes")')
 
-    def test_browser_mouse_click_xy_action_string(self) -> None:
+    def test_browser_mouse_click_xy_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_mouse_click_xy constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_mouse_click_xy(100, 200)
 
         mock_step.assert_called_once_with("mouse_click(x=100, y=200)")
 
-    def test_browser_wait_action_string(self) -> None:
+    def test_browser_wait_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_wait constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_wait(5)
 
         mock_step.assert_called_once_with("noop(wait_ms=5000)")
 
-    def test_browser_wait_respects_max_wait(self) -> None:
+    def test_browser_wait_respects_max_wait(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_wait clamps to max_wait value."""
         config = BrowsergymConfig(max_wait=10)
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = mock_playwright_session
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_wait(120)  # Request 120 seconds, but max_wait is 10
 
         mock_step.assert_called_once_with("noop(wait_ms=10000)")
 
-    def test_browser_back_action_string(self) -> None:
+    def test_browser_back_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_back constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_back()
 
         mock_step.assert_called_once_with("go_back()")
 
-    def test_browser_forward_action_string(self) -> None:
+    def test_browser_forward_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that browser_forward constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.browser_forward()
 
         mock_step.assert_called_once_with("go_forward()")
 
-    def test_noop_action_string(self) -> None:
+    def test_noop_action_string(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that noop constructs correct action string."""
-        tool = self._create_tool_with_mock_env()
+        tool = self._create_tool_with_mock_env(mock_playwright_session)
 
         with patch.object(tool, "_execute_bgym_step", return_value="Success") as mock_step:
             tool.noop()
@@ -438,17 +446,17 @@ class TestBrowsergymToolActionMethods:
 class TestBrowsergymToolStepResults:
     """Tests for action step results and state updates."""
 
-    def _create_tool_with_mock_page(self) -> BrowsergymTool:
+    def _create_tool_with_mock_page(self, mock_playwright_session: PlaywrightSession) -> BrowsergymTool:
         """Helper to create a tool with a mocked page."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = mock_playwright_session
         tool._action_set = MagicMock()
         return tool
 
-    def test_execute_bgym_step_returns_success(self) -> None:
+    def test_execute_bgym_step_returns_success(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that _execute_bgym_step returns success message."""
-        tool = self._create_tool_with_mock_page()
+        tool = self._create_tool_with_mock_page(mock_playwright_session)
 
         with (
             patch("cube_harness.tools.browsergym.execute_python_code"),
@@ -458,9 +466,9 @@ class TestBrowsergymToolStepResults:
 
         assert result == "Success"
 
-    def test_execute_bgym_step_returns_failure_on_exception(self) -> None:
+    def test_execute_bgym_step_returns_failure_on_exception(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that _execute_bgym_step returns failure message on exception."""
-        tool = self._create_tool_with_mock_page()
+        tool = self._create_tool_with_mock_page(mock_playwright_session)
 
         with (
             patch("cube_harness.tools.browsergym.execute_python_code", side_effect=Exception("Some error")),
@@ -470,9 +478,9 @@ class TestBrowsergymToolStepResults:
 
         assert "Failed" in result
 
-    def test_execute_bgym_step_updates_last_obs(self) -> None:
+    def test_execute_bgym_step_updates_last_obs(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that _execute_bgym_step updates _last_obs."""
-        tool = self._create_tool_with_mock_page()
+        tool = self._create_tool_with_mock_page(mock_playwright_session)
         new_obs = {"screenshot": np.zeros((10, 10, 3))}
 
         with (
@@ -483,9 +491,9 @@ class TestBrowsergymToolStepResults:
 
         assert tool._last_obs is new_obs
 
-    def test_execute_bgym_step_updates_last_info(self) -> None:
+    def test_execute_bgym_step_updates_last_info(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that _execute_bgym_step updates _last_info with source=action."""
-        tool = self._create_tool_with_mock_page()
+        tool = self._create_tool_with_mock_page(mock_playwright_session)
 
         with (
             patch("cube_harness.tools.browsergym.execute_python_code"),
@@ -500,11 +508,11 @@ class TestBrowsergymToolStepResults:
 class TestBrowsergymToolExecuteAction:
     """Tests for execute_action integration."""
 
-    def test_execute_action_returns_combined_observation(self) -> None:
+    def test_execute_action_returns_combined_observation(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that execute_action combines action result and page observation."""
         config = BrowsergymConfig(use_html=True, use_axtree=False, use_screenshot=False, prune_html=False)
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = mock_playwright_session
 
         action = Action(name="browser_click", arguments={"bid": "a1"})
 
@@ -541,11 +549,11 @@ class TestBrowsergymToolLifecycle:
         mock_wait.assert_called_once()
         mock_extract.assert_called_once()
 
-    def test_reset_closes_existing_runtime(self) -> None:
+    def test_reset_closes_existing_runtime(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that reset closes existing runtime before creating new one."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = mock_playwright_session
 
         with (
             patch.object(tool, "_close_runtime") as mock_close,
@@ -557,36 +565,42 @@ class TestBrowsergymToolLifecycle:
 
         mock_close.assert_called_once()
 
-    def test_close_cleans_up_browser(self) -> None:
+    def test_close_cleans_up_browser(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that close cleans up the browser resources."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
-        tool.session = PlaywrightSession(page=MagicMock(), context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = mock_playwright_session
         tool._last_obs = {"some": "data"}
         tool._last_info = {"info": "data"}
 
         tool.close()
 
-        assert tool.session is None
+        assert tool._session is None
         assert tool._last_obs is None
         assert tool._last_info is None
 
-    def test_close_handles_exception(self) -> None:
+    def test_close_handles_exception(self, mock_playwright_session: PlaywrightSession) -> None:
         """Test that close handles exceptions gracefully."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
         mock_context = MagicMock()
         mock_context.close.side_effect = Exception("Close failed")
-        tool.session = PlaywrightSession(page=MagicMock(), context=mock_context, cdp_url="http://localhost:9222")
+        tool._session = PlaywrightSession(
+            playwright=MagicMock(),
+            page=MagicMock(),
+            context=mock_context,
+            cdp_url="http://localhost:9222",
+            user_data_dir=tempfile.mkdtemp(prefix="cube_harness_"),
+        )
         tool._last_obs = {"some": "data"}
 
         # Should not raise
         tool.close()
 
         # State should still be cleaned up
-        assert tool.session is None
+        assert tool._session is None
         assert tool._last_obs is None
 
     def test_close_noop_when_no_browser(self) -> None:
@@ -664,7 +678,13 @@ class TestBrowsergymToolCheckboxJsFallback:
         mock_page._mock_element_locator = mock_element_locator
         mock_page._mock_frame = mock_frame
 
-        tool.session = PlaywrightSession(page=mock_page, context=MagicMock(), cdp_url="http://localhost:9222")
+        tool._session = PlaywrightSession(
+            playwright=MagicMock(),
+            page=mock_page,
+            context=MagicMock(),
+            cdp_url="http://localhost:9222",
+            user_data_dir=tempfile.mkdtemp(prefix="cube_harness_"),
+        )
         tool._last_obs = {}
 
         return tool
