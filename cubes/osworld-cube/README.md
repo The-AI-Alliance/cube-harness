@@ -35,6 +35,7 @@ uv pip install -e .
 
 ```python
 from osworld_cube import OSWorldTask, ComputerConfig
+from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 from cube.task import TaskMetadata
 
 task = OSWorldTask(
@@ -49,7 +50,8 @@ task = OSWorldTask(
             "related_apps": [],
         },
     ),
-    tool_config=ComputerConfig(provider="docker"),
+    tool_config=ComputerConfig(),
+    vm_backend=OSWorldQEMUVMBackend(),
 )
 
 obs, info = task.reset()
@@ -65,9 +67,11 @@ task.close()
 
 ```python
 from osworld_cube import OSWorldBenchmark, ComputerConfig
+from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 bench = OSWorldBenchmark(
-    default_tool_config=ComputerConfig(provider="docker"),
+    default_tool_config=ComputerConfig(),
+    vm_backend=OSWorldQEMUVMBackend(),
 )
 bench.setup()
 for task_config in bench.get_task_configs():
@@ -195,9 +199,16 @@ python -m osworld_cube.debug
 ```
 src/osworld_cube/
 ├── __init__.py       # Public exports
-├── computer.py       # ComputerBase, Computer13, PyAutoGUIComputer, ComputerConfig
+├── computer.py       # Re-exports from cube_computer_tool; sets osworld-cube cache default
 ├── task.py           # OSWorldTask
 ├── benchmark.py      # OSWorldBenchmark, OSWorldTaskConfig
 ├── axtree.py         # Accessibility tree parsing and Set-of-Marks annotation
-└── debug.py          # get_debug_task_configs, make_debug_agent
+├── debug.py          # get_debug_task_configs, make_debug_agent
+└── vm_backend/       # QEMU VM backend (auto-downloads OSWorld images from HuggingFace)
+    ├── __init__.py   # OSWorldQEMUVMBackend, ensure_base_image
+    ├── evaluator.py  # Task evaluation logic
+    ├── setup_controller.py  # VM setup/teardown
+    ├── pyautogui_utils.py   # PyAutoGUI helpers
+    ├── getters/      # Per-app state extractors (chrome, calc, file, gimp, …)
+    └── metrics/      # Per-app evaluation metrics (basic_os, chrome, docs, …)
 ```

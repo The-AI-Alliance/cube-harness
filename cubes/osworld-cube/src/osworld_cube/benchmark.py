@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Paths — rooted under CUBE_CACHE_DIR (default ~/.agentlab2)
+# Paths — rooted under CUBE_CACHE_DIR (default ~/.cube)
 # ---------------------------------------------------------------------------
 
 OSWORLD_BASE_DIR = _CUBE_CACHE_ROOT

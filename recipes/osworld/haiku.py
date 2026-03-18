@@ -10,7 +10,7 @@ v2: Updated system prompt — adds sudo password, environment context, and tips 
 the OSWorld reference prompt (home dir, curl vs wget, zoom, large-output handling, date).
 
 Prerequisites:
-    OSWorld repo cloned to ~/.agentlab2/OSWorld/
+    OSWorld repo cloned to ~/.cube/OSWorld/
     (auto-cloned on first run if missing)
 
 Usage:
