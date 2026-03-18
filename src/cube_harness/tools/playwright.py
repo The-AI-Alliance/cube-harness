@@ -15,16 +15,10 @@ from cube_harness.utils import prune_html
 logger = logging.getLogger(__name__)
 
 
-class ExtraPlaywrightConfig(PlaywrightConfig):
-    """Extended configuration for Playwright tool."""
-
-    pw_kwargs: dict = {}
-
-
 class AsyncPlaywrightTool(AsyncToolWithTelemetry, BrowserActionSpace):
     """Fully asynchronous Playwright tool using playwright.async_api."""
 
-    def __init__(self, config: ExtraPlaywrightConfig) -> None:
+    def __init__(self, config: PlaywrightConfig) -> None:
         super().__init__()
         self.config = config
         self._apw = None
@@ -33,7 +27,7 @@ class AsyncPlaywrightTool(AsyncToolWithTelemetry, BrowserActionSpace):
 
     async def initialize(self):
         self._apw = await async_playwright().start()
-        self._abrowser = await self._apw.chromium.launch(chromium_sandbox=True, **self.config.pw_kwargs)
+        self._abrowser = await self._apw.chromium.launch(chromium_sandbox=True, **self.config.browser.pw_extra_kwargs)
         self._page = await self._abrowser.new_page()
 
     async def _execute_action(self, action: Action) -> Observation | StepError:
