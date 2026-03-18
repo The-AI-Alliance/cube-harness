@@ -18,13 +18,10 @@ dependencies = [
     "Pillow~=11.0",
     "beautifulsoup4~=4.14",
     "numpy~=2.3.5",
-    "numpydoc~=1.10.0",
     "ray[default]>=2.52.1",
     "tenacity>=8.5.0",
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
-    "gradio~=5.49",
-    "matplotlib>=3.8",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
@@ -41,6 +38,10 @@ workarena = [
 # Miniwob cube dependencies
 miniwob = [
     "miniwob-cube",
+]
+# XRay trajectory viewer
+analyze = [
+    "gradio~=5.49",
 ]
 
 [build-system]
@@ -68,7 +69,6 @@ line-ending = "auto"
 extend-select = ["I"] # sort imports
 
 [project.scripts]
-ch-viewer = "cube_harness.deprecated_viewer:main"
 ch-mcp-server = "cube_harness.mcp.server:main"
 ch-xray = "cube_harness.analyze.xray:main"
 
