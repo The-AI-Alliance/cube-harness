@@ -681,7 +681,7 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "browsergym-core" },
-    { name = "cube-browser-playwright" },
+    { name = "cube-browser-tool" },
     { name = "cube-standard" },
     { name = "litellm" },
     { name = "mcp", extra = ["cli"] },
@@ -723,8 +723,8 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
-    { name = "cube-browser-playwright" },
-    { name = "cube-standard" },
+    { name = "cube-browser-tool", specifier = ">=0.1.0" },
+    { name = "cube-standard", specifier = ">=0.1.0rc2" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.26" },
@@ -1656,17 +1656,17 @@ name = "miniwob-cube"
 version = "1.0.0"
 source = { editable = "cubes/miniwob" }
 dependencies = [
+    { name = "cube-browser-tool" },
     { name = "cube-standard" },
     { name = "miniwob" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-browser-tool", marker = "extra == 'debug'" },
+    { name = "cube-browser-tool" },
     { name = "cube-standard" },
     { name = "miniwob", specifier = ">=1.0" },
 ]
-provides-extras = ["debug"]
 
 [[package]]
 name = "msgpack"
