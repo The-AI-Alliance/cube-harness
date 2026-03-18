@@ -35,7 +35,7 @@ class BrowsergymConfig(ToolConfig):
     """Configuration for BrowserGym-style Playwright tool."""
 
     # Browser configuration (launch parameters)
-    browser_config: PlaywrightSessionConfig = Field(default_factory=PlaywrightSessionConfig)
+    browser: PlaywrightSessionConfig = Field(default_factory=PlaywrightSessionConfig)
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
@@ -101,7 +101,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         return self._last_terminated
 
     def _create_runtime(self) -> None:
-        self._session = self.config.browser_config.make()
+        self._session = self.config.browser.make()
         self._session.playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:

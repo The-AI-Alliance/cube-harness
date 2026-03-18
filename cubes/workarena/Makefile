@@ -1,8 +1,8 @@
 .PHONY: test install
 
 test:
-	uv run python -m arithmetic_cube.debug
+	uv run cube test workarena-cube
 
 install:
 	uv sync --all-extras
-	pip install -e .
+	uv pip install -e .

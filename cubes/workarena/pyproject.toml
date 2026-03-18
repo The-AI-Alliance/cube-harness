@@ -1,0 +1,24 @@
+[project]
+name = "workarena-cube"
+version = "1.0.0"
+description = "WorkArena ServiceNow benchmark for cube"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-standard>=0.1.0rc2",
+    "browsergym-workarena",
+    "termcolor",
+    "cube-browser-tool>=0.1.0",
+    "cube-browser-playwright>=0.1.0",
+]
+
+[project.entry-points."cube.benchmarks"]
+workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4
