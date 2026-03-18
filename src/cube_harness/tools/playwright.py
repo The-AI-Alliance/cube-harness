@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ExtraPlaywrightConfig(PlaywrightConfig):
     """Extended configuration for Playwright tool."""
+
     pw_kwargs: dict = {}
 
 
