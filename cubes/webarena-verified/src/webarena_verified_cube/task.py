@@ -1,4 +1,3 @@
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -12,7 +11,7 @@ from webarena_verified.types.config import WebArenaVerifiedConfig
 from webarena_verified.types.eval import EvalStatus, NetworkTrace, TaskEvalResult
 from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 
-from cube_harness.tools.playwright import SyncPlaywrightTool
+from cube_browser_tool import SyncPlaywrightTool
 from cube_harness.tools.toolbox import Toolbox
 from webarena_verified_cube.tool import SubmitResponseTool, WebArenaToolConfig
 
@@ -54,7 +53,7 @@ class WebArenaVerifiedTask(Task):
         if submitted is None:
             return 0.0, {"eval_status": EvalStatus.FAILURE, "evaluators_results": []}
         self._playwright_tool.close()  # HAR is saved at context close
-        har_path = Path(self._playwright_tool.config.context_kwargs["record_har_path"])
+        har_path = Path(self._playwright_tool.config.har_path)
         network_trace = NetworkTrace.from_har(har_path)
         wav = WebArenaVerified(config=self.wav_config)
         result: TaskEvalResult = wav.evaluate_task(

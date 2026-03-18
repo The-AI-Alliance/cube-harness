@@ -1,19 +1,25 @@
 import tempfile
 
 from cube.tool import ToolConfig, tool_action
+from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 
 from cube_harness.tool import ToolWithTelemetry
-from cube_harness.tools.playwright import PlaywrightConfig, SyncPlaywrightTool
 from cube_harness.tools.toolbox import ToolboxConfig
-from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, Status
+from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, PublicResultItem, Status
 
 
 class HarPlaywrightConfig(PlaywrightConfig):
+    har_path: str = ""
+
     def make(self, container=None) -> SyncPlaywrightTool:
         with tempfile.NamedTemporaryFile(suffix=".har", delete=False) as f:
             har_path = f.name
-        config = self.model_copy(update={"context_kwargs": {**self.context_kwargs, "record_har_path": har_path}})
-        return SyncPlaywrightTool(config)
+        browser_with_har = self.browser.model_copy(
+            update={"pw_extra_kwargs": {**self.browser.pw_extra_kwargs, "record_har_path": har_path}}
+        )
+        config_with_har = self.model_copy(update={"browser": browser_with_har, "har_path": har_path})
+        session = browser_with_har.make()
+        return SyncPlaywrightTool(config=config_with_har, session=session)
 
 
 class SubmitResponseConfig(ToolConfig):
@@ -41,7 +47,7 @@ class SubmitResponseTool(ToolWithTelemetry):
         self,
         task_type: str,
         status: str,
-        retrieved_data: list | None = None,
+        retrieved_data: list[PublicResultItem] | None = None,
         error_details: str | None = None,
     ) -> str:
         """Submit your final response for the task.

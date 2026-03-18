@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import sys
 
+from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
 from cube.testing import run_debug_suite
 from webarena_verified.api.webarena_verified import WebArenaVerified
@@ -32,7 +33,6 @@ from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedCo
 from webarena_verified.types.task import WebArenaSite
 
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
-from webarena_verified_cube.task import WebArenaVerifiedTaskConfig
 from webarena_verified_cube.tool import WebArenaToolConfig
 
 logger = logging.getLogger(__name__)
@@ -73,18 +73,12 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(expected_response=wav_task.expected_agent_response)
 
 
-def get_debug_task_configs() -> list[WebArenaVerifiedTaskConfig]:
-    wav = WebArenaVerified()
-    return [
-        WebArenaVerifiedTaskConfig(
-            task_id=tid,
-            task_metadata=WebArenaVerifiedBenchmark.task_metadata[tid],
-            tool_config=WebArenaToolConfig(headless=False),
-            wav_task=wav.get_task(int(tid)),
-            wav_config=_DEBUG_WAV_CONFIG,
-        )
-        for tid in _DEBUG_TASK_IDS
-    ]
+def get_debug_benchmark() -> Benchmark:
+    return WebArenaVerifiedBenchmark(
+        wav_config=_DEBUG_WAV_CONFIG,
+        task_ids_filter=[int(tid) for tid in _DEBUG_TASK_IDS],
+        default_tool_config=WebArenaToolConfig(headless=False),
+    )
 
 
 if __name__ == "__main__":
