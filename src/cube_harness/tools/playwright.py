@@ -15,10 +15,15 @@ from cube_harness.utils import prune_html
 logger = logging.getLogger(__name__)
 
 
+class ExtraPlaywrightConfig(PlaywrightConfig):
+    """Extended configuration for Playwright tool."""
+    pw_kwargs: dict = {}
+
+
 class AsyncPlaywrightTool(AsyncToolWithTelemetry, BrowserActionSpace):
     """Fully asynchronous Playwright tool using playwright.async_api."""
 
-    def __init__(self, config: PlaywrightConfig) -> None:
+    def __init__(self, config: ExtraPlaywrightConfig) -> None:
         super().__init__()
         self.config = config
         self._apw = None
