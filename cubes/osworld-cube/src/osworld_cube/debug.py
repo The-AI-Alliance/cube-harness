@@ -25,8 +25,9 @@ from pathlib import Path
 from cube.core import Action, ActionSchema, Observation
 from cube.task import TaskMetadata
 from cube.vm import VMBackend
-from osworld_cube.benchmark import OSWorldTaskConfig
+from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 from osworld_cube.computer import ComputerConfig
+from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,21 @@ class DebugAgent:
 # ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
+
+
+def get_debug_benchmark() -> OSWorldBenchmark:
+    """Return an OSWorldBenchmark scoped to the debug tasks.
+
+    Uses debug_tasks.json as the task source — no OSWorld repo clone or VM
+    download required. Called once by cube.testing before any debug episodes run.
+    """
+    bench = OSWorldBenchmark(
+        tasks_file=str(_TASKS_FILE),
+        default_tool_config=ComputerConfig(),
+        vm_backend=OSWorldQEMUVMBackend(),
+    )
+    bench.setup()
+    return bench.subset_from_list(list(_TASK_ACTIONS.keys()))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
