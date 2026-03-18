@@ -23,7 +23,7 @@ import sys
 
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import LocalQEMUVMBackend
+from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -94,7 +94,7 @@ def main(debug: bool) -> None:
         use_som=False,
         tasks_file=tasks_file,
         test_set_name=OSWorldTestSet.TEST_SMALL,
-        vm_backend=LocalQEMUVMBackend(),
+        vm_backend=OSWorldQEMUVMBackend(),
     )
 
     exp = Experiment(
