@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import ray
 
-from cube_harness.core import AgentOutput, EnvironmentOutput, Trajectory
+from cube_harness.core import Trajectory
 from cube_harness.episode import Episode
 from cube_harness.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from cube_harness.experiment import Experiment, ExpResult
@@ -106,14 +106,12 @@ def _poll_ray(
             task_id = ref_to_id[task_ref]
             try:
                 traj: Trajectory = ray.get(task_ref)
-                n_agent_steps = sum(1 for s in traj.steps if isinstance(s.output, AgentOutput))
-                n_env_steps = sum(1 for s in traj.steps if isinstance(s.output, EnvironmentOutput))
                 logger.info(
                     "Completed trajectory for task %s with %d steps (%d agent steps, %d environment steps)",
                     task_id,
                     len(traj.steps),
-                    n_agent_steps,
-                    n_env_steps,
+                    traj.n_agent_steps,
+                    traj.n_env_steps,
                 )
                 results.trajectories[task_id] = traj
             except Exception as e:
