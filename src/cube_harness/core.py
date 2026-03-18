@@ -48,6 +48,14 @@ class Trajectory(TypedBaseModel):
                 return step.output
         raise ValueError("No EnvironmentOutput found in the trajectory.")
 
+    @property
+    def n_agent_steps(self) -> int:
+        return sum(1 for step in self.steps if isinstance(step.output, AgentOutput))
+
+    @property
+    def n_env_steps(self) -> int:
+        return sum(1 for step in self.steps if isinstance(step.output, EnvironmentOutput))
+
 
 class ActionSpace(frozenset[Callable]):
     """A set of action callables representing a subset of an action space.
