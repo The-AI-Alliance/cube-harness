@@ -22,12 +22,25 @@ All commits need a [DCO sign-off](https://developercertificate.org/): `git commi
 
 ```
 src/cube_harness/
-  core/        # Agent, Episode, Trajectory, Experiment protocols
-  runners/     # ExpRunner (sequential + Ray)
-  viewer/      # Gradio experiment viewer
-cubes/         # Built-in CUBE-standard benchmark wrappers
-recipes/       # Example experiment scripts
-tests/         # Test suite
+  agent.py          # Agent protocol and AgentConfig base
+  benchmark.py      # Benchmark interface for task collections
+  core.py           # Data structures: Action, Observation, Trajectory, Task
+  environment.py    # Environment and EnvConfig abstractions
+  episode.py        # Episode execution and trajectory persistence
+  experiment.py     # Experiment configuration and statistics
+  exp_runner.py     # Sequential and Ray-based parallel execution
+  llm.py            # LLM wrapper using LiteLLM
+  storage.py        # Trajectory storage backends
+  tool.py           # Tool abstraction for action spaces
+  agents/           # Agent implementations (ReAct, Genny, …)
+  tools/            # Tool implementations (Playwright, BrowserGym, …)
+  benchmarks/       # Benchmark wrappers (MiniWob, WorkArena, …)
+  metrics/          # Telemetry and tracing (OpenTelemetry-based)
+  action_spaces/    # Browser action space protocols
+  analyze/          # Trajectory analysis and XRay inspection utilities
+  mcp/              # MCP server for exposing tools via Model Context Protocol
+recipes/            # Example experiment scripts
+tests/              # Test suite
 ```
 
 ## Licenses
