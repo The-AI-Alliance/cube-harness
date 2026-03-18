@@ -5,3 +5,4 @@ test:
 
 install:
 	uv sync --all-extras
+	pip install -e .
