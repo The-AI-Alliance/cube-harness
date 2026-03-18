@@ -8,11 +8,11 @@ SNOW_INSTANCE_PWD) or HUGGING_FACE_HUB_TOKEN for the hosted instance pool.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_task_configs()           -> list[WorkArenaTaskConfig]
+get_debug_benchmark()              -> WorkArenaBenchmark
 make_debug_agent(task_id: str)     -> CheatAgent
 
 Usage:
-    uv run python -m workarena_cube.debug
+    uv run cube test workarena-cube
 """
 
 from __future__ import annotations

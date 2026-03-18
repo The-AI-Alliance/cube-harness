@@ -659,6 +659,22 @@ wheels = [
 ]
 
 [[package]]
+name = "cube-browser-tool"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "cube-browser-playwright" },
+    { name = "cube-standard" },
+    { name = "pillow" },
+    { name = "playwright" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/39/ef8986593551df5d8d768c3722982f4f6d5d6898408037a6f892663b5923/cube_browser_tool-0.1.0.tar.gz", hash = "sha256:0d499aa2becb66e3d55e5b51fbd5773d5845da794e628a1018dff706c7c08ee5", size = 6013, upload-time = "2026-03-16T19:24:48.162Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/6b/d8a7cb10988f36655fc9e57a0776e28c24f7fd855885173bf3c73ba6c441/cube_browser_tool-0.1.0-py3-none-any.whl", hash = "sha256:8de770817bd0127f8bbf77094d763176f89402a09312a63d64b0f4361cf11ce2", size = 8245, upload-time = "2026-03-16T19:24:47.069Z" },
+]
+
+[[package]]
 name = "cube-harness"
 version = "0.1.0"
 source = { editable = "." }
@@ -691,7 +707,7 @@ miniwob = [
     { name = "miniwob-cube" },
 ]
 workarena = [
-    { name = "browsergym-workarena" },
+    { name = "workarena-cube" },
 ]
 
 [package.dev-dependencies]
@@ -707,7 +723,6 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
-    { name = "browsergym-workarena", marker = "extra == 'workarena'", specifier = ">=0.5.2" },
     { name = "cube-browser-playwright" },
     { name = "cube-standard" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
@@ -726,6 +741,7 @@ requires-dist = [
     { name = "ray", extras = ["default"], specifier = ">=2.52.1" },
     { name = "tenacity", specifier = ">=8.5.0" },
     { name = "termcolor", specifier = "~=3.2" },
+    { name = "workarena-cube", marker = "extra == 'workarena'", editable = "cubes/workarena" },
 ]
 provides-extras = ["workarena", "miniwob", "analyze"]
 
@@ -3510,6 +3526,25 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/86/eb/20b6cdf273913d0ad05a6a14aed4b9a85591c18a987a3d47f20fa13dcc47/websockets-15.0.1-cp313-cp313-win32.whl", hash = "sha256:ba9e56e8ceeeedb2e080147ba85ffcd5cd0711b89576b83784d8605a7df455fa", size = 176393, upload-time = "2025-03-05T20:02:53.814Z" },
     { url = "https://files.pythonhosted.org/packages/1b/6c/c65773d6cab416a64d191d6ee8a8b1c68a09970ea6909d16965d26bfed1e/websockets-15.0.1-cp313-cp313-win_amd64.whl", hash = "sha256:e09473f095a819042ecb2ab9465aee615bd9c2028e4ef7d933600a8401c79561", size = 176837, upload-time = "2025-03-05T20:02:55.237Z" },
     { url = "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl", hash = "sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f", size = 169743, upload-time = "2025-03-05T20:03:39.41Z" },
+]
+
+[[package]]
+name = "workarena-cube"
+version = "1.0.0"
+source = { editable = "cubes/workarena" }
+dependencies = [
+    { name = "browsergym-workarena" },
+    { name = "cube-browser-tool" },
+    { name = "cube-standard" },
+    { name = "termcolor" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "browsergym-workarena" },
+    { name = "cube-browser-tool" },
+    { name = "cube-standard" },
+    { name = "termcolor" },
 ]
 
 [[package]]

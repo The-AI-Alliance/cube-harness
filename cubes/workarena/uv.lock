@@ -318,27 +318,33 @@ wheels = [
 ]
 
 [[package]]
+name = "cube-browser-playwright"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cube-standard" },
+    { name = "playwright" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9f/b3/360047dea00946f8b0a4b15f9edd3a675d556e54f255ae075a2852a348aa/cube_browser_playwright-0.1.0.tar.gz", hash = "sha256:ee11fadc7bb22588bd26703a1424acb3e91947f1fd82b1d7baf1ee1f74128b25", size = 2922, upload-time = "2026-03-16T19:22:19.857Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/ce/0457a8b89c76f15e5a13a98b73b172eda1026303ecbfd2e79cadcad6d2df/cube_browser_playwright-0.1.0-py3-none-any.whl", hash = "sha256:bd3eca362e24afd7bba02a9eed873ba14eb614c3236b4f56f8c471dab96adfdb", size = 4001, upload-time = "2026-03-16T19:22:18.593Z" },
+]
+
+[[package]]
 name = "cube-browser-tool"
 version = "0.1.0"
-source = { editable = "../../cube-standard/cube-tools/cube-browser-tool" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "cube-browser-playwright" },
     { name = "cube-standard" },
     { name = "pillow" },
     { name = "playwright" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "beautifulsoup4" },
-    { name = "browsergym-core", marker = "extra == 'bgym'" },
-    { name = "cube-standard" },
-    { name = "pillow", specifier = ">=9.0" },
-    { name = "playwright" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
+sdist = { url = "https://files.pythonhosted.org/packages/db/39/ef8986593551df5d8d768c3722982f4f6d5d6898408037a6f892663b5923/cube_browser_tool-0.1.0.tar.gz", hash = "sha256:0d499aa2becb66e3d55e5b51fbd5773d5845da794e628a1018dff706c7c08ee5", size = 6013, upload-time = "2026-03-16T19:24:48.162Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/6b/d8a7cb10988f36655fc9e57a0776e28c24f7fd855885173bf3c73ba6c441/cube_browser_tool-0.1.0-py3-none-any.whl", hash = "sha256:8de770817bd0127f8bbf77094d763176f89402a09312a63d64b0f4361cf11ce2", size = 8245, upload-time = "2026-03-16T19:24:47.069Z" },
 ]
-provides-extras = ["bgym", "dev"]
 
 [[package]]
 name = "cube-standard"
@@ -1742,7 +1748,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "browsergym-workarena" },
-    { name = "cube-browser-tool", editable = "../../cube-standard/cube-tools/cube-browser-tool" },
+    { name = "cube-browser-tool" },
     { name = "cube-standard" },
     { name = "termcolor" },
 ]

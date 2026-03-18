@@ -9,7 +9,7 @@ from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import Task, TaskConfig
 from cube.tool import tool_action
 from cube_browser_playwright import PlaywrightSession, Viewport
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
@@ -134,16 +134,17 @@ class WorkArenaTask(Task):
 class WorkArenaTaskConfig(TaskConfig):
     """Serializable configuration for a single WorkArena task."""
 
-    task_metadata: TaskMetadata
-
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
+        from workarena_cube.benchmark import WorkArenaBenchmark
+
         _ = runtime_context, container_backend
+        meta = WorkArenaBenchmark.task_metadata[self.task_id]
         return WorkArenaTask(
-            metadata=self.task_metadata,
+            metadata=meta,
             tool_config=self.tool_config,
             seed=self.seed if self.seed is not None else 42,
         )

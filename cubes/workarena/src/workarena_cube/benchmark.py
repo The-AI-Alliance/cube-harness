@@ -59,22 +59,24 @@ class WorkArenaBenchmark(Benchmark):
             random.shuffle(task_tuples)
         self._task_tuples = task_tuples
         self._runtime_context = {"level": self.level, "n_tasks": len(task_tuples)}
+        WorkArenaBenchmark.task_metadata.clear()
+        for task_class, _seed in task_tuples:
+            task_id = task_class.get_task_id()
+            task_class_path = f"{task_class.__module__}.{task_class.__qualname__}"
+            WorkArenaBenchmark.task_metadata[task_id] = TaskMetadata(
+                id=task_id,
+                extra_info={"task_class_path": task_class_path, "level": self.level},
+            )
         logger.info(f"WorkArena benchmark setup complete: {len(task_tuples)} task(s)")
 
     def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
         """Yield one WorkArenaTaskConfig per (task_class, seed) tuple."""
         for task_class, seed in self._task_tuples:
             task_id = task_class.get_task_id()
-            task_class_path = f"{task_class.__module__}.{task_class.__qualname__}"
-            task_metadata = TaskMetadata(
-                id=task_id,
-                extra_info={"task_class_path": task_class_path, "level": self.level},
-            )
             yield WorkArenaTaskConfig(
                 task_id=task_id,
                 seed=seed,
                 tool_config=self.default_tool_config,
-                task_metadata=task_metadata,
             )
 
     def close(self) -> None:
