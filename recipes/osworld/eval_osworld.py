@@ -1,13 +1,3 @@
-# /// script
-# dependencies = [
-#   "osworld-cube",
-#   "cube-harness",
-# ]
-#
-# [tool.uv.sources]
-# osworld-cube = { path = "../../cubes/osworld-cube", editable = true }
-# cube-harness = { path = "../.." }
-# ///
 """OSWorld Eval — Genny agent with GPT-5 and accessibility tree observations.
 
 Uses the Genny agent (explicit context management, rolling summaries) with

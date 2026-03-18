@@ -1,13 +1,3 @@
-# /// script
-# dependencies = [
-#   "osworld-cube",
-#   "cube-harness",
-# ]
-#
-# [tool.uv.sources]
-# osworld-cube = { path = "../../cubes/osworld-cube", editable = true }
-# cube-harness = { path = "../.." }
-# ///
 """OSWorld Eval — Claude Haiku with screenshot + axtree observations, rolling 3-step context, 100 actions.
 
 Uses the Genny agent with Claude Haiku (claude-haiku-4-5-20251001) as a multimodal agent.
