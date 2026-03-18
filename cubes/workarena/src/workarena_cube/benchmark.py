@@ -47,6 +47,9 @@ class WorkArenaBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Enumerate WorkArena task classes and seeds for the configured level."""
+        if self._task_tuples and self._runtime_context and WorkArenaBenchmark.task_metadata:
+            logger.debug("WorkArena benchmark already set up, skipping.")
+            return
         logger.info(f"Setting up WorkArena benchmark (level={self.level})")
         task_tuples = get_all_tasks_agents(
             filter=self.level,
