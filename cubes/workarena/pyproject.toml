@@ -4,10 +4,11 @@ version = "1.0.0"
 description = "WorkArena ServiceNow benchmark for cube"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard",
+    "cube-standard>=0.1.0rc2",
     "browsergym-workarena",
     "termcolor",
-    "cube-browser-tool",
+    "cube-browser-tool>=0.1.0",
+    "cube-browser-playwright>=0.1.0",
 ]
 
 [project.entry-points."cube.benchmarks"]
