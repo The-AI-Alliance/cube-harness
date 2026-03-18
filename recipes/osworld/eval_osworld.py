@@ -5,7 +5,7 @@ the linearized accessibility tree for element coordinates, without screenshots
 or Set-of-Marks scaffolding.
 
 Prerequisites:
-    OSWorld repo cloned to ~/.agentlab2/OSWorld/
+    OSWorld repo cloned to ~/.cube/OSWorld/
     (auto-cloned on first run if missing)
 
 Usage:

@@ -4,7 +4,7 @@ Integration test for OSWorldTask against a real desktop_env Docker VM.
 Requires:
   - Docker running and the OSWorld VM image available
   - desktop_env installed
-  - CUBE_CACHE_DIR set (or default ~/.agentlab2 used for VM storage)
+  - CUBE_CACHE_DIR set (or default ~/.cube used for VM storage)
 
 Run with:
   pytest tests/test_run_osworld.py -s -v
