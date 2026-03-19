@@ -11,19 +11,6 @@ dependencies = [
     "requests>=2.28",
     "requests-toolbelt>=0.10",
     "tqdm>=4.60",
-]
-
-[project.entry-points."cube.benchmarks"]
-osworld-cube = "osworld_cube.benchmark:OSWorldBenchmark"
-
-[build-system]
-requires = ["uv_build>=0.8,<0.9"]
-build-backend = "uv_build"
-
-[project.optional-dependencies]
-# Full evaluation stack — required to run the getter/metric functions at task eval time.
-# Not pulled in by default to keep the core install light (VM backend + QEMU only).
-evaluation = [
     "lxml>=4.9",
     "cssselect>=1.2",
     "pdfplumber>=0.9",
@@ -55,19 +42,23 @@ evaluation = [
     "pytz>=2023.3",
 ]
 
+[project.entry-points."cube.benchmarks"]
+osworld-cube = "osworld_cube.benchmark:OSWorldBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
-    "osworld-cube[evaluation]",
 ]
 
 [tool.uv]
 override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-standard = { path = "../../../cube-standard", editable = true }
-cube-computer-tool = { path = "../../../cube-standard/cube-tools/cube-computer-tool", editable = true }
-cube-vm-backend = { path = "../../../cube-standard/cube-tools/cube-vm-backend", editable = true }
+cube-standard = { path = "../../cube-standard", editable = true }
 
 [tool.ruff]
 fix = true
