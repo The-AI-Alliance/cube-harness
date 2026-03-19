@@ -15,18 +15,20 @@ from cube_harness.llm import LLMConfig
 def main(debug: bool):
     output_dir = make_experiment_output_dir("react", "webarena-verified")
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     tool_config = WebArenaToolConfig()
-    wav_config = WebArenaVerifiedConfig(environments={
-        WebArenaSite.SHOPPING: EnvironmentConfig(urls=["http://localhost:7770"]),
-        WebArenaSite.SHOPPING_ADMIN: EnvironmentConfig(urls=["http://localhost:7780"]),
-        WebArenaSite.GITLAB: EnvironmentConfig(urls=["http://localhost:8023"]),
-        WebArenaSite.REDDIT: EnvironmentConfig(urls=["http://localhost:9999"]),
-        WebArenaSite.WIKIPEDIA: EnvironmentConfig(urls=["http://localhost:8888"]),
-        WebArenaSite.MAP: EnvironmentConfig(urls=["http://localhost:3000"]),
-    })
+    wav_config = WebArenaVerifiedConfig(
+        environments={
+            WebArenaSite.SHOPPING: EnvironmentConfig(urls=["http://localhost:7770"]),
+            WebArenaSite.SHOPPING_ADMIN: EnvironmentConfig(urls=["http://localhost:7780"]),
+            WebArenaSite.GITLAB: EnvironmentConfig(urls=["http://localhost:8023"]),
+            WebArenaSite.REDDIT: EnvironmentConfig(urls=["http://localhost:9999"]),
+            WebArenaSite.WIKIPEDIA: EnvironmentConfig(urls=["http://localhost:8888"]),
+            WebArenaSite.MAP: EnvironmentConfig(urls=["http://localhost:3000"]),
+        }
+    )
     benchmark = WebArenaVerifiedBenchmark(tool_config=tool_config, wav_config=wav_config)
 
     exp = Experiment(
