@@ -27,7 +27,7 @@ from cube.task import TaskMetadata
 from cube.vm import VMBackend
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import OSWorldDockerVMBackend, OSWorldQEMUVMBackend
+from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 logger = logging.getLogger(__name__)
 
