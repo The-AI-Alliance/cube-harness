@@ -20,10 +20,10 @@ import asyncio
 import logging
 from typing import Any
 
+from cube_browser_tool import PlaywrightConfig
 from mcp.types import TextContent
 
 from cube_harness.mcp.server import McpServer
-from cube_harness.tools.playwright import PlaywrightConfig
 
 
 def _get_content_blocks(call_tool_result: Any) -> list:

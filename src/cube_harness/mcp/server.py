@@ -96,7 +96,7 @@ def main() -> None:
         "--tool-config",
         type=str,
         required=True,
-        help="Python import path to a ToolConfig instance, e.g. 'cube_harness.tools.playwright.PlaywrightConfig'",
+        help="Python import path to a ToolConfig instance, e.g. 'cube_browser_tool.PlaywrightConfig'",
     )
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
     parser.add_argument("--host", default="localhost")

@@ -1,5 +1,6 @@
 import sys
 
+from cube_browser_tool import PlaywrightConfig
 from miniwob_cube.benchmark import MiniWobBenchmark
 
 from cube_harness import make_experiment_output_dir
@@ -7,7 +8,6 @@ from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
-from cube_harness.tools.playwright import PlaywrightConfig
 
 
 def main(debug: bool) -> None:
