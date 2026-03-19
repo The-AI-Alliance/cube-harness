@@ -107,34 +107,34 @@ class FileStorage:
 
     def _append_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
         """Internal method to append a step to the JSONL file."""
-        step_to_save = step
         cur_path = self._current_traj_paths[trajectory_id]
         if isinstance(step.output, AgentOutput) and step.output.llm_calls:
-            step_to_save = self._extract_llm_calls(step, f"{trajectory_id}_step{step_num:03d}")
+            line = self._extract_llm_calls(step, f"{trajectory_id}_step{step_num:03d}")
+        else:
+            line = step.model_dump_json()
 
         with open(f"{cur_path}.jsonl", "a") as f:
-            line = step_to_save.model_dump_json()
             f.write(f"{line}\n")
 
-    def _extract_llm_calls(self, step: TrajectoryStep, step_id: str) -> TrajectoryStep:
-        """Extract LLM calls to separate files and return step with references only."""
+    def _extract_llm_calls(self, step: TrajectoryStep, step_id: str) -> str:
+        """Extract LLM calls to separate files and return step JSON with references only."""
         assert isinstance(step.output, AgentOutput)
 
         llm_calls_dir = self.output_dir / "llm_calls"
         llm_calls_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save each LLM call to a separate file
+        # Save each LLM call to a separate file and collect references
         llm_call_refs = []
         for llm_call in step.output.llm_calls:
             call_path = llm_calls_dir / f"{step_id}_{llm_call.id}.json"
             with open(call_path, "w") as f:
                 f.write(llm_call.model_dump_json(indent=2))
-            # Create a reference with just the id
-            llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id))
+            llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id).model_dump())
 
-        # Create a copy of the step with llm_calls replaced by references
-        output_with_refs = step.output.model_copy(update={"llm_calls": llm_call_refs})
-        return step.model_copy(update={"output": output_with_refs})
+        # Serialize the step correctly, then replace llm_calls with references in the dict
+        step_dict = json.loads(step.model_dump_json())
+        step_dict["output"]["llm_calls"] = llm_call_refs
+        return json.dumps(step_dict)
 
     def load_trajectory(self, trajectory_id: str) -> Trajectory:
         """Load a single trajectory by its ID."""
