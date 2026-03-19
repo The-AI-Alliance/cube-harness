@@ -724,7 +724,7 @@ webarena = [
     { name = "webarena-verified-cube" },
 ]
 workarena = [
-    { name = "browsergym-workarena" },
+    { name = "workarena-cube" },
 ]
 
 [package.dev-dependencies]
@@ -740,7 +740,6 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
-    { name = "browsergym-workarena", marker = "extra == 'workarena'", specifier = ">=0.5.2" },
     { name = "cube-browser-tool", specifier = ">=0.1.0" },
     { name = "cube-standard", specifier = ">=0.1.0rc2" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
@@ -760,6 +759,7 @@ requires-dist = [
     { name = "tenacity", specifier = ">=8.5.0" },
     { name = "termcolor", specifier = "~=3.2" },
     { name = "webarena-verified-cube", marker = "extra == 'webarena'", editable = "cubes/webarena-verified" },
+    { name = "workarena-cube", marker = "extra == 'workarena'", editable = "cubes/workarena" },
 ]
 provides-extras = ["workarena", "miniwob", "webarena", "analyze"]
 
@@ -3988,6 +3988,27 @@ name = "word2number"
 version = "1.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/4a/29/a31940c848521f0725f0df6b25dca8917f13a2025b0e8fcbe5d0457e45e6/word2number-1.1.zip", hash = "sha256:70e27a5d387f67b04c71fbb7621c05930b19bfd26efd6851e6e0f9969dcde7d0", size = 9723, upload-time = "2017-06-02T15:45:14.488Z" }
+
+[[package]]
+name = "workarena-cube"
+version = "1.0.0"
+source = { editable = "cubes/workarena" }
+dependencies = [
+    { name = "browsergym-workarena" },
+    { name = "cube-browser-playwright" },
+    { name = "cube-browser-tool" },
+    { name = "cube-standard" },
+    { name = "termcolor" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "browsergym-workarena" },
+    { name = "cube-browser-playwright", specifier = ">=0.1.0" },
+    { name = "cube-browser-tool", specifier = ">=0.1.0" },
+    { name = "cube-standard", specifier = ">=0.1.0rc2" },
+    { name = "termcolor" },
+]
 
 [[package]]
 name = "wrapt"
