@@ -12,7 +12,7 @@ so no live servers are required.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_task_configs()           -> list[WebArenaVerifiedTaskConfig]
+get_debug_benchmark()              -> Benchmark
 make_debug_agent(task_id: str)     -> DebugAgent
 
 Usage:
@@ -32,8 +32,9 @@ from webarena_verified.types.agent_response import FinalAgentResponse
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
+from cube_harness.tools.toolbox import ToolboxConfig
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
-from webarena_verified_cube.tool import WebArenaToolConfig
+from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,12 @@ def get_debug_benchmark() -> Benchmark:
     return WebArenaVerifiedBenchmark(
         wav_config=_DEBUG_WAV_CONFIG,
         task_ids_filter=[int(tid) for tid in _DEBUG_TASK_IDS],
-        default_tool_config=WebArenaToolConfig(headless=False),
+        default_tool_config=ToolboxConfig(
+            tool_configs=[
+                HarPlaywrightConfig(),
+                SubmitResponseConfig(),
+            ]
+        ),
     )
 
 

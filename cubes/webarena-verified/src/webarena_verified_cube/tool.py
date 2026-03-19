@@ -4,7 +4,6 @@ from cube.tool import ToolConfig, tool_action
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 
 from cube_harness.tool import ToolWithTelemetry
-from cube_harness.tools.toolbox import ToolboxConfig
 from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, PublicResultItem, Status
 
 
@@ -72,7 +71,3 @@ class SubmitResponseTool(ToolWithTelemetry):
             error_details=error_details,
         )
         return f"Response submitted: task_type={task_type}, status={status}."
-
-
-class WebArenaToolConfig(ToolboxConfig):
-    tool_configs: list[ToolConfig] = [HarPlaywrightConfig(), SubmitResponseConfig()]

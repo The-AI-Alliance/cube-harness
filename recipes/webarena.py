@@ -1,24 +1,31 @@
 import sys
 
+from cube_browser_playwright import PlaywrightSessionConfig
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
-from webarena_verified_cube.tool import WebArenaToolConfig
+from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+from cube_harness.tools.toolbox import ToolboxConfig
 
 
-def main(debug: bool):
+def main(debug: bool) -> None:
     output_dir = make_experiment_output_dir("react", "webarena-verified")
 
     llm_config = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    tool_config = WebArenaToolConfig()
+    tool_config = ToolboxConfig(
+        tool_configs=[
+            HarPlaywrightConfig(browser=PlaywrightSessionConfig(headless=not debug)),
+            SubmitResponseConfig(),
+        ]
+    )
     wav_config = WebArenaVerifiedConfig(
         environments={
             WebArenaSite.SHOPPING: EnvironmentConfig(urls=["http://localhost:7770"]),

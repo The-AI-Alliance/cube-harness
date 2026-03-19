@@ -10,8 +10,10 @@ from webarena_verified.types.agent_response import MainObjectiveType
 from webarena_verified.types.config import WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
+from cube_harness.tools.toolbox import ToolboxConfig
+
 from webarena_verified_cube.task import WebArenaVerifiedTaskConfig
-from webarena_verified_cube.tool import WebArenaToolConfig
+from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +43,16 @@ class WebArenaVerifiedBenchmark(Benchmark):
         num_tasks=812,
         tags=["browser", "web", "ui", "webarena"],
     )
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = _load_task_metadata()
+    # Populated lazily on first use to avoid side-effects at import time.
+    task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = WebArenaVerifiedTaskConfig
+    _task_metadata_loaded: ClassVar[bool] = False
+
+    @classmethod
+    def _ensure_task_metadata_loaded(cls) -> None:
+        if not cls._task_metadata_loaded:
+            cls.task_metadata = _load_task_metadata()
+            cls._task_metadata_loaded = True
 
     wav_config: WebArenaVerifiedConfig
     sites_filter: list[WebArenaSite] | None = None
@@ -68,6 +78,7 @@ class WebArenaVerifiedBenchmark(Benchmark):
         pass
 
     def get_task_configs(self) -> Generator[WebArenaVerifiedTaskConfig, None, None]:
+        self._ensure_task_metadata_loaded()
         wav = WebArenaVerified(config=self.wav_config)
         tasks = wav.get_tasks(sites=self.sites_filter, action=self.action_filter)
         if self.task_ids_filter is not None:
@@ -79,7 +90,8 @@ class WebArenaVerifiedBenchmark(Benchmark):
             yield WebArenaVerifiedTaskConfig(
                 task_id=task_id_str,
                 task_metadata=task_meta,
-                tool_config=self.default_tool_config or WebArenaToolConfig(),
+                tool_config=self.default_tool_config
+                or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
                 wav_task=t,
                 wav_config=self.wav_config,
             )
