@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cube-standard",
     "cube-computer-tool",
-    "cube-vm-backend",
+    "cube-vm-backend[docker]",
     "pillow>=9.0",
     "requests>=2.28",
     "requests-toolbelt>=0.10",
@@ -59,6 +59,7 @@ override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
 cube-standard = { path = "../../cube-standard", editable = true }
+cube-vm-backend = { path = "../../cube-standard/cube-resources/cube-vm-backend", editable = true }
 
 [tool.ruff]
 fix = true

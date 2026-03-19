@@ -27,7 +27,7 @@ from cube.task import TaskMetadata
 from cube.vm import VMBackend
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
+from osworld_cube.vm_backend import OSWorldDockerVMBackend, OSWorldQEMUVMBackend
 
 logger = logging.getLogger(__name__)
 
@@ -124,16 +124,20 @@ class DebugAgent:
 # ---------------------------------------------------------------------------
 
 
-def get_debug_benchmark() -> OSWorldBenchmark:
+def get_debug_benchmark(vm_backend: VMBackend | None = None) -> OSWorldBenchmark:
     """Return an OSWorldBenchmark scoped to the debug tasks.
 
-    Uses debug_tasks.json as the task source — no OSWorld repo clone or VM
-    download required. Called once by cube.testing before any debug episodes run.
+    Uses debug_tasks.json as the task source — no OSWorld repo clone required.
+    Called once by cube.testing before any debug episodes run.
+
+    Args:
+        vm_backend: Backend to use. Defaults to OSWorldQEMUVMBackend (Linux/KVM).
+                    Pass OSWorldDockerVMBackend() to run on macOS via Docker.
     """
     bench = OSWorldBenchmark(
         tasks_file=str(_TASKS_FILE),
         default_tool_config=ComputerConfig(),
-        vm_backend=OSWorldQEMUVMBackend(),
+        vm_backend=vm_backend or OSWorldQEMUVMBackend(),
     )
     bench.setup()
     return bench.subset_from_list(list(_TASK_ACTIONS.keys()))

@@ -1,7 +1,10 @@
 """VM backend for OSWorld.
 
-Provides OSWorldQEMUVMBackend — a LocalQEMUVMBackend subclass that
-auto-downloads the OSWorld qcow2 image from HuggingFace on first use.
+Provides:
+  - OSWorldQEMUVMBackend — LocalQEMUVMBackend that auto-downloads the OSWorld
+    qcow2 image from HuggingFace. Requires KVM (Linux only).
+  - OSWorldDockerVMBackend — LocalDockerVMBackend that pulls the OSWorld Docker
+    image from Docker Hub. Works on macOS via Docker Desktop (no KVM needed).
 """
 
 import logging
@@ -12,15 +15,16 @@ from time import sleep
 
 import requests
 from cube.vm import VM, VMBackend, VMConfig
-from cube_vm_backend import LocalQEMUVM, LocalQEMUVMBackend
+from cube_vm_backend import LocalDockerVM, LocalDockerVMBackend, LocalQEMUVM, LocalQEMUVMBackend
 from cube_vm_backend.qemu_manager import QEMUConfig, QEMUManager
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-# HuggingFace image URLs for OSWorld VM images
+# HuggingFace image URLs for OSWorld QEMU images
 _UBUNTU_X86_URL = "https://huggingface.co/datasets/xlangai/ubuntu_osworld/resolve/main/Ubuntu.qcow2.zip"
 _WINDOWS_X86_URL = "https://huggingface.co/datasets/xlangai/windows_osworld/resolve/main/Windows-10-x64.qcow2.zip"
+
 
 # Backwards-compatibility alias — old code referenced VMInstance as QEMUManager
 VMInstance = QEMUManager
@@ -120,13 +124,51 @@ class OSWorldQEMUVMBackend(LocalQEMUVMBackend):
         return super().launch(config)
 
 
+class OSWorldDockerVMBackend(LocalDockerVMBackend):
+    """LocalDockerVMBackend that runs QEMU-in-Docker for OSWorld.
+
+    Auto-downloads the OSWorld qcow2 image from HuggingFace (same image as
+    OSWorldQEMUVMBackend), then mounts it read-only into the
+    ``happysixd/osworld-docker`` container. Works on macOS via Docker Desktop.
+
+    Usage::
+
+        backend = OSWorldDockerVMBackend()
+        vm = backend.launch(VMConfig())
+        # vm.endpoint → http://localhost:<port>
+
+    Note: only Ubuntu is supported (no Windows Docker image available).
+    """
+
+    memory: str = "4G"
+    cpus: int = 4
+    disk_size: str = "32G"
+
+    def ensure_resource(self, config: VMConfig) -> None:
+        if self.path_to_vm is not None:
+            logger.info("Using explicit VM image: %s", self.path_to_vm)
+            return
+        vm_dir = Path(self.cache_dir)
+        ensure_base_image(vm_dir, config.os_type)
+        logger.info("Base image ready")
+
+    def launch(self, config: VMConfig) -> LocalDockerVM:
+        self.ensure_resource(config)
+        if self.path_to_vm is None:
+            self.path_to_vm = str(ensure_base_image(Path(self.cache_dir), config.os_type))
+        return super().launch(config)
+
+
 __all__ = [
     "VM",
     "VMBackend",
     "VMConfig",
     "VMInstance",
+    "LocalDockerVM",
+    "LocalDockerVMBackend",
     "LocalQEMUVM",
     "LocalQEMUVMBackend",
+    "OSWorldDockerVMBackend",
     "OSWorldQEMUVMBackend",
     "QEMUConfig",
     "QEMUManager",
