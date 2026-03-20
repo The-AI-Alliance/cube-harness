@@ -6,10 +6,8 @@ requires-python = ">=3.12"
 dependencies = [
     "cube-standard",
     "miniwob>=1.0",
+    "cube-browser-tool"
 ]
-
-[project.optional-dependencies]
-debug = ["cube-browser-tool"]
 
 [project.entry-points."cube.benchmarks"]
 miniwob-cube = "miniwob_cube.benchmark:MiniWobBenchmark"

@@ -27,21 +27,20 @@ Usage:
 
 import sys
 
+from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
+
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
-from cube_harness.tools.browser_session import PlaywrightSessionConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
 
 try:
-    from cube_harness.benchmarks.workarena import WorkArenaBenchmark
+    from workarena_cube.benchmark import WorkArenaBenchmark
 except ImportError:
-    print(
-        "WorkArena benchmark requires 'browsergym-workarena'. Run `make install` to install all optional dependencies."
-    )
+    print("WorkArena benchmark requires 'workarena-cube'. Run `make install` to install all optional dependencies.")
     sys.exit(1)
 
 _LLM = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
@@ -68,13 +67,14 @@ def main(debug: bool, agent: str) -> None:
     output_dir = make_experiment_output_dir(agent, "workarena", tag="l1")
 
     tool_config = BrowsergymConfig(
-        browser_config=PlaywrightSessionConfig(headless=not debug, timeout=30000),
+        browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
         use_screenshot=True,
         use_axtree=True,
         use_html=False,
     )
 
-    benchmark = WorkArenaBenchmark(tool_config=tool_config, level="l1", n_seeds_l1=1)
+    # Configure WorkArena benchmark
+    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, level="l1", n_seeds_l1=1)
 
     exp = Experiment(
         name=f"workarena_{agent}",
