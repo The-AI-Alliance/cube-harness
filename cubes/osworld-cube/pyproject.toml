@@ -58,8 +58,7 @@ dev = [
 override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-standard = { path = "../../cube-standard", editable = true }
-cube-vm-backend = { path = "../../cube-standard/cube-resources/cube-vm-backend", editable = true }
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "main" }
 
 [tool.ruff]
 fix = true
