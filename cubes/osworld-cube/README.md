@@ -6,6 +6,16 @@
 
 `osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.cube`).
 
+### Platform support
+
+The OSWorld VM images are **x86_64 only**. Hardware acceleration requirements differ by platform:
+
+| Platform | Support | Notes |
+|----------|---------|-------|
+| Linux x86_64 + KVM | ✅ Full | Recommended |
+| macOS Intel (x86_64) | ✅ Full | HVF acceleration available for local QEMU; Docker Desktop exposes `/dev/kvm` to containers |
+| macOS Apple Silicon (arm64) | ❌ Not supported | HVF does not accelerate x86_64 guests; pure software emulation is too slow |
+
 **Before running any task**, follow the [OSWorld Setup Guide](https://github.com/xlang-ai/OSWorld/blob/main/SETUP_GUIDELINE.md) to install the required system dependencies for your chosen provider (Docker, VMware, etc.). In particular:
 
 - **Docker** (recommended): install Docker. VM images are downloaded automatically by `desktop_env` on first use.
@@ -13,7 +23,7 @@
 - **QEMU** (default provider): install QEMU — `qemu-img` must be on your `PATH` for VM overlay creation.
 
   ```bash
-  # macOS
+  # macOS (x86_64)
   brew install qemu
   # Ubuntu/Debian
   sudo apt install qemu-utils

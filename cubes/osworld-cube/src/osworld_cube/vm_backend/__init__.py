@@ -2,9 +2,17 @@
 
 Provides:
   - OSWorldQEMUVMBackend — LocalQEMUVMBackend that auto-downloads the OSWorld
-    qcow2 image from HuggingFace. Requires KVM (Linux only).
-  - OSWorldDockerVMBackend — LocalDockerVMBackend that pulls the OSWorld Docker
-    image from Docker Hub. Works on macOS via Docker Desktop (no KVM needed).
+    qcow2 image from HuggingFace. Requires KVM; Linux x86_64 only.
+  - OSWorldDockerVMBackend — LocalDockerVMBackend that runs QEMU inside a
+    Docker container. Requires Linux x86_64 with KVM for acceptable performance.
+
+Platform support:
+  - Linux x86_64 with KVM: fully supported (both backends).
+  - macOS Intel (x86_64): fully supported. Local QEMU uses HVF acceleration;
+    Docker Desktop exposes /dev/kvm to containers.
+  - macOS Apple Silicon (arm64): not supported. The VM images are x86_64 and
+    HVF does not accelerate cross-architecture emulation, so QEMU falls back to
+    pure software emulation which is too slow to be usable.
 """
 
 import logging
