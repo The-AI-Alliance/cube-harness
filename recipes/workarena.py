@@ -36,8 +36,8 @@ from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
-from cube_harness.tools.toolbox import ToolboxConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
+from cube_harness.tools.toolbox import ToolboxConfig
 
 try:
     from workarena_cube.benchmark import WorkArenaBenchmark
@@ -66,7 +66,7 @@ AGENTS = {
 
 def main(debug: bool, agent: str) -> None:
     agent_config = AGENTS[agent]
-    output_dir = make_experiment_output_dir(agent, "workarena", tag='l1')
+    output_dir = make_experiment_output_dir(agent, "workarena", tag="l1")
 
     tool_config = ToolboxConfig(
         tool_configs=[
