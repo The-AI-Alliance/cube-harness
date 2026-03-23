@@ -191,7 +191,7 @@ class OSWorldTask(Task):
 
         Steps:
           1. Launch VM if not yet running (via vm_backend)
-          2. Build task_config dict from metadata.extra_info
+          2. Build task_data dict from metadata.extra_info
           3. Restore VM snapshot, run setup scripts, wait for stabilisation
           4. Post-process the observation (SoM or linearize)
           5. Prepend task instruction as text observation
@@ -200,7 +200,7 @@ class OSWorldTask(Task):
         self._ensure_vm()
         extra = self.metadata.extra_info
 
-        task_config = {
+        task_data = {
             "id": self.metadata.id,
             "instruction": self.metadata.abstract_description,
             "config": extra.get("config", []),
@@ -211,7 +211,7 @@ class OSWorldTask(Task):
 
         logger.info("Resetting OSWorldTask %s (domain=%s)", self.metadata.id, extra.get("domain", "unknown"))
 
-        obs = self._setup_task(task_config)
+        obs = self._setup_task(task_data)
         obs = self.obs_postprocess(obs)
 
         goal_obs = Observation.from_text(f"Task: {self.metadata.abstract_description}")
