@@ -78,7 +78,6 @@ class OSWorldTask(Task):
     and replace axtree with an indexed element table before returning obs."""
 
     _vm: VM | None = PrivateAttr(default=None)
-    _current_task_config: dict | None = PrivateAttr(default=None)
 
     def model_post_init(self, __context: Any) -> None:
         """Create the Computer tool without a VM — VM is deferred to reset()."""
@@ -152,15 +151,10 @@ class OSWorldTask(Task):
         if did_something:
             logger.info("Waiting 60s for VM to stabilise...")
             time.sleep(60)
-        self._current_task_config = task_data
         return self._computer.get_observation()
 
     def _evaluate_task(self) -> float:
         """Run the OSWorld evaluator and return reward ∈ [0.0, 1.0]."""
-        if self._current_task_config is None:
-            logger.error("_evaluate_task() called before reset()")
-            return 0.0
-
         if self._computer._guest is None:
             logger.error("_evaluate_task() called with no VM attached")
             return 0.0
@@ -175,8 +169,12 @@ class OSWorldTask(Task):
             vlc_port=vlc_port,
             server_port=server_port,
         )
+        eval_config = {
+            "id": self.metadata.id,
+            "evaluator": self.metadata.extra_info.get("evaluator", {}),
+        }
         try:
-            reward = evaluator.evaluate(self._current_task_config, self._computer._action_history)
+            reward = evaluator.evaluate(eval_config, self._computer._action_history)
             logger.info("Task evaluation result: %f", reward)
             return reward
         except Exception as exc:
