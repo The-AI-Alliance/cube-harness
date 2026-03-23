@@ -10,9 +10,11 @@ from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
 from cube.task import Task, TaskConfig
-from cube.tool import tool_action
+from cube.tool import BrowserTool, tool_action
 from cube_browser_playwright import PlaywrightSession, Viewport
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
+from cube_chat_tool import ChatTool
+from cube_harness.tools.toolbox import Toolbox
 from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ _SUPPORTED_ACTION_NAMES = frozenset(
         "browser_forward",
         "noop",
         "workarena_cheat",
+        "send_message",
     }
 )
 
@@ -68,26 +71,47 @@ class WorkArenaTask(Task):
 
     _workarena_task: AbstractServiceNowTask | None = PrivateAttr(default=None)
 
+    @property
+    def _browser_tool(self) -> BrowserTool:
+        """Resolve the playwright tool whether the tool is direct or inside a Toolbox."""
+        if isinstance(self.tool, Toolbox):
+            tool = self.tool.find_tool(BrowserTool)
+            if tool is None:
+                raise RuntimeError("No BrowserTool found in Toolbox")
+            return tool
+        assert isinstance(self.tool, BrowserTool), "Tool must be a BrowserTool"
+        return self.tool
+
+    @property
+    def _chat_tool(self) -> ChatTool | None:
+        """Return the ChatTool if present in a Toolbox, else None."""
+        if isinstance(self.tool, Toolbox):
+            return self.tool.find_tool(ChatTool)
+        return None
+
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
         task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
         self._workarena_task = task_class(seed=self.seed)
-        _apply_task_runtime_preferences(self.tool, self._workarena_task)
-        if isinstance(self.tool, WorkArenaCheatTool):
-            self.tool._workarena_task = self._workarena_task
+        _apply_task_runtime_preferences(self._browser_tool, self._workarena_task)
+        if isinstance(self._browser_tool, WorkArenaCheatTool):
+            self._browser_tool._workarena_task = self._workarena_task
         self.tool.reset()
-        page = self.tool.page
+        page = self._browser_tool.page
         goal, task_info = self._workarena_task.setup(page)
 
         logger.info(f"WorkArena page URL after setup: {page.url}")
         logger.info(f"WorkArena page title: {page.title()}")
         logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
 
-        self.tool.noop()
+        self._browser_tool.noop()
         time.sleep(self.wait_first_page_time)
         logger.info(f"WorkArena task goal: {goal}")
 
-        obs = Observation.from_text(goal) + self.tool.page_obs()
+        obs = Observation.from_text(goal) + self._browser_tool.page_obs()
+        if self._chat_tool is not None:
+            self._chat_tool.add_message("user", goal)
+            obs = obs + self._chat_tool.chat_obs()
         info = {
             "task_id": self.id,
             "task_class": task_class.__name__,
@@ -97,20 +121,26 @@ class WorkArenaTask(Task):
         }
         return obs, info
 
+    @property
+    def _chat_messages(self) -> list[dict]:
+        """Return the current chat message history, or empty list if no chat tool."""
+        chat = self._chat_tool
+        return chat.messages if chat is not None else []
+
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
-        page = self.tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, [])
+        page = self._browser_tool.page
+        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
         return reward, {"done": done, **task_info}
 
     def finished(self, obs: Observation) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = self.tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, [])
+        page = self._browser_tool.page
+        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:

@@ -34,6 +34,7 @@ dependencies = [
 # WorkArena benchmark dependencies
 workarena = [
     "workarena-cube",
+    "cube-chat-tool"
 ]
 # Miniwob cube dependencies
 miniwob = [

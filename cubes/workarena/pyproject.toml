@@ -9,6 +9,9 @@ dependencies = [
     "termcolor",
     "cube-browser-tool>=0.1.0",
     "cube-browser-playwright>=0.1.0",
+    "cube-harness",  # TODO: remove
+    "cube-chat",
+    "cube-chat-tool>=0.1.0",
 ]
 
 [project.entry-points."cube.benchmarks"]
