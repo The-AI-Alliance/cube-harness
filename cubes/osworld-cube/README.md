@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-`osworld-cube` clones the [OSWorld repository](https://github.com/xlang-ai/OSWorld) automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.cube`). The repo is used only for task configurations (JSON files under `evaluation_examples/`) — `desktop_env` is not used.
+`osworld-cube` clones the [OSWorld repository](https://github.com/xlang-ai/OSWorld) automatically on first `setup()` into `~/.cube/osworld-cube/OSWorld` (i.e. `$CUBE_CACHE_DIR/osworld-cube/OSWorld`). The repo is used only for task configurations (JSON files under `evaluation_examples/`) — `desktop_env` is not used.
 
 ### Platform support
 
@@ -149,15 +149,16 @@ Set `use_som=True` on `OSWorldTask` / `OSWorldBenchmark` to switch to Set-of-Mar
 | VM image | Ubuntu 22.04 |
 | Task index files | `test_all.json`, `test_small.json`, `test_nogdrive.json`, `test_infeasible.json` |
 
-The OSWorld repo is cloned once and pinned to commit `e695a10`. To use a different commit or a pre-existing clone, set `OSWORLD_REPO` to point at it (see [Environment Variables](#environment-variables)).
+The OSWorld repo is cloned once to `$CUBE_CACHE_DIR/osworld-cube/OSWorld` and pinned to commit `e695a10`.
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CUBE_CACHE_DIR` | `~/.cube` | Root directory for VMs and cache |
-| `OSWORLD_REPO` | *(derived from `CUBE_CACHE_DIR`)* | Path used to resolve `settings_file` paths in task configs — override if you have an existing OSWorld clone |
 | `PROXY_CONFIG_FILE` | *(not set)* | Path to proxy config JSON for OSWorld network routing (e.g. `dataimpulse.json`) |
+
+`setup()` automatically appends `PROXY_CONFIG_FILE=$CUBE_CACHE_DIR/osworld-cube/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json` to `.env` if not already defined.
 
 ### Example `.env`
 
@@ -165,11 +166,8 @@ The OSWorld repo is cloned once and pinned to commit `e695a10`. To use a differe
 # Root cache directory for VM images and cloned repos (default: ~/.cube)
 # CUBE_CACHE_DIR=~/.cube
 
-# Override if you already have an OSWorld clone somewhere
-# OSWORLD_REPO=~/.cube/benchmarks/osworld/OSWorld
-
 # Proxy config for OSWorld network routing (required for some tasks/providers)
-# PROXY_CONFIG_FILE=~/.cube/benchmarks/osworld/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json
+# PROXY_CONFIG_FILE=~/.cube/osworld-cube/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json
 
 # LLM API key (whichever provider you use — passed through to LiteLLM)
 # OPENAI_API_KEY=sk-...

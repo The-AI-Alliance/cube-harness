@@ -7,7 +7,7 @@ local development without requiring an LLM.
 
 Public API
 ----------
-make_debug_agent(task_id)       → DebugAgent
+make_debug_agent(task_id)    → DebugAgent
 get_debug_benchmark()        → OSWorldBenchmark
 
 Usage::

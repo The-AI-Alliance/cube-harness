@@ -120,23 +120,23 @@ class OSWorldTask(Task):
         server_port: int = getattr(vm, "server_port", 5000)
         return chromium_port, vlc_port, server_port
 
-    def _setup_task(self, task_config: dict) -> Observation:
+    def _setup_task(self, task_data: dict) -> Observation:
         """Restore VM snapshot, run setup scripts, wait, return initial observation.
 
         Called from reset(). Uses SetupController for OSWorld-specific task
         configuration scripts.
         """
         logger.info(
-            "Setting up task: %s. Instruction: %s", task_config.get("id", "unknown"), task_config.get("instruction", "")
+            "Setting up task: %s. Instruction: %s", task_data.get("id", "unknown"), task_data.get("instruction", "")
         )
         if self._vm is not None:
-            snapshot = task_config.get("snapshot", "init_state")
+            snapshot = task_data.get("snapshot", "init_state")
             self._vm.restore_snapshot(snapshot)
 
-        setup_steps = task_config.get("config") or []
+        setup_steps = task_data.get("config") or []
         if setup_steps:
             chromium_port, vlc_port, _ = self._get_vm_ports()
-            task_cache_dir = str(Path(self._computer.config.cache_dir) / task_config.get("id", "task"))
+            task_cache_dir = str(Path(self._computer.config.cache_dir) / task_data.get("id", "task"))
             Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
             setup_ctrl = SetupController(
                 guest=self._computer._guest,
@@ -148,13 +148,11 @@ class OSWorldTask(Task):
             )
             setup_ctrl.setup(setup_steps)
 
-        logger.info("Waiting 60s for VM to stabilise...")
-        time.sleep(60)
         did_something = self._vm is not None or bool(setup_steps)
         if did_something:
             logger.info("Waiting 60s for VM to stabilise...")
             time.sleep(60)
-        self._current_task_config = task_config
+        self._current_task_config = task_data
         return self._computer.get_observation()
 
     def _evaluate_task(self) -> float:

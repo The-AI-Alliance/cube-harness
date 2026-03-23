@@ -23,6 +23,7 @@ import os
 import subprocess
 from collections.abc import Generator
 from copy import deepcopy
+from dotenv import load_dotenv
 from pathlib import Path
 from typing import ClassVar
 
@@ -64,7 +65,7 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
     resolves the path correctly regardless of the current working directory.
     """
     key = "PROXY_CONFIG_FILE"
-    value = str(_CUBE_CACHE_ROOT / "OSWorld" / "evaluation_examples" / "settings" / "proxy" / "dataimpulse.json")
+    value = str(OSWORLD_REPO_DIR / "evaluation_examples" / "settings" / "proxy" / "dataimpulse.json")
 
     if env_path.exists():
         for line in env_path.read_text().splitlines():
@@ -105,6 +106,7 @@ class OSWorldTaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored for OSWorld — tasks are deterministic)
+        vm_backend:  VMBackend to use for this task (passed by benchmark.get_task_configs()).
 
     make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
     populated by OSWorldBenchmark.setup()).
@@ -412,6 +414,7 @@ class OSWorldBenchmark(Benchmark):
         else:
             logger.info(f"OSWorld repo already present at {OSWORLD_REPO_DIR}")
         ensure_proxy_config_in_env()
+        load_dotenv()  # Load the .env file
         logger.info(f"Set PROXY_CONFIG_FILE={os.environ.get('PROXY_CONFIG_FILE', 'not set')}")
 
         logger.info("VM images will be downloaded automatically on first task reset.")
