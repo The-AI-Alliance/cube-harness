@@ -40,6 +40,7 @@ dependencies = [
     "scipy>=1.11",
     "opencv-python-headless>=4.8",
     "pytz>=2023.3",
+    "python-dotenv>=1.0",
 ]
 
 [project.entry-points."cube.benchmarks"]
