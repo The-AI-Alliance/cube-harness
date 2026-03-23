@@ -148,6 +148,7 @@ class OSWorldDockerVMBackend(LocalDockerVMBackend):
     Note: only Ubuntu is supported (no Windows Docker image available).
     """
 
+    image: str = "happysixd/osworld-docker"
     memory: str = "4G"
     cpus: int = 4
     disk_size: str = "32G"
