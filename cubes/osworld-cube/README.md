@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-`osworld-cube` relies on [desktop_env](https://github.com/xlang-ai/OSWorld) to control desktop VMs. The OSWorld repository is cloned automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.cube`).
+`osworld-cube` clones the [OSWorld repository](https://github.com/xlang-ai/OSWorld) automatically on first `setup()` into the CUBE cache directory (under `CUBE_CACHE_DIR`, default `~/.cube`). The repo is used only for task configurations (JSON files under `evaluation_examples/`) — `desktop_env` is not used.
 
 ### Platform support
 
@@ -184,9 +184,12 @@ The OSWorld repo is cloned once and pinned to commit `e695a10`. To use a differe
 A deterministic `DebugAgent` replays hardcoded action sequences without an LLM:
 
 ```python
-from osworld_cube import get_debug_task_configs, make_debug_agent
+from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
-for config in get_debug_task_configs():
+bench = get_debug_benchmark()
+bench.install()
+bench.setup()
+for config in bench.get_task_configs():
     task = config.make()
     agent = make_debug_agent(config.task_id)
     obs, _ = task.reset()
@@ -213,7 +216,7 @@ src/osworld_cube/
 ├── task.py           # OSWorldTask
 ├── benchmark.py      # OSWorldBenchmark, OSWorldTaskConfig
 ├── axtree.py         # Accessibility tree parsing and Set-of-Marks annotation
-├── debug.py          # get_debug_task_configs, make_debug_agent
+├── debug.py          # get_debug_benchmark, make_debug_agent
 └── vm_backend/       # QEMU VM backend (auto-downloads OSWorld images from HuggingFace)
     ├── __init__.py   # OSWorldQEMUVMBackend, ensure_base_image
     ├── evaluator.py  # Task evaluation logic

@@ -8,7 +8,7 @@ local development without requiring an LLM.
 Public API
 ----------
 make_debug_agent(task_id)       → DebugAgent
-get_debug_task_configs()        → list[OSWorldTaskConfig]
+get_debug_benchmark()        → OSWorldBenchmark
 
 Usage::
 
@@ -18,14 +18,12 @@ Usage::
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
 from cube.core import Action, ActionSchema, Observation
-from cube.task import TaskMetadata
 from cube.vm import VMBackend
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
+from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
 from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
@@ -128,59 +126,22 @@ def get_debug_benchmark(vm_backend: VMBackend | None = None) -> OSWorldBenchmark
     """Return an OSWorldBenchmark scoped to the debug tasks.
 
     Uses debug_tasks.json as the task source — no OSWorld repo clone required.
-    Called once by cube.testing before any debug episodes run.
+    The caller (cube.testing) is responsible for calling install() and setup().
 
     Args:
         vm_backend: Backend to use. Defaults to OSWorldQEMUVMBackend (Linux/KVM).
                     Pass OSWorldDockerVMBackend() to run on macOS via Docker.
     """
-    bench = OSWorldBenchmark(
+    return OSWorldBenchmark(
         tasks_file=str(_TASKS_FILE),
         default_tool_config=ComputerConfig(),
         vm_backend=vm_backend or OSWorldQEMUVMBackend(),
     )
-    bench.setup()
-    return bench.subset_from_list(list(_TASK_ACTIONS.keys()))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
     """Return a fresh DebugAgent for the given task_id."""
     return DebugAgent(task_id)
-
-
-def get_debug_task_configs(vm_backend: VMBackend | None = None) -> list[OSWorldTaskConfig]:
-    """
-    Load debug task definitions from debug_tasks.json and return as OSWorldTaskConfig list.
-
-    Each config carries a ComputerConfig() as tool_config and the full TaskMetadata,
-    so callers can instantiate the task with task_config.make().
-
-    Args:
-        vm_backend: Optional VMBackend to attach to each task config. Required for
-                    live integration tests that actually run a VM.
-
-    These are the configs exposed by benchmark.get_debug_task_configs()
-    (stress_test_specs.md §1.1).
-    """
-    raw: list[dict] = json.loads(_TASKS_FILE.read_text())
-    configs = []
-    for entry in raw:
-        meta = TaskMetadata(
-            id=entry["id"],
-            abstract_description=entry["instruction"],
-            extra_info={
-                "domain": entry.get("domain", "os"),
-                "snapshot": entry.get("snapshot", "init_state"),
-                "config": entry.get("config", []),
-                "evaluator": entry.get("evaluator", {}),
-                "related_apps": entry.get("related_apps", []),
-            },
-        )
-        configs.append(
-            OSWorldTaskConfig(task_id=meta.id, tool_config=ComputerConfig(), metadata=meta, vm_backend=vm_backend)
-        )
-    logger.debug("[get_debug_task_configs] Loaded %d configs from %s", len(configs), _TASKS_FILE)
-    return configs
 
 
 # ---------------------------------------------------------------------------

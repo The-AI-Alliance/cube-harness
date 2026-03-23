@@ -512,7 +512,7 @@ def get_extensions_installed_from_shop(env, config: Dict[str, str]):
         )["output"].strip()
     elif os_type == "Linux":
         if "arm" in platform.machine():
-            env.controller.execute_python_command(
+            chrome_extension_dir = env.controller.execute_python_command(
                 "import os; print(os.path.join(os.getenv('HOME'), 'snap/chromium/common/chromium/Default/Extensions/'))"
             )["output"].strip()
         else:

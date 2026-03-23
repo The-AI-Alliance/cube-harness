@@ -1,7 +1,5 @@
 """Accessibility tree processing utilities for OSWorld.
 
-Ported from kusha/AgentLab2/src/agentlab2/benchmarks/osworld/osworld_axtree.py.
-
 Provides:
     linearize_accessibility_tree(xml_str, platform) -> str
         Convert XML accessibility tree to a tab-separated table for the agent.

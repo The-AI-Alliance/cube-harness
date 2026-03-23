@@ -1,9 +1,12 @@
 import pytest
 
 from osworld_cube.vm_backend import OSWorldQEMUVMBackend
-from osworld_cube.debug import get_debug_task_configs, make_debug_agent
+from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
-_DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in get_debug_task_configs(vm_backend=OSWorldQEMUVMBackend())}
+_benchmark = get_debug_benchmark(vm_backend=OSWorldQEMUVMBackend())
+_benchmark.install()
+_benchmark.setup()
+_DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in _benchmark.get_task_configs()}
 
 
 def run_debug_episode(task_id: str, max_steps: int = 20) -> dict:

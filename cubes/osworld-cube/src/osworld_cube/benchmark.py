@@ -34,6 +34,7 @@ from cube.task import TaskConfig, TaskMetadata
 from cube.vm import VMBackend
 
 from osworld_cube.computer import ComputerConfig, _CUBE_CACHE_ROOT
+from osworld_cube.task import OSWorldTask
 
 logger = logging.getLogger(__name__)
 
@@ -100,40 +101,32 @@ class OSWorldTaskConfig(TaskConfig):
     """
     Serialisable config for a single OSWorld task.
 
-    Carries a copy of the full TaskMetadata so that make() can instantiate
-    OSWorldTask without importing OSWorldBenchmark (avoids circular import).
-
     Fields:
-        task_id:    inherited from TaskConfig
+        task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
-        seed:       inherited (ignored for OSWorld — tasks are deterministic)
-        metadata:   full TaskMetadata copy injected by OSWorldBenchmark.get_task_configs()
+        seed:        inherited (ignored for OSWorld — tasks are deterministic)
+
+    make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
+    populated by OSWorldBenchmark.setup()).
     """
 
-    metadata: TaskMetadata | None = None
     vm_backend: VMBackend | None = None
 
     def make(
         self,
         runtime_context: dict | None = None,
         container_backend: ContainerBackend | None = None,
-    ) -> "OSWorldTask":  # noqa: F821
+    ) -> OSWorldTask:
         """Instantiate OSWorldTask from this config."""
-        from osworld_cube.task import OSWorldTask
+        metadata = OSWorldBenchmark.task_metadata[self.task_id]
 
-        if self.metadata is None:
-            raise ValueError(
-                f"OSWorldTaskConfig for task '{self.task_id}' has no metadata. "
-                "Ensure get_task_configs() was called on an OSWorldBenchmark instance "
-                "that has been setup() first."
-            )
         if self.tool_config is None:
             raise ValueError(
                 f"OSWorldTaskConfig for task '{self.task_id}' has no tool_config. "
                 "Pass default_tool_config=ComputerConfig(...) to OSWorldBenchmark."
             )
         return OSWorldTask(
-            metadata=self.metadata,
+            metadata=metadata,
             tool_config=self.tool_config,
             vm_backend=self.vm_backend,
             runtime_context=runtime_context,
@@ -159,9 +152,9 @@ class OSWorldBenchmark(Benchmark):
 
     Constructor params (set by benchmark users):
         default_tool_config:  ComputerConfig  — how to connect to the VM (action_space selects variant)
-        tasks_file:           str | None         — flat JSON task file; mutually exclusive with test_set_name
-        test_set_name:        OSWorldTestSet     — which test-set index file to load (default: TEST_ALL)
-        use_som:              bool               — Set-of-Marks mode for all tasks
+        tasks_file:           str | None      — flat JSON task file; mutually exclusive with test_set_name
+        test_set_name:        OSWorldTestSet  — which test-set index file to load (default: TEST_ALL)
+        use_som:              bool            — Set-of-Marks mode for all tasks
 
     To filter by domain or any other metadata field, call subset_from_glob() after setup():
         bench.setup()
@@ -220,28 +213,21 @@ class OSWorldBenchmark(Benchmark):
         return self
 
     # ------------------------------------------------------------------
-    # get_task_configs() override — inject metadata into each config
+    # get_task_configs() override — inject vm_backend into each config
     # ------------------------------------------------------------------
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """
-        Yield OSWorldTaskConfig objects, each carrying a copy of the TaskMetadata.
-
-        Overrides the base class to inject metadata into configs so that
-        OSWorldTaskConfig.make() can instantiate OSWorldTask without looking up
-        the benchmark class (avoids circular import).
-        """
+        """Yield OSWorldTaskConfig objects, injecting vm_backend from the benchmark."""
         for tm in self.task_metadata.values():
             yield OSWorldTaskConfig(
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
                 seed=None,
-                metadata=tm,
                 vm_backend=self.vm_backend,
             )
 
     # ------------------------------------------------------------------
-    # _setup() — replaces kusha's setup()
+    # _setup()
     # ------------------------------------------------------------------
 
     def _setup(self) -> None:
@@ -253,26 +239,28 @@ class OSWorldBenchmark(Benchmark):
           2. Ensure OSWorld repo is cloned (or validate tasks_file)
           3. Load task metadata from JSON files → populate instance shadow of task_metadata
         """
-        # Skip install when a custom test_set_path is provided (e.g. in tests)
-        if not self.test_set_path and not self.tasks_file:
-            self.install()
+        self.install()
 
         logger.info(f"Setting up OSWorldBenchmark (provider={self._get_provider()})")
 
-        if not self.task_metadata:
+        # Only skip loading if this instance already has its own shadow (i.e. was
+        # already set up).  We deliberately do NOT guard on the class-level attr
+        # because that would prevent a fresh instance from loading its own task
+        # set when a previous setup already populated the ClassVar with a different set.
+        if "task_metadata" not in self.__dict__:
             if self.tasks_file:
                 if not Path(self.tasks_file).exists():
                     raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
                 loaded = self._load_task_metadata_from_file(self.tasks_file)
             else:
-                if not self.test_set_path and not OSWORLD_REPO_DIR.exists():
-                    logger.info("OSWorld repo not found — cloning...")
-                    self._clone_osworld_repo()
                 loaded = self._load_task_metadata_from_repo()
 
-            # Populate instance-level shadow of the ClassVar
-            # (same pattern used by cube.Benchmark.subset_from_list)
+            # Populate instance-level shadow for test isolation (each Benchmark
+            # instance sees its own view, e.g. after subset_from_glob).
             object.__setattr__(self, "task_metadata", loaded)
+            # Also update the class-level attr so make() can find tasks via the
+            # ClassVar in the same process without needing to re-run setup().
+            type(self).task_metadata = loaded
 
         # OSWorld manages its own VM lifecycle via desktop_env — no shared runtime
         # infrastructure is needed. Populate _runtime_context to suppress the
@@ -378,14 +366,12 @@ class OSWorldBenchmark(Benchmark):
         Prepend OSWorld repo path to settings_file paths in task config items.
 
         Keeps relative paths in the task JSON working regardless of CWD.
-        The OSWORLD_REPO env var overrides the default repo location.
         """
         updated = deepcopy(task)
-        repo_dir = Path(os.environ.get("OSWORLD_REPO", str(OSWORLD_REPO_DIR)))
         for config_item in updated.get("config", []):
             params = config_item.get("parameters", {})
             if "settings_file" in params:
-                params["settings_file"] = str(repo_dir / params["settings_file"])
+                params["settings_file"] = str(OSWORLD_REPO_DIR / params["settings_file"])
         return updated
 
     def _clone_osworld_repo(self) -> None:
@@ -403,8 +389,10 @@ class OSWorldBenchmark(Benchmark):
         OSWORLD_VM_DIR.mkdir(parents=True, exist_ok=True)
 
     def _get_provider(self) -> str:
-        """Return provider name from default_tool_config, if set."""
-        return "qemu"
+        """Return provider name derived from vm_backend type."""
+        if self.vm_backend is None:
+            return "none"
+        return type(self.vm_backend).__name__
 
     # ------------------------------------------------------------------
     # install() — available for manual invocation; called from _setup()

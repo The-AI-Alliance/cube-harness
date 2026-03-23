@@ -649,9 +649,7 @@ class TestOSWorldBenchmark:
         assert bench.task_metadata["flat-2"].extra_info["domain"] == "chrome"
 
     def test_fix_settings_paths(self) -> None:
-        import os
-
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWORLD_REPO_DIR, OSWorldBenchmark
         from osworld_cube.computer import ComputerConfig
 
         bench = OSWorldBenchmark(default_tool_config=ComputerConfig())
@@ -659,10 +657,9 @@ class TestOSWorldBenchmark:
             "id": "t",
             "config": [{"type": "setup", "parameters": {"settings_file": "configs/x.json"}}],
         }
-        with patch.dict(os.environ, {"OSWORLD_REPO": "/fake/osworld"}):
-            fixed = bench._fix_settings_paths(task_data)
+        fixed = bench._fix_settings_paths(task_data)
 
-        assert fixed["config"][0]["parameters"]["settings_file"] == "/fake/osworld/configs/x.json"
+        assert fixed["config"][0]["parameters"]["settings_file"] == str(OSWORLD_REPO_DIR / "configs/x.json")
 
     def test_test_set_name_accepts_enum(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet

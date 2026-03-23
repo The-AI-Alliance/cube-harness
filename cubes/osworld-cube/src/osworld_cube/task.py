@@ -22,7 +22,7 @@ from PIL import Image
 from pydantic import PrivateAttr
 
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers OSWorldTask.model_rebuild()
-from cube.core import ActionSchema, Observation
+from cube.core import Observation
 from cube.task import Task
 from cube.vm import VM, VMBackend, VMConfig
 
@@ -79,7 +79,6 @@ class OSWorldTask(Task):
 
     _vm: VM | None = PrivateAttr(default=None)
     _current_task_config: dict | None = PrivateAttr(default=None)
-    _action_history: list = PrivateAttr(default_factory=list)
 
     def model_post_init(self, __context: Any) -> None:
         """Create the Computer tool without a VM — VM is deferred to reset()."""
@@ -127,9 +126,9 @@ class OSWorldTask(Task):
         Called from reset(). Uses SetupController for OSWorld-specific task
         configuration scripts.
         """
-        logger.info("Setting up task: %s", task_config.get("id", "unknown"))
-        logger.info("Instruction: %s", task_config.get("instruction", ""))
-
+        logger.info(
+            "Setting up task: %s. Instruction: %s", task_config.get("id", "unknown"), task_config.get("instruction", "")
+        )
         if self._vm is not None:
             snapshot = task_config.get("snapshot", "init_state")
             self._vm.restore_snapshot(snapshot)
@@ -151,9 +150,10 @@ class OSWorldTask(Task):
 
         logger.info("Waiting 60s for VM to stabilise...")
         time.sleep(60)
-
-        self._computer._is_done = False
-        self._action_history = []
+        did_something = self._vm is not None or bool(setup_steps)
+        if did_something:
+            logger.info("Waiting 60s for VM to stabilise...")
+            time.sleep(60)
         self._current_task_config = task_config
         return self._computer.get_observation()
 
@@ -178,7 +178,7 @@ class OSWorldTask(Task):
             server_port=server_port,
         )
         try:
-            reward = evaluator.evaluate(self._current_task_config, self._action_history)
+            reward = evaluator.evaluate(self._current_task_config, self._computer._action_history)
             logger.info("Task evaluation result: %f", reward)
             return reward
         except Exception as exc:
@@ -320,13 +320,6 @@ class OSWorldTask(Task):
         except Exception as e:
             logger.warning("Failed to apply SoM annotation: %s", e)
             return self._postprocess_linearize(obs)
-
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Optionally whitelist a subset of Computer actions for this task.
-
-        Default: allow all actions.
-        """
-        return actions
 
     def close(self) -> None:
         """Clean up task resources: stop tool then stop VM."""
