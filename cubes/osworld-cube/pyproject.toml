@@ -58,8 +58,6 @@ dev = [
 [tool.uv]
 override-dependencies = ["protobuf>=6.33.5"]
 
-[tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "main" }
 
 [tool.ruff]
 fix = true
