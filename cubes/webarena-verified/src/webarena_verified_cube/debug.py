@@ -32,7 +32,7 @@ from webarena_verified.types.agent_response import FinalAgentResponse
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
-from cube_harness.tools.toolbox import ToolboxConfig
+from cube.tool import ToolboxConfig
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 

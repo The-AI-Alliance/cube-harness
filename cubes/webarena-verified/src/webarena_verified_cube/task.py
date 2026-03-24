@@ -13,7 +13,7 @@ from webarena_verified.types.eval import EvalStatus, NetworkTrace, TaskEvalResul
 from webarena_verified.types.task import WebArenaVerifiedTask as WAVTask
 
 from cube_browser_tool import SyncPlaywrightTool
-from cube_harness.tools.toolbox import Toolbox, ToolboxConfig
+from cube.tool import Toolbox, ToolboxConfig
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig, SubmitResponseTool
 
 logger = logging.getLogger(__name__)

@@ -1,9 +1,8 @@
 import tempfile
 
-from cube.tool import ToolConfig, tool_action
+from cube.tool import Tool, ToolConfig, tool_action
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 
-from cube_harness.tool import ToolWithTelemetry
 from webarena_verified.types.agent_response import FinalAgentResponse, MainObjectiveType, PublicResultItem, Status
 
 
@@ -26,7 +25,7 @@ class SubmitResponseConfig(ToolConfig):
         return SubmitResponseTool()
 
 
-class SubmitResponseTool(ToolWithTelemetry):
+class SubmitResponseTool(Tool):
     """Tool providing the submit_response action for WebArena tasks."""
 
     def __init__(self) -> None:

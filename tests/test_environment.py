@@ -3,9 +3,9 @@
 import pytest
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from cube.task import STOP_ACTION
+from cube.tool import Toolbox
 
 from cube_harness.legacy import EnvConfig, Environment
-from cube_harness.tools.toolbox import Toolbox
 from tests.conftest import MockTool
 
 

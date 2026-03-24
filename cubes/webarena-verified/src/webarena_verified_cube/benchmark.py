@@ -10,7 +10,7 @@ from webarena_verified.types.agent_response import MainObjectiveType
 from webarena_verified.types.config import WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
-from cube_harness.tools.toolbox import ToolboxConfig
+from cube.tool import ToolboxConfig
 
 from webarena_verified_cube.task import WebArenaVerifiedTaskConfig
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig

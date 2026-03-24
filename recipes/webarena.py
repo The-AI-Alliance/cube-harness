@@ -1,5 +1,6 @@
 import sys
 
+from cube.tool import ToolboxConfig
 from cube_browser_playwright import PlaywrightSessionConfig
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
@@ -11,7 +12,6 @@ from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
-from cube_harness.tools.toolbox import ToolboxConfig
 
 
 def main(debug: bool) -> None:
