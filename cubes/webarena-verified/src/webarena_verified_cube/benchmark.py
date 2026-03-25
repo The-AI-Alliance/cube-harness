@@ -86,10 +86,8 @@ class WebArenaVerifiedBenchmark(Benchmark):
             tasks = [t for t in tasks if t.task_id in task_ids_set]
         for t in tasks:
             task_id_str = str(t.task_id)
-            task_meta = self.task_metadata[task_id_str]
             yield WebArenaVerifiedTaskConfig(
                 task_id=task_id_str,
-                task_metadata=task_meta,
                 tool_config=self.default_tool_config
                 or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
                 wav_task=t,

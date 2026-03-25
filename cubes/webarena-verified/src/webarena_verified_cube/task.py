@@ -85,7 +85,6 @@ class WebArenaVerifiedTask(Task):
 
 
 class WebArenaVerifiedTaskConfig(TaskConfig):
-    task_metadata: TaskMetadata
     wav_task: WAVTask
     wav_config: WebArenaVerifiedConfig
 
@@ -95,8 +94,11 @@ class WebArenaVerifiedTaskConfig(TaskConfig):
         container_backend: ContainerBackend | None = None,
     ) -> WebArenaVerifiedTask:
         _ = runtime_context, container_backend
+        from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
+
+        metadata = WebArenaVerifiedBenchmark.task_metadata[self.task_id]
         return WebArenaVerifiedTask(
-            metadata=self.task_metadata,
+            metadata=metadata,
             tool_config=self.tool_config or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
             wav_task=self.wav_task,
             wav_config=self.wav_config,
