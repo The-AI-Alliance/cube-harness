@@ -145,17 +145,35 @@ class TestToolboxEnv:
         assert env_output.obs.contents[0].tool_call_id == "call_123"
 
     def test_toolbox_env_multiple_tools(self, mock_task):
-        """Test ToolboxEnv with multiple tools."""
+        """Test ToolboxEnv with multiple tools with distinct action names."""
+        from cube.tool import tool_action
+        from cube_harness.tool import ToolWithTelemetry
+
+        class SecondTool(ToolWithTelemetry):
+            @tool_action
+            def scroll(self, direction: str) -> str:
+                """Scroll the page.
+
+                Args:
+                    direction: The direction to scroll.
+
+                Returns:
+                    Scroll confirmation message.
+                """
+                return f"Scrolled {direction}"
+
+            def reset(self):
+                pass
 
         tool1 = MockTool()
-        tool2 = MockTool()
+        tool2 = SecondTool()
 
         env = Environment(task=mock_task, tool=Toolbox(tools=[tool1, tool2]))
         actions = env.action_set
 
-        # Both tools have same actions, so we should see them (from first match)
         action_names = {a.name for a in actions}
         assert "click" in action_names
+        assert "scroll" in action_names
 
     def test_toolbox_env_task_finished(self, mock_task, mock_tool):
         """Test that task.finished() is checked."""
