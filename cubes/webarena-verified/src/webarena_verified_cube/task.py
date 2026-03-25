@@ -5,7 +5,7 @@ from typing import Any
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import Task, TaskConfig
 from pydantic import PrivateAttr
 from webarena_verified.api.webarena_verified import WebArenaVerified
 from webarena_verified.types.config import WebArenaVerifiedConfig
