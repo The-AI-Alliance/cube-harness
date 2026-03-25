@@ -44,6 +44,11 @@ class WebArenaVerifiedTask(Task):
         return tool
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
+        """Reset the task by reinitializing the browser tool and navigating to the task's start URL.
+
+        Returns an observation combining the task intent text and the initial page state,
+        along with task metadata (task_id, sites, expected_action).
+        """
         self._playwright_closed = False
         self.tool.reset()
         start_url = self.wav_config.render_url(self.wav_task.start_urls[0], list(self.wav_task.sites), strict=False)
@@ -57,6 +62,14 @@ class WebArenaVerifiedTask(Task):
         return obs, info
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+        """Evaluate the agent's submitted response against the WebArena verified evaluators.
+
+        Closes the browser context to flush the HAR file to disk, reads the network trace,
+        then calls the WebArenaVerified API to score the response. Returns 0.0 immediately
+        if no response was submitted.
+
+        Returns the score and a dict with eval_status and per-evaluator results.
+        """
         submitted = self._submit_tool.get_submitted_response()
         if submitted is None:
             return 0.0, {"eval_status": EvalStatus.FAILURE, "evaluators_results": []}
@@ -81,6 +94,7 @@ class WebArenaVerifiedTask(Task):
         }
 
     def finished(self, obs: Observation) -> bool:
+        """Return True once the agent has submitted a response via the SubmitResponseTool."""
         return self._submit_tool.get_submitted_response() is not None
 
 

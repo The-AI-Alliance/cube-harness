@@ -46,12 +46,22 @@ class WebArenaVerifiedBenchmark(Benchmark):
     task_metadata: ClassVar[dict[str, TaskMetadata]] = _load_task_metadata()
     task_config_class: ClassVar[type[TaskConfig]] = WebArenaVerifiedTaskConfig
 
+    default_tool_config: ToolboxConfig = ToolboxConfig(  # type: ignore
+        tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]
+    )
+
     wav_config: WebArenaVerifiedConfig
     sites_filter: list[WebArenaSite] | None = None
     action_filter: MainObjectiveType | None = None
     task_ids_filter: list[int] | None = None
 
     def _setup(self) -> None:
+        """
+        Verify that every configured environment URL is reachable before running tasks.
+
+        Raises RuntimeError if any site cannot be reached, with a hint to start
+        the corresponding Docker container.
+        """
         if self.wav_config.environments is None:
             return
         for site, env_config in self.wav_config.environments.items():
@@ -70,6 +80,13 @@ class WebArenaVerifiedBenchmark(Benchmark):
         pass
 
     def get_task_configs(self) -> Generator[WebArenaVerifiedTaskConfig, None, None]:
+        """Yield task configs, applying any active site, action, or task-ID filters.
+
+        Overrides the base class because each config must carry ``wav_task`` and
+        ``wav_config`` (required by the WebArena tools), and because filtering by
+        ``sites_filter``, ``action_filter``, and ``task_ids_filter`` is done here
+        rather than via the generic ``task_metadata`` dict.
+        """
         wav = WebArenaVerified(config=self.wav_config)
         tasks = wav.get_tasks(sites=self.sites_filter, action=self.action_filter)
         if self.task_ids_filter is not None:
@@ -79,8 +96,7 @@ class WebArenaVerifiedBenchmark(Benchmark):
             task_id_str = str(t.task_id)
             yield WebArenaVerifiedTaskConfig(
                 task_id=task_id_str,
-                tool_config=self.default_tool_config
-                or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
+                tool_config=self.default_tool_config,
                 wav_task=t,
                 wav_config=self.wav_config,
             )
