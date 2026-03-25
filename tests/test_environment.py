@@ -147,6 +147,7 @@ class TestToolboxEnv:
     def test_toolbox_env_multiple_tools(self, mock_task):
         """Test ToolboxEnv with multiple tools with distinct action names."""
         from cube.tool import tool_action
+
         from cube_harness.tool import ToolWithTelemetry
 
         class SecondTool(ToolWithTelemetry):
