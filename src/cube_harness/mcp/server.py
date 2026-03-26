@@ -10,7 +10,6 @@ from cube.core import Action, Observation, TypedBaseModel
 from cube.tool import AbstractAsyncTool, AbstractTool
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ImageContent, TextContent
-from numpy.random import f
 
 from cube_harness.mcp.convert import observation_to_mcp_content
 

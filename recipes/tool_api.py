@@ -16,7 +16,6 @@ Usage:
 """
 
 import asyncio
-from cgitb import text
 import logging
 
 from cube_browser_tool import AsyncPlaywrightConfig
@@ -113,7 +112,9 @@ async def main() -> None:
         page_html = " ".join(b.text for b in text_blocks)
         logger.info("  browser_click returned %d block(s), html snippet: %s", len(blocks), page_html[:120])
         assert "click me" not in page_html, f"Expected button text to change from 'click me', got: {page_html[:200]}"
-        assert "clicked\n</button>" in page_html, f"Expected button text content to be 'clicked', got: {page_html[:200]}"
+        assert "clicked\n</button>" in page_html, (
+            f"Expected button text content to be 'clicked', got: {page_html[:200]}"
+        )
 
         logger.info("All good! Playwright MCP server roundtrip verified.")
 
