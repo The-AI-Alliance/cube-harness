@@ -1,7 +1,8 @@
-.PHONY: help install update format lint test coverage hello debug xray
+.PHONY: help install ci-install update format lint test coverage hello debug xray
 
 help:
 	@echo "make install    - Install dependencies in editable mode"
+	@echo "make ci-install - Install dependencies with locked versions (for CI)"
 	@echo "make update     - Update dependencies"
 	@echo "make format     - Format code"
 	@echo "make lint       - Lint and auto-fix"
@@ -30,6 +31,10 @@ install:
 	uv sync --all-extras
 	uv run playwright install chromium --with-deps
 	git config core.hooksPath .githooks
+
+ci-install:
+	uv sync --frozen --all-extras
+	uv run playwright install chromium --with-deps
 
 update:
 	@echo "🔄 Updating dependencies"
