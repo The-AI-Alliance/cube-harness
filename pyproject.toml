@@ -11,8 +11,8 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc4",
-    "cube-browser-tool>=0.1.0",
-    "cube-browser-playwright>=0.1.0",
+    "cube-browser-tool>=0.2.0",
+    "cube-browser-playwright>=0.2.0",
     "pydantic~=2.0",
     "litellm~=1.80.8",
     "playwright==1.44",
