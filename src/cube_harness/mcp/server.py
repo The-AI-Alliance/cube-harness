@@ -7,9 +7,10 @@ import logging
 from typing import Any, Literal
 
 from cube.core import Action, Observation, TypedBaseModel
-from cube.tool import AbstractTool
+from cube.tool import AbstractAsyncTool, AbstractTool
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ImageContent, TextContent
+from numpy.random import f
 
 from cube_harness.mcp.convert import observation_to_mcp_content
 
@@ -28,7 +29,7 @@ class McpServerConfig(TypedBaseModel):
 class McpServer:
     """Adapts an cube-harness tool to serve its actions as MCP tools.
 
-    Wraps any AbstractTool (PlaywrightTool, BrowsergymTool, Toolbox, etc.)
+    Wraps any AbstractTool | AbstractAsyncTool (PlaywrightTool, BrowsergymTool, Toolbox, etc.)
     and exposes its action_set as MCP tools using FastMCP.
 
     Usage:
@@ -37,7 +38,7 @@ class McpServer:
         server.run()  # blocks, serving MCP over stdio
     """
 
-    def __init__(self, tool: AbstractTool, config: McpServerConfig | None = None) -> None:
+    def __init__(self, tool: AbstractTool | AbstractAsyncTool, config: McpServerConfig | None = None) -> None:
         self._tool = tool
         self._config = config or McpServerConfig()
         self._mcp = FastMCP(self._config.server_name)
@@ -60,7 +61,7 @@ class McpServer:
         self._mcp.run(transport=self._config.transport)
 
 
-def _make_async_handler(tool: AbstractTool, method: Any, action_name: str) -> Any:
+def _make_async_handler(tool: AbstractTool | AbstractAsyncTool, method: Any, action_name: str) -> Any:
     """Create an async MCP handler that dispatches to tool.execute_action.
 
     The wrapper preserves the original method's signature via functools.wraps,
@@ -75,8 +76,10 @@ def _make_async_handler(tool: AbstractTool, method: Any, action_name: str) -> An
     async def handler(*args: Any, **kwargs: Any) -> list[TextContent | ImageContent]:
         action = Action(name=action_name, arguments=kwargs)
         if is_async:
+            assert isinstance(tool, AbstractAsyncTool), f"Expected async tool, got {type(tool)}"
             obs: Observation = await tool.execute_action(action)
         else:
+            assert isinstance(tool, AbstractTool), f"Expected sync tool, got {type(tool)}"
             obs: Observation = await asyncio.to_thread(tool.execute_action, action)
         return observation_to_mcp_content(obs)
 
