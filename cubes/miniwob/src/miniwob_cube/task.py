@@ -5,7 +5,7 @@ from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Content, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
-from cube.tools.browser import AbstractBrowserTool
+from cube.tools.browser import BrowserTool
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class MiniWobTask(Task):
     episode_max_time: int = 1000000
 
     @property
-    def tool(self) -> AbstractBrowserTool:  # type: ignore[override]
+    def tool(self) -> BrowserTool:  # type: ignore[override]
         return self._tool  # type: ignore[return-value]
 
     @property
