@@ -662,22 +662,30 @@ wheels = [
 [[package]]
 name = "cube-browser-playwright"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard.git?subdirectory=cube-resources%2Fcube-browser-playwright&branch=main#ad06d6082f804f2d8c2a31cea9b1f9a99e5f3eb7" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cube-standard" },
     { name = "playwright" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/97/ea/242458b185592a2afd11f05b89c7788a6f85294e6a0395b7a3d3baa369bc/cube_browser_playwright-0.2.0.tar.gz", hash = "sha256:a8fba62c2befc3c4fd0ec19af2ea1a6ce71f179e2ef96122d018cf46a01214c7", size = 3243, upload-time = "2026-03-26T13:38:03.058Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/76/d9f533e709fee812ea77dab2ee4ab5e88be193f8be8effdff256d25a67c9/cube_browser_playwright-0.2.0-py3-none-any.whl", hash = "sha256:6612166e1db80d93829e7131313f685e8e4dae814564a1e1faf55b3b4e6c8f47", size = 6470, upload-time = "2026-03-26T13:38:02.061Z" },
 ]
 
 [[package]]
 name = "cube-browser-tool"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard.git?subdirectory=cube-tools%2Fcube-browser-tool&branch=main#ad06d6082f804f2d8c2a31cea9b1f9a99e5f3eb7" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "cube-browser-playwright" },
     { name = "cube-standard" },
     { name = "pillow" },
     { name = "playwright" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/21/c9/48c50f83dfb70038eaa842dff2ba42038d46d3be9adc1334ada329239c0f/cube_browser_tool-0.2.0.tar.gz", hash = "sha256:2e32cf2a74ccc9a028fd62c21fc547e3eb1113397b9d7db19691e433a0481ad1", size = 7569, upload-time = "2026-03-26T13:36:35.359Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/06/236642085cd0e5861b5599be4f4fba50b138d71036f8cdb7b77c6bbe2975/cube_browser_tool-0.2.0-py3-none-any.whl", hash = "sha256:7ecb20faf0c2f83e2a3f48cd4d686de7f2987585b7f4deafc273973a07a502b9", size = 9751, upload-time = "2026-03-26T13:36:34.391Z" },
 ]
 
 [[package]]
@@ -733,9 +741,9 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
-    { name = "cube-browser-playwright", git = "https://github.com/The-AI-Alliance/cube-standard.git?subdirectory=cube-resources%2Fcube-browser-playwright&branch=main" },
-    { name = "cube-browser-tool", git = "https://github.com/The-AI-Alliance/cube-standard.git?subdirectory=cube-tools%2Fcube-browser-tool&branch=main" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard.git?branch=main" },
+    { name = "cube-browser-playwright", specifier = ">=0.1.0" },
+    { name = "cube-browser-tool", specifier = ">=0.1.0" },
+    { name = "cube-standard", specifier = ">=0.1.0rc4" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.26" },
@@ -769,7 +777,7 @@ dev = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc4"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard.git?branch=main#ad06d6082f804f2d8c2a31cea9b1f9a99e5f3eb7" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -779,6 +787,10 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "uvicorn", extra = ["standard"] },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c6/45/5ba997b63cddba438ec92aaa6f585eb51521871dc3147ed19a695b24ce69/cube_standard-0.1.0rc4.tar.gz", hash = "sha256:ab38a1d881b545b645b92503b947f945bcff4930e522934411fd87b10d08bd03", size = 56621, upload-time = "2026-03-26T13:39:40.1Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/c2/1f5385ae569088d8ce596e418a9b2ee1a254d427a53887d2a12e02f61f07/cube_standard-0.1.0rc4-py3-none-any.whl", hash = "sha256:9c198b6bade21842b2da281af077202974b2cb809e30e35adfc5bca98a45661c", size = 73031, upload-time = "2026-03-26T13:39:38.694Z" },
 ]
 
 [[package]]

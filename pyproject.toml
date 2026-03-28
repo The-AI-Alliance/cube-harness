@@ -10,7 +10,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc2",
+    "cube-standard>=0.1.0rc4",
     "cube-browser-tool>=0.1.0",
     "cube-browser-playwright>=0.1.0",
     "pydantic~=2.0",
@@ -57,9 +57,6 @@ build-backend = "uv_build"
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard.git", branch = "main" }
-cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard.git", branch = "main", subdirectory = "cube-tools/cube-browser-tool" }
-cube-browser-playwright = { git = "https://github.com/The-AI-Alliance/cube-standard.git", branch = "main", subdirectory = "cube-resources/cube-browser-playwright" }
 miniwob-cube = { path = "cubes/miniwob", editable = true }
 webarena-verified-cube = { path = "cubes/webarena-verified", editable = true }
 workarena-cube = { path = "cubes/workarena", editable = true }
