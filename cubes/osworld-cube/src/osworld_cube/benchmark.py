@@ -31,6 +31,7 @@ from pydantic import model_validator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
+from cube.resource import InfraConfig
 from cube.task import TaskConfig, TaskMetadata
 from cube.vm import VMBackend
 
@@ -106,12 +107,14 @@ class OSWorldTaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored for OSWorld — tasks are deterministic)
-        vm_backend:  VMBackend to use for this task (passed by benchmark.get_task_configs()).
+        infra:       InfraConfig to use for this task (preferred).
+        vm_backend:  VMBackend to use for this task (legacy, used when infra is None).
 
     make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
     populated by OSWorldBenchmark.setup()).
     """
 
+    infra: InfraConfig | None = None
     vm_backend: VMBackend | None = None
 
     def make(
@@ -130,6 +133,7 @@ class OSWorldTaskConfig(TaskConfig):
         return OSWorldTask(
             metadata=metadata,
             tool_config=self.tool_config,
+            infra=self.infra,
             vm_backend=self.vm_backend,
             runtime_context=runtime_context,
             container_backend=container_backend,
@@ -204,9 +208,12 @@ class OSWorldBenchmark(Benchmark):
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
+    infra: InfraConfig | None = None
+    """Preferred: InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+    Each task gets a fresh VM launched from the provisioned image."""
+
     vm_backend: VMBackend | None = None
-    """VM backend used to provision VMs for each task. If None, tasks will fail
-    unless a VM is attached externally via computer.attach_vm()."""
+    """Legacy: VMBackend. Used when infra is None. Supports QMP snapshot restore."""
 
     @model_validator(mode="after")
     def _warn_on_conflicting_task_source(self) -> "OSWorldBenchmark":
@@ -219,12 +226,13 @@ class OSWorldBenchmark(Benchmark):
     # ------------------------------------------------------------------
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield OSWorldTaskConfig objects, injecting vm_backend from the benchmark."""
+        """Yield OSWorldTaskConfig objects, injecting infra (or legacy vm_backend)."""
         for tm in self.task_metadata.values():
             yield OSWorldTaskConfig(
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
                 seed=None,
+                infra=self.infra,
                 vm_backend=self.vm_backend,
             )
 
