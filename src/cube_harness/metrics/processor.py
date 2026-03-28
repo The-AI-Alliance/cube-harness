@@ -9,6 +9,7 @@ from cube_harness.metrics.store import JsonlSpanWriter
 CH_TYPE = "ch.type"
 CH_NAME = "ch.name"
 CH_EXPERIMENT = "ch.experiment"
+CH_EPISODE = "ch.episode"
 
 TYPE_EXPERIMENT = "experiment"
 TYPE_EPISODE = "episode"
