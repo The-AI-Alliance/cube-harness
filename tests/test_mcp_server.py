@@ -3,7 +3,7 @@
 import pytest
 from mcp.types import TextContent
 
-from agentlab2.mcp.server import McpServer, McpServerConfig
+from cube_harness.mcp.server import McpServer, McpServerConfig
 from tests.conftest import MockTool
 
 
@@ -79,5 +79,5 @@ class TestMcpServer:
         tool = MockTool()
         server = McpServer(tool=tool)
 
-        assert server._config.server_name == "agentlab2"
+        assert server._config.server_name == "cube_harness"
         assert server._config.transport == "stdio"

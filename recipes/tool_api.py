@@ -1,13 +1,12 @@
 """Recipe: Expose the Playwright browser tool as an MCP server and verify tool calling.
 
 Demonstrates the full MCP server roundtrip with a real browser tool:
-1. Start a tiny HTTP server serving a test page
-2. Create an AsyncPlaywrightTool (headless Chromium)
-3. Wrap it with McpServer, which registers BrowserActionSpace as MCP tools
-4. Navigate to the test page and verify page content comes back through MCP
-
-Uses AsyncPlaywrightTool so tool execution is natively async — no greenlet
-issues, no event-loop blocking, no nest_asyncio.
+1. Start a tiny HTTP server serving a test page with a clickable button
+2. Create an AsyncPlaywrightTool (headless Chromium) via AsyncPlaywrightConfig.make()
+3. Wrap it with McpServer, which registers AsyncBrowserActionSpace as MCP tools
+4. Navigate to the test page (task-internal goto), then exercise MCP tools:
+   - noop: simplest roundtrip, verifies page HTML is returned
+   - browser_click: click the button and verify the page updates
 
 Prerequisites:
     playwright install chromium
@@ -18,29 +17,22 @@ Usage:
 
 import asyncio
 import logging
-from typing import Any
 
-from mcp.types import TextContent
+from cube_browser_tool import AsyncPlaywrightConfig
+from mcp.types import TextContent as MCPTextContent
 
-from agentlab2.mcp.server import McpServer
-from agentlab2.tools.playwright import PlaywrightConfig
-
-
-def _get_content_blocks(call_tool_result: Any) -> list:
-    """Extract content blocks from FastMCP.call_tool() result.
-
-    call_tool() returns (content_blocks, metadata) tuple.
-    """
-    if isinstance(call_tool_result, tuple):
-        return list(call_tool_result[0])
-    return list(call_tool_result)
-
+from cube_harness.mcp.server import McpServer
 
 LOG_FORMAT = "[%(levelname)s] %(asctime)s - %(name)s:%(lineno)d - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
-TEST_PAGE = "<html><body>hi there!</body></html>"
+TEST_PAGE = (
+    "<html><body>"
+    "<p>hi there!</p>"
+    "<button id='btn' onclick=\"this.textContent='clicked'\">click me</button>"
+    "</body></html>"
+)
 TEST_PORT = 8791
 
 
@@ -59,7 +51,6 @@ async def start_test_server() -> asyncio.Server:
 
 EXPECTED_BROWSER_TOOLS = {
     "noop",
-    "goto",
     "browser_wait",
     "browser_click",
     "browser_type",
@@ -70,6 +61,7 @@ EXPECTED_BROWSER_TOOLS = {
     "browser_drag",
     "browser_select_option",
     "browser_mouse_click_xy",
+    "browser_scroll",
 }
 
 
@@ -79,8 +71,7 @@ async def main() -> None:
     logger.info("Test HTTP server started on port %d.", TEST_PORT)
 
     # -- 1. Create AsyncPlaywrightTool --
-    tool = PlaywrightConfig(headless=True, use_screenshot=False).make_async()
-    await tool.initialize()
+    tool = await AsyncPlaywrightConfig(use_screenshot=False).make()
     logger.info("AsyncPlaywrightTool initialized (headless Chromium).")
 
     try:
@@ -100,20 +91,30 @@ async def main() -> None:
         assert not missing, f"Missing expected browser tools: {missing}"
         logger.info("All %d BrowserActionSpace tools registered.", len(EXPECTED_BROWSER_TOOLS))
 
-        # -- 4. Test noop: simplest roundtrip --
-        logger.info("Calling noop...")
-        blocks = _get_content_blocks(await mcp.call_tool("noop", {}))
-        text_blocks = [b for b in blocks if isinstance(b, TextContent)]
-        logger.info("  noop returned %d block(s), text: %s", len(blocks), [b.text[:60] for b in text_blocks])
-        assert any("Success" in b.text for b in text_blocks), "Expected 'Success' in noop result"
+        # -- 4. Navigate to test page (task-internal, not an MCP tool) --
+        await tool.goto(f"http://127.0.0.1:{TEST_PORT}")
+        logger.info("Navigated to test page.")
 
-        # -- 5. Test goto: navigate to test page and verify HTML in observation --
-        logger.info("Calling goto(url='http://127.0.0.1:%d')...", TEST_PORT)
-        blocks = _get_content_blocks(await mcp.call_tool("goto", {"url": f"http://127.0.0.1:{TEST_PORT}"}))
-        text_blocks = [b for b in blocks if isinstance(b, TextContent)]
+        # -- 5. Test noop: verify page HTML is returned --
+        logger.info("Calling noop...")
+        blocks, _ = await mcp.call_tool("noop", {})
+        blocks = list(blocks)  # convert from generator
+        text_blocks = [b for b in blocks if isinstance(b, MCPTextContent)]
         page_html = " ".join(b.text for b in text_blocks)
-        logger.info("  page HTML contains: %s", page_html[:120])
+        logger.info("  noop returned %d block(s), html snippet: %s", len(blocks), page_html[:120])
         assert "hi there!" in page_html, f"Expected 'hi there!' in page HTML, got: {page_html[:200]}"
+
+        # -- 6. Test browser_click: click the button and verify the page updates --
+        logger.info("Calling browser_click(selector='#btn')...")
+        blocks, _ = await mcp.call_tool("browser_click", {"selector": "#btn"})
+        blocks = list(blocks)  # convert from generator
+        text_blocks = [b for b in blocks if isinstance(b, MCPTextContent)]
+        page_html = " ".join(b.text for b in text_blocks)
+        logger.info("  browser_click returned %d block(s), html snippet: %s", len(blocks), page_html[:120])
+        assert "click me" not in page_html, f"Expected button text to change from 'click me', got: {page_html[:200]}"
+        assert "clicked\n</button>" in page_html, (
+            f"Expected button text content to be 'clicked', got: {page_html[:200]}"
+        )
 
         logger.info("All good! Playwright MCP server roundtrip verified.")
 

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 from cube.core import Action, ActionSchema, Observation
 
-from agentlab2.agents.genny import (
+from cube_harness.agents.genny import (
     Genny,
     GennyConfig,
     NativeToolAdapter,
@@ -21,7 +21,7 @@ from agentlab2.agents.genny import (
     _obs_section_header,
     _truncate_message,
 )
-from agentlab2.llm import LLMConfig, LLMResponse, Usage
+from cube_harness.llm import LLMConfig, LLMResponse, Usage
 
 # ---------------------------------------------------------------------------
 # Helpers

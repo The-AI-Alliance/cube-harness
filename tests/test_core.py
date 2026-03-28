@@ -1,4 +1,4 @@
-"""Tests for agentlab2.core module."""
+"""Tests for cube_harness.core module."""
 
 import json
 
@@ -6,7 +6,7 @@ import pytest
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation, StepError
 from PIL import Image
 
-from agentlab2.core import (
+from cube_harness.core import (
     AgentOutput,
     TrajectoryStep,
 )

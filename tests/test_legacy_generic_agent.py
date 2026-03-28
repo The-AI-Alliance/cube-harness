@@ -1,10 +1,10 @@
-"""Tests for agentlab2.agents.legacy_generic_agent prompt generation."""
+"""Tests for cube_harness.agents.legacy_generic_agent prompt generation."""
 
 import pytest
 from cube.core import ActionSchema, Content, Observation
 from PIL import Image
 
-from agentlab2.agents.legacy_generic_agent import (
+from cube_harness.agents.legacy_generic_agent import (
     BeCautious,
     Criticise,
     GenericAgent,
@@ -23,7 +23,7 @@ from agentlab2.agents.legacy_generic_agent import (
     Trunkater,
     parse_html_tags,
 )
-from agentlab2.llm import LLMConfig
+from cube_harness.llm import LLMConfig
 
 # ============================================================================
 # Test parse_html_tags

@@ -1,4 +1,4 @@
-"""Tests for agentlab2.llm module."""
+"""Tests for cube_harness.llm module."""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from litellm import Message
 from litellm.types.utils import ChatCompletionMessageToolCall, Function
 
-from agentlab2.llm import LLM, LLMCall, LLMConfig, Prompt
+from cube_harness.llm import LLM, LLMCall, LLMConfig, Prompt
 
 
 class TestPrompt:
@@ -110,7 +110,7 @@ class TestLLM:
         llm = LLM(config=sample_llm_config)
         assert llm.config == sample_llm_config
 
-    @patch("agentlab2.llm.completion_with_retries")
+    @patch("cube_harness.llm.completion_with_retries")
     def test_llm_call(self, mock_completion, sample_llm_config, sample_prompt):
         """Test LLM call with mocked completion."""
         mock_message = Message(role="assistant", content="Hello! How can I help?")
@@ -129,7 +129,7 @@ class TestLLM:
         assert result.message.content == "Hello! How can I help?"
         assert result.usage.prompt_tokens == 0  # No usage info provided
 
-    @patch("agentlab2.llm.completion_with_retries")
+    @patch("cube_harness.llm.completion_with_retries")
     def test_llm_call_with_tools(self, mock_completion, sample_llm_config) -> None:
         """Test LLM call with tools."""
         tool_call = ChatCompletionMessageToolCall(

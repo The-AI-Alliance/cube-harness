@@ -1,12 +1,12 @@
-"""Tests for agentlab2.episode module."""
+"""Tests for cube_harness.episode module."""
 
 import json
 
 import pytest
 from cube.core import Action, EnvironmentOutput, Observation
 
-from agentlab2.core import AgentOutput, Trajectory, TrajectoryStep
-from agentlab2.episode import MAX_STEPS, Episode
+from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
+from cube_harness.episode import MAX_STEPS, Episode
 from tests.conftest import MockAgent
 
 
@@ -250,7 +250,7 @@ class TestEpisode:
 
         # But error should be saved in trajectory before raising
         # Load the trajectory to verify
-        from agentlab2.storage import FileStorage
+        from cube_harness.storage import FileStorage
 
         storage = FileStorage(tmp_dir)
         traj_id = f"{episode.config.task_id}_ep{episode.config.id}"
@@ -270,7 +270,7 @@ class TestEpisode:
 
         from cube.core import ActionSchema
 
-        from agentlab2.legacy import Task
+        from cube_harness.legacy import Task
 
         class ErrorTask(Task):
             id = "error_task"
@@ -293,7 +293,7 @@ class TestEpisode:
             def teardown(self) -> None:
                 pass
 
-        from agentlab2.legacy import EnvConfig
+        from cube_harness.legacy import EnvConfig
 
         error_task = ErrorTask()
         env_config = EnvConfig(task=error_task, tool_config=mock_tool_config)
@@ -310,7 +310,7 @@ class TestEpisode:
             trajectory = episode.run()
 
         # But error should be saved in trajectory before raising
-        from agentlab2.storage import FileStorage
+        from cube_harness.storage import FileStorage
 
         storage = FileStorage(tmp_dir)
         traj_id = f"{episode.config.task_id}_ep{episode.config.id}"

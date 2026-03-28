@@ -1,4 +1,4 @@
-"""Tests for agentlab2.storage module."""
+"""Tests for cube_harness.storage module."""
 
 import json
 from pathlib import Path
@@ -7,13 +7,13 @@ import pytest
 from cube.core import Action, Content, EnvironmentOutput, Observation
 from PIL import Image
 
-from agentlab2.core import (
+from cube_harness.core import (
     AgentOutput,
     Trajectory,
     TrajectoryStep,
 )
-from agentlab2.llm import LLMCall, LLMConfig, Message, Prompt
-from agentlab2.storage import FileStorage
+from cube_harness.llm import LLMCall, LLMConfig, Message, Prompt
+from cube_harness.storage import FileStorage
 
 
 class TestFileStorageBasic:
@@ -58,7 +58,7 @@ class TestFileStorageBasic:
         with open(metadata_path) as f:
             data = json.load(f)
         assert data == {
-            "_type": "agentlab2.core.Trajectory",
+            "_type": "cube_harness.core.Trajectory",
             "id": "test_traj_1",
             "metadata": {"task_id": "task_1", "agent": "test_agent"},
             "start_time": 0.0,
@@ -512,7 +512,7 @@ class TestFileStorageEpisodeConfig:
 
     def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test save_episode_config creates episode_configs directory."""
-        from agentlab2.episode import EpisodeConfig
+        from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
         episode_config = EpisodeConfig(
@@ -532,7 +532,7 @@ class TestFileStorageEpisodeConfig:
 
     def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test save_episode_config creates correct config file."""
-        from agentlab2.episode import EpisodeConfig
+        from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
         episode_config = EpisodeConfig(
@@ -552,7 +552,7 @@ class TestFileStorageEpisodeConfig:
 
     def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test episode config save/load round-trip."""
-        from agentlab2.episode import EpisodeConfig
+        from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
 
@@ -592,7 +592,7 @@ class TestFileStorageEpisodeConfig:
 
     def test_list_episode_configs(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test list_episode_configs returns all config files."""
-        from agentlab2.episode import EpisodeConfig
+        from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
 
@@ -629,7 +629,7 @@ class TestFileStorageEpisodeConfig:
 
     def test_episode_config_filename_parsing(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test episode config filename format is correct for parsing."""
-        from agentlab2.episode import EpisodeConfig
+        from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
 

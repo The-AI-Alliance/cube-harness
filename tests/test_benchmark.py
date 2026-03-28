@@ -1,4 +1,4 @@
-"""Tests for agentlab2.benchmark module."""
+"""Tests for cube_harness.benchmark module."""
 
 import json
 

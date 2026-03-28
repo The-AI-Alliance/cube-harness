@@ -5,7 +5,7 @@ from mcp.types import ImageContent, TextContent
 from PIL import Image
 from pydantic import BaseModel
 
-from agentlab2.mcp.convert import action_schema_to_mcp_tool, observation_to_mcp_content
+from cube_harness.mcp.convert import action_schema_to_mcp_tool, observation_to_mcp_content
 
 
 class TestActionSchemaToMcpTool:

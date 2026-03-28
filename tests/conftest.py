@@ -1,4 +1,4 @@
-"""Common fixtures for agentlab2 tests."""
+"""Common fixtures for cube_harness tests."""
 
 import tempfile
 from pathlib import Path
@@ -17,16 +17,16 @@ from cube.task import TaskMetadata
 from cube.tool import ToolConfig, tool_action
 from PIL import Image
 
-from agentlab2.agent import Agent, AgentConfig
-from agentlab2.core import (
+from cube_harness.agent import Agent, AgentConfig
+from cube_harness.core import (
     AgentOutput,
     Trajectory,
     TrajectoryStep,
 )
-from agentlab2.episode import Episode
-from agentlab2.legacy import Benchmark, EnvConfig, Environment, Task
-from agentlab2.llm import LLMConfig, Prompt
-from agentlab2.tool import ToolWithTelemetry
+from cube_harness.episode import Episode
+from cube_harness.legacy import Benchmark, EnvConfig, Environment, Task
+from cube_harness.llm import LLMConfig, Prompt
+from cube_harness.tool import ToolWithTelemetry
 
 # --- Core fixtures ---
 

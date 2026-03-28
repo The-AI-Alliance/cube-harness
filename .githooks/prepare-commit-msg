@@ -1,0 +1,17 @@
+#!/bin/sh
+# Automatically add DCO Signed-off-by line if not already present.
+# Activated via: git config core.hooksPath .githooks
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Skip for merge commits, squash commits, and fixup commits
+[ "$COMMIT_SOURCE" = "merge" ] && exit 0
+[ "$COMMIT_SOURCE" = "squash" ] && exit 0
+
+NAME=$(git config user.name)
+EMAIL=$(git config user.email)
+SOB="Signed-off-by: $NAME <$EMAIL>"
+
+# Add only if not already present
+grep -qF "$SOB" "$COMMIT_MSG_FILE" || echo "\n$SOB" >> "$COMMIT_MSG_FILE"

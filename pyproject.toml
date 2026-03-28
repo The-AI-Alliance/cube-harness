@@ -1,8 +1,8 @@
 
 [project]
-name = "agentlab2"
+name = "cube-harness"
 version = "0.1.0"
-description = "agentlab2, open source agentic evaluation and data generation framework."
+description = "cube-harness, open source agentic evaluation and data generation framework."
 readme = "README.md"
 authors = [
     { name = "Aman Jaiswal", email = "amanjaiswal73892@gmail.com" },
@@ -10,34 +10,37 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard",
+    "cube-standard>=0.1.0rc4",
     "pydantic~=2.0",
     "litellm~=1.80.8",
     "playwright==1.44",
     "Pillow~=11.0",
     "beautifulsoup4~=4.14",
     "numpy~=2.3.5",
-    "numpydoc~=1.10.0",
     "ray[default]>=2.52.1",
-    "tenacity~=8.5.0",
+    "tenacity>=8.5.0",
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
-    "miniwob>=1.0",
-    "gradio~=5.49",
-    "matplotlib>=3.8",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
     "mcp[cli]>=1.26",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
 ]
 
 [project.optional-dependencies]
 # WorkArena benchmark dependencies
 workarena = [
-    "browsergym-workarena>=0.5.2",
+    "workarena-cube",
+]
+# Miniwob cube dependencies
+miniwob = [
+    "miniwob-cube",
+]
+# XRay trajectory viewer
+analyze = [
+    "gradio~=5.49",
 ]
 # SWE-bench benchmarks
 swebench = [
@@ -55,6 +58,8 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 [tool.uv.sources]
 swebench-verified-cube = { path = "cubes/swebench-verified-cube", editable = true }
 swebench-live-cube = { path = "cubes/swebench-live-cube", editable = true }
+miniwob-cube = { path = "cubes/miniwob", editable = true }
+workarena-cube = { path = "cubes/workarena", editable = true }
 
 [tool.ruff]
 fix = true
@@ -71,9 +76,8 @@ line-ending = "auto"
 extend-select = ["I"] # sort imports
 
 [project.scripts]
-al2-viewer = "agentlab2.deprecated_viewer:main"
-al2-mcp-server = "agentlab2.mcp.server:main"
-al2-xray = "agentlab2.analyze.xray:main"
+ch-mcp-server = "cube_harness.mcp.server:main"
+ch-xray = "cube_harness.analyze.xray:main"
 
 [dependency-groups]
 dev = [

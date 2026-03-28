@@ -19,13 +19,13 @@ jobs:
       actions: read        # github_ci MCP server
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           ref: ${{ github.event.issue.pull_request.head.sha }}
           fetch-depth: 0  # Full history for git blame/log
 
       - name: PR Review with Progress Tracking
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@673eb13aa77026be5c507eda12322c1a58b80f0b  # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -39,7 +39,7 @@ jobs:
           prompt: |
             Run /code-review --comment
             
-            Review this PR against the AgentLab2 constitution defined in:
+            Review this PR against the cube-harness constitution defined in:
             - .claude/rules/constitution.md (the full constitution with pillars and directives)
             - .claude/rules/review-rules.md (enforceable rules with severity levels and examples)
           # Tools for /code-review command (from official plugin documentation)

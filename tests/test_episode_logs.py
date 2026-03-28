@@ -1,11 +1,11 @@
-"""Tests for agentlab2.episode_logs."""
+"""Tests for cube_harness.episode_logs."""
 
 import logging
 from pathlib import Path
 
 import pytest
 
-from agentlab2.episode_logs import get_log_path, redirect_output_to_log, trajectory_log_id
+from cube_harness.episode_logs import get_log_path, redirect_output_to_log, trajectory_log_id
 
 
 def test_trajectory_log_id() -> None:

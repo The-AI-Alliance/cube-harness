@@ -1,1 +1,1 @@
-"""Unit tests for agentlab2 framework."""
+"""Unit tests for cube_harness framework."""

@@ -1,4 +1,4 @@
-# The AgentLab2 Constitution
+# The cube-harness Constitution
 
 > **📝 To update this constitution**, use the Claude command `/update-constitution`.
 > This ensures all dependent files are updated automatically.

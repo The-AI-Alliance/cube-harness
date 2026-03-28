@@ -1,6 +1,6 @@
-"""Tests for agentlab2.utils module."""
+"""Tests for cube_harness.utils module."""
 
-from agentlab2.utils import prune_html
+from cube_harness.utils import prune_html
 
 
 class TestPruneHtml:

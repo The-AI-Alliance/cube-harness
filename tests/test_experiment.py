@@ -1,12 +1,12 @@
-"""Tests for agentlab2.experiment module."""
+"""Tests for cube_harness.experiment module."""
 
 import json
 
 from cube.core import EnvironmentOutput, Observation
 
-from agentlab2.core import Trajectory, TrajectoryStep
-from agentlab2.episode import Episode
-from agentlab2.experiment import Experiment, ExpResult
+from cube_harness.core import Trajectory, TrajectoryStep
+from cube_harness.episode import Episode
+from cube_harness.experiment import Experiment, ExpResult
 from tests.conftest import MockBenchmark, MockTask
 
 
@@ -217,8 +217,8 @@ class TestExperiment:
         """Test retry_failed=True returns only failed episodes."""
         from cube.core import EnvironmentOutput, Observation, StepError
 
-        from agentlab2.core import Trajectory, TrajectoryStep
-        from agentlab2.storage import FileStorage
+        from cube_harness.core import Trajectory, TrajectoryStep
+        from cube_harness.storage import FileStorage
 
         # Create tasks
         tasks = [MockTask(goal=f"Task {i}") for i in range(3)]
