@@ -54,6 +54,9 @@ class SWEBenchVerifiedBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Load dataset from HuggingFace, apply filters, and populate task_metadata."""
+        if SWEBenchVerifiedBenchmark.task_metadata:
+            logger.info("SWE-bench Verified task_metadata already populated, skipping setup")
+            return
         ds = load_dataset(self.dataset_name, split="test")
         tasks_data = self._filter_tasks(list(ds))  # type: ignore[arg-type]
 
@@ -88,9 +91,7 @@ class SWEBenchVerifiedBenchmark(Benchmark):
                 },
             )
 
-        # Set on the class so TaskConfig.make() can look it up (skip if already populated)
-        if not SWEBenchVerifiedBenchmark.task_metadata:
-            SWEBenchVerifiedBenchmark.task_metadata = metadata
+        SWEBenchVerifiedBenchmark.task_metadata = metadata
         logger.info(f"SWE-bench Verified setup complete: {len(metadata)} tasks")
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
