@@ -229,6 +229,30 @@ class OSWorldBenchmark(Benchmark):
             )
 
     # ------------------------------------------------------------------
+    # list_resources() — resource lifecycle protocol
+    # ------------------------------------------------------------------
+
+    def list_resources(self) -> list:
+        """Declare the VM image required to run OSWorld tasks.
+
+        Enables run_debug_agent(benchmark, AzureInfraConfig(...)) to provision
+        and smoke-test the VM before a full evaluation run.
+        """
+        from cube.resource import VMResourceConfig
+
+        return [
+            VMResourceConfig(
+                name="osworld-ubuntu-vm",
+                source_url=(
+                    "https://huggingface.co/datasets/xlangai/ubuntu_osworld"
+                    "/resolve/main/Ubuntu.qcow2.zip"
+                ),
+                scope="task",
+                default_ttl_seconds=3600,
+            )
+        ]
+
+    # ------------------------------------------------------------------
     # _setup()
     # ------------------------------------------------------------------
 
