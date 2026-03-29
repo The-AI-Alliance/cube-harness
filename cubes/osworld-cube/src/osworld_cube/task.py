@@ -199,6 +199,7 @@ class OSWorldTask(Task):
           6. Return (obs, info)
         """
         self._ensure_vm()
+        self._computer.reset()
         extra = self.metadata.extra_info
 
         task_data = {
