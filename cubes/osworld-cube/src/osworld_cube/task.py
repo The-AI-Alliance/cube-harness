@@ -20,7 +20,6 @@ from __future__ import annotations
 import io
 import logging
 import time
-import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -133,9 +132,9 @@ class OSWorldTask(Task):
             return
 
         if self.infra is not None:
-            run_id = str(uuid.uuid4())
-            logger.info("Launching VM via %s (run_id=%s)", type(self.infra).__name__, run_id[:8])
-            self._handle = self.infra.launch(_OSWORLD_UBUNTU_RESOURCE, run_id)
+            logger.info("Launching VM via %s", type(self.infra).__name__)
+            self._handle = self.infra.launch(_OSWORLD_UBUNTU_RESOURCE)
+            logger.info("VM ready (run_id=%s)", self._handle.run_id[:8])
             self._computer.attach_endpoint(self._handle.endpoint)
 
         elif self.vm_backend is not None:

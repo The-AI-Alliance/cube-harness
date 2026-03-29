@@ -22,6 +22,7 @@ import logging
 from pathlib import Path
 
 from cube.core import Action, ActionSchema, Observation
+from cube.resource import InfraConfig
 from cube.vm import VMBackend
 from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
@@ -122,20 +123,27 @@ class DebugAgent:
 # ---------------------------------------------------------------------------
 
 
-def get_debug_benchmark(vm_backend: VMBackend | None = None) -> OSWorldBenchmark:
+def get_debug_benchmark(
+    infra: InfraConfig | None = None,
+    vm_backend: VMBackend | None = None,
+) -> OSWorldBenchmark:
     """Return an OSWorldBenchmark scoped to the debug tasks.
 
     Uses debug_tasks.json as the task source — no OSWorld repo clone required.
-    The caller (cube.testing) is responsible for calling install() and setup().
+    The caller is responsible for calling install() and setup().
 
     Args:
-        vm_backend: Backend to use. Defaults to OSWorldQEMUVMBackend (Linux/KVM).
-                    Pass OSWorldDockerVMBackend() to run on macOS via Docker.
+        infra:      Preferred. InfraConfig (AWSInfraConfig, AzureInfraConfig,
+                    LocalInfraConfig). Each task gets a fresh VM from the
+                    provisioned image. Takes precedence over vm_backend.
+        vm_backend: Legacy. Defaults to OSWorldQEMUVMBackend (Linux/KVM) if
+                    neither infra nor vm_backend is provided.
     """
     return OSWorldBenchmark(
         tasks_file=str(_TASKS_FILE),
         default_tool_config=ComputerConfig(),
-        vm_backend=vm_backend or OSWorldQEMUVMBackend(),
+        infra=infra,
+        vm_backend=None if infra else (vm_backend or OSWorldQEMUVMBackend()),
     )
 
 
