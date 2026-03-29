@@ -55,8 +55,17 @@ dev = [
     "pytest>=9.0.2",
 ]
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: mark test as requiring a live InfraConfig (cloud VM)",
+]
+
 [tool.uv]
 override-dependencies = ["protobuf>=6.33.5"]
+
+[tool.uv.sources]
+cube-standard = { path = "../../../cube-standard", editable = true }
+cube-computer-tool = { path = "../../../cube-standard/cube-tools/cube-computer-tool", editable = true }
 
 
 [tool.ruff]

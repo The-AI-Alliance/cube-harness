@@ -1,39 +1,56 @@
+"""
+Integration tests for OSWorldTask using the debug action sequences.
+
+Requires an InfraConfig pointing to a provisioned OSWorld VM image.
+Run the integration test manually via:
+    cube-resources/cube-infra-azure/test_run_debug_agent.py
+    cube-resources/cube-infra-aws/test_run_debug_agent.py
+
+These tests are skipped by default — pass --run-integration to enable them.
+"""
+
 import pytest
 
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
-_benchmark = get_debug_benchmark(vm_backend=OSWorldQEMUVMBackend())
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--run-integration", action="store_true", default=False)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "integration: mark test as requiring a live InfraConfig")
+
+
+def _get_infra():
+    """Return an InfraConfig from env if available, else None."""
+    import os
+    provider = os.environ.get("CUBE_TEST_INFRA_PROVIDER")
+    if provider == "azure":
+        from cube_infra_azure import AzureInfraConfig
+        return AzureInfraConfig()
+    if provider == "aws":
+        from cube_infra_aws import AWSInfraConfig
+        return AWSInfraConfig()
+    return None
+
+
+_infra = _get_infra()
+_benchmark = get_debug_benchmark(infra=_infra)
 _benchmark.install()
 _benchmark.setup()
 _DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in _benchmark.get_task_configs()}
 
 
-def run_debug_episode(task_id: str, max_steps: int = 20) -> dict:
-    """
-    Run a debug episode for an OSWorld task and return a minimal report dict.
-
-    Delegates to the generic ``cube.testing.run_debug_episode`` harness.
-    The report schema matches the stress-test MVP output (stress_test_specs.md §3.1).
-
-    Args:
-        task_id:    ID of the debug task (must be in debug_tasks.json).
-        max_steps:  Safety cap on the step loop (default 20).
-
-    Returns:
-        dict with keys: task_id, done, reward, steps, episode_time_s,
-        step_times_s, error.
-    """
+@pytest.mark.integration
+@pytest.mark.skipif(_infra is None, reason="Set CUBE_TEST_INFRA_PROVIDER=azure|aws to run")
+@pytest.mark.parametrize("task_id", list(_DEBUG_TASK_CONFIGS))
+def test_debug_episode(task_id: str) -> None:
     from cube.testing import run_debug_episode as _run
 
     task = _DEBUG_TASK_CONFIGS[task_id].make()
     agent = make_debug_agent(task_id)
-    return _run(task, agent, max_steps=max_steps)
-
-
-@pytest.mark.parametrize("task_id", list(_DEBUG_TASK_CONFIGS))
-def test_debug_episode(task_id: str) -> None:
-    report = run_debug_episode(task_id)
+    report = _run(task, agent, max_steps=20)
     assert report["done"], f"Episode did not complete: {report}"
     assert report["reward"] > 0, f"Zero/negative reward: {report}"
     assert not report["error"], f"Episode error: {report['error']}"
