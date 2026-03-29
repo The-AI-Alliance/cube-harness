@@ -31,7 +31,7 @@ from pydantic import model_validator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
-from cube.resource import InfraConfig
+from cube.resource import InfraConfig, ResourceConfig
 from cube.task import TaskConfig, TaskMetadata
 
 from osworld_cube.computer import ComputerConfig, _CUBE_CACHE_ROOT
@@ -208,7 +208,7 @@ class OSWorldBenchmark(Benchmark):
     """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
     Each task gets a fresh VM launched from the provisioned image."""
 
-    resources = [OSWORLD_UBUNTU_RESOURCE]
+    resources: list[ResourceConfig] = [OSWORLD_UBUNTU_RESOURCE]
     """VM image required to run OSWorld tasks (declared for the harness resource lifecycle)."""
 
     @model_validator(mode="after")
