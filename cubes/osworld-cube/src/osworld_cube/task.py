@@ -150,12 +150,18 @@ class OSWorldTask(Task):
         These are constants baked into the OSWorld Ubuntu image.
         For the legacy vm_backend path, custom attributes on the VM object
         are respected as overrides.
+        For the infra path, server_port is extracted from the handle endpoint
+        (the SSH tunnel maps a free local port → VM:5000).
         """
         if self._vm is not None:
             chromium_port: int = getattr(self._vm, "chromium_port", _CHROMIUM_PORT)
             vlc_port: int = getattr(self._vm, "vlc_port", _VLC_PORT)
             server_port: int = getattr(self._vm, "server_port", _SERVER_PORT)
             return chromium_port, vlc_port, server_port
+        if self._handle is not None and self._handle.endpoint:
+            from urllib.parse import urlparse
+            server_port = urlparse(self._handle.endpoint).port or _SERVER_PORT
+            return _CHROMIUM_PORT, _VLC_PORT, server_port
         return _CHROMIUM_PORT, _VLC_PORT, _SERVER_PORT
 
     def _setup_task(self, task_data: dict) -> Observation:
