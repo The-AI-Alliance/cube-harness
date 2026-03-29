@@ -33,10 +33,9 @@ from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
 from cube.resource import InfraConfig
 from cube.task import TaskConfig, TaskMetadata
-from cube.vm import VMBackend
 
 from osworld_cube.computer import ComputerConfig, _CUBE_CACHE_ROOT
-from osworld_cube.task import OSWorldTask
+from osworld_cube.task import OSWORLD_UBUNTU_RESOURCE, OSWorldTask
 
 logger = logging.getLogger(__name__)
 
@@ -107,15 +106,13 @@ class OSWorldTaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored for OSWorld — tasks are deterministic)
-        infra:       InfraConfig to use for this task (preferred).
-        vm_backend:  VMBackend to use for this task (legacy, used when infra is None).
+        infra:       InfraConfig to use for this task.
 
     make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
     populated by OSWorldBenchmark.setup()).
     """
 
     infra: InfraConfig | None = None
-    vm_backend: VMBackend | None = None
 
     def make(
         self,
@@ -134,7 +131,6 @@ class OSWorldTaskConfig(TaskConfig):
             metadata=metadata,
             tool_config=self.tool_config,
             infra=self.infra,
-            vm_backend=self.vm_backend,
             runtime_context=runtime_context,
             container_backend=container_backend,
         )
@@ -209,11 +205,11 @@ class OSWorldBenchmark(Benchmark):
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
     infra: InfraConfig | None = None
-    """Preferred: InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+    """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
     Each task gets a fresh VM launched from the provisioned image."""
 
-    vm_backend: VMBackend | None = None
-    """Legacy: VMBackend. Used when infra is None. Supports QMP snapshot restore."""
+    resources = [OSWORLD_UBUNTU_RESOURCE]
+    """VM image required to run OSWorld tasks (declared for the harness resource lifecycle)."""
 
     @model_validator(mode="after")
     def _warn_on_conflicting_task_source(self) -> "OSWorldBenchmark":
@@ -221,44 +217,15 @@ class OSWorldBenchmark(Benchmark):
             logger.warning("Both 'tasks_file' and 'test_set_name' were specified — 'tasks_file' takes precedence.")
         return self
 
-    # ------------------------------------------------------------------
-    # get_task_configs() override — inject vm_backend into each config
-    # ------------------------------------------------------------------
-
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield OSWorldTaskConfig objects, injecting infra (or legacy vm_backend)."""
+        """Yield OSWorldTaskConfig objects, injecting infra."""
         for tm in self.task_metadata.values():
             yield OSWorldTaskConfig(
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
                 seed=None,
                 infra=self.infra,
-                vm_backend=self.vm_backend,
             )
-
-    # ------------------------------------------------------------------
-    # list_resources() — resource lifecycle protocol
-    # ------------------------------------------------------------------
-
-    def list_resources(self) -> list:
-        """Declare the VM image required to run OSWorld tasks.
-
-        Enables run_debug_agent(benchmark, AzureInfraConfig(...)) to provision
-        and smoke-test the VM before a full evaluation run.
-        """
-        from cube.resource import VMResourceConfig
-
-        return [
-            VMResourceConfig(
-                name="osworld-ubuntu-vm",
-                source_url=(
-                    "https://huggingface.co/datasets/xlangai/ubuntu_osworld"
-                    "/resolve/main/Ubuntu.qcow2.zip"
-                ),
-                scope="task",
-                default_ttl_seconds=3600,
-            )
-        ]
 
     # ------------------------------------------------------------------
     # _setup()
@@ -423,10 +390,10 @@ class OSWorldBenchmark(Benchmark):
         OSWORLD_VM_DIR.mkdir(parents=True, exist_ok=True)
 
     def _get_provider(self) -> str:
-        """Return provider name derived from vm_backend type."""
-        if self.vm_backend is None:
+        """Return provider name derived from infra type."""
+        if self.infra is None:
             return "none"
-        return type(self.vm_backend).__name__
+        return type(self.infra).__name__
 
     # ------------------------------------------------------------------
     # install() — available for manual invocation; called from _setup()

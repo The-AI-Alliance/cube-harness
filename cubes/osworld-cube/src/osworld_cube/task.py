@@ -1,12 +1,7 @@
 """
 OSWorldTask — CUBE task for a single OSWorld desktop-automation episode.
 
-    # New API: InfraConfig (cloud or local)
     task = OSWorldTask(metadata=..., tool_config=ComputerConfig(...), infra=AWSInfraConfig(...))
-
-    # Legacy API: VMBackend (still supported)
-    task = OSWorldTask(metadata=..., tool_config=ComputerConfig(...), vm_backend=LocalQEMUVMBackend(...))
-
     obs, info = task.reset()
     while not done:
         action = agent(obs, task.action_set)
@@ -30,7 +25,6 @@ from cube.benchmark import RuntimeContext  # noqa: F401 — triggers OSWorldTask
 from cube.core import Observation
 from cube.resource import InfraConfig, ResourceHandle, VMResourceConfig
 from cube.task import Task
-from cube.vm import VM, VMBackend, VMConfig
 
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
 
@@ -42,12 +36,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# OSWorld Ubuntu image — canonical resource declaration (mirrors list_resources())
-_OSWORLD_UBUNTU_RESOURCE = VMResourceConfig(
+OSWORLD_UBUNTU_RESOURCE = VMResourceConfig(
     name="osworld-ubuntu-vm",
     source_url="https://huggingface.co/datasets/xlangai/ubuntu_osworld/resolve/main/Ubuntu.qcow2.zip",
     scope="task",
-    default_ttl_seconds=3600,
+    default_ttl_seconds=60 * 60 * 24,
 )
 
 # Port constants baked into the OSWorld Ubuntu image
@@ -66,23 +59,19 @@ class OSWorldTask(Task):
 
     Reference: https://github.com/xlang-ai/OSWorld
 
-    Pydantic fields (all inherited from cube.task.Task except use_som, infra, vm_backend):
+    Pydantic fields (all inherited from cube.task.Task except use_som, infra):
         metadata:      TaskMetadata  — required; OSWorld-specific fields go in
                                        metadata.extra_info (see below)
         tool_config:   ToolConfig    — required; pass ComputerConfig(...)
-        infra:         InfraConfig | None — preferred; InfraConfig (AWSInfraConfig,
+        infra:         InfraConfig | None — InfraConfig (AWSInfraConfig,
                                        AzureInfraConfig, LocalInfraConfig, ...).
                                        Each task gets a fresh VM launched from the
                                        provisioned image.
-        vm_backend:    VMBackend | None — legacy; still supported. Used when infra
-                                       is None. Pass LocalQEMUVMBackend(...) for
-                                       local QEMU with QMP snapshot restore.
         validate_per_step: bool      — inherited; default False
         accept_agent_stop: bool      — inherited; default True
 
     Fields stored in metadata.extra_info:
         domain        (str)   — e.g. "chrome", "os", "libreoffice"
-        snapshot      (str)   — VM snapshot name (legacy vm_backend path only)
         config        (list)  — setup scripts to run before task starts
         evaluator     (dict)  — evaluation function + expected results
         related_apps  (list)  — applications involved in the task
@@ -92,17 +81,13 @@ class OSWorldTask(Task):
     """
 
     infra: InfraConfig | None = None
-    """Preferred: InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+    """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
     Each task gets a fresh VM launched from the provisioned image via infra.launch()."""
-
-    vm_backend: VMBackend | None = None
-    """Legacy: VMBackend. Used when infra is None. Supports QMP snapshot restore."""
 
     use_som: bool = False
     """If True, annotate screenshot with numbered bounding boxes (Set-of-Marks)
     and replace axtree with an indexed element table before returning obs."""
 
-    _vm: VM | None = PrivateAttr(default=None)
     _handle: ResourceHandle | None = PrivateAttr(default=None)
 
     def model_post_init(self, __context: Any) -> None:
@@ -120,44 +105,23 @@ class OSWorldTask(Task):
         return raw.lower()
 
     def _ensure_vm(self) -> None:
-        """Launch the VM if not already running.
-
-        Preferred path (infra set): calls infra.launch() → ResourceHandle.
-        Each task gets a fresh VM launched from the provisioned image.
-
-        Legacy path (vm_backend set): calls vm_backend.launch() → VM.
-        Supports QMP snapshot restore via VMConfig.snapshot_name.
-        """
-        if self._handle is not None or self._vm is not None:
+        """Launch the VM if not already running via infra.launch()."""
+        if self._handle is not None:
             return
-
-        if self.infra is not None:
-            logger.info("Launching VM via %s", type(self.infra).__name__)
-            self._handle = self.infra.launch(_OSWORLD_UBUNTU_RESOURCE)
-            logger.info("VM ready (run_id=%s)", self._handle.run_id[:8])
-            self._computer.attach_endpoint(self._handle.endpoint)
-
-        elif self.vm_backend is not None:
-            snapshot = self.metadata.extra_info.get("snapshot", "init_state")
-            vm_config = VMConfig(snapshot_name=snapshot)
-            logger.info("Launching VM via %s (legacy)", type(self.vm_backend).__name__)
-            self._vm = self.vm_backend.launch(vm_config)
-            self._computer.attach_vm(self._vm)
+        if self.infra is None:
+            raise RuntimeError("OSWorldTask requires an InfraConfig — set infra= when constructing.")
+        logger.info("Launching VM via %s", type(self.infra).__name__)
+        self._handle = self.infra.launch(OSWORLD_UBUNTU_RESOURCE)
+        logger.info("VM ready (run_id=%s)", self._handle.run_id[:8])
+        self._computer.attach_endpoint(self._handle.endpoint)
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
         """Return (chromium_port, vlc_port, server_port).
 
-        These are constants baked into the OSWorld Ubuntu image.
-        For the legacy vm_backend path, custom attributes on the VM object
-        are respected as overrides.
-        For the infra path, server_port is extracted from the handle endpoint
-        (the SSH tunnel maps a free local port → VM:5000).
+        Ports are baked into the OSWorld Ubuntu image.
+        server_port is extracted from the handle endpoint since the SSH tunnel
+        maps a free local port → VM:5000.
         """
-        if self._vm is not None:
-            chromium_port: int = getattr(self._vm, "chromium_port", _CHROMIUM_PORT)
-            vlc_port: int = getattr(self._vm, "vlc_port", _VLC_PORT)
-            server_port: int = getattr(self._vm, "server_port", _SERVER_PORT)
-            return chromium_port, vlc_port, server_port
         if self._handle is not None and self._handle.endpoint:
             from urllib.parse import urlparse
             server_port = urlparse(self._handle.endpoint).port or _SERVER_PORT
@@ -173,13 +137,7 @@ class OSWorldTask(Task):
         logger.info(
             "Setting up task: %s. Instruction: %s", task_data.get("id", "unknown"), task_data.get("instruction", "")
         )
-        if self._vm is not None:
-            # Legacy path: QMP snapshot restore to known-good state.
-            snapshot = task_data.get("snapshot", "init_state")
-            self._vm.restore_snapshot(snapshot)
-        # Infra path: VM was just launched fresh from the provisioned image —
-        # no snapshot restore needed; the image IS the snapshot.
-
+        # VM was launched fresh from the provisioned image — no snapshot restore needed.
         setup_steps = task_data.get("config") or []
         if setup_steps:
             chromium_port, vlc_port, _ = self._get_vm_ports()
@@ -195,8 +153,7 @@ class OSWorldTask(Task):
             )
             setup_ctrl.setup(setup_steps)
 
-        did_something = self._vm is not None or self._handle is not None or bool(setup_steps)
-        if did_something:
+        if self._handle is not None or setup_steps:
             logger.info("Waiting 60s for VM to stabilise...")
             time.sleep(60)
         return self._computer.get_observation()
@@ -234,7 +191,7 @@ class OSWorldTask(Task):
         Restore the VM snapshot, run setup scripts, and return the initial obs.
 
         Steps:
-          1. Launch VM if not yet running (via vm_backend)
+          1. Launch VM if not yet running (via infra)
           2. Build task_data dict from metadata.extra_info
           3. Restore VM snapshot, run setup scripts, wait for stabilisation
           4. Post-process the observation (SoM or linearize)
@@ -372,6 +329,3 @@ class OSWorldTask(Task):
         if self._handle is not None:
             self._handle.close()
             self._handle = None
-        if self._vm is not None:
-            self._vm.stop()
-            self._vm = None
