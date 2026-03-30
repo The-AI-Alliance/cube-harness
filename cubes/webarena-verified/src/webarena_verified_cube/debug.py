@@ -7,8 +7,8 @@ The evaluation may return reward=0 because task.evaluate() passes a
 FinalAgentResponse object directly to wav.evaluate_task(), which expects str/dict.
 Only errors (Python exceptions) are treated as failures.
 
-Debug tasks are restricted to AgentResponseEvaluator-only tasks on a single site
-so no live servers are required.
+The debug suite requires a running shopping-admin server. It is started automatically
+when this script is invoked directly. A local Docker daemon must be available.
 
 Public API (cube.testing protocol)
 -----------------------------------
@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import subprocess
 import sys
 
 from cube.benchmark import Benchmark
@@ -34,7 +35,7 @@ from webarena_verified.types.task import WebArenaSite
 
 from cube.tool import ToolboxConfig
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
-from webarena_verified_cube.tool import NoopBrowserConfig, SubmitResponseConfig
+from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,38 @@ def get_debug_benchmark() -> Benchmark:
     return WebArenaVerifiedBenchmark(
         wav_config=_DEBUG_WAV_CONFIG,
         task_ids_filter=[int(tid) for tid in _DEBUG_TASK_IDS],
-        default_tool_config=ToolboxConfig(tool_configs=[NoopBrowserConfig(), SubmitResponseConfig()]),
+        default_tool_config=ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
     )
+
+
+def _start_debug_server() -> None:
+    """Start the shopping-admin server required by the debug suite.
+
+    Requires a local Docker daemon. Prints a clear error and exits if the
+    command fails (Docker not running, webarena-verified not installed, etc.).
+    """
+    cmd = ["webarena-verified", "env", "start", "--site"]
+    sites = [env.value for env in _DEBUG_WAV_CONFIG.environments]  # type: ignore[attr-defined]
+    cmd += sites
+    try:
+        result = subprocess.run(cmd, check=False)
+    except FileNotFoundError:
+        print(
+            f"\nERROR: 'webarena-verified' command not found.\n"
+            f"Make sure the package is installed, then run:\n"
+            f"  {' '.join(cmd)}\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if result.returncode != 0:
+        print(
+            f"\nERROR: Failed to start the {', '.join(sites)} server(s) (exit code {result.returncode}).\n"
+            f"Make sure Docker is running and try manually:\n"
+            f"  {' '.join(cmd)}\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -87,6 +118,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
+    _start_debug_server()
     results = run_debug_suite("webarena-verified-cube", _this_module)
 
     failed = [r for r in results if r["error"] or r["reward"] != 1.0]
