@@ -26,9 +26,11 @@ def _get_infra():
     provider = os.environ.get("CUBE_TEST_INFRA_PROVIDER")
     if provider == "azure":
         from cube_infra_azure import AzureInfraConfig
+
         return AzureInfraConfig()
     if provider == "aws":
         from cube_infra_aws import AWSInfraConfig
+
         return AWSInfraConfig()
     return None
 

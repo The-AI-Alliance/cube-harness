@@ -124,6 +124,7 @@ class OSWorldTask(Task):
         """
         if self._handle is not None and self._handle.endpoint:
             from urllib.parse import urlparse
+
             server_port = urlparse(self._handle.endpoint).port or _SERVER_PORT
             return _CHROMIUM_PORT, _VLC_PORT, server_port
         return _CHROMIUM_PORT, _VLC_PORT, _SERVER_PORT
