@@ -274,6 +274,7 @@ def _make_mock_vm(server_port: int = 15000, chromium_port: int = 19222, vlc_port
 def _make_mock_handle(server_port: int = 15000) -> MagicMock:
     """Return a Mock that looks like a ResourceHandle."""
     from cube.resource import ResourceHandle
+
     handle = MagicMock(spec=ResourceHandle)
     handle.endpoint = f"http://localhost:{server_port}"
     handle.run_id = "test-run-id-1234"
