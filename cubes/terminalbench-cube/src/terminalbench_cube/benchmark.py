@@ -13,6 +13,7 @@ from typing import ClassVar
 
 from datasets import Dataset, load_from_disk
 
+from cube import get_cache_dir
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerConfig
 from cube.task import TaskConfig, TaskMetadata
@@ -20,7 +21,7 @@ from terminalbench_cube.task import TerminalBenchTaskConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATASET_PATH = str(Path.home() / ".agentlab" / "data" / "terminal_bench_v2")
+DEFAULT_DATASET_PATH = str(get_cache_dir("terminal_bench_v2"))
 
 REPO_URL = "https://github.com/laude-institute/terminal-bench-2.git"
 
