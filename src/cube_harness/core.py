@@ -1,7 +1,7 @@
 from typing import Callable
 
 from cube.core import Action, EnvironmentOutput, StepError, TypedBaseModel
-from pydantic import Field
+from pydantic import Field, SerializeAsAny
 
 from cube_harness.llm import LLMCall
 
@@ -22,7 +22,7 @@ class AgentOutput(TypedBaseModel):
 
 
 class TrajectoryStep(TypedBaseModel):
-    output: EnvironmentOutput | AgentOutput
+    output: SerializeAsAny[EnvironmentOutput | AgentOutput]
     start_time: float | None = None
     end_time: float | None = None
 
