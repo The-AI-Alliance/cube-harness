@@ -12,7 +12,7 @@ from cube.core import ActionSchema, Observation
 from cube.task import Task, TaskConfig
 from cube.tool import Toolbox, tool_action
 from cube.tools.browser import BrowserTool
-from cube_browser_playwright import PlaywrightSession, Viewport
+from cube_browser_playwright import PlaywrightSession, PlaywrightSessionConfig, Viewport
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
 from cube_chat_tool import ChatTool
 from playwright.sync_api import Page
@@ -40,11 +40,25 @@ _SUPPORTED_ACTION_NAMES = frozenset(
 
 
 @runtime_checkable
+class WorkarenaBrowserToolConfig(Protocol):
+    """
+    Protocol for browser tool configs used by WorkArenaTask — requires a `browser` attribute and a `make()` method.
+    Both BrowsergymConfig and PlaywrightConfig satisfy this protocol, so WorkArenaTask can work with either.
+    """
+
+    browser: PlaywrightSessionConfig
+
+    def make(self, container: Any = None) -> "WorkArenaBrowserTool": ...
+
+
+@runtime_checkable
 class WorkArenaBrowserTool(Protocol):
     """
     Protocol for browser tools used by WorkArena tasks — requires a Playwright `page` attribute.
     Both BrowsergymTool and SyncPlaywrightTool satisfy this protocol, so WorkArenaTask can work with either.
     """
+
+    config: WorkarenaBrowserToolConfig
 
     @property
     def page(self) -> Page: ...
@@ -90,8 +104,8 @@ class WorkArenaTask(Task):
     the base `Task.step()` calls both on every step, resulting in
     two identical round-trips per step.
 
-    Future improvement: cache the result of `validate()` keyed on
-    `(chat_key, hash(page.content()))` where:
+    Future improvement: if the above becomes a performance bottleneck, we can cache the
+    result of `validate()` keyed on `(chat_key, hash(page.content()))` where:
     `chat_key = tuple((m["role"], m["timestamp"], m["message"]) for m in chat_messages)`.
     Both `finished()` and `evaluate()` would call a shared `_validate()` helper
     that returns the cached result when the key is unchanged, and refreshes it otherwise.
@@ -230,7 +244,7 @@ def _load_task_class(class_path: str) -> type:
     return getattr(module, class_name)
 
 
-def _apply_task_runtime_preferences(tool: Any, workarena_task: AbstractServiceNowTask) -> None:
+def _apply_task_runtime_preferences(tool: WorkArenaBrowserTool, workarena_task: AbstractServiceNowTask) -> None:
     """Apply WorkArena task runtime defaults to the tool config when not explicitly set."""
     browser_config = tool.config.browser
     explicitly_set = browser_config.model_fields_set
