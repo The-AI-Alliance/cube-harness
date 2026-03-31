@@ -81,7 +81,14 @@ class WorkArenaBenchmark(Benchmark):
         logger.info(f"WorkArena benchmark setup complete: {len(task_tuples)} task(s)")
 
     def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
-        """Yield one WorkArenaTaskConfig per (task_class, seed) tuple."""
+        """Yield one WorkArenaTaskConfig per (task_class, seed) tuple.
+
+        Calls setup() automatically if _task_tuples has not been populated yet,
+        so that this method works on a freshly instantiated Benchmark() without
+        the caller needing to call setup() first.
+        """
+        if not self._task_tuples:
+            self.setup()
         for task_class, seed in self._task_tuples:
             task_id = task_class.get_task_id()
             yield WorkArenaTaskConfig(
