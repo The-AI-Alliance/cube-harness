@@ -12,12 +12,13 @@ import os
 import time
 from pathlib import Path
 
-from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.exp_runner import run_sequentially
-from agentlab2.experiment import Experiment
-from agentlab2.llm import LLMConfig
 from cube.backends.daytona import DaytonaContainerBackend
 from terminalbench_cube import TerminalBenchBenchmark, TerminalBenchToolConfig
+
+from cube_harness.agents.react import ReactAgentConfig
+from cube_harness.exp_runner import run_sequentially
+from cube_harness.experiment import Experiment
+from cube_harness.llm import LLMConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
@@ -28,7 +29,7 @@ Work in /app directory. Read existing files, test your solutions before declarin
 def main(mode: str, model: str = "openai/gpt-5-nano") -> None:
     model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"tbench_cube_{mode}_{model_short}_{current_datetime}"
+    output_dir = Path.home() / "cube_harness_results" / f"tbench_cube_{mode}_{model_short}_{current_datetime}"
 
     api_key = os.getenv("DAYTONA_API_KEY")
     if not api_key:
