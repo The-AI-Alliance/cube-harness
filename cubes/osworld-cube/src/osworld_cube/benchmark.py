@@ -218,14 +218,7 @@ class OSWorldBenchmark(Benchmark):
         return self
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield OSWorldTaskConfig objects, injecting infra.
-
-        Calls setup() automatically if task_metadata has not been populated yet,
-        so that this method works on a freshly instantiated Benchmark() without
-        the caller needing to call setup() first.
-        """
-        if "task_metadata" not in self.__dict__:
-            self.setup()
+        """Yield OSWorldTaskConfig objects, injecting infra."""
         for tm in self.task_metadata.values():
             yield OSWorldTaskConfig(
                 task_id=tm.id,

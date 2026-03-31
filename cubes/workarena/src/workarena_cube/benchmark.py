@@ -32,6 +32,7 @@ class WorkArenaBenchmark(Benchmark):
         version="1.0.0",
         description="WorkArena ServiceNow benchmark tasks",
         tags=["browser", "web", "servicenow"],
+        num_tasks=165,  # L1 default: ~33 unique tasks × 5 seeds
     )
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
@@ -73,14 +74,7 @@ class WorkArenaBenchmark(Benchmark):
         logger.info(f"WorkArena benchmark setup complete: {len(task_tuples)} task(s)")
 
     def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
-        """Yield one WorkArenaTaskConfig per (task_class, seed) tuple.
-
-        Calls setup() automatically if _task_tuples has not been populated yet,
-        so that this method works on a freshly instantiated Benchmark() without
-        the caller needing to call setup() first.
-        """
-        if not self._task_tuples:
-            self.setup()
+        """Yield one WorkArenaTaskConfig per (task_class, seed) tuple."""
         for task_class, seed in self._task_tuples:
             task_id = task_class.get_task_id()
             yield WorkArenaTaskConfig(
