@@ -214,16 +214,27 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
 
     Columns: selected (bool), experiment (str), date (str), n_trajs (int).
     The date column contains "YYYY-MM-DD HH:MM" when a time is available.
-    Only includes directories that contain a 'trajectories/' subdirectory.
+    Counts trajectories via ``*.metadata.json`` in the experiment dir (flat layout)
+    or under ``trajectories/`` (legacy), matching :func:`get_directory_contents`.
     Sorted most-recent first (ISO datetime strings sort lexicographically).
     """
     if not results_dir or not results_dir.exists():
         return []
+
+    def count_trajectories(d: Path) -> int:
+        return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
+
     rows = []
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
+        n_trajs = count_trajectories(dir_path)
+        if n_trajs == 0:
+            traj_dir = dir_path / "trajectories"
+            if traj_dir.exists():
+                n_trajs = count_trajectories(traj_dir)
+        if n_trajs == 0:
+            continue
         rows.append(
             {
                 "selected": False,

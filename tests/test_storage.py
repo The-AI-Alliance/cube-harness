@@ -31,7 +31,7 @@ class TestFileStorageBasic:
         assert storage.output_dir == Path(tmp_dir)
 
     def test_save_trajectory_creates_directories(self, tmp_dir):
-        """Test save_trajectory creates output_dir and files in it (flat layout)."""
+        """Test save_trajectory creates output_dir and trajectory files."""
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="test_traj_1", metadata={"task_id": "task_1"})
 
@@ -155,7 +155,7 @@ class TestFileStorageLogs:
     """Tests for per-episode log helpers in FileStorage."""
 
     def test_get_log_path(self, tmp_dir: Path) -> None:
-        """Test that log path is in same dir as other experiment files."""
+        """Test log path under output_dir."""
         storage = FileStorage(tmp_dir)
 
         log_path = storage.get_log_path("task_a_ep3")
@@ -182,6 +182,18 @@ class TestFileStorageLogs:
 
         assert loaded == ""
         assert storage.has_logs("missing_ep0") is False
+
+    def test_load_logs_falls_back_to_legacy_logs_subdir(self, tmp_dir: Path) -> None:
+        """Test legacy logs/ subdirectory fallback for backward compatibility."""
+        storage = FileStorage(tmp_dir)
+        legacy_log_path = Path(tmp_dir) / "logs" / "legacy_task_ep0.log"
+        legacy_log_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_log_path.write_text("legacy line 1\nlegacy line 2\n")
+
+        loaded = storage.load_logs("legacy_task_ep0")
+
+        assert loaded == "legacy line 1\nlegacy line 2\n"
+        assert storage.has_logs("legacy_task_ep0") is True
 
 
 class TestFileStorageWithLLMCalls:
@@ -210,8 +222,6 @@ class TestFileStorageWithLLMCalls:
 
         storage.save_trajectory(traj)
 
-        # Check LLM call file exists
-        # LLM calls stored in same dir as other experiment files (flat layout)
         llm_call_files = list(Path(tmp_dir).glob("test_traj_step*.json"))
         assert len(llm_call_files) == 1
         assert "test_traj_step000_llm_call_1" in llm_call_files[0].name
@@ -259,7 +269,6 @@ class TestFileStorageWithLLMCalls:
 
         storage.save_trajectory(traj)
 
-        # LLM calls stored in same dir as other experiment files (flat layout)
         llm_call_files = list(Path(tmp_dir).glob("test_traj_step*.json"))
         assert len(llm_call_files) == 3
 
@@ -509,7 +518,7 @@ class TestFileStorageEpisodeConfig:
     """Tests for FileStorage episode config save/load functionality."""
 
     def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
-        """Test save_episode_config creates config file in output_dir (flat layout)."""
+        """Test save_episode_config creates config file under output_dir."""
         from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
@@ -644,7 +653,7 @@ class TestFileStorageEpisodeConfig:
 
         storage.save_episode_config(config)
 
-        # Verify filename format (flat layout: same dir as output_dir)
+        # Verify filename format
         config_path = Path(tmp_dir) / "episode_10_task_task_with_underscores_123.json"
         assert config_path.exists()
 
@@ -693,7 +702,7 @@ class TestFileStorageOverwrite:
         traj2 = Trajectory(id="archive_test", metadata={"task_id": "t1"})
         storage2.save_trajectory(traj2, allow_overwrite=True)
 
-        # Archived files should exist (flat layout)
+        # Archived files should exist
         archived_metadata = list(traj_dir.glob("archive_test.archived_*.metadata.json"))
         archived_jsonl = list(traj_dir.glob("archive_test.archived_*.jsonl"))
         assert len(archived_metadata) == 1

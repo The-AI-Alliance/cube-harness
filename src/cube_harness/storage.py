@@ -38,22 +38,18 @@ class Storage(Protocol):
 
 
 def _trajectory_dir(output_dir: Path) -> Path:
-    """Directory for trajectory files: use flat output_dir (no trajectories/ subdir)."""
+    """Return the directory used for trajectory files."""
     return output_dir
 
 
 def _trajectory_path_legacy(output_dir: Path, trajectory_id: str, ext: str) -> Path | None:
-    """Legacy path (trajectories/ subdir) for backward compatibility."""
+    """Return legacy ``trajectories/{id}{ext}`` if that file exists."""
     p = output_dir / "trajectories" / f"{trajectory_id}{ext}"
     return p if p.exists() else None
 
 
 class FileStorage:
-    """File-based storage for trajectories.
-
-    All experiment files (trajectories, episode configs, llm_calls) are stored
-    in the same directory (output_dir) so that one directory = one experiment.
-    """
+    """File-based storage for trajectories."""
 
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
@@ -135,19 +131,15 @@ class FileStorage:
         """Extract LLM calls to separate files and return step with references only."""
         assert isinstance(step.output, AgentOutput)
 
-        # Store llm_calls in same dir as other experiment files
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save each LLM call to a separate file
         llm_call_refs = []
         for llm_call in step.output.llm_calls:
             call_path = self.output_dir / f"{step_id}_{llm_call.id}.json"
             with open(call_path, "w") as f:
                 f.write(llm_call.model_dump_json(indent=2))
-            # Create a reference with just the id
             llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id))
 
-        # Create a copy of the step with llm_calls replaced by references
         output_with_refs = step.output.model_copy(update={"llm_calls": llm_call_refs})
         return step.model_copy(update={"output": output_with_refs})
 
@@ -156,7 +148,6 @@ class FileStorage:
         traj_dir = _trajectory_dir(self.output_dir)
         metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
         steps_path = traj_dir / f"{trajectory_id}.jsonl"
-        # Backward compatibility: try legacy trajectories/ subdir
         if not metadata_path.exists():
             legacy = _trajectory_path_legacy(self.output_dir, trajectory_id, ".metadata.json")
             if legacy is not None:
@@ -172,8 +163,6 @@ class FileStorage:
         if "metadata" not in trajectory_data:
             trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
 
-        if not steps_path.exists() and traj_dir == self.output_dir:
-            steps_path = self.output_dir / "trajectories" / f"{trajectory_id}.jsonl"
         steps: list[TrajectoryStep] = []
         if steps_path.exists():
             with open(steps_path) as f:
@@ -203,10 +192,8 @@ class FileStorage:
             return step_data
 
         step_id = f"{trajectory_id}_step{step_num:03d}"
-        # Try flat dir first, then legacy llm_calls/ subdir
         resolved_calls = []
         for ref in llm_calls:
-            # Check if this is a reference (only has 'id' key)
             if llm_call_id := ref.get("llm_call_id", None):
                 call_path = self.output_dir / f"{step_id}_{llm_call_id}.json"
                 if not call_path.exists():
@@ -255,7 +242,6 @@ class FileStorage:
         traj_dir = _trajectory_dir(self.output_dir)
         seen_ids: set[str] = set()
         trajectories = []
-        # Collect from flat dir then legacy trajectories/ subdir (dedupe by id)
         for search_dir in [traj_dir, self.output_dir / "trajectories"]:
             if not search_dir.exists():
                 continue
@@ -319,11 +305,16 @@ class FileStorage:
     def load_logs(self, trajectory_id: str) -> str:
         log_path = self.get_log_path(trajectory_id)
         if not log_path.exists():
-            return ""
+            legacy_log_path = self.output_dir / "logs" / f"{trajectory_id}.log"
+            if not legacy_log_path.exists():
+                return ""
+            log_path = legacy_log_path
         return log_path.read_text()
 
     def has_logs(self, trajectory_id: str) -> bool:
-        return self.get_log_path(trajectory_id).exists()
+        log_path = self.get_log_path(trajectory_id)
+        legacy_log_path = self.output_dir / "logs" / f"{trajectory_id}.log"
+        return log_path.exists() or legacy_log_path.exists()
 
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.
@@ -389,7 +380,6 @@ class FileStorage:
         Returns:
             List of paths to episode config files.
         """
-        # Flat dir first, then legacy episode_configs/ subdir; dedupe by name so flat wins
         seen_names: set[str] = set()
         result: list[Path] = []
         for search_dir in [self.output_dir, self.output_dir / "episode_configs"]:
