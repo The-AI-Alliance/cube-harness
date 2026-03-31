@@ -251,7 +251,7 @@ class TestToolExecutionSpans:
 class MockAsyncTool(AsyncToolWithTelemetry):
     """Async mock tool for telemetry tests."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         self.click_count = 0
 
     @tool_action
