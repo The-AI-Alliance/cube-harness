@@ -354,7 +354,7 @@ wheels = [
 [[package]]
 name = "cube-computer-tool"
 version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../../../cube-standard/cube-tools/cube-computer-tool" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
@@ -362,15 +362,22 @@ dependencies = [
     { name = "requests-toolbelt" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/2f/271ccfc8861448c6a98daab175734309d18f4428cee7c383b2592f042b08/cube_computer_tool-0.1.0.tar.gz", hash = "sha256:3a642be504ee8604bae5227b599fbfc44deecad31a1509fe18a89f6247c0efba", size = 12002, upload-time = "2026-03-18T18:09:07.242Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/ec/60df3ffcc0510cf186b70efe5f656f9135205598ac40c5811dce0bbda937/cube_computer_tool-0.1.0-py3-none-any.whl", hash = "sha256:f1fddfc892fffc971f8f4ccc6b20f8b2ad83305639a0f9307f8126224df57a3e", size = 14265, upload-time = "2026-03-18T18:09:06.141Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "cube-standard" },
+    { name = "pillow", specifier = ">=9.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "requests-toolbelt", specifier = ">=0.10" },
+    { name = "tqdm", specifier = ">=4.60" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc3"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.0rc4"
+source = { editable = "../../../cube-standard" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -378,13 +385,42 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "rich" },
+    { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/3c/0de4767b4d0e47d921ab4f1edd9bd2ebd52a3298fb365547ea8f49ab6f34/cube_standard-0.1.0rc3.tar.gz", hash = "sha256:08bb37ee30e7b12c86a0d5847b60a2a816e1d72ba0aa70ac3ce822c1dfce5af6", size = 54860, upload-time = "2026-03-23T18:56:26.194Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/b3/0f7e7066a0a3ec65aba5e0be6901c311ee8340470da9e00d04c2d6fb985f/cube_standard-0.1.0rc3-py3-none-any.whl", hash = "sha256:913aa9a560ce4296e64a73f2356f3f4abbd34f93546864b9eab76b62df04fb44", size = 72037, upload-time = "2026-03-23T18:56:24.908Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "counter-cube", marker = "extra == 'dev'", editable = "../../../cube-standard/examples/counter-cube" },
+    { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.142.0" },
+    { name = "docker", marker = "extra == 'docker'", specifier = ">=7.1.0" },
+    { name = "docstring-parser", specifier = ">=0.16" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
+    { name = "modal", marker = "extra == 'modal'", specifier = ">=1.3.3" },
+    { name = "pillow", specifier = ">=9.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "rich", specifier = ">=13.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
+    { name = "tenacity", marker = "extra == 'daytona'", specifier = ">=9.1.4" },
+    { name = "tenacity", marker = "extra == 'docker'", specifier = ">=9.1.4" },
+    { name = "tenacity", marker = "extra == 'modal'", specifier = ">=9.1.4" },
+    { name = "tenacity", marker = "extra == 'toolkit'", specifier = ">=9.1.4" },
+    { name = "tqdm", specifier = ">=4.60" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
+provides-extras = ["dev", "docker", "daytona", "modal", "toolkit"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pre-commit", specifier = ">=4.5.1" }]
 
 [[package]]
 name = "cube-vm-backend"
@@ -1153,8 +1189,8 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "cssselect", specifier = ">=1.2" },
-    { name = "cube-computer-tool" },
-    { name = "cube-standard" },
+    { name = "cube-computer-tool", editable = "../../../cube-standard/cube-tools/cube-computer-tool" },
+    { name = "cube-standard", editable = "../../../cube-standard" },
     { name = "cube-vm-backend", extras = ["docker"] },
     { name = "fastdtw", specifier = ">=0.3" },
     { name = "formulas", specifier = ">=1.2" },

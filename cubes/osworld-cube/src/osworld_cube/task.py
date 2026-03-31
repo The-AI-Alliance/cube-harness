@@ -1,7 +1,7 @@
 """
 OSWorldTask — CUBE task for a single OSWorld desktop-automation episode.
 
-    task = OSWorldTask(metadata=..., tool_config=ComputerConfig(...), vm_backend=LocalQEMUVMBackend(...))
+    task = OSWorldTask(metadata=..., tool_config=ComputerConfig(...), infra=AWSInfraConfig(...))
     obs, info = task.reset()
     while not done:
         action = agent(obs, task.action_set)
@@ -23,8 +23,8 @@ from pydantic import PrivateAttr
 
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers OSWorldTask.model_rebuild()
 from cube.core import Observation
+from cube.resource import InfraConfig, ResourceHandle, VMResourceConfig
 from cube.task import Task
-from cube.vm import VM, VMBackend, VMConfig
 
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
 
@@ -35,6 +35,18 @@ if TYPE_CHECKING:
     from cube_computer_tool.computer import ComputerBase
 
 logger = logging.getLogger(__name__)
+
+OSWORLD_UBUNTU_RESOURCE = VMResourceConfig(
+    name="osworld-ubuntu-vm",
+    source_url="https://huggingface.co/datasets/xlangai/ubuntu_osworld/resolve/main/Ubuntu.qcow2.zip",
+    scope="task",
+    default_ttl_seconds=60 * 60 * 24,
+)
+
+# Port constants baked into the OSWorld Ubuntu image
+_CHROMIUM_PORT = 9222
+_VLC_PORT = 8080
+_SERVER_PORT = 5000
 
 
 class OSWorldTask(Task):
@@ -47,20 +59,19 @@ class OSWorldTask(Task):
 
     Reference: https://github.com/xlang-ai/OSWorld
 
-    Pydantic fields (all inherited from cube.task.Task except use_som and vm_backend):
+    Pydantic fields (all inherited from cube.task.Task except use_som, infra):
         metadata:      TaskMetadata  — required; OSWorld-specific fields go in
                                        metadata.extra_info (see below)
         tool_config:   ToolConfig    — required; pass ComputerConfig(...)
-        vm_backend:    VMBackend | None — optional; HOW to provision the VM.
-                                          Pass LocalQEMUVMBackend(...) for local QEMU.
-                                          If None, the tool must have a VM attached
-                                          externally via computer.attach_vm().
+        infra:         InfraConfig | None — InfraConfig (AWSInfraConfig,
+                                       AzureInfraConfig, LocalInfraConfig, ...).
+                                       Each task gets a fresh VM launched from the
+                                       provisioned image.
         validate_per_step: bool      — inherited; default False
         accept_agent_stop: bool      — inherited; default True
 
     Fields stored in metadata.extra_info:
         domain        (str)   — e.g. "chrome", "os", "libreoffice"
-        snapshot      (str)   — VM snapshot name, default "init_state"
         config        (list)  — setup scripts to run before task starts
         evaluator     (dict)  — evaluation function + expected results
         related_apps  (list)  — applications involved in the task
@@ -69,15 +80,15 @@ class OSWorldTask(Task):
         metadata.abstract_description  — used as the agent's goal text
     """
 
-    vm_backend: VMBackend | None = None
-    """HOW to provision the VM. If None, a pre-launched VM must be attached via
-    ComputerBase.attach_vm() before reset() is called."""
+    infra: InfraConfig | None = None
+    """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+    Each task gets a fresh VM launched from the provisioned image via infra.launch()."""
 
     use_som: bool = False
     """If True, annotate screenshot with numbered bounding boxes (Set-of-Marks)
     and replace axtree with an indexed element table before returning obs."""
 
-    _vm: VM | None = PrivateAttr(default=None)
+    _handle: ResourceHandle | None = PrivateAttr(default=None)
 
     def model_post_init(self, __context: Any) -> None:
         """Create the Computer tool without a VM — VM is deferred to reset()."""
@@ -94,30 +105,29 @@ class OSWorldTask(Task):
         return raw.lower()
 
     def _ensure_vm(self) -> None:
-        """Launch the VM if a vm_backend is configured and no VM is running yet."""
-        if self._vm is not None:
+        """Launch the VM if not already running via infra.launch()."""
+        if self._handle is not None:
             return
-        if self.vm_backend is None:
-            return
-
-        snapshot = self.metadata.extra_info.get("snapshot", "init_state")
-        vm_config = VMConfig(snapshot_name=snapshot)
-        logger.info("Launching VM via %s", type(self.vm_backend).__name__)
-        self._vm = self.vm_backend.launch(vm_config)
-        self._computer.attach_vm(self._vm)
+        if self.infra is None:
+            raise RuntimeError("OSWorldTask requires an InfraConfig — set infra= when constructing.")
+        logger.info("Launching VM via %s", type(self.infra).__name__)
+        self._handle = self.infra.launch(OSWORLD_UBUNTU_RESOURCE)
+        logger.info("VM ready (run_id=%s)", self._handle.run_id[:8])
+        self._computer.attach_endpoint(self._handle.endpoint)
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
-        """Return (chromium_port, vlc_port, server_port) from the live VM.
+        """Return (chromium_port, vlc_port, server_port).
 
-        Attempts to read port attributes from the VM handle. Falls back to
-        defaults (9222, 8080, 5000) if the VM does not expose these attributes
-        (e.g. a custom VM backend).
+        Ports are baked into the OSWorld Ubuntu image.
+        server_port is extracted from the handle endpoint since the SSH tunnel
+        maps a free local port → VM:5000.
         """
-        vm = self._vm
-        chromium_port: int = getattr(vm, "chromium_port", 9222)
-        vlc_port: int = getattr(vm, "vlc_port", 8080)
-        server_port: int = getattr(vm, "server_port", 5000)
-        return chromium_port, vlc_port, server_port
+        if self._handle is not None and self._handle.endpoint:
+            from urllib.parse import urlparse
+
+            server_port = urlparse(self._handle.endpoint).port or _SERVER_PORT
+            return _CHROMIUM_PORT, _VLC_PORT, server_port
+        return _CHROMIUM_PORT, _VLC_PORT, _SERVER_PORT
 
     def _setup_task(self, task_data: dict) -> Observation:
         """Restore VM snapshot, run setup scripts, wait, return initial observation.
@@ -128,10 +138,7 @@ class OSWorldTask(Task):
         logger.info(
             "Setting up task: %s. Instruction: %s", task_data.get("id", "unknown"), task_data.get("instruction", "")
         )
-        if self._vm is not None:
-            snapshot = task_data.get("snapshot", "init_state")
-            self._vm.restore_snapshot(snapshot)
-
+        # VM was launched fresh from the provisioned image — no snapshot restore needed.
         setup_steps = task_data.get("config") or []
         if setup_steps:
             chromium_port, vlc_port, _ = self._get_vm_ports()
@@ -147,8 +154,7 @@ class OSWorldTask(Task):
             )
             setup_ctrl.setup(setup_steps)
 
-        did_something = self._vm is not None or bool(setup_steps)
-        if did_something:
+        if self._handle is not None or setup_steps:
             logger.info("Waiting 60s for VM to stabilise...")
             time.sleep(60)
         return self._computer.get_observation()
@@ -186,7 +192,7 @@ class OSWorldTask(Task):
         Restore the VM snapshot, run setup scripts, and return the initial obs.
 
         Steps:
-          1. Launch VM if not yet running (via vm_backend)
+          1. Launch VM if not yet running (via infra)
           2. Build task_data dict from metadata.extra_info
           3. Restore VM snapshot, run setup scripts, wait for stabilisation
           4. Post-process the observation (SoM or linearize)
@@ -194,6 +200,7 @@ class OSWorldTask(Task):
           6. Return (obs, info)
         """
         self._ensure_vm()
+        self._computer.reset()
         extra = self.metadata.extra_info
 
         task_data = {
@@ -318,9 +325,9 @@ class OSWorldTask(Task):
             return self._postprocess_linearize(obs)
 
     def close(self) -> None:
-        """Clean up task resources: stop tool then stop VM."""
+        """Clean up task resources: stop tool, then close VM handle."""
         logger.info("Closing OSWorldTask: %s", self.metadata.id)
         super().close()  # calls self.tool.close()
-        if self._vm is not None:
-            self._vm.stop()
-            self._vm = None
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None

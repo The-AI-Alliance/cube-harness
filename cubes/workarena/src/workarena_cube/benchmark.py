@@ -32,6 +32,7 @@ class WorkArenaBenchmark(Benchmark):
         version="1.0.0",
         description="WorkArena ServiceNow benchmark tasks",
         tags=["browser", "web", "servicenow"],
+        num_tasks=165,  # L1 default: ~33 unique tasks × 5 seeds
     )
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
