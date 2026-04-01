@@ -67,7 +67,7 @@ class TerminalBenchBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Load dataset, apply filters, and populate task_metadata."""
-        if TerminalBenchBenchmark.task_metadata:
+        if "task_metadata" in self.__dict__:
             logger.info("Task metadata already loaded, skipping setup")
             return
 
@@ -104,12 +104,16 @@ class TerminalBenchBenchmark(Benchmark):
                 },
             )
 
-        # Set on the class so TaskConfig.make() can look it up
-        TerminalBenchBenchmark.task_metadata = metadata
+        # Populate instance-level shadow so each instance sees its own filtered view
+        # (e.g. after subset_from_list / subset_from_glob).
+        object.__setattr__(self, "task_metadata", metadata)
+        # Also update the class-level attr so TaskConfig.make() can look up tasks
+        # via the ClassVar in the same process without re-running setup().
+        type(self).task_metadata = metadata
         logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
 
     def close(self) -> None:
-        TerminalBenchBenchmark.task_metadata = {}
+        logger.info("TerminalBenchBenchmark closed — no global resources to release")
 
     # ── Dataset installation ───────────────────────────────────────
 
