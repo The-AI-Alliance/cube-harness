@@ -59,7 +59,12 @@ class ReactAgent(Agent):
         self.token_counter = config.llm_config.make_counter()
         self.tools: list[dict] = [tool.as_dict() for tool in tools]
         if config.can_finish:
-            self.tools.append(STOP_ACTION.as_dict())
+            stop_tool = STOP_ACTION.as_dict()
+            # Ensure parameters has "type": "object" — some LLM APIs (e.g. Anthropic)
+            # require it even for tools with no parameters.
+            if not stop_tool["function"]["parameters"].get("type"):
+                stop_tool["function"]["parameters"] = {"type": "object", "properties": {}}
+            self.tools.append(stop_tool)
 
         self.history: list[dict | Message] = []
         self._actions_cnt = 0

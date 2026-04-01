@@ -48,7 +48,10 @@ class WorkArenaBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Enumerate WorkArena task classes and seeds for the configured level."""
-        if self._task_tuples and self._runtime_context and WorkArenaBenchmark.task_metadata:
+        # Check the instance-level shadow, not the class-level ClassVar — this ensures
+        # each instance sets up its own task_metadata independently, even if another
+        # instance already populated the class-level dict.
+        if "task_metadata" in self.__dict__:
             logger.debug("WorkArena benchmark already set up, skipping.")
             return
         logger.info(f"Setting up WorkArena benchmark (level={self.level})")
@@ -63,14 +66,19 @@ class WorkArenaBenchmark(Benchmark):
             random.shuffle(task_tuples)
         self._task_tuples = task_tuples
         self._runtime_context = {"level": self.level, "n_tasks": len(task_tuples)}
-        WorkArenaBenchmark.task_metadata.clear()
+        metadata: dict[str, TaskMetadata] = {}
         for task_class, _seed in task_tuples:
             task_id = task_class.get_task_id()
             task_class_path = f"{task_class.__module__}.{task_class.__qualname__}"
-            WorkArenaBenchmark.task_metadata[task_id] = TaskMetadata(
+            metadata[task_id] = TaskMetadata(
                 id=task_id,
                 extra_info={"task_class_path": task_class_path, "level": self.level},
             )
+        # Populate instance-level shadow so each instance sees its own task view
+        # (e.g. after subset_from_list / subset_from_glob). Also update the class-level
+        # attr so TaskConfig.make() can look up tasks via the ClassVar without re-running setup().
+        object.__setattr__(self, "task_metadata", metadata)
+        type(self).task_metadata = metadata
         logger.info(f"WorkArena benchmark setup complete: {len(task_tuples)} task(s)")
 
     def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:

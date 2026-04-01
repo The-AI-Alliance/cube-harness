@@ -27,7 +27,9 @@ Usage:
 
 import sys
 
+from cube.tool import ToolboxConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
+from cube_chat_tool import ChatToolConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -66,11 +68,16 @@ def main(debug: bool, agent: str) -> None:
     agent_config = AGENTS[agent]
     output_dir = make_experiment_output_dir(agent, "workarena", tag="l1")
 
-    tool_config = BrowsergymConfig(
-        browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
-        use_screenshot=True,
-        use_axtree=True,
-        use_html=False,
+    tool_config = ToolboxConfig(
+        tool_configs=[
+            BrowsergymConfig(
+                browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
+                use_screenshot=True,
+                use_axtree=True,
+                use_html=False,
+            ),
+            ChatToolConfig(),
+        ]
     )
 
     # Configure WorkArena benchmark
