@@ -138,8 +138,6 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
     Ray workers (separate processes where Benchmark.task_metadata is empty).
     """
 
-    task_metadata_snapshot: TaskMetadata | None = None
-
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
@@ -148,13 +146,9 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
         if container_backend is None:
             raise ValueError("SWEBenchVerifiedTaskConfig.make() requires a container_backend")
 
-        metadata = self.task_metadata_snapshot
-        if metadata is None:
-            # Fallback for configs created without snapshot (e.g., debug mode)
-            # Import here to avoid circular import (benchmark imports task)
-            from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
-
-            metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
+        # Import here to avoid circular import (benchmark imports task)
+        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+        metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
 
         return SWEBenchVerifiedTask(
             metadata=metadata,

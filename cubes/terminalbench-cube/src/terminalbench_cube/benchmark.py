@@ -112,9 +112,6 @@ class TerminalBenchBenchmark(Benchmark):
         type(self).task_metadata = metadata
         logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
 
-    def close(self) -> None:
-        logger.info("TerminalBenchBenchmark closed — no global resources to release")
-
     # ── Dataset installation ───────────────────────────────────────
 
     def install(self) -> None:

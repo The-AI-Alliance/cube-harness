@@ -153,8 +153,6 @@ class SWEBenchLiveTask(Task):
 class SWEBenchLiveTaskConfig(TaskConfig):
     """Serializable factory that produces a SWEBenchLiveTask."""
 
-    task_metadata_snapshot: TaskMetadata | None = None
-
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
@@ -163,12 +161,8 @@ class SWEBenchLiveTaskConfig(TaskConfig):
         if container_backend is None:
             raise ValueError("SWEBenchLiveTaskConfig.make() requires a container_backend")
 
-        metadata = self.task_metadata_snapshot
-        if metadata is None:
-            # Import here to avoid circular import (benchmark imports task)
-            from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
-
-            metadata = SWEBenchLiveBenchmark.task_metadata[self.task_id]
+        from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
+        metadata = SWEBenchLiveBenchmark.task_metadata[self.task_id]
 
         return SWEBenchLiveTask(
             metadata=metadata,

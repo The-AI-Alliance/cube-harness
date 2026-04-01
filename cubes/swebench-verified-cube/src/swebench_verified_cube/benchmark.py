@@ -54,10 +54,10 @@ class SWEBenchVerifiedBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Load dataset from HuggingFace, apply filters, and populate task_metadata."""
-        if SWEBenchVerifiedBenchmark.task_metadata:
+        if "task_metadata" in self.__dict__:
             logger.info("SWE-bench Verified task_metadata already populated, skipping setup")
             return
-        ds = load_dataset(self.dataset_name, split="test")
+        ds = load_dataset(self.dataset_name, split="test")  # swebench-verified is only a single "test" split of 500 tasks.
         tasks_data = self._filter_tasks(list(ds))  # type: ignore[arg-type]
 
         metadata: dict[str, TaskMetadata] = {}
@@ -91,20 +91,9 @@ class SWEBenchVerifiedBenchmark(Benchmark):
                 },
             )
 
-        SWEBenchVerifiedBenchmark.task_metadata = metadata
+        object.__setattr__(self, "task_metadata", metadata)
+        type(self).task_metadata = metadata
         logger.info(f"SWE-bench Verified setup complete: {len(metadata)} tasks")
-
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield self-contained TaskConfigs with metadata snapshots for Ray workers."""
-        for tm in self.task_metadata.values():
-            yield SWEBenchVerifiedTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
-                task_metadata_snapshot=tm,
-            )
-
-    def close(self) -> None:
-        SWEBenchVerifiedBenchmark.task_metadata = {}
 
     def install(self) -> None:
         """Pre-download the SWE-bench Verified dataset from HuggingFace."""

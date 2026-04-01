@@ -33,6 +33,7 @@ class SWEBenchLiveBenchmark(Benchmark):
         version="0.1.0",
         description="SWE-bench Live — continuously updated, contamination-resistant GitHub issue resolution",
         tags=["swe", "github", "docker", "live"],
+        num_tasks=1890,  # as of 2026-04-01
     )
 
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
@@ -53,7 +54,7 @@ class SWEBenchLiveBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Load dataset from HuggingFace, apply filters, and populate task_metadata."""
-        if SWEBenchLiveBenchmark.task_metadata:
+        if "task_metadata" in self.__dict__:
             logger.info("SWE-bench Live task_metadata already populated, skipping setup")
             return
         ds = load_dataset(self.dataset_name, split=self.split)
@@ -95,20 +96,9 @@ class SWEBenchLiveBenchmark(Benchmark):
                 },
             )
 
-        SWEBenchLiveBenchmark.task_metadata = metadata
+        object.__setattr__(self, "task_metadata", metadata)
+        type(self).task_metadata = metadata
         logger.info(f"SWE-bench Live setup complete: {len(metadata)} tasks (split={self.split})")
-
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield self-contained TaskConfigs with metadata snapshots for Ray workers."""
-        for tm in self.task_metadata.values():
-            yield SWEBenchLiveTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
-                task_metadata_snapshot=tm,
-            )
-
-    def close(self) -> None:
-        SWEBenchLiveBenchmark.task_metadata = {}
 
     def install(self) -> None:
         """Pre-download the SWE-bench Live dataset from HuggingFace."""
