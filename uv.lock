@@ -688,6 +688,31 @@ wheels = [
 ]
 
 [[package]]
+name = "cube-chat"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cube-standard" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/e5/cfd8a0e016f7590cd948a8e4dde380781a313a4c0ae1eb599101ce758467/cube_chat-0.1.0.tar.gz", hash = "sha256:115542330042bb3b49609e49e2b5450e4ef78e0c8a877a65294d8c86a7f53ca9", size = 1828 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/42/6c/4f03288485e5e584f45bc9688b5b21892445ee7a7aa021fc447b79550f19/cube_chat-0.1.0-py3-none-any.whl", hash = "sha256:7b8b1c474835005a196d0a74e7f83a53d047c8098e793154ce07b52bcb7637ff", size = 2674 },
+]
+
+[[package]]
+name = "cube-chat-tool"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cube-chat" },
+    { name = "cube-standard" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f0/07/ae6546acb4dc55db03d10de56c0dab592efa8d9ac5011e314ad0d8f390db/cube_chat_tool-0.1.0.tar.gz", hash = "sha256:1ca573931b7b0e0f4a70e071310d7979fa958cb4969c9e256a06340338caa802", size = 2009 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ac/a2/356a23774a66df883bf94a443c3db44bcd13d030469f75bc4dd7fd992f7e/cube_chat_tool-0.1.0-py3-none-any.whl", hash = "sha256:a6a5391ce6a8cc10b173f641ba7c43be4b43a9d5efab0a986fa8d58829be660a", size = 2924 },
+]
+
+[[package]]
 name = "cube-harness"
 version = "0.1.0"
 source = { editable = "." }
@@ -4107,6 +4132,7 @@ dependencies = [
     { name = "browsergym-workarena" },
     { name = "cube-browser-playwright" },
     { name = "cube-browser-tool" },
+    { name = "cube-chat-tool" },
     { name = "cube-standard" },
     { name = "termcolor" },
 ]
@@ -4114,9 +4140,10 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "browsergym-workarena" },
-    { name = "cube-browser-playwright", specifier = ">=0.1.0" },
-    { name = "cube-browser-tool", specifier = ">=0.1.0" },
-    { name = "cube-standard", specifier = ">=0.1.0rc2" },
+    { name = "cube-browser-playwright", specifier = ">=0.2.0" },
+    { name = "cube-browser-tool", specifier = ">=0.2.0" },
+    { name = "cube-chat-tool", specifier = ">=0.1.0" },
+    { name = "cube-standard", specifier = ">=0.1.0rc4" },
     { name = "termcolor" },
 ]
 
