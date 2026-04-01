@@ -3602,14 +3602,12 @@ source = { editable = "cubes/swebench-live-cube" }
 dependencies = [
     { name = "cube-standard" },
     { name = "datasets" },
-    { name = "swebench-verified-cube" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard" },
+    { name = "cube-standard", specifier = ">=0.1.0rc4" },
     { name = "datasets" },
-    { name = "swebench-verified-cube", editable = "cubes/swebench-verified-cube" },
 ]
 
 [package.metadata.requires-dev]
@@ -3626,7 +3624,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard" },
+    { name = "cube-standard", specifier = ">=0.1.0rc4" },
     { name = "datasets" },
 ]
 

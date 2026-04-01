@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "SWE-bench Verified — 500 real-world GitHub issues with test-based validation"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>0.1.0rc4",
+    "cube-standard>=0.1.0rc4",
     "datasets",
 ]
 
