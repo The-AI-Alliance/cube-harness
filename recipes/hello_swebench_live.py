@@ -14,10 +14,10 @@ from pathlib import Path
 from cube.backends.daytona import DaytonaContainerBackend
 from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
-from agentlab2.agents.react import ReactAgentConfig
-from agentlab2.exp_runner import run_sequentially, run_with_ray
-from agentlab2.experiment import Experiment
-from agentlab2.llm import LLMConfig
+from cube_harness.agents.react import ReactAgentConfig
+from cube_harness.exp_runner import run_sequentially, run_with_ray
+from cube_harness.experiment import Experiment
+from cube_harness.llm import LLMConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
@@ -32,7 +32,7 @@ When you are confident the fix is correct, call final_step to submit."""
 def main(mode: str, model: str = "gpt-4.1-mini", split: str = "lite") -> None:
     model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "agentlab_results" / "al2" / f"swebench_live_{mode}_{model_short}_{current_datetime}"
+    output_dir = Path.home() / "cube_harness_results" / f"swebench_live_{mode}_{model_short}_{current_datetime}"
 
     backend = DaytonaContainerBackend()
 
