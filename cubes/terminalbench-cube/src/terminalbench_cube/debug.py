@@ -65,6 +65,7 @@ def get_debug_benchmark() -> "Benchmark":
     container_backend = LocalContainerBackend()
     bench = TerminalBenchBenchmark(
         container_backend=container_backend,
+        task_ids=list(_TASK_ACTIONS),
         oracle_mode=True,
     )
     bench.install()  # Ensure dataset is downloaded and available
