@@ -106,12 +106,12 @@ class OSWorldTaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored for OSWorld — tasks are deterministic)
+        metadata:    TaskMetadata for this task. Stored directly on the config so
+                     the config is self-contained and safe to send to Ray workers.
         infra:       InfraConfig to use for this task.
-
-    make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
-    populated by OSWorldBenchmark.setup()).
     """
 
+    metadata: TaskMetadata
     infra: InfraConfig | None = None
 
     def make(
@@ -120,15 +120,13 @@ class OSWorldTaskConfig(TaskConfig):
         container_backend: ContainerBackend | None = None,
     ) -> OSWorldTask:
         """Instantiate OSWorldTask from this config."""
-        metadata = OSWorldBenchmark.task_metadata[self.task_id]
-
         if self.tool_config is None:
             raise ValueError(
                 f"OSWorldTaskConfig for task '{self.task_id}' has no tool_config. "
                 "Pass default_tool_config=ComputerConfig(...) to OSWorldBenchmark."
             )
         return OSWorldTask(
-            metadata=metadata,
+            metadata=self.metadata,
             tool_config=self.tool_config,
             infra=self.infra,
             runtime_context=runtime_context,
@@ -222,6 +220,7 @@ class OSWorldBenchmark(Benchmark):
         for tm in self.task_metadata.values():
             yield OSWorldTaskConfig(
                 task_id=tm.id,
+                metadata=tm,
                 tool_config=self.default_tool_config,
                 seed=None,
                 infra=self.infra,
