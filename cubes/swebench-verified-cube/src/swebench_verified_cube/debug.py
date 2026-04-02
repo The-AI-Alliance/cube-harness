@@ -1,36 +1,32 @@
-"""Deterministic debug agent for testing terminalbench-cube end-to-end without an LLM.
+"""Deterministic debug agent for testing swebench-verified-cube end-to-end without an LLM.
 
 Public API
 ----------
-get_debug_benchmark()         → TerminalBenchBenchmark
-make_debug_agent(task_id)     → DebugAgent
+get_debug_benchmark()         -> SWEBenchVerifiedBenchmark
+make_debug_agent(task_id)     -> DebugAgent
 """
 
 from __future__ import annotations
 
 import logging
 
+from cube.backends import LocalContainerBackend
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from cube.backends import LocalContainerBackend
-from terminalbench_cube.benchmark import TerminalBenchBenchmark
+
+from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
 logger = logging.getLogger(__name__)
 
-# Each debug task runs in oracle_mode: the ground-truth solution is uploaded
-# to /solution in the container during reset(). The debug agent applies it
-# and calls final_step, which triggers evaluate() → pytest → reward == 1.0.
+# Each debug task runs in oracle_mode: the gold patch is written to
+# /tmp/gold_patch.diff during reset(). The debug agent applies it
+# and calls final_step, which triggers evaluate() → tests → reward == 1.0.
+_APPLY_PATCH = Action(name="bash", arguments={"command": "cd /testbed && git apply /tmp/gold_patch.diff 2>&1"})
 _FINAL = Action(name="final_step", arguments={})
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
-    "fix-git": [
-        Action(name="bash", arguments={"command": "cd /app/personal-site && bash /solution/solve.sh 2>&1"}),
-        _FINAL,
-    ],
-    "overfull-hbox": [
-        Action(name="bash", arguments={"command": "bash /solution/solve.sh 2>&1"}),
-        _FINAL,
-    ],
+    "django__django-11099": [_APPLY_PATCH, _FINAL],
+    "astropy__astropy-12907": [_APPLY_PATCH, _FINAL],
 }
 
 
@@ -55,21 +51,16 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> "Benchmark":
-    """Return a TerminalBenchBenchmark scoped to the debug tasks.
-
-    The harness will call benchmark.install() and benchmark.setup() on the
-    returned instance, iterate benchmark.get_task_configs() to discover tasks,
-    and call benchmark.close() at the end to free resources.
-    """
+def get_debug_benchmark() -> Benchmark:
+    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks."""
     container_backend = LocalContainerBackend()
-    bench = TerminalBenchBenchmark(
+    bench = SWEBenchVerifiedBenchmark(
         container_backend=container_backend,
-        task_ids=list(_TASK_ACTIONS),
+        instance_ids=list(_TASK_ACTIONS),
         oracle_mode=True,
     )
-    bench.install()  # Ensure dataset is downloaded and available
-    bench.setup()  # Load dataset and populate task metadata
+    bench.install()
+    bench.setup()
     return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
 
 
@@ -80,11 +71,11 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 if __name__ == "__main__":
     import sys
 
-    import terminalbench_cube.debug as _this_module
+    import swebench_verified_cube.debug as _this_module
     from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    results = run_debug_suite("terminalbench-cube", _this_module)
+    results = run_debug_suite("swebench-verified-cube", _this_module)
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
     sys.exit(1 if failed else 0)

@@ -744,6 +744,10 @@ analyze = [
 miniwob = [
     { name = "miniwob-cube" },
 ]
+swebench = [
+    { name = "swebench-live-cube" },
+    { name = "swebench-verified-cube" },
+]
 terminalbench = [
     { name = "terminalbench-cube" },
 ]
@@ -783,6 +787,8 @@ requires-dist = [
     { name = "pydantic", specifier = "~=2.0" },
     { name = "python-dotenv", specifier = "~=1.2.0" },
     { name = "ray", extras = ["default"], specifier = ">=2.52.1" },
+    { name = "swebench-live-cube", marker = "extra == 'swebench'", editable = "cubes/swebench-live-cube" },
+    { name = "swebench-verified-cube", marker = "extra == 'swebench'", editable = "cubes/swebench-verified-cube" },
     { name = "tenacity", specifier = ">=8.5.0" },
     { name = "termcolor", specifier = "~=3.2" },
     { name = "terminalbench-cube", marker = "extra == 'terminalbench'", editable = "cubes/terminalbench-cube" },
@@ -3590,6 +3596,44 @@ wheels = [
 ]
 
 [[package]]
+name = "swebench-live-cube"
+version = "0.1.0"
+source = { editable = "cubes/swebench-live-cube" }
+dependencies = [
+    { name = "cube-standard" },
+    { name = "datasets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cube-standard", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
+    { name = "datasets" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0" }]
+
+[[package]]
+name = "swebench-verified-cube"
+version = "0.1.0"
+source = { editable = "cubes/swebench-verified-cube" }
+dependencies = [
+    { name = "cube-standard" },
+    { name = "datasets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cube-standard", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
+    { name = "datasets" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0" }]
+
+[[package]]
 name = "tenacity"
 version = "9.1.4"
 source = { registry = "https://pypi.org/simple" }
@@ -3619,7 +3663,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-standard", specifier = ">=0.1.0rc4" },
-    { name = "cube-standard", extras = ["daytona"], marker = "extra == 'debug'" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
     { name = "datasets" },
 ]
 

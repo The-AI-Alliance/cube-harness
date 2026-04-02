@@ -67,6 +67,10 @@ class TerminalBenchBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Load dataset, apply filters, and populate task_metadata."""
+        # Only skip loading if this instance already has its own shadow (i.e. was
+        # already set up).  We deliberately do NOT guard on the class-level attr
+        # because that would prevent a fresh instance from loading its own task
+        # set when a previous setup already populated the ClassVar with a different set.
         if "task_metadata" in self.__dict__:
             logger.info("Task metadata already loaded, skipping setup")
             return
@@ -113,7 +117,8 @@ class TerminalBenchBenchmark(Benchmark):
         logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
 
     def close(self) -> None:
-        logger.info("TerminalBenchBenchmark closed — no global resources to release")
+        # Containers are closed per-task in TerminalBenchTask.close(), so nothing to clean up here.
+        logger.info("Terminal-Bench benchmark closed")
 
     # ── Dataset installation ───────────────────────────────────────
 

@@ -1,7 +1,7 @@
 [project]
-name = "terminalbench-cube"
+name = "swebench-live-cube"
 version = "0.1.0"
-description = "Terminal-Bench 2 — real-world terminal tasks with pytest-based validation"
+description = "SWE-bench Live — continuously updated, contamination-resistant GitHub issue resolution"
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc4",
@@ -14,7 +14,7 @@ debug = [
 ]
 
 [project.entry-points."cube.benchmarks"]
-terminalbench-cube = "terminalbench_cube.benchmark:TerminalBenchBenchmark"
+swebench-live-cube = "swebench_live_cube.benchmark:SWEBenchLiveBenchmark"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
