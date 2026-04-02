@@ -52,6 +52,11 @@ webarena = [
 analyze = [
     "gradio~=5.49",
 ]
+# SWE-bench benchmarks
+swebench = [
+    "swebench-verified-cube",
+    "swebench-live-cube",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
@@ -61,6 +66,8 @@ build-backend = "uv_build"
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
 [tool.uv.sources]
+swebench-verified-cube = { path = "cubes/swebench-verified-cube", editable = true }
+swebench-live-cube = { path = "cubes/swebench-live-cube", editable = true }
 terminalbench-cube = { path = "cubes/terminalbench-cube", editable = true }
 miniwob-cube = { path = "cubes/miniwob", editable = true }
 webarena-verified-cube = { path = "cubes/webarena-verified", editable = true }
