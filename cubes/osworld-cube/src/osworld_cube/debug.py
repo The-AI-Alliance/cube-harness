@@ -18,9 +18,12 @@ Usage::
 
 from __future__ import annotations
 
+import importlib
 import logging
+import os
 from pathlib import Path
 
+from cube import LocalInfraConfig
 from cube.core import Action, ActionSchema, Observation
 from cube.resource import InfraConfig
 from osworld_cube.benchmark import OSWorldBenchmark
@@ -121,6 +124,35 @@ class DebugAgent:
 # ---------------------------------------------------------------------------
 
 
+def _get_default_infra() -> InfraConfig:
+    """Resolve the default infra for debug runs.
+
+    Priority:
+      1. `CUBE_TEST_INFRA_PROVIDER=azure|aws` for live integration runs
+      2. `LocalInfraConfig()` for the standard zero-arg `cube test` path
+
+    NOTE: This env-var-based approach is temporary. It will be replaced with a
+    proper infra selection mechanism once one is designed.
+    """
+    provider = os.environ.get("CUBE_TEST_INFRA_PROVIDER")
+    if provider is None:
+        return LocalInfraConfig()
+
+    provider_to_module = {
+        "aws": ("cube_infra_aws", "AWSInfraConfig"),
+        "azure": ("cube_infra_azure", "AzureInfraConfig"),
+    }
+    module_name, class_name = provider_to_module.get(provider, (None, None))
+    if module_name is None or class_name is None:
+        raise ValueError(
+            f"Unsupported CUBE_TEST_INFRA_PROVIDER value {provider!r}. Expected one of: {sorted(provider_to_module)}"
+        )
+
+    module = importlib.import_module(module_name)
+    infra_cls = getattr(module, class_name)
+    return infra_cls()
+
+
 def get_debug_benchmark(
     infra: InfraConfig | None = None,
 ) -> OSWorldBenchmark:
@@ -133,10 +165,11 @@ def get_debug_benchmark(
         infra: InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
                Each task gets a fresh VM from the provisioned image.
     """
+    resolved_infra = infra or _get_default_infra()
     return OSWorldBenchmark(
         tasks_file=str(_TASKS_FILE),
         default_tool_config=ComputerConfig(),
-        infra=infra,
+        infra=resolved_infra,
     )
 
 

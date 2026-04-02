@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
+from cube import LocalInfraConfig
 from cube.core import Action, Observation, TextContent
 
 # ---------------------------------------------------------------------------
@@ -107,6 +108,15 @@ class TestComputerConfig:
 
         cfg = ComputerConfig()
         assert cfg.action_space == ActionSpace.COMPUTER_13
+
+
+class TestDebugBenchmark:
+    def test_get_debug_benchmark_defaults_to_local_infra(self) -> None:
+        from osworld_cube.debug import get_debug_benchmark
+
+        benchmark = get_debug_benchmark()
+
+        assert isinstance(benchmark.infra, LocalInfraConfig)
 
 
 # ---------------------------------------------------------------------------
