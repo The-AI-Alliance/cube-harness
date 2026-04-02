@@ -27,7 +27,8 @@ from dotenv import load_dotenv
 from pathlib import Path
 from typing import ClassVar
 
-from pydantic import model_validator
+from cube import LocalInfraConfig
+from pydantic import Field, model_validator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
@@ -202,7 +203,7 @@ class OSWorldBenchmark(Benchmark):
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
-    infra: InfraConfig | None = None
+    infra: InfraConfig | None = Field(default_factory=LocalInfraConfig)
     """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
     Each task gets a fresh VM launched from the provisioned image."""
 
@@ -415,4 +416,12 @@ class OSWorldBenchmark(Benchmark):
         load_dotenv()  # Load the .env file
         logger.info(f"Set PROXY_CONFIG_FILE={os.environ.get('PROXY_CONFIG_FILE', 'not set')}")
 
-        logger.info("VM images will be downloaded automatically on first task reset.")
+        if isinstance(self.infra, LocalInfraConfig):
+            for resource in self.resources:
+                if self.infra.provision_status(resource) == "ready":
+                    logger.info("Local resource %s already provisioned", resource.name)
+                    continue
+                logger.info("Provisioning local resource %s...", resource.name)
+                self.infra.provision(resource)
+
+        logger.info("OSWorld install complete.")
