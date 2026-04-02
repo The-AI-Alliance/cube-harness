@@ -1,0 +1,11 @@
+[
+    {
+        "id": "waa-debug-infeasible",
+        "instruction": "WAA debug task: tests CUBE protocol loop without a live Windows VM",
+        "snapshot": "init_state",
+        "config": [],
+        "evaluator": {"func": "infeasible"},
+        "related_apps": [],
+        "domain": "debug"
+    }
+]
