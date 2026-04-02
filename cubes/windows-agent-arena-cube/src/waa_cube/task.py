@@ -77,7 +77,15 @@ class WAATask(Task):
     def _ensure_vm(self) -> None:
         """Launch the VM if a vm_backend is configured and no VM is running yet."""
         if self._vm is not None:
-            return
+            is_alive = getattr(self._vm, "is_alive", None)
+            if not callable(is_alive) or is_alive():
+                return
+            logger.warning("Existing WAA VM is no longer alive; relaunching it before reset")
+            try:
+                self._vm.stop()
+            except Exception as exc:
+                logger.warning("Failed to stop stale WAA VM cleanly: %s", exc)
+            self._vm = None
         if self.vm_backend is None:
             return
         snapshot = self.metadata.extra_info.get("snapshot", "init_state")

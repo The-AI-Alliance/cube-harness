@@ -276,6 +276,29 @@ class WAADockerManager:
         self._wait_for_ready()
         self._start_proxies()
 
+    def _container_status(self) -> str:
+        """Return the current Docker status for the managed container."""
+        if self._container is None:
+            return "missing"
+        try:
+            self._container.reload()
+            return self._container.status
+        except docker.errors.NotFound:
+            return "removed"
+
+    def is_alive(self) -> bool:
+        """Return True if the underlying Docker container is still running."""
+        return self._container_status() == "running"
+
+    def _require_running_container(self, action: str) -> None:
+        """Raise a clear error if the managed container is not available for exec."""
+        status = self._container_status()
+        if status != "running":
+            raise RuntimeError(
+                f"Cannot {action}: WAA container '{self._container_name}' is not running "
+                f"(status={status}). Relaunch the VM before continuing."
+            )
+
     def _stop_stale_containers(self) -> None:
         """Stop stale WAA containers that hold the base storage path directly.
 
@@ -315,6 +338,7 @@ class WAADockerManager:
         ip_forward, so only the per-port DNAT rules need adding here.
         """
         vm_ip = "20.20.20.21"
+        self._require_running_container("refresh guest port proxies")
 
         self._container.exec_run(
             "/bin/bash -c 'iptables -t nat -A POSTROUTING -d 20.20.20.21 -j MASQUERADE 2>/dev/null || true'",
@@ -374,7 +398,6 @@ class WAADockerManager:
             command="/entry.sh --prepare-image false --start-client false",
             name=self._container_name,
             detach=True,
-            remove=True,
             cap_add=["NET_ADMIN"],
             devices=["/dev/kvm:/dev/kvm"] if Path("/dev/kvm").exists() else [],
             volumes={
@@ -416,14 +439,16 @@ class WAADockerManager:
         logger.info("Waiting for WAA VM to be ready (probing 20.20.20.21:5000/probe inside container)…")
         while time.monotonic() < deadline:
             if self._container is not None:
-                self._container.reload()
-                if self._container.status not in ("running", "created"):
+                status = self._container_status()
+                if status == "removed":
+                    raise RuntimeError("WAA container was removed before the VM became ready.")
+                if status not in ("running", "created"):
                     try:
                         logs = self._container.logs(tail=50).decode("utf-8", errors="replace")
                     except Exception:
                         logs = "(logs unavailable — container already removed)"
                     raise RuntimeError(
-                        f"WAA container exited with status '{self._container.status}' before VM became ready.\n"
+                        f"WAA container exited with status '{status}' before VM became ready.\n"
                         f"Last 50 lines of container logs:\n{logs}"
                     )
                 try:
@@ -447,6 +472,7 @@ class WAADockerManager:
         on the Windows guest Flask server to close all applications between tasks.
         """
         logger.info("Resetting WAA VM state (close_all) for snapshot '%s'", name)
+        self._require_running_container("reset the VM state")
         try:
             self._container.exec_run(
                 "curl -sf -X POST --max-time 30 http://20.20.20.21:5000/setup/close_all",
@@ -461,8 +487,16 @@ class WAADockerManager:
         if self._container is not None:
             try:
                 self._container.stop(timeout=10)
-            except Exception as exc:
+            except docker.errors.NotFound:
+                pass
+            except docker.errors.APIError as exc:
                 logger.warning("Error stopping WAA container: %s", exc)
+            try:
+                self._container.remove(force=True)
+            except docker.errors.NotFound:
+                pass
+            except docker.errors.APIError as exc:
+                logger.warning("Error removing WAA container: %s", exc)
             self._container = None
 
         for lock_path in (
@@ -525,6 +559,10 @@ class WAADockerVM(VM):
     def refresh_proxies(self) -> None:
         """Re-apply iptables DNAT rules after a network reset (e.g. post-close_all)."""
         self._manager._start_proxies()
+
+    def is_alive(self) -> bool:
+        """Return True if the underlying Docker container is still running."""
+        return self._manager.is_alive()
 
     def stop(self) -> None:
         """Stop the Docker container and release port reservations."""

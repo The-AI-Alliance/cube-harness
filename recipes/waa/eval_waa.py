@@ -90,7 +90,7 @@ def main(debug: bool) -> None:
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
         vm_backend=WAADockerVMBackend(
-            cpu_cores=4,  # WAA default is 8, but 3 workers × 8 = 24 vCPUs saturates a 16-core host; 4 leaves headroom
+            cpu_cores=8,  # Match WAA's default VM sizing.
         ),
         # tasks_file=tasks_file,
         test_set_name="test_small.json",
