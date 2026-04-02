@@ -39,9 +39,14 @@ workarena = [
 miniwob = [
     "miniwob-cube",
 ]
+# WAA benchmark dependencies
+waa = [
+    "waa-cube",
+]
 # XRay trajectory viewer
 analyze = [
     "gradio~=5.49",
+    "pandas~=2.0",
 ]
 
 [build-system]
@@ -54,6 +59,7 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 [tool.uv.sources]
 miniwob-cube = { path = "cubes/miniwob", editable = true }
 workarena-cube = { path = "cubes/workarena", editable = true }
+waa-cube = { path = "cubes/windows-agent-arena-cube", editable = true }
 
 [tool.ruff]
 fix = true
