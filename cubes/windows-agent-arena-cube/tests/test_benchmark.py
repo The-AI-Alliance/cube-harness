@@ -310,6 +310,38 @@ class TestWAATask:
 
         mock_vm.restore_snapshot.assert_called_once_with("vscode")
 
+    def test_reset_relaunches_stale_vm(self) -> None:
+        """A stale VM handle is replaced if the underlying Docker container died."""
+        from waa_cube.computer import ComputerConfig
+        from waa_cube.task import WAATask
+        from waa_cube.vm_backend.backend import WAADockerVMBackend
+
+        stale_vm = _make_mock_vm(server_port=15000)
+        stale_vm.is_alive.return_value = False
+        fresh_vm = _make_mock_vm(server_port=15001)
+
+        mock_backend = WAADockerVMBackend()
+
+        task = WAATask(
+            metadata=_make_task_metadata(snapshot="vscode"),
+            tool_config=ComputerConfig(),
+            vm_backend=mock_backend,
+        )
+        task._vm = stale_vm
+
+        with (
+            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
+            patch(PATCH_SETUP_CTRL),
+            patch(PATCH_SLEEP),
+            patch.object(WAADockerVMBackend, "launch", return_value=fresh_vm) as mock_launch,
+        ):
+            mock_ga_cls.return_value = _make_mock_guest()
+            task.reset()
+
+        stale_vm.stop.assert_called_once()
+        mock_launch.assert_called_once()
+        assert task._vm is fresh_vm
+
 
 # ---------------------------------------------------------------------------
 # WAABenchmark
