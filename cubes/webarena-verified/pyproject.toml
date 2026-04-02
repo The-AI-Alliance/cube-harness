@@ -1,19 +1,17 @@
 [project]
-name = "workarena-cube"
+name = "webarena-verified-cube"
 version = "1.0.0"
-description = "WorkArena ServiceNow benchmark for cube"
+description = "WebArena-Verified benchmark cube — 812 verified web automation tasks"
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc4",
-    "browsergym-workarena",
-    "termcolor",
     "cube-browser-tool>=0.2.0",
-    "cube-browser-playwright>=0.2.0",
-    "cube-chat-tool>=0.1.0",
+    "webarena-verified",
+    "Pillow",
 ]
 
 [project.entry-points."cube.benchmarks"]
-workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmark"
+webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmark"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]

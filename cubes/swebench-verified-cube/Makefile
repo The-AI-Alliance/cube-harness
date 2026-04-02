@@ -1,7 +1,7 @@
 .PHONY: test install
 
 test:
-	uv run python -m miniwob_cube.debug
+	uv run cube test swebench-verified-cube
 
 install:
 	uv sync --all-extras

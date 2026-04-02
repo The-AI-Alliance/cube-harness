@@ -1,0 +1,31 @@
+[project]
+name = "swebench-live-cube"
+version = "0.1.0"
+description = "SWE-bench Live — continuously updated, contamination-resistant GitHub issue resolution"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-standard>=0.1.0rc4",
+    "datasets",
+]
+
+[project.optional-dependencies]
+debug = [
+    "cube-standard[docker]>=0.1.0rc4",
+]
+
+[project.entry-points."cube.benchmarks"]
+swebench-live-cube = "swebench_live_cube.benchmark:SWEBenchLiveBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+]
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4

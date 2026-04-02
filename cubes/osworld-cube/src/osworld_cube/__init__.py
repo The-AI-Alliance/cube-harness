@@ -6,7 +6,7 @@ from osworld_cube.computer import (
 )
 from osworld_cube.task import OSWorldTask
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
-from osworld_cube.debug import make_debug_agent
+from osworld_cube.debug import make_debug_agent, get_debug_benchmark
 
 __all__ = [
     # Tool classes
@@ -21,4 +21,5 @@ __all__ = [
     "OSWorldTaskConfig",
     # Debug helpers
     "make_debug_agent",
+    "get_debug_benchmark",
 ]

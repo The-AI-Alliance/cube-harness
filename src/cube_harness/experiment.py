@@ -86,6 +86,8 @@ class Experiment(TypedBaseModel):
                     task_config=tc,
                     exp_name=self.name,
                     max_steps=self.max_steps,
+                    runtime_context=self.benchmark._runtime_context,
+                    container_backend=self.benchmark.container_backend,
                 )
                 for i, tc in enumerate(task_configs)
             ]
