@@ -9,7 +9,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-debug = ["cube-standard[daytona]"]
+debug = [
+    "cube-standard[docker]>=0.1.0rc4",
+]
 
 [project.entry-points."cube.benchmarks"]
 terminalbench-cube = "terminalbench_cube.benchmark:TerminalBenchBenchmark"

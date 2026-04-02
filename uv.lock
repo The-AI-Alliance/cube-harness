@@ -3607,6 +3607,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-standard", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
     { name = "datasets" },
 ]
 
@@ -3625,6 +3626,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-standard", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
     { name = "datasets" },
 ]
 

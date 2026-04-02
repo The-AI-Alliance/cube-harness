@@ -13,7 +13,7 @@ import os
 
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from cube.backends import DaytonaContainerBackend
+from cube.backends import LocalContainerBackend
 from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
 logger = logging.getLogger(__name__)
@@ -63,10 +63,7 @@ def get_debug_benchmark() -> "Benchmark":
     returned instance, iterate benchmark.get_task_configs() to discover tasks,
     and call benchmark.close() at the end to free resources.
     """
-    api_key = os.environ.get("DAYTONA_API_KEY")
-    if not api_key:
-        raise RuntimeError("DAYTONA_API_KEY environment variable is required for cube test terminalbench-cube")
-    container_backend = DaytonaContainerBackend(api_key=api_key)
+    container_backend = LocalContainerBackend()
     bench = TerminalBenchBenchmark(
         container_backend=container_backend,
         oracle_mode=True,
