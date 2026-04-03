@@ -4,8 +4,7 @@ Uses AzureInfraConfig to launch fresh VMs per task. Mirrors the non-Azure
 OSWorld recipe configuration while using Azure-backed VM provisioning.
 
 Prerequisites:
-    az login                                    # authenticate Azure CLI
-    # Image must already be provisioned — run test_run_debug_agent.py first if not.
+    See cube-resources/cube-infra-azure/README.md for full setup instructions.
 
 Usage:
     # Debug mode (debug_tasks.json, sequential)
@@ -147,7 +146,7 @@ def main(debug: bool) -> None:
     finally:
         # Sweep any VMs orphaned by Ray force-kills or worker crashes.
         # Normal completions are already cleaned up by task.close() in episode.py.
-        deleted = INFRA.cleanup_stale()
+        deleted = INFRA.cleanup_orphaned_resources()
         if deleted:
             print(f"Cleaned up {len(deleted)} orphaned VM(s): {deleted}")
 
