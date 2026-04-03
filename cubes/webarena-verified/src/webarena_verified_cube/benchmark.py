@@ -55,7 +55,7 @@ class WebArenaVerifiedBenchmark(Benchmark):
 
     default_tool_config: ToolboxConfig = ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()])  # type: ignore
 
-    wav_config: WebArenaVerifiedConfig
+    wav_config: WebArenaVerifiedConfig = WebArenaVerifiedConfig()
     sites_filter: list[WebArenaSite] | None = None
     action_filter: MainObjectiveType | None = None
     task_ids_filter: list[int] | None = None
