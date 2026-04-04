@@ -1,5 +1,6 @@
 """Task and TaskConfig for terminalbench-cube."""
 
+import base64
 import io
 import logging
 import re
@@ -32,7 +33,10 @@ class TerminalBenchTask(Task):
         self._temp_dir = tempfile.TemporaryDirectory()
         task_path = Path(self._temp_dir.name) / self.metadata.id
         task_path.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(fileobj=io.BytesIO(extra["archive"]), mode="r:gz") as tar:
+        archive = extra["archive"]
+        if isinstance(archive, str):
+            archive = base64.b64decode(archive)
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
             tar.extractall(path=task_path, filter="data")
         self._task_path = task_path
 
