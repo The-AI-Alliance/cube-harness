@@ -147,6 +147,19 @@ def _is_experiment_dir(dir_path: Path) -> bool:
     )
 
 
+def _count_trajectory_metadata_files(d: Path) -> int:
+    return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
+
+
+def _n_trajectories_flat_then_legacy(exp_dir: Path) -> int:
+    n = _count_trajectory_metadata_files(exp_dir)
+    if n == 0:
+        traj_dir = exp_dir / "trajectories"
+        if traj_dir.exists():
+            n = _count_trajectory_metadata_files(traj_dir)
+    return n
+
+
 def get_directory_contents(results_dir: Path) -> list[str]:
     """Return sorted list of experiment directory names with trajectory counts.
 
@@ -159,18 +172,11 @@ def get_directory_contents(results_dir: Path) -> list[str]:
     if not results_dir or not results_dir.exists():
         return [sentinel]
 
-    def count_trajectories(d: Path) -> int:
-        return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
-
     exp_descriptions = []
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = count_trajectories(dir_path)
-        if n_trajs == 0:
-            traj_dir = dir_path / "trajectories"
-            if traj_dir.exists():
-                n_trajs = count_trajectories(traj_dir)
+        n_trajs = _n_trajectories_flat_then_legacy(dir_path)
         if n_trajs == 0:
             continue
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
@@ -221,18 +227,11 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     if not results_dir or not results_dir.exists():
         return []
 
-    def count_trajectories(d: Path) -> int:
-        return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
-
     rows = []
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = count_trajectories(dir_path)
-        if n_trajs == 0:
-            traj_dir = dir_path / "trajectories"
-            if traj_dir.exists():
-                n_trajs = count_trajectories(traj_dir)
+        n_trajs = _n_trajectories_flat_then_legacy(dir_path)
         if n_trajs == 0:
             continue
         rows.append(

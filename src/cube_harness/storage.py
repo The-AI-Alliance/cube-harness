@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -37,15 +38,39 @@ class Storage(Protocol):
         ...
 
 
-def _trajectory_dir(output_dir: Path) -> Path:
-    """Return the directory used for trajectory files."""
-    return output_dir
+def _resolve_trajectory_paths(output_dir: Path, trajectory_id: str) -> tuple[Path, Path]:
+    """Return ``(metadata_path, jsonl_path)``: flat ``output_dir`` first, else legacy ``trajectories/``."""
+    meta = output_dir / f"{trajectory_id}.metadata.json"
+    jsonl = output_dir / f"{trajectory_id}.jsonl"
+    if not meta.exists():
+        legacy_meta = output_dir / "trajectories" / f"{trajectory_id}.metadata.json"
+        if legacy_meta.exists():
+            return legacy_meta, output_dir / "trajectories" / f"{trajectory_id}.jsonl"
+    return meta, jsonl
 
 
-def _trajectory_path_legacy(output_dir: Path, trajectory_id: str, ext: str) -> Path | None:
-    """Return legacy ``trajectories/{id}{ext}`` if that file exists."""
-    p = output_dir / "trajectories" / f"{trajectory_id}{ext}"
-    return p if p.exists() else None
+def _resolve_llm_call_file(output_dir: Path, step_id: str, llm_call_id: str) -> Path:
+    """Prefer flat layout, then legacy ``llm_calls/``."""
+    flat = output_dir / f"{step_id}_{llm_call_id}.json"
+    if flat.exists():
+        return flat
+    return output_dir / "llm_calls" / f"{step_id}_{llm_call_id}.json"
+
+
+def _iter_trajectory_metadata_files(output_dir: Path) -> Iterator[Path]:
+    """Walk flat dir then ``trajectories/``; skip archived; dedupe by trajectory id (flat wins)."""
+    seen: set[str] = set()
+    for search_dir in (output_dir, output_dir / "trajectories"):
+        if not search_dir.exists():
+            continue
+        for f in search_dir.glob("*.metadata.json"):
+            if ".archived_" in f.name:
+                continue
+            tid = f.stem.replace(".metadata", "")
+            if tid in seen:
+                continue
+            seen.add(tid)
+            yield f
 
 
 class FileStorage:
@@ -64,9 +89,8 @@ class FileStorage:
                 If False, raise FileExistsError when trajectory files already exist.
                 Re-saves within the same session (e.g. updating end_time) are always allowed.
         """
-        traj_dir = _trajectory_dir(self.output_dir)
-        traj_dir.mkdir(parents=True, exist_ok=True)
-        cur_path = traj_dir / trajectory.id
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        cur_path = self.output_dir / trajectory.id
 
         # Check for pre-existing files from a previous run.
         # Skip the check if this trajectory was already created in this session (re-save for end_time update).
@@ -98,9 +122,8 @@ class FileStorage:
 
     def _archive_trajectory(self, trajectory_id: str) -> None:
         """Rename existing trajectory files with an archived timestamp suffix."""
-        traj_dir = _trajectory_dir(self.output_dir)
         for ext in [".metadata.json", ".jsonl"]:
-            old_path = traj_dir / f"{trajectory_id}{ext}"
+            old_path = self.output_dir / f"{trajectory_id}{ext}"
             if old_path.exists():
                 new_path = self.output_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
                 old_path.rename(new_path)
@@ -145,14 +168,7 @@ class FileStorage:
 
     def load_trajectory(self, trajectory_id: str) -> Trajectory:
         """Load a single trajectory by its ID."""
-        traj_dir = _trajectory_dir(self.output_dir)
-        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
-        steps_path = traj_dir / f"{trajectory_id}.jsonl"
-        if not metadata_path.exists():
-            legacy = _trajectory_path_legacy(self.output_dir, trajectory_id, ".metadata.json")
-            if legacy is not None:
-                metadata_path = legacy
-                steps_path = self.output_dir / "trajectories" / f"{trajectory_id}.jsonl"
+        metadata_path, steps_path = _resolve_trajectory_paths(self.output_dir, trajectory_id)
         if not metadata_path.exists():
             raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
 
@@ -195,9 +211,7 @@ class FileStorage:
         resolved_calls = []
         for ref in llm_calls:
             if llm_call_id := ref.get("llm_call_id", None):
-                call_path = self.output_dir / f"{step_id}_{llm_call_id}.json"
-                if not call_path.exists():
-                    call_path = self.output_dir / "llm_calls" / f"{step_id}_{llm_call_id}.json"
+                call_path = _resolve_llm_call_file(self.output_dir, step_id, llm_call_id)
                 if not call_path.exists():
                     raise FileNotFoundError(f"LLM call file not found: {call_path}")
                 with open(call_path) as f:
@@ -214,12 +228,7 @@ class FileStorage:
         Returns a Trajectory stub with steps=[] — significantly faster than
         load_trajectory() since it skips the JSONL file and all LLM call refs.
         """
-        traj_dir = _trajectory_dir(self.output_dir)
-        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
-        if not metadata_path.exists():
-            legacy = _trajectory_path_legacy(self.output_dir, trajectory_id, ".metadata.json")
-            if legacy is not None:
-                metadata_path = legacy
+        metadata_path, _ = _resolve_trajectory_paths(self.output_dir, trajectory_id)
         if not metadata_path.exists():
             raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
 
@@ -239,41 +248,19 @@ class FileStorage:
         Much faster than load_all_trajectories() — only reads *.metadata.json files.
         Each returned Trajectory has steps=[] until select_trajectory() loads it on demand.
         """
-        traj_dir = _trajectory_dir(self.output_dir)
-        seen_ids: set[str] = set()
         trajectories = []
-        for search_dir in [traj_dir, self.output_dir / "trajectories"]:
-            if not search_dir.exists():
-                continue
-            for metadata_file in search_dir.glob("*.metadata.json"):
-                if ".archived_" in metadata_file.name:
-                    continue
-                trajectory_id = metadata_file.stem.replace(".metadata", "")
-                if trajectory_id in seen_ids:
-                    continue
-                seen_ids.add(trajectory_id)
-                try:
-                    trajectories.append(self.load_trajectory_metadata(trajectory_id))
-                except Exception as e:
-                    logger.error(f"Failed to load trajectory metadata {trajectory_id}: {e}")
+        for metadata_file in _iter_trajectory_metadata_files(self.output_dir):
+            trajectory_id = metadata_file.stem.replace(".metadata", "")
+            try:
+                trajectories.append(self.load_trajectory_metadata(trajectory_id))
+            except Exception as e:
+                logger.error(f"Failed to load trajectory metadata {trajectory_id}: {e}")
 
         return trajectories
 
     def list_trajectory_ids(self) -> list[str]:
         """List all non-archived trajectory IDs in the output directory."""
-        seen: set[str] = set()
-        result: list[str] = []
-        for search_dir in [_trajectory_dir(self.output_dir), self.output_dir / "trajectories"]:
-            if not search_dir.exists():
-                continue
-            for f in search_dir.glob("*.metadata.json"):
-                if ".archived_" in f.name:
-                    continue
-                tid = f.stem.replace(".metadata", "")
-                if tid not in seen:
-                    seen.add(tid)
-                    result.append(tid)
-        return result
+        return [f.stem.replace(".metadata", "") for f in _iter_trajectory_metadata_files(self.output_dir)]
 
     def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
         """List trajectory IDs mapped to their latest file modification time.
@@ -283,20 +270,13 @@ class FileStorage:
         in live polling to avoid reloading trajectories that haven't changed.
         """
         result: dict[str, float] = {}
-        for search_dir in [_trajectory_dir(self.output_dir), self.output_dir / "trajectories"]:
-            if not search_dir.exists():
-                continue
-            for metadata_file in search_dir.glob("*.metadata.json"):
-                if ".archived_" in metadata_file.name:
-                    continue
-                traj_id = metadata_file.stem.replace(".metadata", "")
-                if traj_id in result:
-                    continue
-                mtime = metadata_file.stat().st_mtime
-                jsonl_path = search_dir / f"{traj_id}.jsonl"
-                if jsonl_path.exists():
-                    mtime = max(mtime, jsonl_path.stat().st_mtime)
-                result[traj_id] = mtime
+        for metadata_file in _iter_trajectory_metadata_files(self.output_dir):
+            traj_id = metadata_file.stem.replace(".metadata", "")
+            mtime = metadata_file.stat().st_mtime
+            jsonl_path = metadata_file.parent / f"{traj_id}.jsonl"
+            if jsonl_path.exists():
+                mtime = max(mtime, jsonl_path.stat().st_mtime)
+            result[traj_id] = mtime
         return result
 
     def get_log_path(self, trajectory_id: str) -> Path:
