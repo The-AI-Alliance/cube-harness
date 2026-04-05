@@ -3,16 +3,19 @@
 import importlib
 import logging
 import time
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
 from cube.task import Task, TaskConfig
-from cube.tool import tool_action
-from cube_browser_playwright import PlaywrightSession, Viewport
+from cube.tool import Toolbox, tool_action
+from cube.tools.browser import BrowserTool
+from cube_browser_playwright import PlaywrightSession, PlaywrightSessionConfig, Viewport
 from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
+from cube_chat_tool import ChatTool
+from playwright.sync_api import Page
 from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
@@ -31,8 +34,38 @@ _SUPPORTED_ACTION_NAMES = frozenset(
         "browser_forward",
         "noop",
         "workarena_cheat",
+        "send_message",
     }
 )
+
+
+@runtime_checkable
+class WorkarenaBrowserToolConfig(Protocol):
+    """
+    Protocol for browser tool configs used by WorkArenaTask — requires a `browser` attribute and a `make()` method.
+    Both BrowsergymConfig and PlaywrightConfig satisfy this protocol, so WorkArenaTask can work with either.
+    """
+
+    browser: PlaywrightSessionConfig
+
+    def make(self, container: Any = None) -> "WorkArenaBrowserTool": ...
+
+
+@runtime_checkable
+class WorkArenaBrowserTool(Protocol):
+    """
+    Protocol for browser tools used by WorkArena tasks — requires a Playwright `page` attribute.
+    Both BrowsergymTool and SyncPlaywrightTool satisfy this protocol, so WorkArenaTask can work with either.
+    """
+
+    config: WorkarenaBrowserToolConfig
+
+    @property
+    def page(self) -> Page: ...
+
+    def noop(self) -> Any: ...
+
+    def page_obs(self) -> Observation: ...
 
 
 class WorkArenaCheatTool(SyncPlaywrightTool):
@@ -60,7 +93,25 @@ class WorkArenaCheatToolConfig(PlaywrightConfig):
 
 
 class WorkArenaTask(Task):
-    """CUBE Task wrapper for WorkArena ServiceNow tasks."""
+    """
+    CUBE Task wrapper for WorkArena ServiceNow tasks.
+
+    ---
+    Future optimization note:
+
+    Both `finished()` and `evaluate()` call `self._workarena_task.validate()`,
+    which makes a live ServiceNow API call. With `validate_per_step=True`,
+    the base `Task.step()` calls both on every step, resulting in
+    two identical round-trips per step.
+
+    Future improvement: if the above becomes a performance bottleneck, we can cache the
+    result of `validate()` keyed on `(chat_key, hash(page.content()))` where:
+    `chat_key = tuple((m["role"], m["timestamp"], m["message"]) for m in chat_messages)`.
+    Both `finished()` and `evaluate()` would call a shared `_validate()` helper
+    that returns the cached result when the key is unchanged, and refreshes it otherwise.
+    The `page.content()` hash captures SPA state changes that do not update the URL,
+    at the cost of a DOM serialization on each cache-miss check.
+    """
 
     seed: int
     wait_first_page_time: float = 10.0
@@ -68,26 +119,53 @@ class WorkArenaTask(Task):
 
     _workarena_task: AbstractServiceNowTask | None = PrivateAttr(default=None)
 
+    @property
+    def _browser_tool(self) -> WorkArenaBrowserTool:
+        """Resolve the playwright tool whether the tool is direct or inside a Toolbox."""
+        if isinstance(self.tool, Toolbox):
+            tool = self.tool.find_tool(BrowserTool)
+            if tool is None:
+                raise RuntimeError("No BrowserTool found in Toolbox")
+        else:
+            tool = self.tool
+        if not isinstance(tool, WorkArenaBrowserTool):
+            raise RuntimeError(
+                f"The browser tool must satisfy the WorkArenaBrowserTool protocol (e.g., BrowsergymTool or SyncPlaywrightTool), got {type(tool).__name__}"
+            )
+        return tool
+
+    @property
+    def _chat_tool(self) -> ChatTool | None:
+        """Return the ChatTool if present in a Toolbox, else None."""
+        if isinstance(self.tool, Toolbox):
+            return self.tool.find_tool(ChatTool)
+        return None
+
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
         task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
         self._workarena_task = task_class(seed=self.seed)
-        _apply_task_runtime_preferences(self.tool, self._workarena_task)
-        if isinstance(self.tool, WorkArenaCheatTool):
-            self.tool._workarena_task = self._workarena_task
+        _apply_task_runtime_preferences(self._browser_tool, self._workarena_task)
+        if isinstance(self._browser_tool, WorkArenaCheatTool):
+            self._browser_tool._workarena_task = self._workarena_task
         self.tool.reset()
-        page = self.tool.page
+        page = self._browser_tool.page
         goal, task_info = self._workarena_task.setup(page)
 
         logger.info(f"WorkArena page URL after setup: {page.url}")
         logger.info(f"WorkArena page title: {page.title()}")
         logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
 
-        self.tool.noop()
+        self._browser_tool.noop()
         time.sleep(self.wait_first_page_time)
         logger.info(f"WorkArena task goal: {goal}")
 
-        obs = Observation.from_text(goal) + self.tool.page_obs()
+        page_obs = self._browser_tool.page_obs()
+        if self._chat_tool is not None:
+            self._chat_tool.add_message("user", goal)
+            obs = Observation.from_text(self._chat_tool.chat_obs()) + page_obs
+        else:
+            obs = Observation.from_text(goal) + page_obs
         info = {
             "task_id": self.id,
             "task_class": task_class.__name__,
@@ -97,25 +175,34 @@ class WorkArenaTask(Task):
         }
         return obs, info
 
+    @property
+    def _chat_messages(self) -> list[dict]:
+        """Return the current chat message history, or empty list if no chat tool."""
+        chat = self._chat_tool
+        return chat.messages if chat is not None else []
+
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
-        page = self.tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, [])
+        page = self._browser_tool.page
+        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
         return reward, {"done": done, **task_info}
 
     def finished(self, obs: Observation) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = self.tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, [])
+        page = self._browser_tool.page
+        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
         """Filter to BID browser actions supported by WorkArena."""
-        filtered = [a for a in actions if a.name in _SUPPORTED_ACTION_NAMES]
+        supported_actions = _SUPPORTED_ACTION_NAMES
+        if self._chat_tool is None:
+            supported_actions = supported_actions - {"send_message"}
+        filtered = [a for a in actions if a.name in supported_actions]
         logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
         return filtered
 
@@ -157,7 +244,7 @@ def _load_task_class(class_path: str) -> type:
     return getattr(module, class_name)
 
 
-def _apply_task_runtime_preferences(tool: Any, workarena_task: AbstractServiceNowTask) -> None:
+def _apply_task_runtime_preferences(tool: WorkArenaBrowserTool, workarena_task: AbstractServiceNowTask) -> None:
     """Apply WorkArena task runtime defaults to the tool config when not explicitly set."""
     browser_config = tool.config.browser
     explicitly_set = browser_config.model_fields_set
