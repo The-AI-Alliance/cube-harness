@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -37,6 +38,41 @@ class Storage(Protocol):
         ...
 
 
+def _resolve_trajectory_paths(output_dir: Path, trajectory_id: str) -> tuple[Path, Path]:
+    """Return ``(metadata_path, jsonl_path)``: flat ``output_dir`` first, else legacy ``trajectories/``."""
+    meta = output_dir / f"{trajectory_id}.metadata.json"
+    jsonl = output_dir / f"{trajectory_id}.jsonl"
+    if not meta.exists():
+        legacy_meta = output_dir / "trajectories" / f"{trajectory_id}.metadata.json"
+        if legacy_meta.exists():
+            return legacy_meta, output_dir / "trajectories" / f"{trajectory_id}.jsonl"
+    return meta, jsonl
+
+
+def _resolve_llm_call_file(output_dir: Path, step_id: str, llm_call_id: str) -> Path:
+    """Prefer flat layout, then legacy ``llm_calls/``."""
+    flat = output_dir / f"{step_id}_{llm_call_id}.json"
+    if flat.exists():
+        return flat
+    return output_dir / "llm_calls" / f"{step_id}_{llm_call_id}.json"
+
+
+def _iter_trajectory_metadata_files(output_dir: Path) -> Iterator[Path]:
+    """Walk flat dir then ``trajectories/``; skip archived; dedupe by trajectory id (flat wins)."""
+    seen: set[str] = set()
+    for search_dir in (output_dir, output_dir / "trajectories"):
+        if not search_dir.exists():
+            continue
+        for f in search_dir.glob("*.metadata.json"):
+            if ".archived_" in f.name:
+                continue
+            tid = f.stem.replace(".metadata", "")
+            if tid in seen:
+                continue
+            seen.add(tid)
+            yield f
+
+
 class FileStorage:
     """File-based storage for trajectories."""
 
@@ -53,9 +89,8 @@ class FileStorage:
                 If False, raise FileExistsError when trajectory files already exist.
                 Re-saves within the same session (e.g. updating end_time) are always allowed.
         """
-        traj_dir = self.output_dir / "trajectories"
-        traj_dir.mkdir(parents=True, exist_ok=True)
-        cur_path = traj_dir / trajectory.id
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        cur_path = self.output_dir / trajectory.id
 
         # Check for pre-existing files from a previous run.
         # Skip the check if this trajectory was already created in this session (re-save for end_time update).
@@ -87,11 +122,10 @@ class FileStorage:
 
     def _archive_trajectory(self, trajectory_id: str) -> None:
         """Rename existing trajectory files with an archived timestamp suffix."""
-        traj_dir = self.output_dir / "trajectories"
         for ext in [".metadata.json", ".jsonl"]:
-            old_path = traj_dir / f"{trajectory_id}{ext}"
+            old_path = self.output_dir / f"{trajectory_id}{ext}"
             if old_path.exists():
-                new_path = traj_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
+                new_path = self.output_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
                 old_path.rename(new_path)
                 logger.info(f"Archived {old_path.name} -> {new_path.name}")
 
@@ -120,13 +154,12 @@ class FileStorage:
         """Extract LLM calls to separate files and return step JSON with references only."""
         assert isinstance(step.output, AgentOutput)
 
-        llm_calls_dir = self.output_dir / "llm_calls"
-        llm_calls_dir.mkdir(parents=True, exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Save each LLM call to a separate file and collect references
         llm_call_refs = []
         for llm_call in step.output.llm_calls:
-            call_path = llm_calls_dir / f"{step_id}_{llm_call.id}.json"
+            call_path = self.output_dir / f"{step_id}_{llm_call.id}.json"
             with open(call_path, "w") as f:
                 f.write(llm_call.model_dump_json(indent=2))
             llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id).model_dump())
@@ -138,10 +171,7 @@ class FileStorage:
 
     def load_trajectory(self, trajectory_id: str) -> Trajectory:
         """Load a single trajectory by its ID."""
-        traj_dir = self.output_dir / "trajectories"
-        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
-        steps_path = traj_dir / f"{trajectory_id}.jsonl"
-
+        metadata_path, steps_path = _resolve_trajectory_paths(self.output_dir, trajectory_id)
         if not metadata_path.exists():
             raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
 
@@ -181,13 +211,10 @@ class FileStorage:
             return step_data
 
         step_id = f"{trajectory_id}_step{step_num:03d}"
-        llm_calls_dir = self.output_dir / "llm_calls"
-
         resolved_calls = []
         for ref in llm_calls:
-            # Check if this is a reference (only has 'id' key)
             if llm_call_id := ref.get("llm_call_id", None):
-                call_path = llm_calls_dir / f"{step_id}_{llm_call_id}.json"
+                call_path = _resolve_llm_call_file(self.output_dir, step_id, llm_call_id)
                 if not call_path.exists():
                     raise FileNotFoundError(f"LLM call file not found: {call_path}")
                 with open(call_path) as f:
@@ -204,9 +231,7 @@ class FileStorage:
         Returns a Trajectory stub with steps=[] — significantly faster than
         load_trajectory() since it skips the JSONL file and all LLM call refs.
         """
-        traj_dir = self.output_dir / "trajectories"
-        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
-
+        metadata_path, _ = _resolve_trajectory_paths(self.output_dir, trajectory_id)
         if not metadata_path.exists():
             raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
 
@@ -226,14 +251,8 @@ class FileStorage:
         Much faster than load_all_trajectories() — only reads *.metadata.json files.
         Each returned Trajectory has steps=[] until select_trajectory() loads it on demand.
         """
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return []
-
         trajectories = []
-        for metadata_file in traj_dir.glob("*.metadata.json"):
-            if ".archived_" in metadata_file.name:
-                continue
+        for metadata_file in _iter_trajectory_metadata_files(self.output_dir):
             trajectory_id = metadata_file.stem.replace(".metadata", "")
             try:
                 trajectories.append(self.load_trajectory_metadata(trajectory_id))
@@ -244,10 +263,7 @@ class FileStorage:
 
     def list_trajectory_ids(self) -> list[str]:
         """List all non-archived trajectory IDs in the output directory."""
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return []
-        return [f.stem.replace(".metadata", "") for f in traj_dir.glob("*.metadata.json") if ".archived_" not in f.name]
+        return [f.stem.replace(".metadata", "") for f in _iter_trajectory_metadata_files(self.output_dir)]
 
     def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
         """List trajectory IDs mapped to their latest file modification time.
@@ -256,16 +272,11 @@ class FileStorage:
         trajectory — cheap stat() calls only, no file reads. Used for change detection
         in live polling to avoid reloading trajectories that haven't changed.
         """
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return {}
         result: dict[str, float] = {}
-        for metadata_file in traj_dir.glob("*.metadata.json"):
-            if ".archived_" in metadata_file.name:
-                continue
+        for metadata_file in _iter_trajectory_metadata_files(self.output_dir):
             traj_id = metadata_file.stem.replace(".metadata", "")
             mtime = metadata_file.stat().st_mtime
-            jsonl_path = traj_dir / f"{traj_id}.jsonl"
+            jsonl_path = metadata_file.parent / f"{traj_id}.jsonl"
             if jsonl_path.exists():
                 mtime = max(mtime, jsonl_path.stat().st_mtime)
             result[traj_id] = mtime
@@ -277,11 +288,16 @@ class FileStorage:
     def load_logs(self, trajectory_id: str) -> str:
         log_path = self.get_log_path(trajectory_id)
         if not log_path.exists():
-            return ""
+            legacy_log_path = self.output_dir / "logs" / f"{trajectory_id}.log"
+            if not legacy_log_path.exists():
+                return ""
+            log_path = legacy_log_path
         return log_path.read_text()
 
     def has_logs(self, trajectory_id: str) -> bool:
-        return self.get_log_path(trajectory_id).exists()
+        log_path = self.get_log_path(trajectory_id)
+        legacy_log_path = self.output_dir / "logs" / f"{trajectory_id}.log"
+        return log_path.exists() or legacy_log_path.exists()
 
     def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
         """Load all trajectories from an experiment directory.
@@ -296,16 +312,9 @@ class FileStorage:
             storage = FileStorage(exp_dir)
             return storage.load_all_trajectories()
 
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return []
-
+        trajectory_ids = self.list_trajectory_ids()
         trajectories = []
-        # Find all metadata files and extract trajectory IDs
-        for metadata_file in traj_dir.glob("*.metadata.json"):
-            if ".archived_" in metadata_file.name:
-                continue
-            trajectory_id = metadata_file.stem.replace(".metadata", "")
+        for trajectory_id in trajectory_ids:
             try:
                 trajectory = self.load_trajectory(trajectory_id)
                 trajectories.append(trajectory)
@@ -318,11 +327,10 @@ class FileStorage:
         """Save episode configuration to disk for later resumption.
 
         Args:
-            episode_config: The episode configuration to save.e
+            episode_config: The episode configuration to save.
         """
-        config_dir = self.output_dir / "episode_configs"
-        config_dir.mkdir(parents=True, exist_ok=True)
-        config_path = config_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        config_path = self.output_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
         if config_path.exists():
             raise FileExistsError(
                 f"Episode config already exists: {config_path}, are you trying to resume without setting the flag Experiment.resume?"
@@ -355,7 +363,13 @@ class FileStorage:
         Returns:
             List of paths to episode config files.
         """
-        config_dir = self.output_dir / "episode_configs"
-        if not config_dir.exists():
-            return []
-        return list(config_dir.glob("episode_*_task_*.json"))
+        seen_names: set[str] = set()
+        result: list[Path] = []
+        for search_dir in [self.output_dir, self.output_dir / "episode_configs"]:
+            if not search_dir.exists():
+                continue
+            for p in search_dir.glob("episode_*_task_*.json"):
+                if p.name not in seen_names:
+                    seen_names.add(p.name)
+                    result.append(p)
+        return result

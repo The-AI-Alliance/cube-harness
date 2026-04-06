@@ -45,7 +45,7 @@ class TestEpisode:
         mock_episode.run()
 
         # Check trajectory files exist
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         assert traj_dir.exists()
 
         # Should have metadata and jsonl files
@@ -58,7 +58,7 @@ class TestEpisode:
         mock_episode.run()
 
         # Read metadata file
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         metadata_files = [f for f in traj_dir.iterdir() if ".metadata.json" in f.name]
         assert len(metadata_files) > 0, "No metadata file found"
 
@@ -72,7 +72,7 @@ class TestEpisode:
         mock_episode.run()
 
         # Read JSONL file
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         jsonl_files = [f for f in traj_dir.iterdir() if ".jsonl" in f.name]
         assert len(jsonl_files) > 0, "No JSONL file found"
 
@@ -142,7 +142,7 @@ class TestEpisode:
         trajectory = Trajectory(id="test_traj", metadata={"task_id": "test"})
         mock_episode.storage.save_trajectory(trajectory)
 
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         assert traj_dir.exists()
 
     def test_storage_save_step_without_trajectory(self, mock_episode):
@@ -165,7 +165,7 @@ class TestEpisode:
             mock_episode.storage.save_step(step, trajectory.id, i)
 
         # Read JSONL file
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         jsonl_files = [f for f in traj_dir.iterdir() if ".jsonl" in f.name]
         assert len(jsonl_files) > 0, "No JSONL file found"
 
@@ -218,7 +218,7 @@ class TestEpisode:
 
         episode.run()
 
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         files = [f.name for f in traj_dir.iterdir()]
 
         # Should contain run id
@@ -366,7 +366,7 @@ class TestEpisode:
         episode2.run()
 
         # Both archived and current files should exist
-        traj_dir = tmp_dir / "trajectories"
+        traj_dir = tmp_dir
         traj_id = f"{episode.config.task_id}_ep{episode.config.id}"
         archived = list(traj_dir.glob(f"{traj_id}.archived_*.metadata.json"))
         assert len(archived) == 1
