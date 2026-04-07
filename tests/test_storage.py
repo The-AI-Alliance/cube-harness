@@ -403,8 +403,8 @@ class TestFileStorageEpisodeConfig:
         )
         storage.save_episode_config(episode_config)
 
-        config_dir = Path(tmp_dir) / "episode_configs"
-        assert config_dir.exists()
+        ep_dir = Path(tmp_dir) / "episodes" / "test_task_ep0"
+        assert ep_dir.exists()
 
     def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_tool_config):
         from cube_harness.episode import EpisodeConfig
@@ -421,7 +421,7 @@ class TestFileStorageEpisodeConfig:
         )
         storage.save_episode_config(episode_config)
 
-        config_path = Path(tmp_dir) / "episode_configs" / "episode_5_task_my_task_123.json"
+        config_path = Path(tmp_dir) / "episodes" / "my_task_123_ep5" / "episode_config.json"
         assert config_path.exists()
 
     def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_tool_config):
@@ -439,7 +439,7 @@ class TestFileStorageEpisodeConfig:
         )
         storage.save_episode_config(original_config)
 
-        config_path = Path(tmp_dir) / "episode_configs" / "episode_42_task_roundtrip_task.json"
+        config_path = Path(tmp_dir) / "episodes" / "roundtrip_task_ep42" / "episode_config.json"
         loaded_config = storage.load_episode_config(config_path)
 
         assert loaded_config.id == original_config.id
@@ -476,9 +476,10 @@ class TestFileStorageEpisodeConfig:
         assert len(config_files) == 3
         for config_file in config_files:
             assert config_file.exists()
-            assert config_file.name.startswith("episode_")
-            assert "_task_" in config_file.name
-            assert config_file.name.endswith(".json")
+            assert config_file.name == "episode_config.json"
+            # Parent dir name is the trajectory_id: {task_id}_ep{id}
+            assert config_file.parent.name.startswith("task_")
+            assert "_ep" in config_file.parent.name
 
     def test_list_episode_configs_empty_directory(self, tmp_dir):
         storage = FileStorage(tmp_dir)
@@ -500,7 +501,7 @@ class TestFileStorageEpisodeConfig:
         )
         storage.save_episode_config(config)
 
-        config_path = Path(tmp_dir) / "episode_configs" / "episode_10_task_task_with_underscores_123.json"
+        config_path = Path(tmp_dir) / "episodes" / "task_with_underscores_123_ep10" / "episode_config.json"
         assert config_path.exists()
 
         loaded = storage.load_episode_config(config_path)
@@ -1278,3 +1279,41 @@ class TestExperimentResultGetRecords:
         records = result.get_records()
         assert len(records) == 3
         assert all(isinstance(r, EpisodeRecord) for r in records)
+
+    def test_iter_records(self, tmp_dir, sample_env_output) -> None:
+        from cube_harness.results import EpisodeRecord, ExperimentResult
+        from cube_harness.summary import SummaryProcessor
+
+        storage = FileStorage(tmp_dir)
+        for i in range(2):
+            traj = Trajectory(id=f"task_1_ep{i}", metadata={"task_id": "task_1", "agent_name": "A"})
+            traj.steps.append(TrajectoryStep(output=sample_env_output))
+            storage.save_trajectory(traj)
+            ep_dir = storage._episode_dir(f"task_1_ep{i}")
+            proc = SummaryProcessor(ep_dir)
+            proc.on_step(0, traj.steps[0])
+            proc.on_episode_complete(traj, storage)
+
+        result = ExperimentResult(tmp_dir)
+        records = list(result.iter_records())
+        assert len(records) == 2
+        assert all(isinstance(r, EpisodeRecord) for r in records)
+
+    def test_experiment_result_iter(self, tmp_dir, sample_env_output) -> None:
+        from cube_harness.results import EpisodeResult, ExperimentResult
+        from cube_harness.summary import SummaryProcessor
+
+        storage = FileStorage(tmp_dir)
+        for i in range(2):
+            traj = Trajectory(id=f"task_1_ep{i}", metadata={"task_id": "task_1", "agent_name": "A"})
+            traj.steps.append(TrajectoryStep(output=sample_env_output))
+            storage.save_trajectory(traj)
+            ep_dir = storage._episode_dir(f"task_1_ep{i}")
+            proc = SummaryProcessor(ep_dir)
+            proc.on_step(0, traj.steps[0])
+            proc.on_episode_complete(traj, storage)
+
+        result = ExperimentResult(tmp_dir)
+        episodes = list(result)
+        assert len(episodes) == 2
+        assert all(isinstance(ep, EpisodeResult) for ep in episodes)

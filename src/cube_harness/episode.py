@@ -14,7 +14,7 @@ from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.legacy import EnvConfig
 from cube_harness.metrics.tracer import get_tracer
-from cube_harness.storage import FileStorage, Storage
+from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
 
 logger = logging.getLogger(__name__)
@@ -98,8 +98,15 @@ class Episode:
         Returns:
             Episode instance ready to run
         """
-        # Infer output_dir from config_path structure: {output_dir}/episode_configs/episode_*.json
-        output_dir = config_path.parent.parent
+        # Detect V2 vs V1 path structure:
+        # V2: {output_dir}/episodes/{traj_id}/episode_config.json  -> output_dir is grandparent's parent
+        # V1: {output_dir}/episode_configs/episode_*.json          -> output_dir is grandparent
+        if config_path.name == "episode_config.json":
+            # V2: config is inside episodes/{traj_id}/, so output_dir is 3 levels up
+            output_dir = config_path.parent.parent.parent
+            assert config_path.parent.parent.name == EPISODES_DIR
+        else:
+            output_dir = config_path.parent.parent
         storage = FileStorage(output_dir)
         episode_config = storage.load_episode_config(config_path)
 

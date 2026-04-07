@@ -1,7 +1,7 @@
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -62,7 +62,7 @@ class EpisodeResult:
         config_path = self._dir / "episode_config.json"
         return EpisodeConfig.model_validate_json(config_path.read_text())
 
-    def summary_stats(self) -> dict | None:
+    def summary_stats(self) -> dict[str, Any] | None:
         return self.metadata().summary_stats
 
     def summary(self) -> list[StepSummary]:
@@ -79,10 +79,16 @@ class EpisodeResult:
         return self._summary
 
     def status(self) -> EpisodeStatus:
-        lines = self.summary()
-        if not lines:
+        path = self._dir / "episode_summary.jsonl"
+        if not path.exists():
             return EpisodeStatus.PENDING
-        return lines[-1].status
+        last_line = None
+        for line in path.read_text().splitlines():
+            if line.strip():
+                last_line = line
+        if last_line is None:
+            return EpisodeStatus.PENDING
+        return StepSummary.model_validate_json(last_line).status
 
     def n_turns(self) -> int:
         steps_dir = self._dir / STEPS_DIR
@@ -143,6 +149,9 @@ class ExperimentResult:
         self._storage = FileStorage(self._dir)
         self._episodes: dict[str, EpisodeResult] | None = None
 
+    def __iter__(self) -> Iterator[EpisodeResult]:
+        return iter(self.episodes().values())
+
     def episodes(self) -> dict[str, EpisodeResult]:
         if self._episodes is None:
             self._episodes = {}
@@ -160,10 +169,14 @@ class ExperimentResult:
             return ExperimentSummary.model_validate_json(path.read_text())
         return None
 
-    def get_records(self) -> list[EpisodeRecord]:
-        return [ep.get_exp_record() for ep in self.episodes().values()]
+    def iter_records(self) -> Iterator[EpisodeRecord]:
+        for ep in self.episodes().values():
+            yield ep.get_exp_record()
 
-    def to_df(self):
+    def get_records(self) -> list[EpisodeRecord]:
+        return list(self.iter_records())
+
+    def to_df(self) -> Any:
         from cube_harness.analyze.inspect_results import trajectories_to_df
 
         trajs = self._storage.load_all_trajectory_metadata()
