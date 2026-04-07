@@ -31,14 +31,14 @@ class TestFileStorageBasic:
         assert storage.output_dir == Path(tmp_dir)
 
     def test_save_trajectory_creates_directories(self, tmp_dir):
-        """Test save_trajectory creates necessary directories."""
+        """Test save_trajectory creates output_dir and trajectory files."""
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="test_traj_1", metadata={"task_id": "task_1"})
 
         storage.save_trajectory(traj)
 
-        traj_dir = Path(tmp_dir) / "trajectories"
-        assert traj_dir.exists()
+        assert Path(tmp_dir).exists()
+        assert (Path(tmp_dir) / "test_traj_1.metadata.json").exists()
 
     def test_save_trajectory_creates_metadata_file(self, tmp_dir):
         """Test save_trajectory creates metadata JSON file."""
@@ -52,7 +52,7 @@ class TestFileStorageBasic:
 
         storage.save_trajectory(traj)
 
-        metadata_path = Path(tmp_dir) / "trajectories" / "test_traj_1.metadata.json"
+        metadata_path = Path(tmp_dir) / "test_traj_1.metadata.json"
         assert metadata_path.exists()
 
         with open(metadata_path) as f:
@@ -73,7 +73,7 @@ class TestFileStorageBasic:
 
         storage.save_trajectory(traj)
 
-        jsonl_path = Path(tmp_dir) / "trajectories" / "test_traj_1.jsonl"
+        jsonl_path = Path(tmp_dir) / "test_traj_1.jsonl"
         assert jsonl_path.exists()
 
 
@@ -88,7 +88,7 @@ class TestFileStorageWithSteps:
 
         storage.save_trajectory(traj)
 
-        jsonl_path = Path(tmp_dir) / "trajectories" / "test_traj.jsonl"
+        jsonl_path = Path(tmp_dir) / "test_traj.jsonl"
         with open(jsonl_path) as f:
             lines = f.readlines()
         assert len(lines) == 1
@@ -105,7 +105,7 @@ class TestFileStorageWithSteps:
 
         storage.save_trajectory(traj)
 
-        jsonl_path = Path(tmp_dir) / "trajectories" / "test_traj.jsonl"
+        jsonl_path = Path(tmp_dir) / "test_traj.jsonl"
         with open(jsonl_path) as f:
             lines = f.readlines()
         assert len(lines) == 1
@@ -123,7 +123,7 @@ class TestFileStorageWithSteps:
 
         storage.save_trajectory(traj)
 
-        jsonl_path = Path(tmp_dir) / "trajectories" / "test_traj.jsonl"
+        jsonl_path = Path(tmp_dir) / "test_traj.jsonl"
         with open(jsonl_path) as f:
             lines = f.readlines()
         assert len(lines) == 3
@@ -138,7 +138,7 @@ class TestFileStorageWithSteps:
         # Append additional step
         storage.save_step(TrajectoryStep(output=sample_agent_output), "test_traj", 1)
 
-        jsonl_path = Path(tmp_dir) / "trajectories" / "test_traj.jsonl"
+        jsonl_path = Path(tmp_dir) / "test_traj.jsonl"
         with open(jsonl_path) as f:
             lines = f.readlines()
         assert len(lines) == 2
@@ -155,12 +155,12 @@ class TestFileStorageLogs:
     """Tests for per-episode log helpers in FileStorage."""
 
     def test_get_log_path(self, tmp_dir: Path) -> None:
-        """Test that log path uses logs/{trajectory_id}.log convention."""
+        """Test log path under output_dir."""
         storage = FileStorage(tmp_dir)
 
         log_path = storage.get_log_path("task_a_ep3")
 
-        assert log_path == Path(tmp_dir) / "logs" / "task_a_ep3.log"
+        assert log_path == Path(tmp_dir) / "task_a_ep3.log"
 
     def test_load_logs_returns_full_file_contents(self, tmp_dir: Path) -> None:
         """Test that load_logs returns complete log file content."""
@@ -182,6 +182,18 @@ class TestFileStorageLogs:
 
         assert loaded == ""
         assert storage.has_logs("missing_ep0") is False
+
+    def test_load_logs_falls_back_to_legacy_logs_subdir(self, tmp_dir: Path) -> None:
+        """Test legacy logs/ subdirectory fallback for backward compatibility."""
+        storage = FileStorage(tmp_dir)
+        legacy_log_path = Path(tmp_dir) / "logs" / "legacy_task_ep0.log"
+        legacy_log_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_log_path.write_text("legacy line 1\nlegacy line 2\n")
+
+        loaded = storage.load_logs("legacy_task_ep0")
+
+        assert loaded == "legacy line 1\nlegacy line 2\n"
+        assert storage.has_logs("legacy_task_ep0") is True
 
 
 class TestFileStorageWithLLMCalls:
@@ -210,11 +222,7 @@ class TestFileStorageWithLLMCalls:
 
         storage.save_trajectory(traj)
 
-        # Check LLM call file exists
-        llm_calls_dir = Path(tmp_dir) / "llm_calls"
-        assert llm_calls_dir.exists()
-
-        llm_call_files = list(llm_calls_dir.glob("*.json"))
+        llm_call_files = list(Path(tmp_dir).glob("test_traj_step*.json"))
         assert len(llm_call_files) == 1
         assert "test_traj_step000_llm_call_1" in llm_call_files[0].name
 
@@ -231,7 +239,7 @@ class TestFileStorageWithLLMCalls:
 
         storage.save_trajectory(traj)
 
-        jsonl_path = Path(tmp_dir) / "trajectories" / "test_traj.jsonl"
+        jsonl_path = Path(tmp_dir) / "test_traj.jsonl"
         with open(jsonl_path) as f:
             step_data = json.loads(f.readline())
 
@@ -261,8 +269,7 @@ class TestFileStorageWithLLMCalls:
 
         storage.save_trajectory(traj)
 
-        llm_calls_dir = Path(tmp_dir) / "llm_calls"
-        llm_call_files = list(llm_calls_dir.glob("*.json"))
+        llm_call_files = list(Path(tmp_dir).glob("test_traj_step*.json"))
         assert len(llm_call_files) == 3
 
 
@@ -511,7 +518,7 @@ class TestFileStorageEpisodeConfig:
     """Tests for FileStorage episode config save/load functionality."""
 
     def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
-        """Test save_episode_config creates episode_configs directory."""
+        """Test save_episode_config creates config file under output_dir."""
         from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
@@ -527,8 +534,8 @@ class TestFileStorageEpisodeConfig:
 
         storage.save_episode_config(episode_config)
 
-        config_dir = Path(tmp_dir) / "episode_configs"
-        assert config_dir.exists()
+        config_path = Path(tmp_dir) / "episode_0_task_test_task.json"
+        assert config_path.exists()
 
     def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_tool_config):
         """Test save_episode_config creates correct config file."""
@@ -547,7 +554,7 @@ class TestFileStorageEpisodeConfig:
 
         storage.save_episode_config(episode_config)
 
-        config_path = Path(tmp_dir) / "episode_configs" / "episode_5_task_my_task_123.json"
+        config_path = Path(tmp_dir) / "episode_5_task_my_task_123.json"
         assert config_path.exists()
 
     def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_tool_config):
@@ -570,7 +577,7 @@ class TestFileStorageEpisodeConfig:
         storage.save_episode_config(original_config)
 
         # Load config
-        config_path = Path(tmp_dir) / "episode_configs" / "episode_42_task_roundtrip_task.json"
+        config_path = Path(tmp_dir) / "episode_42_task_roundtrip_task.json"
         loaded_config = storage.load_episode_config(config_path)
 
         # Verify all fields match
@@ -585,7 +592,7 @@ class TestFileStorageEpisodeConfig:
     def test_load_episode_config_not_found(self, tmp_dir):
         """Test load_episode_config raises error for non-existent file."""
         storage = FileStorage(tmp_dir)
-        config_path = Path(tmp_dir) / "episode_configs" / "nonexistent.json"
+        config_path = Path(tmp_dir) / "nonexistent.json"
 
         with pytest.raises(FileNotFoundError):
             storage.load_episode_config(config_path)
@@ -647,7 +654,7 @@ class TestFileStorageEpisodeConfig:
         storage.save_episode_config(config)
 
         # Verify filename format
-        config_path = Path(tmp_dir) / "episode_configs" / "episode_10_task_task_with_underscores_123.json"
+        config_path = Path(tmp_dir) / "episode_10_task_task_with_underscores_123.json"
         assert config_path.exists()
 
         # Load it back
@@ -688,7 +695,7 @@ class TestFileStorageOverwrite:
         traj.steps.append(TrajectoryStep(output=env_out))
         storage.save_trajectory(traj)
 
-        traj_dir = Path(tmp_dir) / "trajectories"
+        traj_dir = Path(tmp_dir)
 
         # New storage instance with allow_overwrite
         storage2 = FileStorage(tmp_dir)
