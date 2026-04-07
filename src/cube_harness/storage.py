@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -40,18 +41,31 @@ class Storage(Protocol):
     def update_experiment_summary(self, trajectory: Trajectory) -> None: ...
 
 
-_ZST_COMPRESSOR = zstandard.ZstdCompressor(level=3)
-_ZST_DECOMPRESSOR = zstandard.ZstdDecompressor()
+# Thread-local zstd compressor/decompressor: these objects are NOT thread-safe,
+# so each thread gets its own instance (Ray workers, async episodes, etc.).
+_thread_local = threading.local()
+
+
+def _get_compressor() -> zstandard.ZstdCompressor:
+    if not hasattr(_thread_local, "compressor"):
+        _thread_local.compressor = zstandard.ZstdCompressor(level=3)
+    return _thread_local.compressor
+
+
+def _get_decompressor() -> zstandard.ZstdDecompressor:
+    if not hasattr(_thread_local, "decompressor"):
+        _thread_local.decompressor = zstandard.ZstdDecompressor()
+    return _thread_local.decompressor
 
 
 def _serialize_step(step: TrajectoryStep) -> bytes:
     data = step.model_dump(serialize_as_any=True)
     packed = msgpack.packb(data, use_bin_type=True)
-    return _ZST_COMPRESSOR.compress(packed)
+    return _get_compressor().compress(packed)
 
 
 def _deserialize_step(raw: bytes) -> dict:
-    decompressed = _ZST_DECOMPRESSOR.decompress(raw)
+    decompressed = _get_decompressor().decompress(raw)
     return msgpack.unpackb(decompressed, raw=False)
 
 
@@ -69,21 +83,17 @@ def _read_step_file(path: Path) -> dict | None:
     return None
 
 
-def _episode_dir_name(trajectory: Trajectory) -> str:
-    parts = trajectory.id.rsplit("_ep", 1)
-    task = parts[0]
-    ep_num = int(parts[1]) if len(parts) == 2 else 0
-    agent = trajectory.metadata.get("agent_name", "unknown")
-    return f"{ep_num:03d}_{agent}_on_{task.replace('.', '-')}"
-
-
 class FileStorage:
 
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
-        self._current_episode_dirs: dict[str, Path] = {}
+        self._saved_ids: set[str] = set()  # trajectory IDs saved in this session (for resave detection)
 
     # --- V2 episode directory helpers ---
+
+    def _episode_dir(self, trajectory_id: str) -> Path:
+        """Return the episode directory for a trajectory ID. O(1) — no scanning."""
+        return self.output_dir / EPISODES_DIR / trajectory_id
 
     def _episode_dirs(self) -> Iterator[Path]:
         episodes_dir = self.output_dir / EPISODES_DIR
@@ -92,13 +102,6 @@ class FileStorage:
         for ep_dir in episodes_dir.iterdir():
             if ep_dir.is_dir() and ARCHIVED_MARKER not in ep_dir.name and (ep_dir / EPISODE_METADATA).exists():
                 yield ep_dir
-
-    def _read_episode_id(self, ep_dir: Path) -> str:
-        with open(ep_dir / EPISODE_METADATA) as f:
-            data = json.load(f)
-        traj_id = data.get("id", ep_dir.name)
-        self._current_episode_dirs[traj_id] = ep_dir
-        return traj_id
 
     # --- V1 trajectory file helpers ---
 
@@ -114,27 +117,13 @@ class FileStorage:
     def _v1_traj_id_from_file(metadata_file: Path) -> str:
         return metadata_file.stem.replace(".metadata", "")
 
-    # --- Find / detect ---
-
-    def _find_episode_dir(self, trajectory_id: str) -> Path | None:
-        if trajectory_id in self._current_episode_dirs:
-            return self._current_episode_dirs[trajectory_id]
-        for ep_dir in self._episode_dirs():
-            with open(ep_dir / EPISODE_METADATA) as f:
-                data = json.load(f)
-            if data.get("id") == trajectory_id:
-                self._current_episode_dirs[trajectory_id] = ep_dir
-                return ep_dir
-        return None
-
     # --- Write (always V2) ---
 
     def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None:
-        dir_name = _episode_dir_name(trajectory)
-        ep_dir = self.output_dir / EPISODES_DIR / dir_name
-        is_resave = trajectory.id in self._current_episode_dirs
-
+        ep_dir = self._episode_dir(trajectory.id)
         metadata_path = ep_dir / EPISODE_METADATA
+        is_resave = trajectory.id in self._saved_ids
+
         if not is_resave and ep_dir.exists() and metadata_path.exists():
             if not allow_overwrite:
                 raise FileExistsError(
@@ -145,7 +134,7 @@ class FileStorage:
 
         ep_dir.mkdir(parents=True, exist_ok=True)
         (ep_dir / STEPS_DIR).mkdir(exist_ok=True)
-        self._current_episode_dirs[trajectory.id] = ep_dir
+        self._saved_ids.add(trajectory.id)
 
         trajectory_data = trajectory.model_dump(exclude={"steps"})
         with open(metadata_path, "w") as f:
@@ -162,10 +151,10 @@ class FileStorage:
         logger.info(f"Archived {ep_dir.name} -> {archived.name}")
 
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
-        if trajectory_id not in self._current_episode_dirs:
-            raise ValueError("Trajectory path not set. Call save_trajectory first.")
+        ep_dir = self._episode_dir(trajectory_id)
+        if not ep_dir.exists():
+            raise ValueError(f"Episode directory does not exist: {ep_dir}. Call save_trajectory first.")
         try:
-            ep_dir = self._current_episode_dirs[trajectory_id]
             self._write_step(ep_dir, step_num, step)
         except Exception as e:
             logger.exception(f"Error saving step to trajectory {trajectory_id}: {e}")
@@ -179,8 +168,8 @@ class FileStorage:
     # --- Load single trajectory ---
 
     def load_trajectory(self, trajectory_id: str) -> Trajectory:
-        ep_dir = self._find_episode_dir(trajectory_id)
-        if ep_dir is not None:
+        ep_dir = self._episode_dir(trajectory_id)
+        if (ep_dir / EPISODE_METADATA).exists():
             return self._load_trajectory(ep_dir, trajectory_id)
         return self._v1_load_trajectory(trajectory_id)
 
@@ -200,15 +189,16 @@ class FileStorage:
         return Trajectory.model_validate(trajectory_data)
 
     def load_step(self, trajectory_id: str, step_index: int) -> TrajectoryStep:
-        ep_dir = self._find_episode_dir(trajectory_id)
-        if ep_dir is None:
+        ep_dir = self._episode_dir(trajectory_id)
+        if not ep_dir.exists():
             raise FileNotFoundError(f"Episode directory not found for trajectory: {trajectory_id}")
-        step_files = sorted((ep_dir / STEPS_DIR).iterdir())
-        if step_index >= len(step_files):
-            raise IndexError(f"Step index {step_index} out of range (have {len(step_files)} steps)")
-        step_data = _read_step_file(step_files[step_index])
-        assert step_data is not None
-        return TrajectoryStep.model_validate(step_data)
+        steps_dir = ep_dir / STEPS_DIR
+        # Try both suffixes — exactly one should exist for a given step index
+        for suffix in ("obs", "act"):
+            path = steps_dir / f"{step_index:03d}_{suffix}.msgpack.zst"
+            if path.exists():
+                return TrajectoryStep.model_validate(_deserialize_step(path.read_bytes()))
+        raise IndexError(f"Step {step_index} not found in {steps_dir}")
 
     def _v1_load_trajectory(self, trajectory_id: str) -> Trajectory:
         traj_dir = self.output_dir / TRAJECTORIES_DIR
@@ -264,10 +254,9 @@ class FileStorage:
     # --- Load metadata (no steps) ---
 
     def load_trajectory_metadata(self, trajectory_id: str) -> Trajectory:
-        ep_dir = self._find_episode_dir(trajectory_id)
-        if ep_dir is not None:
-            metadata_path = ep_dir / EPISODE_METADATA
-        else:
+        ep_dir = self._episode_dir(trajectory_id)
+        metadata_path = ep_dir / EPISODE_METADATA
+        if not metadata_path.exists():
             metadata_path = self.output_dir / TRAJECTORIES_DIR / f"{trajectory_id}.metadata.json"
 
         if not metadata_path.exists():
@@ -293,8 +282,6 @@ class FileStorage:
             try:
                 with open(ep_dir / EPISODE_METADATA) as f:
                     data = json.load(f)
-                traj_id = data.get("id", ep_dir.name)
-                self._current_episode_dirs[traj_id] = ep_dir
                 data["steps"] = []
                 results.append(Trajectory.model_validate(data))
             except Exception as e:
@@ -315,7 +302,7 @@ class FileStorage:
         return self._list_ids() + self._v1_list_ids()
 
     def _list_ids(self) -> list[str]:
-        return [self._read_episode_id(ep_dir) for ep_dir in self._episode_dirs()]
+        return [ep_dir.name for ep_dir in self._episode_dirs()]
 
     def _v1_list_ids(self) -> list[str]:
         return [self._v1_traj_id_from_file(f) for f in self._v1_metadata_files()]
@@ -328,13 +315,13 @@ class FileStorage:
     def _list_ids_with_mtime(self) -> dict[str, float]:
         result: dict[str, float] = {}
         for ep_dir in self._episode_dirs():
-            traj_id = self._read_episode_id(ep_dir)
-            mtime = (ep_dir / EPISODE_METADATA).stat().st_mtime
-            steps_dir = ep_dir / STEPS_DIR
-            if steps_dir.exists():
-                for step_file in steps_dir.iterdir():
-                    mtime = max(mtime, step_file.stat().st_mtime)
-            result[traj_id] = mtime
+            traj_id = ep_dir.name
+            # Prefer episode_summary.jsonl mtime (appended every step) over scanning all step files
+            summary_path = ep_dir / "episode_summary.jsonl"
+            if summary_path.exists():
+                result[traj_id] = summary_path.stat().st_mtime
+            else:
+                result[traj_id] = (ep_dir / EPISODE_METADATA).stat().st_mtime
         return result
 
     def _v1_list_ids_with_mtime(self) -> dict[str, float]:
@@ -358,8 +345,7 @@ class FileStorage:
         results: list[Trajectory] = []
         for ep_dir in self._episode_dirs():
             try:
-                traj_id = self._read_episode_id(ep_dir)
-                results.append(self._load_trajectory(ep_dir, traj_id))
+                results.append(self._load_trajectory(ep_dir, ep_dir.name))
             except Exception as e:
                 logger.error(f"Failed to load episode {ep_dir.name}: {e}")
         return results

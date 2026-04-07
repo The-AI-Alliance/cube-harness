@@ -145,7 +145,7 @@ class TestEpisode:
         obs = Observation.from_text("test")
         step = TrajectoryStep(output=EnvironmentOutput(obs=obs))
 
-        with pytest.raises(ValueError, match="Trajectory path not set"):
+        with pytest.raises(ValueError, match="Episode directory does not exist"):
             mock_episode.storage.save_step(step, "nonexistent_traj", 0)
 
     def test_storage_save_step_creates_files(self, mock_episode, tmp_dir):
@@ -211,7 +211,7 @@ class TestEpisode:
 
         episodes_dir = tmp_dir / "episodes"
         ep_dirs = [d.name for d in episodes_dir.iterdir() if d.is_dir()]
-        assert any("042_" in d for d in ep_dirs)
+        assert any("_ep42" in d for d in ep_dirs)
 
     def test_episode_captures_agent_error(self, tmp_dir, mock_agent_config, mock_env_config):
         """Test Episode captures agent errors correctly in trajectory."""

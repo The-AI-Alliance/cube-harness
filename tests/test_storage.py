@@ -19,7 +19,7 @@ class TestFileStorageBasic:
     def test_init_creates_path(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         assert storage.output_dir == Path(tmp_dir)
-        assert storage._current_episode_dirs == {}
+        assert storage._saved_ids == set()
 
     def test_init_with_string_path(self, tmp_dir):
         storage = FileStorage(str(tmp_dir))
@@ -34,7 +34,7 @@ class TestFileStorageBasic:
         assert episodes_dir.exists()
         ep_dirs = list(episodes_dir.iterdir())
         assert len(ep_dirs) == 1
-        assert ep_dirs[0].name == "000_TestAgent_on_task_1"
+        assert ep_dirs[0].name == "task_1_ep0"
 
     def test_save_trajectory_creates_metadata_file(self, tmp_dir):
         storage = FileStorage(tmp_dir)
@@ -46,7 +46,7 @@ class TestFileStorageBasic:
         )
         storage.save_trajectory(traj)
 
-        metadata_path = Path(tmp_dir) / "episodes" / "000_TestAgent_on_task_1" / "episode.metadata.json"
+        metadata_path = Path(tmp_dir) / "episodes" / "task_1_ep0" / "episode.metadata.json"
         assert metadata_path.exists()
 
         with open(metadata_path) as f:
@@ -62,7 +62,7 @@ class TestFileStorageBasic:
         traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "TestAgent"})
         storage.save_trajectory(traj)
 
-        steps_dir = Path(tmp_dir) / "episodes" / "000_TestAgent_on_task_1" / "steps"
+        steps_dir = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps"
         assert steps_dir.exists()
 
 
@@ -74,7 +74,7 @@ class TestFileStorageWithSteps:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        steps_dir = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps"
+        steps_dir = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps"
         step_files = sorted(steps_dir.iterdir())
         assert len(step_files) == 1
         assert step_files[0].name == "000_obs.msgpack.zst"
@@ -89,7 +89,7 @@ class TestFileStorageWithSteps:
         traj.steps.append(TrajectoryStep(output=sample_agent_output))
         storage.save_trajectory(traj)
 
-        steps_dir = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps"
+        steps_dir = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps"
         step_files = sorted(steps_dir.iterdir())
         assert len(step_files) == 1
         assert step_files[0].name == "000_act.msgpack.zst"
@@ -102,7 +102,7 @@ class TestFileStorageWithSteps:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        steps_dir = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps"
+        steps_dir = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps"
         step_files = sorted(steps_dir.iterdir())
         assert len(step_files) == 3
         assert [f.name for f in step_files] == ["000_obs.msgpack.zst", "001_act.msgpack.zst", "002_obs.msgpack.zst"]
@@ -115,13 +115,13 @@ class TestFileStorageWithSteps:
 
         storage.save_step(TrajectoryStep(output=sample_agent_output), "task_1_ep0", 1)
 
-        steps_dir = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps"
+        steps_dir = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps"
         step_files = sorted(steps_dir.iterdir())
         assert len(step_files) == 2
 
     def test_save_step_without_trajectory_raises_error(self, tmp_dir, sample_env_output):
         storage = FileStorage(tmp_dir)
-        with pytest.raises(ValueError, match="Trajectory path not set"):
+        with pytest.raises(ValueError, match="Episode directory does not exist"):
             storage.save_step(TrajectoryStep(output=sample_env_output), "unknown_traj", 0)
 
 
@@ -173,7 +173,7 @@ class TestFileStorageWithLLMCalls:
 
         assert not (Path(tmp_dir) / "llm_calls").exists()
 
-        step_file = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps" / "000_act.msgpack.zst"
+        step_file = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps" / "000_act.msgpack.zst"
         step_data = _deserialize_step(step_file.read_bytes())
         llm_calls = step_data["output"]["llm_calls"]
         assert len(llm_calls) == 1
@@ -543,7 +543,7 @@ class TestFileStorageOverwrite:
         archived = [d for d in episodes_dir.iterdir() if ".archived_" in d.name]
         assert len(archived) == 1
 
-        current = episodes_dir / "000_A_on_task_1"
+        current = episodes_dir / "task_1_ep0"
         assert current.exists()
         assert (current / "episode.metadata.json").exists()
 
@@ -662,7 +662,7 @@ class TestSummaryStats:
         traj = self._make_trajectory_with_stats()
         storage.save_trajectory(traj)
 
-        metadata_path = tmp_dir / "episodes" / "000_A_on_task_1" / "episode.metadata.json"
+        metadata_path = tmp_dir / "episodes" / "task_1_ep0" / "episode.metadata.json"
         with open(metadata_path) as f:
             data = json.load(f)
 
@@ -687,7 +687,7 @@ class TestSummaryStats:
         traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
         storage.save_trajectory(traj)
 
-        metadata_path = tmp_dir / "episodes" / "000_A_on_task_1" / "episode.metadata.json"
+        metadata_path = tmp_dir / "episodes" / "task_1_ep0" / "episode.metadata.json"
         with open(metadata_path) as f:
             data = json.load(f)
         del data["summary_stats"]
@@ -738,7 +738,7 @@ class TestEpisodeSummary:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         proc = SummaryProcessor(ep_dir)
         proc.on_step(0, traj.steps[0])
 
@@ -773,7 +773,7 @@ class TestEpisodeSummary:
         traj.steps.append(TrajectoryStep(output=EnvironmentOutput(obs=obs, reward=0.0)))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         proc = SummaryProcessor(ep_dir)
         proc.on_step(0, traj.steps[0])
 
@@ -813,7 +813,7 @@ class TestMsgpackZstFormat:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        steps_dir = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps"
+        steps_dir = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps"
         step_files = list(steps_dir.iterdir())
         assert len(step_files) == 1
         assert step_files[0].name.endswith(".msgpack.zst")
@@ -840,7 +840,7 @@ class TestMsgpackZstFormat:
         traj.steps.append(TrajectoryStep(output=agent_output))
         storage.save_trajectory(traj)
 
-        step_file = Path(tmp_dir) / "episodes" / "000_A_on_task_1" / "steps" / "000_act.msgpack.zst"
+        step_file = Path(tmp_dir) / "episodes" / "task_1_ep0" / "steps" / "000_act.msgpack.zst"
         compressed_size = step_file.stat().st_size
         json_size = len(traj.steps[0].model_dump_json(serialize_as_any=True).encode())
         assert compressed_size < json_size * 0.5
@@ -891,7 +891,7 @@ class TestLazyLoaders:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         result = EpisodeResult(ep_dir, storage)
 
         assert result.metadata().id == "task_1_ep0"
@@ -908,7 +908,7 @@ class TestLazyLoaders:
         traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.2, end_time=0.3))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         result = EpisodeResult(ep_dir, storage)
 
         assert len(result) == 3
@@ -924,7 +924,7 @@ class TestLazyLoaders:
         traj.steps.append(TrajectoryStep(output=sample_agent_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         result = EpisodeResult(ep_dir, storage)
 
         steps = list(result)
@@ -972,7 +972,7 @@ class TestLazyLoaders:
         traj.steps.append(TrajectoryStep(output=sample_agent_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         result = EpisodeResult(ep_dir, storage)
         full = result.load_full()
         assert len(full.steps) == 2
@@ -1125,7 +1125,7 @@ class TestEpisodeSummaryStatus:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         proc = SummaryProcessor(ep_dir)
         proc.on_step(0, traj.steps[0])
         proc.on_episode_complete(traj, storage)
@@ -1154,7 +1154,7 @@ class TestEpisodeSummaryStatus:
         traj.steps.append(TrajectoryStep(output=error_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         proc = SummaryProcessor(ep_dir)
         proc.on_step(0, traj.steps[0])
         proc.on_step(1, traj.steps[1])
@@ -1181,7 +1181,7 @@ class TestEpisodeResultAPI:
         traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.2, end_time=0.3))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         proc = SummaryProcessor(ep_dir)
         for i, step in enumerate(traj.steps):
             proc.on_step(i, step)
@@ -1205,7 +1205,7 @@ class TestEpisodeResultAPI:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
         storage.save_trajectory(traj)
 
-        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        ep_dir = storage._episode_dir("task_1_ep0")
         result = EpisodeResult(ep_dir, storage)
         assert result.status() == EpisodeStatus.PENDING
 
@@ -1269,7 +1269,7 @@ class TestExperimentResultGetRecords:
             traj = Trajectory(id=f"task_1_ep{i}", metadata={"task_id": "task_1", "agent_name": "A"})
             traj.steps.append(TrajectoryStep(output=sample_env_output))
             storage.save_trajectory(traj)
-            ep_dir = storage._current_episode_dirs[f"task_1_ep{i}"]
+            ep_dir = storage._episode_dir(f"task_1_ep{i}")
             proc = SummaryProcessor(ep_dir)
             proc.on_step(0, traj.steps[0])
             proc.on_episode_complete(traj, storage)

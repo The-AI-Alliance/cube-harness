@@ -209,7 +209,7 @@ class Episode:
                     start_time=start_time,
                 )
                 self.storage.save_trajectory(trajectory, allow_overwrite=self.allow_overwrite)
-                ep_dir = self.storage._current_episode_dirs[trajectory.id]
+                ep_dir = self.storage._episode_dir(trajectory.id)
                 (ep_dir / "episode_config.json").write_text(
                     self.config.model_dump_json(indent=2, serialize_as_any=True)
                 )

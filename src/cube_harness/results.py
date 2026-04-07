@@ -151,10 +151,7 @@ class ExperimentResult:
                 for ep_dir in sorted(episodes_dir.iterdir()):
                     if ep_dir.is_dir() and ARCHIVED_MARKER not in ep_dir.name:
                         if (ep_dir / EPISODE_METADATA).exists():
-                            with open(ep_dir / EPISODE_METADATA) as f:
-                                data = json.load(f)
-                            traj_id = data.get("id", ep_dir.name)
-                            self._episodes[traj_id] = EpisodeResult(ep_dir, self._storage)
+                            self._episodes[ep_dir.name] = EpisodeResult(ep_dir, self._storage)
         return self._episodes
 
     def summary(self) -> ExperimentSummary | None:
