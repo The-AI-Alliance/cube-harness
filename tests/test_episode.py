@@ -51,6 +51,7 @@ class TestEpisode:
         ep_dirs = [d for d in episodes_dir.iterdir() if d.is_dir()]
         assert len(ep_dirs) >= 1
         assert (ep_dirs[0] / "episode.metadata.json").exists()
+        assert (ep_dirs[0] / "episode_config.json").exists()
         assert (ep_dirs[0] / "steps").exists()
 
     def test_episode_run_metadata_file_content(self, mock_episode, tmp_dir):

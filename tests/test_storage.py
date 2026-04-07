@@ -759,7 +759,10 @@ class TestEpisodeSummary:
         last = json.loads(lines[-1])
         assert last["n_env_steps"] == 2
         assert last["n_agent_steps"] == 1
-        assert last["step_num"] == 2
+        assert last["turn"] == 2
+        assert last["status"] == "running"
+        assert "tokens" in last
+        assert "cost_usd" in last
 
     def test_summary_tracks_running_totals(self, tmp_dir):
         from cube_harness.summary import SummaryProcessor
@@ -796,7 +799,8 @@ class TestEpisodeSummary:
         last = json.loads(lines[-1])
         assert last["prompt_tokens"] == 100
         assert last["completion_tokens"] == 50
-        assert last["cost"] == pytest.approx(0.01)
+        assert last["tokens"] == 150
+        assert last["cost_usd"] == pytest.approx(0.01)
         assert last["total_actions"] == 1
         assert last["total_llm_calls"] == 1
 
@@ -957,7 +961,7 @@ class TestLazyLoaders:
 
         result = ExperimentResult(tmp_dir)
         assert result.summary() is not None
-        assert result.summary()["n_episodes"] == 1
+        assert result.summary().n_episodes == 1
 
     def test_episode_result_load_full(self, tmp_dir, sample_env_output, sample_agent_output):
         from cube_harness.results import EpisodeResult
@@ -1109,3 +1113,168 @@ class TestV1BackwardCompat:
         assert len(all_trajs) == 2
         ids = {t.id for t in all_trajs}
         assert ids == {"old_traj", "task_1_ep0"}
+
+
+class TestEpisodeSummaryStatus:
+
+    def test_final_line_written_on_complete(self, tmp_dir, sample_env_output):
+        from cube_harness.summary import EpisodeStatus, SummaryProcessor, StepSummary
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        proc = SummaryProcessor(ep_dir)
+        proc.on_step(0, traj.steps[0])
+        proc.on_episode_complete(traj, storage)
+
+        summary_path = ep_dir / "episode_summary.jsonl"
+        lines = summary_path.read_text().splitlines()
+        assert len(lines) == 2
+
+        running = StepSummary.model_validate_json(lines[0])
+        assert running.status == EpisodeStatus.RUNNING
+        assert running.turn == 0
+
+        final = StepSummary.model_validate_json(lines[1])
+        assert final.status == EpisodeStatus.DONE
+        assert final.turn == -1
+
+    def test_failed_status_on_error(self, tmp_dir, sample_env_output):
+        from cube_harness.summary import EpisodeStatus, SummaryProcessor, StepSummary
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+
+        from cube.core import StepError
+        error_output = AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace=""))
+        traj.steps.append(TrajectoryStep(output=error_output))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        proc = SummaryProcessor(ep_dir)
+        proc.on_step(0, traj.steps[0])
+        proc.on_step(1, traj.steps[1])
+        proc.on_episode_complete(traj, storage)
+
+        lines = (ep_dir / "episode_summary.jsonl").read_text().splitlines()
+        final = StepSummary.model_validate_json(lines[-1])
+        assert final.status == EpisodeStatus.FAILED
+
+
+class TestEpisodeResultAPI:
+
+    def _make_episode(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.summary import SummaryProcessor
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(
+            id="task_1_ep0",
+            metadata={"task_id": "task_1", "agent_name": "A"},
+            summary_stats={"final_reward": 1.0, "cost": 0.05, "n_env_steps": 2, "n_agent_steps": 1},
+        )
+        traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.0, end_time=0.1))
+        traj.steps.append(TrajectoryStep(output=sample_agent_output, start_time=0.1, end_time=0.2))
+        traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.2, end_time=0.3))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        proc = SummaryProcessor(ep_dir)
+        for i, step in enumerate(traj.steps):
+            proc.on_step(i, step)
+        proc.on_episode_complete(traj, storage)
+        return storage, ep_dir
+
+    def test_status_done(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+        from cube_harness.summary import EpisodeStatus
+
+        storage, ep_dir = self._make_episode(tmp_dir, sample_env_output, sample_agent_output)
+        result = EpisodeResult(ep_dir, storage)
+        assert result.status() == EpisodeStatus.DONE
+
+    def test_status_pending_no_summary(self, tmp_dir, sample_env_output):
+        from cube_harness.results import EpisodeResult
+        from cube_harness.summary import EpisodeStatus
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        result = EpisodeResult(ep_dir, storage)
+        assert result.status() == EpisodeStatus.PENDING
+
+    def test_summary_returns_step_summary_models(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+        from cube_harness.summary import StepSummary
+
+        storage, ep_dir = self._make_episode(tmp_dir, sample_env_output, sample_agent_output)
+        result = EpisodeResult(ep_dir, storage)
+        summary = result.summary()
+        assert len(summary) == 4
+        assert all(isinstance(s, StepSummary) for s in summary)
+
+    def test_n_turns(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+
+        storage, ep_dir = self._make_episode(tmp_dir, sample_env_output, sample_agent_output)
+        result = EpisodeResult(ep_dir, storage)
+        assert result.n_turns() == 2
+
+    def test_get_obs_and_get_act(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+
+        storage, ep_dir = self._make_episode(tmp_dir, sample_env_output, sample_agent_output)
+        result = EpisodeResult(ep_dir, storage)
+
+        obs_step = result.get_obs(0)
+        assert isinstance(obs_step.output, EnvironmentOutput)
+
+        act_step = result.get_act(1)
+        assert isinstance(act_step.output, AgentOutput)
+
+    def test_get_obs_not_found(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+
+        storage, ep_dir = self._make_episode(tmp_dir, sample_env_output, sample_agent_output)
+        result = EpisodeResult(ep_dir, storage)
+        with pytest.raises(FileNotFoundError):
+            result.get_obs(99)
+
+    def test_get_exp_record(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeRecord, EpisodeResult
+        from cube_harness.summary import EpisodeStatus
+
+        storage, ep_dir = self._make_episode(tmp_dir, sample_env_output, sample_agent_output)
+        result = EpisodeResult(ep_dir, storage)
+        record = result.get_exp_record()
+        assert isinstance(record, EpisodeRecord)
+        assert record.trajectory_id == "task_1_ep0"
+        assert record.status == EpisodeStatus.DONE
+
+
+class TestExperimentResultGetRecords:
+
+    def test_get_records(self, tmp_dir, sample_env_output):
+        from cube_harness.results import EpisodeRecord, ExperimentResult
+        from cube_harness.summary import SummaryProcessor
+
+        storage = FileStorage(tmp_dir)
+        for i in range(3):
+            traj = Trajectory(id=f"task_1_ep{i}", metadata={"task_id": "task_1", "agent_name": "A"})
+            traj.steps.append(TrajectoryStep(output=sample_env_output))
+            storage.save_trajectory(traj)
+            ep_dir = storage._current_episode_dirs[f"task_1_ep{i}"]
+            proc = SummaryProcessor(ep_dir)
+            proc.on_step(0, traj.steps[0])
+            proc.on_episode_complete(traj, storage)
+
+        result = ExperimentResult(tmp_dir)
+        records = result.get_records()
+        assert len(records) == 3
+        assert all(isinstance(r, EpisodeRecord) for r in records)
