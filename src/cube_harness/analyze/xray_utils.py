@@ -149,7 +149,7 @@ def _count_episodes(dir_path: Path) -> int:
         return sum(1 for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name)
     traj_dir = dir_path / "trajectories"
     if traj_dir.exists():
-        return len(list(traj_dir.glob("*.jsonl")))
+        return sum(1 for _ in traj_dir.glob("*.jsonl"))
     return 0
 
 

@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -66,16 +65,11 @@ def _read_step_file(path: Path) -> dict | None:
 
 
 def _episode_dir_name(trajectory: Trajectory) -> str:
-    m = re.search(r"_ep(\d+)$", trajectory.id)
-    if m:
-        ep_num = int(m.group(1))
-        task_from_id = trajectory.id[: m.start()]
-    else:
-        ep_num = 0
-        task_from_id = trajectory.id
+    parts = trajectory.id.rsplit("_ep", 1)
+    task = parts[0]
+    ep_num = int(parts[1]) if len(parts) == 2 else 0
     agent = trajectory.metadata.get("agent_name", "unknown")
-    task_safe = task_from_id.replace(".", "-")
-    return f"{ep_num:03d}_{agent}_on_{task_safe}"
+    return f"{ep_num:03d}_{agent}_on_{task.replace('.', '-')}"
 
 
 class FileStorage:

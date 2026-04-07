@@ -873,6 +873,107 @@ class TestMsgpackZstFormat:
             storage.load_step("nonexistent", 0)
 
 
+class TestLazyLoaders:
+
+    def test_episode_result_lazy_metadata(self, tmp_dir, sample_env_output):
+        from cube_harness.results import EpisodeResult
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(
+            id="task_1_ep0",
+            metadata={"task_id": "task_1", "agent_name": "A"},
+            summary_stats={"final_reward": 1.0, "cost": 0.05},
+        )
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        result = EpisodeResult(ep_dir, storage)
+
+        assert result.metadata.id == "task_1_ep0"
+        assert result.summary_stats["final_reward"] == 1.0
+        assert result.metadata.steps == []
+
+    def test_episode_result_random_access(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
+        traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.0, end_time=0.1))
+        traj.steps.append(TrajectoryStep(output=sample_agent_output, start_time=0.1, end_time=0.2))
+        traj.steps.append(TrajectoryStep(output=sample_env_output, start_time=0.2, end_time=0.3))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        result = EpisodeResult(ep_dir, storage)
+
+        assert len(result) == 3
+        step1 = result[1]
+        assert isinstance(step1.output, AgentOutput)
+
+    def test_episode_result_iteration(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+        traj.steps.append(TrajectoryStep(output=sample_agent_output))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        result = EpisodeResult(ep_dir, storage)
+
+        steps = list(result)
+        assert len(steps) == 2
+        assert isinstance(steps[0].output, EnvironmentOutput)
+        assert isinstance(steps[1].output, AgentOutput)
+
+    def test_experiment_result_listing(self, tmp_dir, sample_env_output):
+        from cube_harness.results import ExperimentResult
+
+        storage = FileStorage(tmp_dir)
+        for i in range(3):
+            traj = Trajectory(id=f"task_1_ep{i}", metadata={"task_id": "task_1", "agent_name": "A"})
+            traj.steps.append(TrajectoryStep(output=sample_env_output))
+            storage.save_trajectory(traj)
+
+        result = ExperimentResult(tmp_dir)
+        assert len(result.episodes) == 3
+        for traj_id, episode in result.episodes.items():
+            assert episode.metadata.steps == []
+
+    def test_experiment_result_summary(self, tmp_dir, sample_env_output):
+        from cube_harness.results import ExperimentResult
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(
+            id="task_1_ep0",
+            metadata={"task_id": "task_1", "agent_name": "A"},
+            summary_stats={"final_reward": 1.0, "prompt_tokens": 500, "completion_tokens": 100, "cost": 0.02},
+        )
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+        storage.save_trajectory(traj)
+        storage.update_experiment_summary(traj)
+
+        result = ExperimentResult(tmp_dir)
+        assert result.summary is not None
+        assert result.summary["n_episodes"] == 1
+
+    def test_episode_result_load_full(self, tmp_dir, sample_env_output, sample_agent_output):
+        from cube_harness.results import EpisodeResult
+
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
+        traj.steps.append(TrajectoryStep(output=sample_env_output))
+        traj.steps.append(TrajectoryStep(output=sample_agent_output))
+        storage.save_trajectory(traj)
+
+        ep_dir = storage._current_episode_dirs["task_1_ep0"]
+        result = EpisodeResult(ep_dir, storage)
+        full = result.load_full()
+        assert len(full.steps) == 2
+
+
 class TestV1BackwardCompat:
 
     def _create_v1_trajectory(self, tmp_dir: Path, traj_id: str = "test_traj") -> None:
