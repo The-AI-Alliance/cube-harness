@@ -145,6 +145,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
         """Execute a BrowserGym action string and return result message."""
         logger.info(f"Execute bgym step: {action_str}")
         result = "Success"
+        infeasible_messages: list[str] = []
 
         try:
             code = self._action_set.to_python_code(action_str)
@@ -152,9 +153,14 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
                 code=code,
                 page=self.page,
                 send_message_to_user=lambda message: logger.info(f"BrowserGym message: {message}"),
-                report_infeasible_instructions=lambda message: logger.warning(f"Infeasible instruction: {message}"),
+                report_infeasible_instructions=lambda message: infeasible_messages.append(message),
             )
-            self._last_info = {"source": "action", "action": action_str, "action_error": ""}
+            if infeasible_messages:
+                error_msg = "; ".join(infeasible_messages)
+                self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
+                result = f"Failed (infeasible): {error_msg}"
+            else:
+                self._last_info = {"source": "action", "action": action_str, "action_error": ""}
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
             self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
@@ -369,6 +375,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool, BidBrowserActionSpace):
             "axtree_object": axtree,
             "extra_element_properties": extra_properties,
             "focused_element_bid": focused_element_bid,
+            "last_action_error": self._last_info.get("action_error", "") if self._last_info else "",
         }
         if self.config.use_screenshot:
             obs["screenshot"] = extract_screenshot(page)
