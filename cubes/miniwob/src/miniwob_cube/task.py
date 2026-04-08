@@ -8,6 +8,14 @@ from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tools.browser import BrowserTool
 from PIL import Image
 
+
+class MiniWobTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for MiniWob++ tasks.
+    Adds cube-specific public fields that are safe to ship in task_metadata.json.
+    """
+    nondeterministic: bool = False
+
+
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_ACTION_NAMES = frozenset(

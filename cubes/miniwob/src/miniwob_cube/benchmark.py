@@ -11,7 +11,7 @@ from typing import ClassVar, Generator
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.task import TaskConfig
 
-from miniwob_cube.task import MiniWobTaskConfig
+from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class MiniWobBenchmark(Benchmark):
         num_tasks=125,
         tags=["browser", "web", "ui"],
     )
-    # task_metadata: populated automatically at import time in Benchmark.__init_subclass__
+    task_metadata: ClassVar[dict[str, MiniWobTaskMetadata]]  # type: ignore - will be populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = MiniWobTaskConfig
 
     html_path: str = files("miniwob").joinpath("html").as_posix()  # type: ignore
