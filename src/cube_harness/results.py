@@ -34,7 +34,6 @@ class EpisodeRecord(BaseModel):
 
 
 class EpisodeResult:
-
     def __init__(self, episode_dir: Path, storage: FileStorage) -> None:
         self._dir = episode_dir
         self._storage = storage
@@ -72,9 +71,7 @@ class EpisodeResult:
                 self._summary = []
             else:
                 self._summary = [
-                    StepSummary.model_validate_json(line)
-                    for line in path.read_text().splitlines()
-                    if line.strip()
+                    StepSummary.model_validate_json(line) for line in path.read_text().splitlines() if line.strip()
                 ]
         return self._summary
 
@@ -143,7 +140,6 @@ class EpisodeResult:
 
 
 class ExperimentResult:
-
     def __init__(self, exp_dir: str | Path) -> None:
         self._dir = Path(exp_dir)
         self._storage = FileStorage(self._dir)

@@ -31,7 +31,6 @@ class LLMCallRef(BaseModel):
 
 
 class Storage(Protocol):
-
     def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None: ...
 
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None: ...
@@ -84,7 +83,6 @@ def _read_step_file(path: Path) -> dict | None:
 
 
 class FileStorage:
-
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
         self._saved_ids: set[str] = set()  # trajectory IDs saved in this session (for resave detection)

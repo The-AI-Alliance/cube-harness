@@ -52,7 +52,6 @@ class ExperimentSummary(BaseModel):
 
 
 class SummaryProcessor:
-
     def __init__(self, episode_dir: Path) -> None:
         self._summary_path = episode_dir / "episode_summary.jsonl"
         self._n_env_steps = 0
@@ -104,10 +103,7 @@ class SummaryProcessor:
         self._append(self._build_entry(step_num, EpisodeStatus.RUNNING))
 
     def on_episode_complete(self, trajectory: Trajectory, storage: "FileStorage") -> None:
-        has_error = any(
-            isinstance(s.output, AgentOutput) and s.output.error is not None
-            for s in trajectory.steps
-        )
+        has_error = any(isinstance(s.output, AgentOutput) and s.output.error is not None for s in trajectory.steps)
         status = EpisodeStatus.FAILED if has_error else EpisodeStatus.DONE
         self._append(self._build_entry(-1, status))
         storage.update_experiment_summary(trajectory)

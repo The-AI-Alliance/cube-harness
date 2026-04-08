@@ -15,7 +15,6 @@ from cube_harness.storage import FileStorage, _deserialize_step
 
 
 class TestFileStorageBasic:
-
     def test_init_creates_path(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         assert storage.output_dir == Path(tmp_dir)
@@ -67,7 +66,6 @@ class TestFileStorageBasic:
 
 
 class TestFileStorageWithSteps:
-
     def test_save_trajectory_with_env_step(self, tmp_dir, sample_env_output):
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
@@ -126,7 +124,6 @@ class TestFileStorageWithSteps:
 
 
 class TestFileStorageLogs:
-
     def test_get_log_path(self, tmp_dir: Path) -> None:
         storage = FileStorage(tmp_dir)
         log_path = storage.get_log_path("task_a_ep3")
@@ -151,7 +148,6 @@ class TestFileStorageLogs:
 
 
 class TestFileStorageWithLLMCalls:
-
     @pytest.fixture
     def sample_llm_call(self):
         return LLMCall(
@@ -201,7 +197,6 @@ class TestFileStorageWithLLMCalls:
 
 
 class TestFileStorageLoad:
-
     def test_load_trajectory_basic(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
@@ -261,7 +256,6 @@ class TestFileStorageLoad:
 
 
 class TestFileStorageLoadAll:
-
     def test_load_all_empty_directory(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         result = storage.load_all_trajectories()
@@ -307,7 +301,6 @@ class TestFileStorageLoadAll:
 
 
 class TestFileStorageWithImages:
-
     def test_save_and_load_trajectory_with_image(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         img = Image.new("RGB", (100, 100), color="blue")
@@ -328,7 +321,6 @@ class TestFileStorageWithImages:
 
 
 class TestFileStorageRoundtrip:
-
     def test_full_trajectory_roundtrip(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         llm_call = LLMCall(
@@ -387,7 +379,6 @@ class TestFileStorageRoundtrip:
 
 
 class TestFileStorageEpisodeConfig:
-
     def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
         from cube_harness.episode import EpisodeConfig
 
@@ -510,7 +501,6 @@ class TestFileStorageEpisodeConfig:
 
 
 class TestFileStorageOverwrite:
-
     def test_save_trajectory_raises_on_duplicate(self, tmp_dir) -> None:
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
@@ -559,7 +549,6 @@ class TestFileStorageOverwrite:
 
 
 class TestLoadTrajectoryMetadata:
-
     def test_load_metadata_returns_trajectory_with_no_steps(self, tmp_dir: Path) -> None:
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="task_1_ep0", metadata={"agent_name": "A", "task_id": "task_1"})
@@ -573,7 +562,13 @@ class TestLoadTrajectoryMetadata:
 
     def test_load_metadata_preserves_timing_and_reward_info(self, tmp_dir: Path) -> None:
         storage = FileStorage(tmp_dir)
-        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"}, start_time=0.0, end_time=5.0, reward_info={"reward": 1.0})
+        traj = Trajectory(
+            id="task_1_ep0",
+            metadata={"task_id": "task_1", "agent_name": "A"},
+            start_time=0.0,
+            end_time=5.0,
+            reward_info={"reward": 1.0},
+        )
         storage.save_trajectory(traj)
 
         loaded = storage.load_trajectory_metadata("task_1_ep0")
@@ -632,7 +627,6 @@ class TestLoadTrajectoryMetadata:
 
 
 class TestSummaryStats:
-
     def _make_trajectory_with_stats(self, traj_id: str = "task_1_ep0") -> Trajectory:
         obs = Observation.from_text("obs")
         traj = Trajectory(
@@ -730,7 +724,6 @@ class TestSummaryStats:
 
 
 class TestEpisodeSummary:
-
     def test_summary_appended_per_step(self, tmp_dir, sample_env_output, sample_agent_output):
         from cube_harness.summary import SummaryProcessor
 
@@ -787,10 +780,12 @@ class TestEpisodeSummary:
         llm_call.usage.prompt_tokens = 100
         llm_call.usage.completion_tokens = 50
         llm_call.usage.cost = 0.01
-        agent_step = TrajectoryStep(output=AgentOutput(
-            actions=[Action(name="click", arguments={})],
-            llm_calls=[llm_call],
-        ))
+        agent_step = TrajectoryStep(
+            output=AgentOutput(
+                actions=[Action(name="click", arguments={})],
+                llm_calls=[llm_call],
+            )
+        )
         storage.save_step(agent_step, "task_1_ep0", 1)
         proc.on_step(1, agent_step)
 
@@ -807,7 +802,6 @@ class TestEpisodeSummary:
 
 
 class TestMsgpackZstFormat:
-
     def test_step_files_are_binary(self, tmp_dir, sample_env_output):
         storage = FileStorage(tmp_dir)
         traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1", "agent_name": "A"})
@@ -879,7 +873,6 @@ class TestMsgpackZstFormat:
 
 
 class TestLazyLoaders:
-
     def test_episode_result_lazy_metadata(self, tmp_dir, sample_env_output):
         from cube_harness.results import EpisodeResult
 
@@ -980,7 +973,6 @@ class TestLazyLoaders:
 
 
 class TestV1BackwardCompat:
-
     def _create_v1_trajectory(self, tmp_dir: Path, traj_id: str = "test_traj") -> None:
         traj_dir = tmp_dir / "trajectories"
         traj_dir.mkdir(parents=True, exist_ok=True)
@@ -1117,7 +1109,6 @@ class TestV1BackwardCompat:
 
 
 class TestEpisodeSummaryStatus:
-
     def test_final_line_written_on_complete(self, tmp_dir, sample_env_output):
         from cube_harness.summary import EpisodeStatus, StepSummary, SummaryProcessor
 
@@ -1151,6 +1142,7 @@ class TestEpisodeSummaryStatus:
         traj.steps.append(TrajectoryStep(output=sample_env_output))
 
         from cube.core import StepError
+
         error_output = AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace=""))
         traj.steps.append(TrajectoryStep(output=error_output))
         storage.save_trajectory(traj)
@@ -1167,7 +1159,6 @@ class TestEpisodeSummaryStatus:
 
 
 class TestEpisodeResultAPI:
-
     def _make_episode(self, tmp_dir, sample_env_output, sample_agent_output):
         from cube_harness.summary import SummaryProcessor
 
@@ -1260,7 +1251,6 @@ class TestEpisodeResultAPI:
 
 
 class TestExperimentResultGetRecords:
-
     def test_get_records(self, tmp_dir, sample_env_output):
         from cube_harness.results import EpisodeRecord, ExperimentResult
         from cube_harness.summary import SummaryProcessor
