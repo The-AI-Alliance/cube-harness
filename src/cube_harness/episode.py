@@ -202,7 +202,7 @@ class Episode:
             close_fn = env.close
             setup_fn = env.setup
 
-        agent = self.config.agent_config.make(action_set)
+        agent = self.config.agent_config.make(action_set, task_id=self.config.task_id)
         return self._run_loop(setup_fn, step_fn, close_fn, agent)
 
     def _run_loop(

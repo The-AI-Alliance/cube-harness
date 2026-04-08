@@ -1,176 +1,218 @@
-# Meta-Agent: Cube & Agent Debugger
+# Meta-Agent: Iterative Agent Improvement Loop
 
-You are the **meta-agent** — a systematic debugger for cube benchmarks and the agents that run on them. Your job is to find root causes, apply clean targeted fixes, and validate improvement.
+You are the **meta-agent**. Your job is to make the cube-harness Genny agent better at specific tasks by running evaluations, analysing failures, implementing targeted fixes, validating them, and repeating.
 
-Inspired by Meta-Harness (arXiv 2603.28052) and JEF-Hinter (arXiv 2510.04373).
-
----
-
-## Fix Priority Order
-
-When you find a failure, work through this hierarchy — earlier levels have higher priority and smaller blast radius:
-
-**1. Cube / Tool implementation bugs** ← start here
-Is the tool giving the agent complete, accurate information? Is the observation (screenshot, AXTree, HTML) showing what the task actually requires? A broken or incomplete tool invalidates everything above it. Check:
-- Does the tool expose all necessary actions?
-- Is the observation representation faithfully capturing state?
-- Are there rendering artifacts, stale state, or missing elements?
-
-**2. Benchmark / Task definition issues**
-Is the task description clear about what success looks like? Is the evaluation function checking the right thing? Could the task be made faster without sacrificing signal?
-- Is the goal description unambiguous?
-- Does the eval function match the task intent (brittle regex, wrong element check)?
-- Are there unnecessary slow steps (extra page loads, waits) that could be cut?
-
-**3. Agent scaffolding**
-Only after ruling out environment issues: is Genny presenting information well? Does it have access to the tools it needs? Consider meta-harness style improvements — external tool calls, better summarisation, context window tuning.
-- Is the observation window (`render_last_n_obs`) enough for the task horizon?
-- Is summarisation preserving key facts?
-- Does the agent need access to an external tool not provided by the environment?
-
-**4. Hints**
-Targeted LLM guidance when the scaffolding is fine but the model needs a nudge. Scoped as narrowly as possible:
-- `task_hints[task_id]` — task-specific
-- `GennyConfig.hint` — subset-wide
-- `system_prompt` change — only if the issue is truly general
-
-**5. Harness improvements**
-Improve how the harness stores, represents, or exposes information. Better telemetry, faster trace loading, richer step summaries — anything that makes debugging faster or cheaper.
-
-**6. General efficiency**
-Token cost, wall-clock time, parallelism, benchmark setup overhead. Worth fixing but never at the cost of correctness.
+You draw inspiration from Meta-Harness (arXiv 2603.28052) and JEF-Hinter (arXiv 2510.04373): systematic, hypothesis-driven debugging with minimal cost.
 
 ---
 
-## Debugging Strategy
+## Working Contract
 
-**Pick tasks that fail but should succeed.** Avoid tasks with fundamental ambiguity or that require capabilities the agent fundamentally lacks. A task that sometimes passes is a better target than one that never passes.
-
-**Use causal interventions, not hunches.** Before writing a fix, write a minimal intervention (a hint, a one-line code change, a different prompt) that would confirm your hypothesis. If the intervention works → root cause confirmed → write the real fix. If not → revise the hypothesis.
-
-**Fixes go in the right place, always.**
-| Root Cause | Correct Fix |
-|---|---|
-| Tool missing information | Fix the tool |
-| Observation not showing required state | Fix `obs_postprocess` in the cube task |
-| Task description ambiguous | Add task-level specification to the benchmark |
-| Eval function brittle | Fix the eval function |
-| Agent scaffolding insufficient | Improve Genny (context, summarisation, tools) |
-| LLM needs guidance on a specific task | Add `task_hints` entry |
-| Playwright version issue | Identify version, pin or blacklist it |
-
-Temporary hacks (e.g. a blunt hint that masks a tool bug) are only acceptable as a diagnostic step to confirm a hypothesis. They must not be committed as the final fix.
+- All scaffolding changes (genny.py, episode.py, storage) go on branch `feat/meta-agent`.
+- Each meta-agent discovery (hint, tool fix, prompt change) goes on its own branch off `feat/meta-agent`: `feat/meta-agent/iter-N-<short-description>`, then a PR against `feat/meta-agent`.
+- Keep an iteration log at `meta_agent_log.md` in the repo root. Append one entry per iteration.
+- Be cost-conscious: prefer targeted re-runs over full benchmark sweeps.
+- Every change must be validated before opening a PR.
 
 ---
 
 ## Entry Point
 
+The starting recipe is `recipes/meta_agent_recipe.py`. Always start from there:
+
 ```bash
-uv run recipes/meta_agent_recipe.py debug   # 2 tasks, sequential
-uv run recipes/meta_agent_recipe.py         # full subset run
+uv run recipes/meta_agent_recipe.py debug   # sequential, quick sanity check
+uv run recipes/meta_agent_recipe.py         # full run on selected task subset
 ```
 
-Edit `task_ids` in the recipe to focus on failing tasks. Edit `GennyConfig.task_hints` / `hint` to add hints.
+The recipe contains two things the meta-agent edits each iteration:
+1. `task_ids` — the subset of tasks to focus on
+2. `agent_config` — the `GennyConfig` with `hint` and `task_hints`
 
-**Task subset** — `MiniWobSubset` filters `get_task_configs()` to a list of IDs:
+---
+
+## Task Subset Selection
+
+`MiniWobSubset` (defined in the recipe) wraps `MiniWobBenchmark` and filters `get_task_configs()` to the specified `task_ids`. To change the subset:
+
 ```python
-task_ids: list[str] = ["click-button", "login-user"]
+task_ids: list[str] = ["click-button", "login-user", "search-engine"]
 benchmark = MiniWobSubset(default_tool_config=tool_config, task_ids=task_ids)
 ```
-Empty list = all 125 tasks. List all IDs: `MiniWobBenchmark.task_metadata.keys()`.
+
+An empty `task_ids` list runs all 125 MiniWob tasks (full benchmark sweep — avoid unless needed).
+
+Available task IDs come from `miniwob_tasks.json` in `cubes/miniwob/`. To list them:
+
+```python
+from miniwob_cube.benchmark import MiniWobBenchmark
+for tm in MiniWobBenchmark.task_metadata.values():
+    print(tm.id)
+```
 
 ---
 
-## Reading Traces
+## Iteration Loop
 
-**Fast overview:**
+### 0. Orient
+
+Before the first iteration, read:
+- `meta_agent_log.md` (if it exists) for prior context
+- Recent results in `~/cube_harness_results/` — pick the most recent output dir
+- Understand which tasks are currently failing and at what rate
+
+If no prior results exist, go to **Step 1** directly.
+
+### 1. Select Tasks to Evaluate
+
+Choose a small, informative task set (2–5 tasks). Prioritise:
+- Tasks that **recently regressed** or have low reward
+- Tasks with **high diagnostic value** (diverse failure modes)
+- Tasks that are **cheap to run** (few steps, no heavy setup)
+
+Avoid: tasks already passing reliably, tasks that take >60s each without strong reason.
+
+Write your selection rationale in the iteration log.
+
+### 2. Run Evaluation
+
+Update `task_ids` in the recipe, then run:
+
+```bash
+uv run recipes/meta_agent_recipe.py debug
+```
+
+Note the output directory printed at startup.
+
+### 3. Analyse Traces
+
+Storage is V2 format. Directory layout:
+
+```
+output_dir/
+  episodes/
+    000_GennyConfig_on_miniwob-click-button/
+      episode.metadata.json      ← task_id, agent_name, reward
+      episode_config.json        ← full GennyConfig for re-launching
+      episode_summary.jsonl      ← one StepSummary per turn (fast, no decompression needed)
+      steps/
+        000_obs.msgpack.zst
+        001_act.msgpack.zst
+        ...
+  experiment_summary.json
+```
+
+Use the typed loaders:
+
 ```python
-from cube_harness.results import ExperimentResult
-for record in ExperimentResult("/path/to/output_dir").get_records():
-    print(record.task_id, record.reward, record.n_turns, record.cost_usd)
+from cube_harness.results import ExperimentResult, EpisodeResult
+
+exp = ExperimentResult("/path/to/output_dir")
+
+# Fast overview
+for record in exp.get_records():
+    print(record.task_id, record.reward, record.n_turns)
+
+# Deep dive on a specific episode
+ep = EpisodeResult("/path/to/output_dir/episodes/000_.../")
+for step in ep.summary():          # StepSummary: turn, status, tokens, cost, reward
+    print(step)
+obs = ep.get_obs(turn=2)           # TrajectoryStep with EnvironmentOutput
+act = ep.get_act(turn=2)           # TrajectoryStep with AgentOutput + inline LLM calls
 ```
 
-**What the agent actually saw** — the most important diagnostic. Read the full LLM prompt from the stored `act` step:
+Use `make xray` for visual inspection when helpful.
+
+Ask:
+- Where did the agent go wrong? (wrong action, bad reasoning, stuck in loop, tool error)
+- Is the failure **systematic** (always same point) or **stochastic**?
+- Root cause in: LLM reasoning, tool bug, task definition gap, missing context?
+
+### 4. Identify Root Cause & Pick Fix Type
+
+| Root Cause | Fix |
+|---|---|
+| LLM lacked task-specific context | Add entry to `task_hints` in the recipe |
+| Needed context applies to whole subset | Set `hint` in `GennyConfig` |
+| Tool implementation bug | Fix tool code in `src/cube_harness/tools/` or the cube |
+| Task eval function wrong/ambiguous | Update task code in the cube |
+| Insufficient trace data to diagnose | Add telemetry fields to `AgentOutput`/`EnvironmentOutput` |
+| Agent prompt too generic for task class | Update `system_prompt`, `react_prompt`, or `act_prompt` |
+| Agent context management issue | Fix `genny.py` logic |
+
+Only pick **one fix per iteration**. Smallest effective change wins.
+
+### 5. Implement the Fix on a Branch
+
+Create a branch for this specific discovery:
+
+```bash
+git checkout -b feat/meta-agent/iter-N-<description> feat/meta-agent
+```
+
+**For task hints** (most common, zero risk — lives in the recipe, not in core code):
+
 ```python
-from pathlib import Path
-from cube_harness.results import EpisodeResult
-from cube_harness.storage import FileStorage
-
-ep = EpisodeResult(Path("output_dir/episodes/000_.../"), FileStorage(Path("output_dir")))
-act = ep.get_act(turn=N)
-for llm_call in act.output.llm_calls:
-    print(f"=== {llm_call.tag} | {llm_call.usage.prompt_tokens} prompt tokens ===")
-    for msg in llm_call.prompt.messages:
-        role = msg.get("role") if isinstance(msg, dict) else msg.role
-        content = msg.get("content") if isinstance(msg, dict) else msg.content
-        if isinstance(content, list):
-            for part in content:
-                print(f"  [{role}]", "[IMAGE]" if part.get("type") == "image_url" else str(part.get("text",""))[:200])
-        else:
-            print(f"  [{role}]", str(content)[:200])
+agent_config = GennyConfig(
+    llm_config=llm_config,
+    hint="General guidance for this task subset.",
+    task_hints={
+        "click-button": "The submit button always has id='subbtn'. Click it directly.",
+        "login-user": "Tab between fields. Username field comes first.",
+    },
+)
 ```
 
-**Raw observation** — what the environment provided before Genny processed it:
-```python
-obs = ep.get_obs(turn=N)
-for content in obs.output.obs.content:
-    print(type(content).__name__, ":", str(content.to_markdown())[:300])
-```
+**For code fixes**: read the file first, make a minimal edit, run `make lint`.
 
-Use `make xray` for visual step-by-step inspection.
+Always run `make lint` and `make test` after any code change.
 
-**Questions to answer:**
-- Goal: is the task description complete and unambiguous in the prompt?
-- Observation: does the screenshot/AXTree show what the agent needs? Any truncation (`… [truncated]`)?
-- Summary: does it preserve key facts or lose critical state?
-- Context window: is earlier state visible when needed for long-horizon tasks?
-- Tools: are all required tools listed? Are descriptions accurate?
+### 6. Validate
 
----
+1. `make test` — must pass
+2. Re-run the same task set with the fix applied
+3. Compare reward before/after
 
-## Genny Context Layout
+If improved: commit, open a PR against `feat/meta-agent`, log the iteration.
+If no improvement: revert, update hypothesis, go back to Step 4.
 
-```
-[system]  system_prompt                        ← static (cached)
-[user]    goal — step-0 observation            ← static (cached)
-[user]    ## Task Hint\n{task_hint or hint}    ← if set (cached)
-[asst]    "Understood..."
-[asst]    ## Summary of past interactions      ← rolling COT / summarise pass
-[user]    ## N most recent observations
-...       windowed obs + asst groups            ← last render_last_n_obs steps
-[user]    react_prompt / act_prompt            ← static
-```
+### 7. Log the Iteration
 
-Key `GennyConfig` levers: `render_last_n_obs`, `max_obs_chars`, `enable_summarize`, `summarize_cot_only`, `summarize_verbose_prompt`, `react_prompt`, `system_prompt`.
-
----
-
-## Branch & Log Convention
-
-- Scaffolding changes → `feat/meta-agent`
-- Each fix → `feat/meta-agent/iter-N-<description>` → PR against `feat/meta-agent`
-- Log every iteration in `meta_agent_log.md`:
+Append to `meta_agent_log.md`:
 
 ```markdown
 ## Iteration N — YYYY-MM-DD
-**Tasks**: task_a, task_b
-**What the agent saw**: [prompt/obs findings]
-**Hypothesis**: [one line]
-**Intervention**: [causal test used to confirm]
-**Fix**: [what changed, where, blast radius]
-**Result**: reward before → after
-**Control set**: [pass / regression on task_x]
+
+**Branch**: feat/meta-agent/iter-N-<description>
+**Tasks evaluated**: task_a, task_b
+**Failure pattern**: [one line]
+**Root cause hypothesis**: [one line]
+**Fix applied**: [type + brief description]
+**Result**: reward before → after (or: no improvement, reverted)
+**Next hypothesis**: [what to try next]
 ```
+
+### 8. Decide: Continue or Stop
+
+Continue if there are still failing tasks with diagnosable root causes.
+Stop if all selected tasks pass, or stuck on the same failure 3 iterations in a row (escalate to user).
 
 ---
 
 ## Key Files
 
-| | |
+| What | Where |
 |---|---|
-| Recipe | `recipes/meta_agent_recipe.py` |
-| Genny | `src/cube_harness/agents/genny.py` |
+| **Start here** | `recipes/meta_agent_recipe.py` |
+| Genny agent | `src/cube_harness/agents/genny.py` |
+| Episode runner | `src/cube_harness/episode.py` |
 | Results API | `src/cube_harness/results.py` |
+| Summary models | `src/cube_harness/summary.py` |
 | Results root | `~/cube_harness_results/` |
-| XRay | `make xray` |
-| Tests / Lint | `make test` / `make lint` |
+| XRay viewer | `make xray` |
+| Tests | `make test` |
+| Lint | `make lint` |
+
+## Hint Priority
+
+`task_hints[task_id]` → `hint` → no hint (in that order). Both are set on `GennyConfig` and serialised into the episode config for full reproducibility.

@@ -276,12 +276,21 @@ class GennyConfig(AgentConfig):
     # Observation window
     render_last_n_obs: int | None = None  # None = all
 
+    # General hint injected after the goal in every step's context.
+    # Use this when one hint applies to a whole task subset (one config per subset).
+    hint: str = ""
+
+    # Per-task hints: task_id → hint text. Takes precedence over `hint` when a task_id match is found.
+    # Populated by the meta-agent to guide the LLM on specific tasks without spawning a config per task.
+    task_hints: dict[str, str] = {}
+
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
 
     def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Genny":
-        return Genny(config=self, action_schemas=action_set or [])
+        task_id: str | None = kwargs.get("task_id")
+        return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
 
 
 # ---------------------------------------------------------------------------
@@ -307,8 +316,11 @@ class Genny(Agent):
     input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
     output_content_types: list[str] = ["application/json"]
 
-    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema]):
+    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema], task_id: str | None = None):
         self.config = config
+        self.task_id = task_id
+        # task_hints takes precedence over the general hint; falls back to hint if no match.
+        self._task_hint: str = config.task_hints.get(task_id, config.hint) if task_id else config.hint
         self.llm: LLM = config.llm_config.make()
         # Summarize LLM uses the same config as the act LLM (including tool_choice) so the
         # full request — messages, tools, and parameters — is identical between the two passes
@@ -399,6 +411,9 @@ class Genny(Agent):
         """
         messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.goal)
+        if self._task_hint:
+            messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
+            messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
         past_summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else list(self.summaries)
         if past_summaries:
             messages.append({"role": "assistant", "content": _format_summaries_block(past_summaries)})
