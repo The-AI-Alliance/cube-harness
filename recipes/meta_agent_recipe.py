@@ -21,7 +21,6 @@ import sys
 
 from cube_browser_tool import PlaywrightConfig
 from miniwob_cube.benchmark import MiniWobBenchmark
-from miniwob_cube.task import MiniWobTaskConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
