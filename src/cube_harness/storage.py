@@ -1,9 +1,14 @@
 import json
 import logging
+import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
+import msgpack
+import zstandard
+from cube.core import EnvironmentOutput
 from pydantic import BaseModel
 
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
@@ -14,135 +19,189 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+EPISODES_DIR = "episodes"
+TRAJECTORIES_DIR = "trajectories"
+EPISODE_METADATA = "episode.metadata.json"
+STEPS_DIR = "steps"
+ARCHIVED_MARKER = ".archived_"
+
 
 class LLMCallRef(BaseModel):
-    """Reference to an LLM call stored in a separate file."""
-
     llm_call_id: str
 
 
 class Storage(Protocol):
-    """Protocol for trajectory storage backends."""
 
-    def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None:
-        """Initialize storage for a trajectory and save metadata."""
-        ...
+    def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None: ...
 
-    def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
-        """Append a single step to the trajectory."""
-        ...
+    def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None: ...
 
-    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
-        """Save episode configuration to disk for later resumption."""
-        ...
+    def save_episode_config(self, episode_config: "EpisodeConfig") -> None: ...
 
-    def update_experiment_summary(self, trajectory: Trajectory) -> None:
-        """Update experiment-level summary after an episode completes."""
-        ...
+    def update_experiment_summary(self, trajectory: Trajectory) -> None: ...
+
+
+# Thread-local zstd compressor/decompressor: these objects are NOT thread-safe,
+# so each thread gets its own instance (Ray workers, async episodes, etc.).
+_thread_local = threading.local()
+
+
+def _get_compressor() -> zstandard.ZstdCompressor:
+    if not hasattr(_thread_local, "compressor"):
+        _thread_local.compressor = zstandard.ZstdCompressor(level=3)
+    return _thread_local.compressor
+
+
+def _get_decompressor() -> zstandard.ZstdDecompressor:
+    if not hasattr(_thread_local, "decompressor"):
+        _thread_local.decompressor = zstandard.ZstdDecompressor()
+    return _thread_local.decompressor
+
+
+def _serialize_step(step: TrajectoryStep) -> bytes:
+    data = step.model_dump(serialize_as_any=True)
+    packed = msgpack.packb(data, use_bin_type=True)
+    return _get_compressor().compress(packed)
+
+
+def _deserialize_step(raw: bytes) -> dict:
+    decompressed = _get_decompressor().decompress(raw)
+    return msgpack.unpackb(decompressed, raw=False)
+
+
+def _step_filename(step_num: int, step: TrajectoryStep) -> str:
+    suffix = "obs" if isinstance(step.output, EnvironmentOutput) else "act"
+    return f"{step_num:03d}_{suffix}.msgpack.zst"
+
+
+def _read_step_file(path: Path) -> dict | None:
+    if path.name.endswith(".msgpack.zst"):
+        return _deserialize_step(path.read_bytes())
+    if path.suffix == ".json":
+        with open(path) as f:
+            return json.loads(f.read())
+    return None
 
 
 class FileStorage:
-    """File-based storage for trajectories."""
 
     def __init__(self, output_dir: str | Path) -> None:
         self.output_dir = Path(output_dir)
-        self._current_traj_paths: dict[str, Path] = {}
+        self._saved_ids: set[str] = set()  # trajectory IDs saved in this session (for resave detection)
+
+    # --- V2 episode directory helpers ---
+
+    def _episode_dir(self, trajectory_id: str) -> Path:
+        """Return the episode directory for a trajectory ID. O(1) — no scanning."""
+        return self.output_dir / EPISODES_DIR / trajectory_id
+
+    def _episode_dirs(self) -> Iterator[Path]:
+        episodes_dir = self.output_dir / EPISODES_DIR
+        if not episodes_dir.exists():
+            return
+        for ep_dir in episodes_dir.iterdir():
+            if ep_dir.is_dir() and ARCHIVED_MARKER not in ep_dir.name and (ep_dir / EPISODE_METADATA).exists():
+                yield ep_dir
+
+    # --- V1 trajectory file helpers ---
+
+    def _v1_metadata_files(self) -> Iterator[Path]:
+        traj_dir = self.output_dir / TRAJECTORIES_DIR
+        if not traj_dir.exists():
+            return
+        for f in traj_dir.glob("*.metadata.json"):
+            if ARCHIVED_MARKER not in f.name:
+                yield f
+
+    @staticmethod
+    def _v1_traj_id_from_file(metadata_file: Path) -> str:
+        return metadata_file.stem.replace(".metadata", "")
+
+    # --- Write (always V2) ---
 
     def save_trajectory(self, trajectory: Trajectory, allow_overwrite: bool = False) -> None:
-        """Save the trajectory metadata and initialize the JSONL file.
+        ep_dir = self._episode_dir(trajectory.id)
+        metadata_path = ep_dir / EPISODE_METADATA
+        is_resave = trajectory.id in self._saved_ids
 
-        Args:
-            trajectory: The trajectory to save.
-            allow_overwrite: If True, archive existing trajectory files before saving.
-                If False, raise FileExistsError when trajectory files already exist.
-                Re-saves within the same session (e.g. updating end_time) are always allowed.
-        """
-        traj_dir = self.output_dir / "trajectories"
-        traj_dir.mkdir(parents=True, exist_ok=True)
-        cur_path = traj_dir / trajectory.id
-
-        # Check for pre-existing files from a previous run.
-        # Skip the check if this trajectory was already created in this session (re-save for end_time update).
-        is_resave = trajectory.id in self._current_traj_paths
-        metadata_path = Path(f"{cur_path}.metadata.json")
-        if not is_resave and metadata_path.exists():
+        if not is_resave and ep_dir.exists() and metadata_path.exists():
             if not allow_overwrite:
                 raise FileExistsError(
-                    f"Trajectory '{trajectory.id}' already exists at {cur_path}. "
+                    f"Trajectory '{trajectory.id}' already exists at {ep_dir}. "
                     "Use allow_overwrite=True to archive the old trajectory and overwrite."
                 )
-            self._archive_trajectory(trajectory.id)
+            self._archive_episode(ep_dir)
 
-        self._current_traj_paths[trajectory.id] = cur_path
-        with open(f"{cur_path}.metadata.json", "w") as f:
-            # Serialize entire trajectory excluding steps
-            trajectory_data = trajectory.model_dump(exclude={"steps"})
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        (ep_dir / STEPS_DIR).mkdir(exist_ok=True)
+        self._saved_ids.add(trajectory.id)
+
+        trajectory_data = trajectory.model_dump(exclude={"steps"})
+        with open(metadata_path, "w") as f:
             f.write(json.dumps(trajectory_data, indent=2))
 
-        # Create empty file for appending steps later
-        with open(f"{cur_path}.jsonl", "w") as f:
-            pass
-
-        # Save initial steps
         for i, step in enumerate(trajectory.steps):
-            self._append_step(step, trajectory.id, i)
+            self._write_step(ep_dir, i, step)
 
-        logger.info(f"Saved trajectory to {cur_path}")
+        logger.info(f"Saved trajectory to {ep_dir}")
 
-    def _archive_trajectory(self, trajectory_id: str) -> None:
-        """Rename existing trajectory files with an archived timestamp suffix."""
-        traj_dir = self.output_dir / "trajectories"
-        for ext in [".metadata.json", ".jsonl"]:
-            old_path = traj_dir / f"{trajectory_id}{ext}"
-            if old_path.exists():
-                new_path = traj_dir / f"{trajectory_id}.archived_{time.time()}{ext}"
-                old_path.rename(new_path)
-                logger.info(f"Archived {old_path.name} -> {new_path.name}")
+    def _archive_episode(self, ep_dir: Path) -> None:
+        archived = ep_dir.parent / f"{ep_dir.name}{ARCHIVED_MARKER}{time.time()}"
+        ep_dir.rename(archived)
+        logger.info(f"Archived {ep_dir.name} -> {archived.name}")
 
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
-        """Append a single step to the trajectory JSONL file."""
-        if trajectory_id not in self._current_traj_paths:
-            raise ValueError("Trajectory path not set. Call save_trajectory first.")
+        ep_dir = self._episode_dir(trajectory_id)
+        if not ep_dir.exists():
+            raise ValueError(f"Episode directory does not exist: {ep_dir}. Call save_trajectory first.")
         try:
-            self._append_step(step, trajectory_id, step_num)
+            self._write_step(ep_dir, step_num, step)
         except Exception as e:
-            logger.exception(f"Error saving step to trajectory {self._current_traj_paths[trajectory_id]}: {e}")
+            logger.exception(f"Error saving step to trajectory {trajectory_id}: {e}")
             raise e
 
-    def _append_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
-        """Internal method to append a step to the JSONL file."""
-        step_to_save = step
-        cur_path = self._current_traj_paths[trajectory_id]
-        if isinstance(step.output, AgentOutput) and step.output.llm_calls:
-            step_to_save = self._extract_llm_calls(step, f"{trajectory_id}_step{step_num:03d}")
+    def _write_step(self, ep_dir: Path, step_num: int, step: TrajectoryStep) -> None:
+        filename = _step_filename(step_num, step)
+        step_path = ep_dir / STEPS_DIR / filename
+        step_path.write_bytes(_serialize_step(step))
 
-        with open(f"{cur_path}.jsonl", "a") as f:
-            line = step_to_save.model_dump_json(serialize_as_any=True)
-            f.write(f"{line}\n")
-
-    def _extract_llm_calls(self, step: TrajectoryStep, step_id: str) -> TrajectoryStep:
-        """Extract LLM calls to separate files and return step with references only."""
-        assert isinstance(step.output, AgentOutput)
-
-        llm_calls_dir = self.output_dir / "llm_calls"
-        llm_calls_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save each LLM call to a separate file
-        llm_call_refs = []
-        for llm_call in step.output.llm_calls:
-            call_path = llm_calls_dir / f"{step_id}_{llm_call.id}.json"
-            with open(call_path, "w") as f:
-                f.write(llm_call.model_dump_json(indent=2))
-            # Create a reference with just the id
-            llm_call_refs.append(LLMCallRef(llm_call_id=llm_call.id))
-
-        # Create a copy of the step with llm_calls replaced by references
-        output_with_refs = step.output.model_copy(update={"llm_calls": llm_call_refs})
-        return step.model_copy(update={"output": output_with_refs})
+    # --- Load single trajectory ---
 
     def load_trajectory(self, trajectory_id: str) -> Trajectory:
-        """Load a single trajectory by its ID."""
-        traj_dir = self.output_dir / "trajectories"
+        ep_dir = self._episode_dir(trajectory_id)
+        if (ep_dir / EPISODE_METADATA).exists():
+            return self._load_trajectory(ep_dir, trajectory_id)
+        return self._v1_load_trajectory(trajectory_id)
+
+    def _load_trajectory(self, ep_dir: Path, trajectory_id: str) -> Trajectory:
+        with open(ep_dir / EPISODE_METADATA) as f:
+            trajectory_data = json.load(f)
+
+        steps: list[TrajectoryStep] = []
+        steps_dir = ep_dir / STEPS_DIR
+        if steps_dir.exists():
+            for step_file in sorted(steps_dir.iterdir()):
+                step_data = _read_step_file(step_file)
+                if step_data is not None:
+                    steps.append(TrajectoryStep.model_validate(step_data))
+
+        trajectory_data["steps"] = steps
+        return Trajectory.model_validate(trajectory_data)
+
+    def load_step(self, trajectory_id: str, step_index: int) -> TrajectoryStep:
+        ep_dir = self._episode_dir(trajectory_id)
+        if not ep_dir.exists():
+            raise FileNotFoundError(f"Episode directory not found for trajectory: {trajectory_id}")
+        steps_dir = ep_dir / STEPS_DIR
+        # Try both suffixes — exactly one should exist for a given step index
+        for suffix in ("obs", "act"):
+            path = steps_dir / f"{step_index:03d}_{suffix}.msgpack.zst"
+            if path.exists():
+                return TrajectoryStep.model_validate(_deserialize_step(path.read_bytes()))
+        raise IndexError(f"Step {step_index} not found in {steps_dir}")
+
+    def _v1_load_trajectory(self, trajectory_id: str) -> Trajectory:
+        traj_dir = self.output_dir / TRAJECTORIES_DIR
         metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
         steps_path = traj_dir / f"{trajectory_id}.jsonl"
 
@@ -152,7 +211,6 @@ class FileStorage:
         with open(metadata_path) as f:
             trajectory_data = json.load(f)
 
-        # TODO: remove legacy format support
         if "metadata" not in trajectory_data:
             trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
 
@@ -162,25 +220,17 @@ class FileStorage:
                 for i, line in enumerate(f):
                     if line.strip():
                         step_data = json.loads(line)
-                        step_data = self._resolve_llm_call_refs(step_data, trajectory_id, i)
-                        if "output" not in step_data:
-                            if "obs" in step_data:
-                                # Legacy format where step is just EnvironmentOutput
-                                step_data = {"output": step_data}
-                            elif "actions" in step_data:
-                                # Legacy format where step is just AgentOutput
-                                step_data = {"output": step_data}
-                        step = TrajectoryStep.model_validate(step_data)
-                        steps.append(step)
+                        step_data = self._v1_resolve_llm_call_refs(step_data, trajectory_id, i)
+                        if "output" not in step_data and ("obs" in step_data or "actions" in step_data):
+                            step_data = {"output": step_data}
+                        steps.append(TrajectoryStep.model_validate(step_data))
 
         trajectory_data["steps"] = steps
         return Trajectory.model_validate(trajectory_data)
 
-    def _resolve_llm_call_refs(self, step_data: dict, trajectory_id: str, step_num: int) -> dict:
-        """Resolve LLM call references by loading full LLMCall data from files."""
+    def _v1_resolve_llm_call_refs(self, step_data: dict, trajectory_id: str, step_num: int) -> dict:
         output = step_data.get("output", {})
         llm_calls = output.get("llm_calls", [])
-
         if not llm_calls:
             return step_data
 
@@ -189,7 +239,6 @@ class FileStorage:
 
         resolved_calls = []
         for ref in llm_calls:
-            # Check if this is a reference (only has 'id' key)
             if llm_call_id := ref.get("llm_call_id", None):
                 call_path = llm_calls_dir / f"{step_id}_{llm_call_id}.json"
                 if not call_path.exists():
@@ -202,14 +251,13 @@ class FileStorage:
         step_data["output"]["llm_calls"] = resolved_calls
         return step_data
 
-    def load_trajectory_metadata(self, trajectory_id: str) -> Trajectory:
-        """Load only metadata (no steps) for fast experiment listing.
+    # --- Load metadata (no steps) ---
 
-        Returns a Trajectory stub with steps=[] — significantly faster than
-        load_trajectory() since it skips the JSONL file and all LLM call refs.
-        """
-        traj_dir = self.output_dir / "trajectories"
-        metadata_path = traj_dir / f"{trajectory_id}.metadata.json"
+    def load_trajectory_metadata(self, trajectory_id: str) -> Trajectory:
+        ep_dir = self._episode_dir(trajectory_id)
+        metadata_path = ep_dir / EPISODE_METADATA
+        if not metadata_path.exists():
+            metadata_path = self.output_dir / TRAJECTORIES_DIR / f"{trajectory_id}.metadata.json"
 
         if not metadata_path.exists():
             raise FileNotFoundError(f"Trajectory metadata not found: {metadata_path}")
@@ -217,63 +265,102 @@ class FileStorage:
         with open(metadata_path) as f:
             trajectory_data = json.load(f)
 
-        # TODO: remove legacy format support
         if "metadata" not in trajectory_data:
             trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
 
         trajectory_data["steps"] = []
         return Trajectory.model_validate(trajectory_data)
 
+    # --- Bulk listing ---
+
     def load_all_trajectory_metadata(self) -> list[Trajectory]:
-        """Load metadata stubs for all trajectories (no steps).
+        return self._load_all_metadata() + self._v1_load_all_metadata()
 
-        Much faster than load_all_trajectories() — only reads *.metadata.json files.
-        Each returned Trajectory has steps=[] until select_trajectory() loads it on demand.
-        """
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return []
-
-        trajectories = []
-        for metadata_file in traj_dir.glob("*.metadata.json"):
-            if ".archived_" in metadata_file.name:
-                continue
-            trajectory_id = metadata_file.stem.replace(".metadata", "")
+    def _load_all_metadata(self) -> list[Trajectory]:
+        results: list[Trajectory] = []
+        for ep_dir in self._episode_dirs():
             try:
-                trajectories.append(self.load_trajectory_metadata(trajectory_id))
+                with open(ep_dir / EPISODE_METADATA) as f:
+                    data = json.load(f)
+                data["steps"] = []
+                results.append(Trajectory.model_validate(data))
+            except Exception as e:
+                logger.error(f"Failed to load episode metadata {ep_dir.name}: {e}")
+        return results
+
+    def _v1_load_all_metadata(self) -> list[Trajectory]:
+        results: list[Trajectory] = []
+        for metadata_file in self._v1_metadata_files():
+            trajectory_id = self._v1_traj_id_from_file(metadata_file)
+            try:
+                results.append(self.load_trajectory_metadata(trajectory_id))
             except Exception as e:
                 logger.error(f"Failed to load trajectory metadata {trajectory_id}: {e}")
-
-        return trajectories
+        return results
 
     def list_trajectory_ids(self) -> list[str]:
-        """List all non-archived trajectory IDs in the output directory."""
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return []
-        return [f.stem.replace(".metadata", "") for f in traj_dir.glob("*.metadata.json") if ".archived_" not in f.name]
+        return self._list_ids() + self._v1_list_ids()
+
+    def _list_ids(self) -> list[str]:
+        return [ep_dir.name for ep_dir in self._episode_dirs()]
+
+    def _v1_list_ids(self) -> list[str]:
+        return [self._v1_traj_id_from_file(f) for f in self._v1_metadata_files()]
 
     def list_trajectory_ids_with_mtime(self) -> dict[str, float]:
-        """List trajectory IDs mapped to their latest file modification time.
+        result = self._list_ids_with_mtime()
+        result.update(self._v1_list_ids_with_mtime())
+        return result
 
-        Returns the max mtime across the .metadata.json and .jsonl files for each
-        trajectory — cheap stat() calls only, no file reads. Used for change detection
-        in live polling to avoid reloading trajectories that haven't changed.
-        """
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return {}
+    def _list_ids_with_mtime(self) -> dict[str, float]:
         result: dict[str, float] = {}
-        for metadata_file in traj_dir.glob("*.metadata.json"):
-            if ".archived_" in metadata_file.name:
-                continue
-            traj_id = metadata_file.stem.replace(".metadata", "")
+        for ep_dir in self._episode_dirs():
+            traj_id = ep_dir.name
+            # Prefer episode_summary.jsonl mtime (appended every step) over scanning all step files
+            summary_path = ep_dir / "episode_summary.jsonl"
+            if summary_path.exists():
+                result[traj_id] = summary_path.stat().st_mtime
+            else:
+                result[traj_id] = (ep_dir / EPISODE_METADATA).stat().st_mtime
+        return result
+
+    def _v1_list_ids_with_mtime(self) -> dict[str, float]:
+        result: dict[str, float] = {}
+        traj_dir = self.output_dir / TRAJECTORIES_DIR
+        for metadata_file in self._v1_metadata_files():
+            traj_id = self._v1_traj_id_from_file(metadata_file)
             mtime = metadata_file.stat().st_mtime
             jsonl_path = traj_dir / f"{traj_id}.jsonl"
             if jsonl_path.exists():
                 mtime = max(mtime, jsonl_path.stat().st_mtime)
             result[traj_id] = mtime
         return result
+
+    def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
+        if exp_dir is not None:
+            return FileStorage(exp_dir).load_all_trajectories()
+        return self._load_all_trajectories() + self._v1_load_all_trajectories()
+
+    def _load_all_trajectories(self) -> list[Trajectory]:
+        results: list[Trajectory] = []
+        for ep_dir in self._episode_dirs():
+            try:
+                results.append(self._load_trajectory(ep_dir, ep_dir.name))
+            except Exception as e:
+                logger.error(f"Failed to load episode {ep_dir.name}: {e}")
+        return results
+
+    def _v1_load_all_trajectories(self) -> list[Trajectory]:
+        results: list[Trajectory] = []
+        for metadata_file in self._v1_metadata_files():
+            trajectory_id = self._v1_traj_id_from_file(metadata_file)
+            try:
+                results.append(self._v1_load_trajectory(trajectory_id))
+            except Exception as e:
+                logger.error(f"Failed to load trajectory {trajectory_id}: {e}")
+        return results
+
+    # --- Logs ---
 
     def get_log_path(self, trajectory_id: str) -> Path:
         return get_episode_log_path(self.output_dir, trajectory_id)
@@ -287,54 +374,16 @@ class FileStorage:
     def has_logs(self, trajectory_id: str) -> bool:
         return self.get_log_path(trajectory_id).exists()
 
-    def load_all_trajectories(self, exp_dir: str | Path | None = None) -> list[Trajectory]:
-        """Load all trajectories from an experiment directory.
-
-        Args:
-            exp_dir: The experiment directory to load from. If None, uses self.output_dir.
-
-        Returns:
-            List of all trajectories found in the directory.
-        """
-        if exp_dir is not None:
-            storage = FileStorage(exp_dir)
-            return storage.load_all_trajectories()
-
-        traj_dir = self.output_dir / "trajectories"
-        if not traj_dir.exists():
-            return []
-
-        trajectories = []
-        # Find all metadata files and extract trajectory IDs
-        for metadata_file in traj_dir.glob("*.metadata.json"):
-            if ".archived_" in metadata_file.name:
-                continue
-            trajectory_id = metadata_file.stem.replace(".metadata", "")
-            try:
-                trajectory = self.load_trajectory(trajectory_id)
-                trajectories.append(trajectory)
-            except Exception as e:
-                logger.error(f"Failed to load trajectory {trajectory_id}: {e}")
-
-        return trajectories
+    # --- Experiment summary ---
 
     def update_experiment_summary(self, trajectory: Trajectory) -> None:
-        """Incrementally update experiment_summary.json after an episode completes."""
+        from cube_harness.summary import ExperimentSummary
+
         summary_path = self.output_dir / "experiment_summary.json"
         if summary_path.exists():
-            with open(summary_path) as f:
-                summary = json.load(f)
+            summary = ExperimentSummary.model_validate_json(summary_path.read_text())
         else:
-            summary = {
-                "n_episodes": 0,
-                "n_completed": 0,
-                "n_errored": 0,
-                "total_reward": 0.0,
-                "total_prompt_tokens": 0,
-                "total_completion_tokens": 0,
-                "total_cost": 0.0,
-                "updated_at": None,
-            }
+            summary = ExperimentSummary()
 
         stats = trajectory.summary_stats or {}
         has_error = any(
@@ -342,40 +391,35 @@ class FileStorage:
             for step in trajectory.steps
             if isinstance(step.output, AgentOutput)
         )
-        reward = stats.get("final_reward", 0.0)
 
-        summary["n_episodes"] += 1
+        summary.n_episodes += 1
         if has_error:
-            summary["n_errored"] += 1
+            summary.n_errored += 1
         else:
-            summary["n_completed"] += 1
-        summary["total_reward"] += reward
-        summary["total_prompt_tokens"] += stats.get("prompt_tokens", 0)
-        summary["total_completion_tokens"] += stats.get("completion_tokens", 0)
-        summary["total_cost"] += stats.get("cost", 0.0)
+            summary.n_completed += 1
+        summary.total_reward += stats.get("final_reward", 0.0)
+        summary.total_prompt_tokens += stats.get("prompt_tokens", 0)
+        summary.total_completion_tokens += stats.get("completion_tokens", 0)
+        summary.total_cost += stats.get("cost", 0.0)
 
-        n_completed = summary["n_completed"]
-        if n_completed > 0:
-            summary["success_rate"] = round(summary["total_reward"] / n_completed, 4)
-        summary["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        if summary.n_completed > 0:
+            summary.success_rate = round(summary.total_reward / summary.n_completed, 4)
+        summary.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
         tmp_path = summary_path.with_suffix(".tmp")
-        with open(tmp_path, "w") as f:
-            json.dump(summary, f, indent=2)
+        tmp_path.write_text(summary.model_dump_json(indent=2))
         tmp_path.rename(summary_path)
 
-    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
-        """Save episode configuration to disk for later resumption.
+    # --- Episode configs ---
 
-        Args:
-            episode_config: The episode configuration to save.e
-        """
+    def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
         config_dir = self.output_dir / "episode_configs"
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
         if config_path.exists():
             raise FileExistsError(
-                f"Episode config already exists: {config_path}, are you trying to resume without setting the flag Experiment.resume?"
+                f"Episode config already exists: {config_path},"
+                " are you trying to resume without setting the flag Experiment.resume?"
             )
 
         with open(config_path, "w") as f:
@@ -383,15 +427,6 @@ class FileStorage:
         logger.info(f"Saved episode config to {config_path}")
 
     def load_episode_config(self, config_path: Path) -> "EpisodeConfig":
-        """Load episode configuration from disk.
-
-        Args:
-            config_path: Path to the episode config JSON file.
-
-        Returns:
-            The loaded EpisodeConfig.
-        """
-        # Import here to avoid circular dependency at module level
         from cube_harness.episode import EpisodeConfig
 
         with open(config_path) as f:
@@ -400,11 +435,6 @@ class FileStorage:
         return EpisodeConfig.model_validate(data)
 
     def list_episode_configs(self) -> list[Path]:
-        """List all episode config files in the output directory.
-
-        Returns:
-            List of paths to episode config files.
-        """
         config_dir = self.output_dir / "episode_configs"
         if not config_dir.exists():
             return []

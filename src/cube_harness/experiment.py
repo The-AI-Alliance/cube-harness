@@ -168,39 +168,19 @@ class Experiment(TypedBaseModel):
         return last_env_step.done
 
     def _load_successful_trajectory_ids(self, storage: FileStorage) -> set[str]:
-        """Load trajectory IDs for episodes that completed successfully.
-
-        Args:
-            storage: FileStorage instance to load trajectories from.
-
-        Returns:
-            Set of trajectory IDs that completed successfully.
-        """
         successful = set()
-        traj_dir = self.output_dir / "trajectories"
-        if traj_dir.exists():
-            for metadata_file in traj_dir.glob("*.metadata.json"):
-                trajectory_id = metadata_file.stem.replace(".metadata", "")
-                try:
-                    trajectory = storage.load_trajectory(trajectory_id)
-                    if self._is_trajectory_successful(trajectory):
-                        successful.add(trajectory_id)
-                except Exception as e:
-                    logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
+        for trajectory_id in storage.list_trajectory_ids():
+            try:
+                trajectory = storage.load_trajectory(trajectory_id)
+                if self._is_trajectory_successful(trajectory):
+                    successful.add(trajectory_id)
+            except Exception as e:
+                logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
         return successful
 
     def _load_started_trajectory_ids(self) -> set[str]:
-        """Load trajectory IDs for episodes that have been started.
-
-        Returns:
-            Set of trajectory IDs that have metadata files on disk.
-        """
-        started = set()
-        traj_dir = self.output_dir / "trajectories"
-        if traj_dir.exists():
-            for metadata_file in traj_dir.glob("*.metadata.json"):
-                started.add(metadata_file.stem.replace(".metadata", ""))
-        return started
+        storage = FileStorage(self.output_dir)
+        return set(storage.list_trajectory_ids())
 
     def _find_episodes_to_relaunch(
         self, config_files: list[Path], filter_trajectory_ids: set[str], include: bool = True

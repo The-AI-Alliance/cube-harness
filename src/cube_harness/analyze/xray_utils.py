@@ -138,7 +138,19 @@ def archive_experiment(results_dir: Path, exp_name: str) -> None:
 
 def _is_experiment_dir(dir_path: Path) -> bool:
     """Return True if dir_path is a valid (non-archived) experiment directory."""
-    return dir_path.is_dir() and not dir_path.name.startswith("_") and (dir_path / "trajectories").exists()
+    if not dir_path.is_dir() or dir_path.name.startswith("_"):
+        return False
+    return (dir_path / "episodes").exists() or (dir_path / "trajectories").exists()
+
+
+def _count_episodes(dir_path: Path) -> int:
+    episodes_dir = dir_path / "episodes"
+    if episodes_dir.exists():
+        return sum(1 for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name)
+    traj_dir = dir_path / "trajectories"
+    if traj_dir.exists():
+        return sum(1 for _ in traj_dir.glob("*.jsonl"))
+    return 0
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
@@ -156,7 +168,7 @@ def get_directory_contents(results_dir: Path) -> list[str]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
+        n_trajs = _count_episodes(dir_path)
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return [sentinel] + sorted(exp_descriptions, reverse=True)
@@ -207,7 +219,7 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
+        n_trajs = _count_episodes(dir_path)
         rows.append(
             {
                 "selected": False,
