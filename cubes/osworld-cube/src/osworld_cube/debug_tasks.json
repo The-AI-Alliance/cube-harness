@@ -1,0 +1,48 @@
+[
+    {
+        "id": "simple-create-file",
+        "desc": "Create a text file on the desktop",
+        "domain": "os",
+        "instruction": "Create a file called 'hello.txt' on the Desktop with the content 'Hello World'.",
+        "snapshot": "init_state",
+        "related_apps": ["os"],
+        "config": [],
+        "evaluator": {
+            "func": "check_include_exclude",
+            "result": {
+                "type": "vm_command_line",
+                "command": "cat ~/Desktop/hello.txt"
+            },
+            "expected": {
+                "type": "rule",
+                "rules": {
+                    "include": ["Hello World"],
+                    "exclude": []
+                }
+            }
+        }
+    },
+    {
+        "id": "simple-make-directory",
+        "desc": "Create a directory on the desktop",
+        "domain": "os",
+        "instruction": "Create a folder called 'my_folder' on the Desktop.",
+        "snapshot": "init_state",
+        "related_apps": ["os"],
+        "config": [],
+        "evaluator": {
+            "func": "check_include_exclude",
+            "result": {
+                "type": "vm_command_line",
+                "command": "ls ~/Desktop/"
+            },
+            "expected": {
+                "type": "rule",
+                "rules": {
+                    "include": ["my_folder"],
+                    "exclude": []
+                }
+            }
+        }
+    }
+]

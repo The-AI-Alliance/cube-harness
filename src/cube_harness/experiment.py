@@ -86,6 +86,8 @@ class Experiment(TypedBaseModel):
                     task_config=tc,
                     exp_name=self.name,
                     max_steps=self.max_steps,
+                    runtime_context=self.benchmark._runtime_context,
+                    container_backend=self.benchmark.container_backend,
                 )
                 for i, tc in enumerate(task_configs)
             ]
@@ -190,6 +192,11 @@ class Experiment(TypedBaseModel):
         return successful
 
     def _load_started_trajectory_ids(self) -> set[str]:
+        """Load trajectory IDs for episodes that have been started.
+
+        Returns:
+            Set of trajectory IDs that have metadata files on disk.
+        """
         storage = FileStorage(self.output_dir)
         return set(storage.list_trajectory_ids())
 
