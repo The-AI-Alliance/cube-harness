@@ -27,15 +27,6 @@
 | `terminalbench-cube` | ✅ done | `install()` clones repo, reads task dirs, saves `task_metadata.json` (archive base64-encoded); `_setup()` applies filters + oracle_mode; `Task.reset()` decodes archive (base64 string from JSON, or raw bytes from `_setup()`) |
 | `workarena` | ✅ done | `install()` enumerates all task types (L1 + L2/L3 agent superset), marks `in_human_curriculum` per task, saves `task_metadata.json`; `WorkArenaSeedGenerator` wraps `get_all_tasks_agents()` and plugs into `Benchmark.seed_generator`; `_setup()` filters by level + sets seed generator; `named_subsets` for l1/l2/l3; human curriculum via `.subset_from_glob("extra_info.in_human_curriculum", "True")`; debug uses `subset_from_list` on first 2 L1 tasks |
 
-## Order of work
-
-1. `webarena-verified` — simplest: no download, just library call → JSON ✅
-2. `swebench-verified-cube` — single HF split, straightforward ✅
-3. `swebench-live-cube` — multi-split merge ✅
-4. `terminalbench-cube` — install() already does the heavy lifting
-5. `osworld-cube` — install() already downloads; needs JSON generation added
-6. `workarena` — multi-level merge, most complex
-
 ---
 
 ## Phase 2: Typed public metadata + per-task execution cache
