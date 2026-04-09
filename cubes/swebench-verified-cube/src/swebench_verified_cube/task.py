@@ -9,7 +9,7 @@ from typing import Any
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig
+from cube.task import Task, TaskConfig, TaskMetadata
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -20,8 +20,31 @@ logger = logging.getLogger(__name__)
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
 
 
+class SWEBenchVerifiedTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for SWE-bench Verified tasks.
+
+    Public fields shipped in task_metadata.json (available at import time).
+    Heavy execution data (problem_statement, patch, test_patch, etc.) lives in
+    the per-task execution cache and is loaded lazily by SWEBenchVerifiedTaskConfig.make().
+    """
+
+    repo: str
+    """GitHub repository, e.g. 'django/django'."""
+
+    difficulty: str
+    """Estimated fix time, e.g. '15 min - 1 hour'."""
+
+    version: str
+    """Repository version string, e.g. '4.3'."""
+
+    base_commit: str
+    """Git SHA of the base commit the agent starts from."""
+
+
 class SWEBenchVerifiedTask(Task):
     """A single SWE-bench Verified task with test-based validation."""
+
+    metadata: SWEBenchVerifiedTaskMetadata  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
@@ -42,8 +65,8 @@ class SWEBenchVerifiedTask(Task):
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
-            "repo": extra["repo"],
-            "difficulty": extra.get("difficulty", "unknown"),
+            "repo": self.metadata.repo,
+            "difficulty": self.metadata.difficulty,
         }
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
@@ -57,16 +80,15 @@ class SWEBenchVerifiedTask(Task):
         fail_to_pass = json.loads(extra["fail_to_pass"])
         pass_to_pass = json.loads(extra["pass_to_pass"])
         eval_timeout = extra.get("eval_timeout", 1800)
-        repo = extra["repo"]
 
         # Run FAIL_TO_PASS tests — these must all pass for resolution
-        f2p_passed, f2p_output = self._run_tests(repo, fail_to_pass, timeout=eval_timeout)
+        f2p_passed, f2p_output = self._run_tests(self.metadata.repo, fail_to_pass, timeout=eval_timeout)
 
         # Run PASS_TO_PASS tests — these must remain passing
         p2p_passed = True
         p2p_output = ""
         if pass_to_pass:
-            p2p_passed, p2p_output = self._run_tests(repo, pass_to_pass, timeout=eval_timeout)
+            p2p_passed, p2p_output = self._run_tests(self.metadata.repo, pass_to_pass, timeout=eval_timeout)
 
         resolved = f2p_passed and p2p_passed
         reward = 1.0 if resolved else 0.0
@@ -155,9 +177,12 @@ class SWEBenchVerifiedTask(Task):
 class SWEBenchVerifiedTaskConfig(TaskConfig):
     """Serializable factory that produces a SWEBenchVerifiedTask.
 
-    Carries a task_metadata_snapshot so it is self-contained and works in
-    Ray workers (separate processes where Benchmark.task_metadata is empty).
+    Loads heavy execution data (problem_statement, patch, test_patch, etc.) from
+    the per-task execution cache in make(), so it works correctly in Ray workers.
     """
+
+    include_hints: bool = False
+    oracle_mode: bool = False
 
     def make(
         self,
@@ -171,6 +196,16 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
         from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
         metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
+        exec_info = SWEBenchVerifiedBenchmark.load_task_execution_info(self.task_id)
+        metadata = metadata.model_copy(
+            update={
+                "extra_info": {
+                    **exec_info,
+                    "include_hints": self.include_hints,
+                    "oracle_mode": self.oracle_mode,
+                }
+            }
+        )
 
         return SWEBenchVerifiedTask(
             metadata=metadata,

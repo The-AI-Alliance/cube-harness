@@ -1884,7 +1884,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-browser-tool" },
-    { name = "cube-standard" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
     { name = "miniwob", specifier = ">=1.0" },
 ]
 
@@ -3602,8 +3602,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard", specifier = ">=0.1.0rc4" },
-    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
     { name = "datasets" },
 ]
 
@@ -3621,8 +3621,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard", specifier = ">=0.1.0rc4" },
-    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
     { name = "datasets" },
 ]
 
@@ -3658,8 +3658,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard", specifier = ">=0.1.0rc4" },
-    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
+    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
     { name = "datasets" },
 ]
 
@@ -4113,7 +4113,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-browser-tool", specifier = ">=0.2.0" },
-    { name = "cube-standard", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
     { name = "pillow" },
     { name = "webarena-verified" },
 ]
@@ -4183,7 +4183,7 @@ requires-dist = [
     { name = "cube-browser-playwright", specifier = ">=0.2.0" },
     { name = "cube-browser-tool", specifier = ">=0.2.0" },
     { name = "cube-chat-tool", specifier = ">=0.1.0" },
-    { name = "cube-standard", specifier = ">=0.1.0rc4" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
     { name = "termcolor" },
 ]
 

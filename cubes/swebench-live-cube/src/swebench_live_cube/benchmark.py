@@ -146,11 +146,11 @@ class SWEBenchLiveBenchmark(Benchmark):
         To regenerate task_metadata.json (developer use only), run:
             scripts/generate_task_metadata.py
         """
-        cache_dir = cls.task_execution_cache_dir()
-        if cache_dir.exists() and any(cache_dir.iterdir()):
+        task_execution_info_cache_dir = cls.task_execution_cache_dir()
+        if task_execution_info_cache_dir.exists() and any(task_execution_info_cache_dir.iterdir()):
             logger.info("Execution cache already populated, skipping installation")
             return
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        task_execution_info_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Download from HuggingFace into our own cache folder (not the default ~/.cache/huggingface)
         hf_cache = str(cls.cache_dir() / "huggingface_cache")
@@ -167,10 +167,10 @@ class SWEBenchLiveBenchmark(Benchmark):
         n = 0
         for iid, (row, _) in merged.items():
             exec_info = _build_execution_info(row)
-            (cache_dir / f"{iid}.json").write_text(json.dumps(exec_info))
+            (task_execution_info_cache_dir / f"{iid}.json").write_text(json.dumps(exec_info))
             n += 1
 
-        logger.info(f"Saved {n} execution cache files to {cache_dir}")
+        logger.info(f"Saved {n} execution cache files to {task_execution_info_cache_dir}")
 
     @classmethod
     def uninstall(cls) -> None:
@@ -178,10 +178,10 @@ class SWEBenchLiveBenchmark(Benchmark):
 
         The shipped task_metadata.json is not removed.
         """
-        cache_dir = cls.task_execution_cache_dir()
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir)
-            logger.info(f"Removed execution cache at {cache_dir}")
+        task_execution_info_cache_dir = cls.task_execution_cache_dir()
+        if task_execution_info_cache_dir.exists():
+            shutil.rmtree(task_execution_info_cache_dir)
+            logger.info(f"Removed execution cache at {task_execution_info_cache_dir}")
 
         hf_cache = cls.cache_dir() / "huggingface_cache"
         if hf_cache.exists():
