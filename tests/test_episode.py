@@ -7,6 +7,7 @@ from cube.core import Action, EnvironmentOutput, Observation
 
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode import MAX_STEPS, Episode
+from cube_harness.storage import _read_step_file
 from tests.conftest import MockAgent
 
 
@@ -44,49 +45,43 @@ class TestEpisode:
         """Test Episode run saves trajectory files."""
         mock_episode.run()
 
-        # Check trajectory files exist
-        traj_dir = tmp_dir
-        assert traj_dir.exists()
+        episodes_dir = tmp_dir / "episodes"
+        assert episodes_dir.exists()
 
-        # Should have metadata and jsonl files
-        files = list(traj_dir.iterdir())
-        assert any(".metadata.json" in f.name for f in files)
-        assert any(".jsonl" in f.name for f in files)
+        ep_dirs = [d for d in episodes_dir.iterdir() if d.is_dir()]
+        assert len(ep_dirs) >= 1
+        assert (ep_dirs[0] / "episode.metadata.json").exists()
+        assert (ep_dirs[0] / "episode_config.json").exists()
+        assert (ep_dirs[0] / "steps").exists()
 
     def test_episode_run_metadata_file_content(self, mock_episode, tmp_dir):
         """Test Episode run creates correct metadata file."""
         mock_episode.run()
 
-        # Read metadata file
-        traj_dir = tmp_dir
-        metadata_files = [f for f in traj_dir.iterdir() if ".metadata.json" in f.name]
-        assert len(metadata_files) > 0, "No metadata file found"
+        episodes_dir = tmp_dir / "episodes"
+        ep_dirs = [d for d in episodes_dir.iterdir() if d.is_dir()]
+        assert len(ep_dirs) > 0, "No episode directory found"
 
-        with open(metadata_files[0]) as f:
+        with open(ep_dirs[0] / "episode.metadata.json") as f:
             metadata = json.load(f)["metadata"]
 
         assert "task_id" in metadata
 
-    def test_episode_run_jsonl_content(self, mock_episode, tmp_dir):
-        """Test Episode run creates correct JSONL file."""
+    def test_episode_run_step_files(self, mock_episode, tmp_dir):
+        """Test Episode run creates per-step files."""
         mock_episode.run()
 
-        # Read JSONL file
-        traj_dir = tmp_dir
-        jsonl_files = [f for f in traj_dir.iterdir() if ".jsonl" in f.name]
-        assert len(jsonl_files) > 0, "No JSONL file found"
+        episodes_dir = tmp_dir / "episodes"
+        ep_dirs = [d for d in episodes_dir.iterdir() if d.is_dir()]
+        assert len(ep_dirs) > 0, "No episode directory found"
 
-        with open(jsonl_files[0]) as f:
-            lines = f.readlines()
+        steps_dir = ep_dirs[0] / "steps"
+        step_files = sorted(steps_dir.iterdir())
+        assert len(step_files) >= 1
 
-        # Should have at least one step saved
-        assert len(lines) >= 1
-
-        # Each line should be valid JSON
-        for line in lines:
-            if line.strip():
-                data = json.loads(line)
-                assert isinstance(data, dict)
+        for step_file in step_files:
+            data = _read_step_file(step_file)
+            assert isinstance(data, dict)
 
     def test_episode_run_respects_max_steps(self, tmp_dir, mock_agent_config, mock_env_config):
         """Test Episode run respects max_steps limit."""
@@ -138,41 +133,37 @@ class TestEpisode:
         assert last_env_step.done is True
 
     def test_storage_save_trajectory_creates_directory(self, mock_episode, tmp_dir):
-        """Test save_trajectory creates trajectory directory."""
+        """Test save_trajectory creates episode directory."""
         trajectory = Trajectory(id="test_traj", metadata={"task_id": "test"})
         mock_episode.storage.save_trajectory(trajectory)
 
-        traj_dir = tmp_dir
-        assert traj_dir.exists()
+        episodes_dir = tmp_dir / "episodes"
+        assert episodes_dir.exists()
 
     def test_storage_save_step_without_trajectory(self, mock_episode):
         """Test save_step raises error if called before save_trajectory."""
         obs = Observation.from_text("test")
         step = TrajectoryStep(output=EnvironmentOutput(obs=obs))
 
-        with pytest.raises(ValueError, match="Trajectory path not set"):
+        with pytest.raises(ValueError, match="Episode directory does not exist"):
             mock_episode.storage.save_step(step, "nonexistent_traj", 0)
 
-    def test_storage_save_step_appends(self, mock_episode, tmp_dir):
-        """Test save_step appends to JSONL file."""
+    def test_storage_save_step_creates_files(self, mock_episode, tmp_dir):
+        """Test save_step creates per-step files."""
         trajectory = Trajectory(id="test_traj", metadata={"task_id": "test"})
         mock_episode.storage.save_trajectory(trajectory)
 
-        # Save multiple steps
         for i in range(3):
             obs = Observation.from_text(f"step {i}")
             step = TrajectoryStep(output=EnvironmentOutput(obs=obs))
             mock_episode.storage.save_step(step, trajectory.id, i)
 
-        # Read JSONL file
-        traj_dir = tmp_dir
-        jsonl_files = [f for f in traj_dir.iterdir() if ".jsonl" in f.name]
-        assert len(jsonl_files) > 0, "No JSONL file found"
-
-        with open(jsonl_files[0]) as f:
-            lines = f.readlines()
-
-        assert len(lines) == 3
+        episodes_dir = tmp_dir / "episodes"
+        ep_dirs = [d for d in episodes_dir.iterdir() if d.is_dir()]
+        assert len(ep_dirs) > 0
+        steps_dir = ep_dirs[0] / "steps"
+        step_files = list(steps_dir.iterdir())
+        assert len(step_files) == 3
 
     def test_episode_closes_env_on_completion(self, mock_episode, mock_task):
         """Test Episode closes environment after run."""
@@ -208,7 +199,7 @@ class TestEpisode:
         assert mock_task.teardown_called
 
     def test_episode_output_filename(self, tmp_dir, mock_agent_config, mock_env_config):
-        """Test Episode generates correct output filename."""
+        """Test Episode generates correct output directory name."""
         episode = Episode(
             id=42,
             output_dir=tmp_dir,
@@ -218,11 +209,9 @@ class TestEpisode:
 
         episode.run()
 
-        traj_dir = tmp_dir
-        files = [f.name for f in traj_dir.iterdir()]
-
-        # Should contain run id
-        assert any("ep42" in f for f in files)
+        episodes_dir = tmp_dir / "episodes"
+        ep_dirs = [d.name for d in episodes_dir.iterdir() if d.is_dir()]
+        assert any("_ep42" in d for d in ep_dirs)
 
     def test_episode_captures_agent_error(self, tmp_dir, mock_agent_config, mock_env_config):
         """Test Episode captures agent errors correctly in trajectory."""
@@ -355,7 +344,6 @@ class TestEpisode:
         )
         episode.run()
 
-        # Simulate a relaunch by creating a new episode with _allow_overwrite=True
         episode2 = Episode(
             id=0,
             output_dir=tmp_dir,
@@ -365,9 +353,8 @@ class TestEpisode:
         episode2.allow_overwrite = True
         episode2.run()
 
-        # Both archived and current files should exist
-        traj_dir = tmp_dir
-        traj_id = f"{episode.config.task_id}_ep{episode.config.id}"
-        archived = list(traj_dir.glob(f"{traj_id}.archived_*.metadata.json"))
+        episodes_dir = tmp_dir / "episodes"
+        archived = [d for d in episodes_dir.iterdir() if ".archived_" in d.name]
         assert len(archived) == 1
-        assert (traj_dir / f"{traj_id}.metadata.json").exists()
+        current_dirs = [d for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name]
+        assert len(current_dirs) == 1

@@ -10,6 +10,7 @@ dependencies = [
     "cube-browser-tool>=0.2.0",
     "cube-browser-playwright>=0.2.0",
     "cube-chat-tool>=0.1.0",
+    "playwright==1.44",
 ]
 
 [project.entry-points."cube.benchmarks"]

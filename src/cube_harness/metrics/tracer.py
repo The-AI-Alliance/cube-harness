@@ -1,9 +1,9 @@
 import json
 import logging
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Any, Iterator, Protocol, override
+from typing import Any, Protocol, override
 from uuid import uuid4
 
 import litellm
@@ -17,32 +17,26 @@ from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
 
-from cube_harness.metrics.disk_exporter import DiskSpanExporter
-from cube_harness.metrics.processor import (
-    CH_EPISODE,
-    CH_EXPERIMENT,
-    CH_NAME,
-    CH_TYPE,
-    TYPE_EPISODE,
-    TYPE_EXPERIMENT,
-    TYPE_STEP,
-)
-
 _logger = logging.getLogger(__name__)
 
+CH_TYPE = "ch.type"
+CH_NAME = "ch.name"
+CH_EXPERIMENT = "ch.experiment"
+CH_EPISODE = "ch.episode"
+TYPE_EXPERIMENT = "experiment"
+TYPE_EPISODE = "episode"
+TYPE_STEP = "step"
+
 RAY_ENV_TRACEPARENT = "TRACEPARENT"
-RAY_ENV_TRACE_OUTPUT = "CUBE_HARNESS_TRACE_OUTPUT"
 RAY_ENV_OTLP_ENDPOINT = "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"
 RAY_ENV_MODEL = "CUBE_HARNESS_MODEL"
 RAY_ENV_AGENT_NAME = "CUBE_HARNESS_AGENT_NAME"
 GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
 
-# https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/#gen-ai-agent-attributes
 GEN_AI_AGENT_NAME = "gen_ai.agent.name"
 GEN_AI_AGENT_ID = "gen_ai.agent.id"
 GEN_AI_AGENT_DESCRIPTION = "gen_ai.agent.description"
 
-# https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/#execute-tool
 GEN_AI_TOOL_NAME = "gen_ai.tool.name"
 GEN_AI_TOOL_CALL_ID = "gen_ai.tool.call.id"
 GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments"
@@ -52,8 +46,6 @@ _tool_tracer = trace.get_tracer(__name__)
 
 
 class _EpisodeBaggageSpanProcessor(SpanProcessor):
-    """Stamps the episode ID baggage value as a span attribute on every span."""
-
     @override
     def on_start(self, span: trace.Span, parent_context: Context | None = None) -> None:
         episode_id = baggage.get_baggage(CH_EPISODE, context=parent_context)
@@ -63,7 +55,6 @@ class _EpisodeBaggageSpanProcessor(SpanProcessor):
 
 @contextmanager
 def tool_span(action: Action) -> Iterator[trace.Span]:
-    """Create a span for tool execution with GenAI semantic attributes."""
     with _tool_tracer.start_as_current_span(f"execute_tool {action.name}", kind=SpanKind.INTERNAL) as span:
         span.set_attribute(GEN_AI_TOOL_NAME, action.name)
         span.set_attribute(GEN_AI_TOOL_CALL_ID, action.id or "")
@@ -85,10 +76,7 @@ class Tracer(Protocol):
 
 
 class _AgentTracer:
-    """Internal tracer. Use get_tracer() to create instances."""
-
-    def __init__(self, provider: TracerProvider, output_dir: Path | None = None) -> None:
-        self.output_dir = output_dir
+    def __init__(self, provider: TracerProvider) -> None:
         self._provider = provider
         self._tracer = provider.get_tracer(__name__)
         self._current_experiment: str | None = None
@@ -106,11 +94,7 @@ class _AgentTracer:
                 self._current_experiment = None
 
     @contextmanager
-    def episode(
-        self,
-        name: str,
-        experiment: str | None = None,
-    ) -> Iterator[trace.Span]:
+    def episode(self, name: str, experiment: str | None = None) -> Iterator[trace.Span]:
         exp = experiment or self._current_experiment or "default"
         parent_ctx = _get_parent_ctx_env()
         episode_id = str(uuid4())
@@ -143,11 +127,6 @@ class _AgentTracer:
             yield span
 
     def shutdown(self) -> None:
-        """Shutdown the tracer provider.
-
-        Note: The provider is shared. Only call once per process. Calling
-        shutdown() multiple times will cause errors on subsequent calls.
-        """
         _logger.info("Shutting down tracer and flushing spans")
         self._provider.shutdown()
         _logger.info("Tracer shutdown complete")
@@ -168,7 +147,7 @@ def _get_parent_ctx_env() -> Context | None:
 
 def get_trace_env_vars() -> dict[str, str]:
     env_vars = {}
-    for key in (RAY_ENV_TRACEPARENT, RAY_ENV_TRACE_OUTPUT, RAY_ENV_OTLP_ENDPOINT, RAY_ENV_MODEL, RAY_ENV_AGENT_NAME):
+    for key in (RAY_ENV_TRACEPARENT, RAY_ENV_OTLP_ENDPOINT, RAY_ENV_MODEL, RAY_ENV_AGENT_NAME):
         if val := os.environ.get(key):
             env_vars[key] = val
     return env_vars
@@ -209,31 +188,27 @@ class _NoOpTracer:
         pass
 
 
-def make_tracer(provider: TracerProvider, output_dir: Path | None = None) -> Tracer:
+def make_tracer(provider: TracerProvider) -> Tracer:
     provider.add_span_processor(_EpisodeBaggageSpanProcessor())
-    return _AgentTracer(provider, output_dir=output_dir)
+    return _AgentTracer(provider)
 
 
 def get_tracer(
     service_name: str,
-    output_dir: str | Path | None = None,
     otlp_endpoint: str | None = None,
     agent_name: str | None = None,
     agent_id: str | None = None,
     agent_description: str | None = None,
     model: str | None = None,
 ) -> Tracer:
-    output_dir = output_dir or os.environ.get(RAY_ENV_TRACE_OUTPUT)
     otlp_endpoint = otlp_endpoint or os.environ.get(RAY_ENV_OTLP_ENDPOINT)
     model = model or os.environ.get(RAY_ENV_MODEL)
     agent_name = agent_name or os.environ.get(RAY_ENV_AGENT_NAME)
 
-    if not (output_dir or otlp_endpoint):
+    if not otlp_endpoint:
         return _NoOpTracer()
 
-    _logger.info(
-        f"Creating _AgentTracer: service={service_name}, output_dir={output_dir}, otlp_endpoint={otlp_endpoint}"
-    )
+    _logger.info(f"Creating _AgentTracer: service={service_name}, otlp_endpoint={otlp_endpoint}")
 
     resource_attrs: dict[str, str] = {SERVICE_NAME: service_name}
     default_agent_id = agent_id or agent_name or uuid4().hex
@@ -248,23 +223,12 @@ def get_tracer(
 
     provider = TracerProvider(resource=Resource.create(resource_attrs))
 
-    resolved_output_dir: Path | None = None
-    if output_dir:
-        resolved_output_dir = Path(output_dir)
-        resolved_output_dir.mkdir(parents=True, exist_ok=True)
-        provider.add_span_processor(BatchSpanProcessor(DiskSpanExporter(resolved_output_dir)))
-        os.environ[RAY_ENV_TRACE_OUTPUT] = str(resolved_output_dir)
+    os.environ[RAY_ENV_OTLP_ENDPOINT] = otlp_endpoint
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
-    if otlp_endpoint:
-        os.environ[RAY_ENV_OTLP_ENDPOINT] = otlp_endpoint
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-
-    # Set as global provider so OTEL-instrumented libraries emit spans into this trace
     trace.set_tracer_provider(provider)
 
-    # Enable litellm OTEL callback now that a proper TracerProvider is configured.
-    # This must happen after set_tracer_provider() to avoid ConsoleSpanExporter fallback.
     os.environ["USE_OTEL_LITELLM_REQUEST_SPAN"] = "true"
     litellm.callbacks = ["otel"]
 
-    return make_tracer(provider, output_dir=resolved_output_dir)
+    return make_tracer(provider)
