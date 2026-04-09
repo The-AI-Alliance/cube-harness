@@ -1,45 +1,32 @@
 """
 Integration tests for OSWorldTask using the debug action sequences.
 
+Accepts a runtime InfraConfig via:
+    OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/infra.json
+
+Falls back to LocalInfraConfig() when none is provided.
+
+Config file shape:
+    {
+      "class": "package.module:InfraConfigClass",
+      "kwargs": {"key": "value"}
+    }
+
 Requires an InfraConfig pointing to a provisioned OSWorld VM image.
 Run the integration test manually via:
     cube-resources/cube-infra-azure/test_run_debug_agent.py
     cube-resources/cube-infra-aws/test_run_debug_agent.py
-
-These tests are skipped by default unless CUBE_TEST_INFRA_PROVIDER is set.
 """
-
-import os
 
 import pytest
 
+from cube.resource import InfraConfig
 from cube.testing import run_debug_episode
 from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
 
-def _make_infra():
-    provider = os.environ.get("CUBE_TEST_INFRA_PROVIDER")
-    if provider == "azure":
-        from cube_infra_azure import AzureInfraConfig
-
-        return AzureInfraConfig()
-    if provider == "aws":
-        from cube_infra_aws import AWSInfraConfig
-
-        return AWSInfraConfig()
-    return None
-
-
 @pytest.fixture(scope="session")
-def infra():
-    cfg = _make_infra()
-    if cfg is None:
-        pytest.skip("Set CUBE_TEST_INFRA_PROVIDER=azure|aws to run integration tests")
-    return cfg
-
-
-@pytest.fixture(scope="session")
-def debug_task_configs(infra):
+def debug_task_configs(infra: InfraConfig):
     benchmark = get_debug_benchmark(infra=infra)
     benchmark.install()
     benchmark.setup()
