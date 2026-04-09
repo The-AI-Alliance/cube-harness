@@ -170,14 +170,6 @@ class Experiment(TypedBaseModel):
         return last_env_step.done
 
     def _load_successful_trajectory_ids(self, storage: FileStorage) -> set[str]:
-        """Load trajectory IDs for episodes that completed successfully.
-
-        Args:
-            storage: FileStorage instance to load trajectories from.
-
-        Returns:
-            Set of trajectory IDs that completed successfully.
-        """
         successful = set()
         for trajectory_id in storage.list_trajectory_ids():
             try:
@@ -189,11 +181,6 @@ class Experiment(TypedBaseModel):
         return successful
 
     def _load_started_trajectory_ids(self) -> set[str]:
-        """Load trajectory IDs for episodes that have been started.
-
-        Returns:
-            Set of trajectory IDs that have metadata files on disk.
-        """
         storage = FileStorage(self.output_dir)
         return set(storage.list_trajectory_ids())
 

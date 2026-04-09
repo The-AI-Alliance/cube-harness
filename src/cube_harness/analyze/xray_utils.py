@@ -140,6 +140,8 @@ def _is_experiment_dir(dir_path: Path) -> bool:
     """Return True if dir_path is a valid (non-archived) experiment directory."""
     if not dir_path.is_dir() or dir_path.name.startswith("_"):
         return False
+    if (dir_path / "episodes").exists():
+        return True
     if (dir_path / "trajectories").exists():
         return True
     return any(
@@ -147,17 +149,17 @@ def _is_experiment_dir(dir_path: Path) -> bool:
     )
 
 
-def _count_trajectory_metadata_files(d: Path) -> int:
-    return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
-
-
-def _n_trajectories_flat_then_legacy(exp_dir: Path) -> int:
-    n = _count_trajectory_metadata_files(exp_dir)
-    if n == 0:
-        traj_dir = exp_dir / "trajectories"
-        if traj_dir.exists():
-            n = _count_trajectory_metadata_files(traj_dir)
-    return n
+def _count_episodes(dir_path: Path) -> int:
+    episodes_dir = dir_path / "episodes"
+    if episodes_dir.exists():
+        return sum(1 for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name)
+    n = len([f for f in dir_path.glob("*.metadata.json") if ".archived_" not in f.name])
+    if n > 0:
+        return n
+    traj_dir = dir_path / "trajectories"
+    if traj_dir.exists():
+        return len([f for f in traj_dir.glob("*.metadata.json") if ".archived_" not in f.name])
+    return 0
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
@@ -176,9 +178,7 @@ def get_directory_contents(results_dir: Path) -> list[str]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = _n_trajectories_flat_then_legacy(dir_path)
-        if n_trajs == 0:
-            continue
+        n_trajs = _count_episodes(dir_path)
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return [sentinel] + sorted(exp_descriptions, reverse=True)
@@ -231,9 +231,7 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = _n_trajectories_flat_then_legacy(dir_path)
-        if n_trajs == 0:
-            continue
+        n_trajs = _count_episodes(dir_path)
         rows.append(
             {
                 "selected": False,
@@ -792,6 +790,8 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
     duration, prompt_tokens, completion_tokens, cached_tokens, cache_creation_tokens,
     cost, final_reward.
     """
+    if traj.summary_stats:
+        return traj.summary_stats
     n_env_steps = 0
     n_agent_steps = 0
     total_actions = 0

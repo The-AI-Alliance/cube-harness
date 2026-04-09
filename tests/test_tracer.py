@@ -3,8 +3,7 @@ from collections.abc import Sequence
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
 
-from cube_harness.metrics.processor import CH_EPISODE
-from cube_harness.metrics.tracer import Tracer, make_tracer
+from cube_harness.metrics.tracer import CH_EPISODE, Tracer, make_tracer
 
 
 class _CollectingExporter(SpanExporter):

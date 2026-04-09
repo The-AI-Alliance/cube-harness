@@ -41,6 +41,7 @@ class Trajectory(TypedBaseModel):
     start_time: float | None = None
     end_time: float | None = None
     reward_info: dict = Field(default_factory=dict)
+    summary_stats: dict | None = None
 
     def last_env_step(self) -> EnvironmentOutput:
         for step in reversed(self.steps):
