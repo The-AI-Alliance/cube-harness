@@ -20,23 +20,6 @@ from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-        "browser_wait",
-        "browser_back",
-        "browser_forward",
-        "noop",
-        "workarena_cheat",
-        "send_message",
-    }
-)
 
 
 @runtime_checkable
@@ -177,9 +160,17 @@ class WorkArenaTask(Task):
 
     @property
     def _chat_messages(self) -> list[dict]:
-        """Return the current chat message history, or empty list if no chat tool."""
+        """Return the current chat message history.
+
+        Prefers ChatTool messages when present. Falls back to the browser tool's
+        chat_messages property (populated via send_msg_to_user when using BrowsergymTool).
+        Tools without chat_messages (e.g. SyncPlaywrightTool) return an empty list.
+        """
         chat = self._chat_tool
-        return chat.messages if chat is not None else []
+        if chat is not None:
+            return chat.messages
+        tool = self._browser_tool
+        return getattr(tool, "chat_messages", [])
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
@@ -198,13 +189,10 @@ class WorkArenaTask(Task):
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter to BID browser actions supported by WorkArena."""
-        supported_actions = _SUPPORTED_ACTION_NAMES
+        """Filter actions: remove ChatTool's send_message when no ChatTool is present."""
         if self._chat_tool is None:
-            supported_actions = supported_actions - {"send_message"}
-        filtered = [a for a in actions if a.name in supported_actions]
-        logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
-        return filtered
+            return [a for a in actions if a.name != "send_message"]
+        return actions
 
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
@@ -221,15 +209,19 @@ class WorkArenaTask(Task):
 class WorkArenaTaskConfig(TaskConfig):
     """Serializable configuration for a single WorkArena task."""
 
+    task_class_path: str | None = None
+
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
-        from workarena_cube.benchmark import WorkArenaBenchmark
+        from cube.task import TaskMetadata
 
         _ = runtime_context, container_backend
-        meta = WorkArenaBenchmark.task_metadata[self.task_id]
+        if self.task_class_path is None:
+            raise ValueError(f"task_class_path is required to instantiate WorkArenaTask (task_id={self.task_id})")
+        meta = TaskMetadata(id=self.task_id, extra_info={"task_class_path": self.task_class_path})
         return WorkArenaTask(
             metadata=meta,
             tool_config=self.tool_config,

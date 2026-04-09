@@ -42,7 +42,7 @@ class BrowsergymConfig(ToolConfig):
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
-    pre_observation_delay: float = 2.5
+    pre_observation_delay: float = 0.5
 
     # Observation configuration
     use_html: bool = True
@@ -79,6 +79,13 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
+        # Accumulated send_msg_to_user messages — passed to WorkArena validate() as chat history
+        self._chat_messages: list[dict] = []
+
+    @property
+    def chat_messages(self) -> list[dict]:
+        """Messages sent via send_msg_to_user, in bgym chat protocol format."""
+        return self._chat_messages
 
     # === Action set: built from bgym's HighLevelActionSet ===
 
@@ -150,6 +157,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_info = {"source": "reset"}
         self._last_reward = 0.0
         self._last_terminated = False
+        self._chat_messages = []
 
     def close(self) -> None:
         self._close_runtime()
@@ -209,6 +217,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
                 result = f"Failed (infeasible): {error_msg}"
             else:
+                # Accumulate messages for WorkArena validate() — format mirrors bgym's chat protocol
+                for msg in user_messages:
+                    self._chat_messages.append({"role": "assistant", "message": msg, "timestamp": time.time()})
                 self._last_info = {
                     "source": "action",
                     "action": action_str,
@@ -409,21 +420,27 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 # === Module-level helpers ===
 
 
+_ACTION_DESCRIPTION_OVERRIDES: dict[str, str] = {
+    "send_msg_to_user": (
+        "Send a message to the user. Use this to communicate answers, results, or information "
+        "the user asked for. This is NOT a thinking or reasoning tool — do not use it to log "
+        "your observations or plan your next steps. Only call this when you have something "
+        "meaningful to communicate to the user."
+    ),
+}
+
+
 def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
     """Convert bgym's HighLevelActionSet to a list of ActionSchema objects."""
     tool_descs = action_set.to_tool_description(api="openai")
     schemas = []
     for desc in tool_descs:
+        # "type": "function" is at the top-level desc dict, not inside parameters.
+        # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
-        # Remove "type": "function" key that bgym adds at top level — not a parameter
-        params.pop("type", None)
-        schemas.append(
-            ActionSchema(
-                name=desc["name"],
-                description=desc.get("description", desc["name"]),
-                parameters=params,
-            )
-        )
+        name = desc["name"]
+        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
+        schemas.append(ActionSchema(name=name, description=description, parameters=params))
     return schemas
 
 
