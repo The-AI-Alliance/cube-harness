@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cube.core import EnvironmentOutput
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 
@@ -38,7 +38,7 @@ class StepSummary(BaseModel):
 
 
 class ExperimentSummary(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
+    model_config = ConfigDict(strict=True, extra="forbid", populate_by_name=True)
 
     n_episodes: int = 0
     n_completed: int = 0
@@ -48,7 +48,8 @@ class ExperimentSummary(BaseModel):
     total_completion_tokens: int = 0
     total_cost: float = 0.0
     updated_at: str | None = None
-    success_rate: float = 0.0
+    # Previously named "success_rate" — actually avg reward, not a success rate
+    avg_reward: float = Field(0.0, validation_alias=AliasChoices("avg_reward", "success_rate"))
 
 
 class SummaryProcessor:

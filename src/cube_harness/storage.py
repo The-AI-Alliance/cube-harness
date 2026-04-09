@@ -1,3 +1,4 @@
+import fcntl
 import json
 import logging
 import threading
@@ -394,36 +395,44 @@ class FileStorage:
     def update_experiment_summary(self, trajectory: Trajectory) -> None:
         from cube_harness.summary import ExperimentSummary
 
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self.output_dir / "experiment_summary.lock"
         summary_path = self.output_dir / "experiment_summary.json"
-        if summary_path.exists():
-            summary = ExperimentSummary.model_validate_json(summary_path.read_text())
-        else:
-            summary = ExperimentSummary()
 
-        stats = trajectory.summary_stats or {}
-        has_error = any(
-            hasattr(step.output, "error") and step.output.error is not None
-            for step in trajectory.steps
-            if isinstance(step.output, AgentOutput)
-        )
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            try:
+                if summary_path.exists():
+                    summary = ExperimentSummary.model_validate_json(summary_path.read_text())
+                else:
+                    summary = ExperimentSummary()
 
-        summary.n_episodes += 1
-        if has_error:
-            summary.n_errored += 1
-        else:
-            summary.n_completed += 1
-        summary.total_reward += stats.get("final_reward", 0.0)
-        summary.total_prompt_tokens += stats.get("prompt_tokens", 0)
-        summary.total_completion_tokens += stats.get("completion_tokens", 0)
-        summary.total_cost += stats.get("cost", 0.0)
+                stats = trajectory.summary_stats or {}
+                has_error = any(
+                    hasattr(step.output, "error") and step.output.error is not None
+                    for step in trajectory.steps
+                    if isinstance(step.output, AgentOutput)
+                )
 
-        if summary.n_completed > 0:
-            summary.success_rate = round(summary.total_reward / summary.n_completed, 4)
-        summary.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                summary.n_episodes += 1
+                if has_error:
+                    summary.n_errored += 1
+                else:
+                    summary.n_completed += 1
+                summary.total_reward += stats.get("final_reward", 0.0)
+                summary.total_prompt_tokens += stats.get("prompt_tokens", 0)
+                summary.total_completion_tokens += stats.get("completion_tokens", 0)
+                summary.total_cost += stats.get("cost", 0.0)
 
-        tmp_path = summary_path.with_suffix(".tmp")
-        tmp_path.write_text(summary.model_dump_json(indent=2))
-        tmp_path.rename(summary_path)
+                if summary.n_completed > 0:
+                    summary.avg_reward = round(summary.total_reward / summary.n_completed, 4)
+                summary.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+                tmp_path = summary_path.with_suffix(".tmp")
+                tmp_path.write_text(summary.model_dump_json(indent=2))
+                tmp_path.rename(summary_path)
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
 
     # --- Episode configs ---
 
