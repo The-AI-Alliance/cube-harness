@@ -12,7 +12,7 @@ from typing import Any
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig
+from cube.task import Task, TaskConfig, TaskMetadata
 
 from swebench_live_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -23,8 +23,31 @@ logger = logging.getLogger(__name__)
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
 
 
+class SWEBenchLiveTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for SWE-bench Live tasks.
+
+    Public fields shipped in task_metadata.json (available at import time).
+    Heavy execution data (problem_statement, patch, test_patch, etc.) lives in
+    the per-task execution cache and is loaded lazily by SWEBenchLiveTaskConfig.make().
+    """
+
+    repo: str
+    """GitHub repository name, e.g. 'django/django'."""
+
+    base_commit: str
+    """Git commit hash the agent's solution must be applied on top of."""
+
+    splits: list[str]
+    """SWE-bench Live splits this task belongs to, e.g. ['verified', 'full']."""
+
+    log_parser: str
+    """Test log parser to use during evaluation, e.g. 'pytest'."""
+
+
 class SWEBenchLiveTask(Task):
     """A single SWE-bench Live task with test-based validation."""
+
+    metadata: SWEBenchLiveTaskMetadata  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
@@ -45,7 +68,7 @@ class SWEBenchLiveTask(Task):
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
-            "repo": extra["repo"],
+            "repo": self.metadata.repo,
         }
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
@@ -63,9 +86,10 @@ class SWEBenchLiveTask(Task):
         # Run tests using explicit test_cmds from the dataset
         test_output = self._run_test_cmds(test_cmds, timeout=eval_timeout)
 
-        # Parse results from the log_parser type
-        log_parser = extra.get("log_parser", "pytest")
-        f2p_passed, p2p_failed = self._check_test_results(test_output, fail_to_pass, pass_to_pass, log_parser)
+        # Use the typed log_parser field from metadata
+        f2p_passed, p2p_failed = self._check_test_results(
+            test_output, fail_to_pass, pass_to_pass, self.metadata.log_parser
+        )
 
         # SWE-bench Live Linux: at least one FAIL_TO_PASS must pass, zero PASS_TO_PASS failures
         resolved = f2p_passed > 0 and p2p_failed == 0
@@ -168,6 +192,12 @@ class SWEBenchLiveTask(Task):
 class SWEBenchLiveTaskConfig(TaskConfig):
     """Serializable factory that produces a SWEBenchLiveTask."""
 
+    include_hints: bool = False
+    """If True, append hints_text to the problem statement in reset()."""
+
+    oracle_mode: bool = False
+    """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
+
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
@@ -180,6 +210,12 @@ class SWEBenchLiveTaskConfig(TaskConfig):
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
         metadata = SWEBenchLiveBenchmark.task_metadata[self.task_id]
+        exec_info = SWEBenchLiveBenchmark.load_task_execution_info(self.task_id)
+        # Overlay runtime config flags — these are benchmark-level settings forwarded
+        # via TaskConfig so they survive Ray worker serialisation.
+        exec_info["include_hints"] = self.include_hints
+        exec_info["oracle_mode"] = self.oracle_mode
+        metadata = metadata.model_copy(update={"extra_info": exec_info})
 
         return SWEBenchLiveTask(
             metadata=metadata,
