@@ -93,31 +93,15 @@ class WorkArenaCheatToolConfig(PlaywrightConfig):
 
 
 class WorkArenaTask(Task):
-    """
-    CUBE Task wrapper for WorkArena ServiceNow tasks.
-
-    ---
-    Future optimization note:
-
-    Both `finished()` and `evaluate()` call `self._workarena_task.validate()`,
-    which makes a live ServiceNow API call. With `validate_per_step=True`,
-    the base `Task.step()` calls both on every step, resulting in
-    two identical round-trips per step.
-
-    Future improvement: if the above becomes a performance bottleneck, we can cache the
-    result of `validate()` keyed on `(chat_key, hash(page.content()))` where:
-    `chat_key = tuple((m["role"], m["timestamp"], m["message"]) for m in chat_messages)`.
-    Both `finished()` and `evaluate()` would call a shared `_validate()` helper
-    that returns the cached result when the key is unchanged, and refreshes it otherwise.
-    The `page.content()` hash captures SPA state changes that do not update the URL,
-    at the cost of a DOM serialization on each cache-miss check.
-    """
+    """CUBE Task wrapper for WorkArena ServiceNow tasks."""
 
     seed: int
     wait_first_page_time: float = 10.0
     validate_per_step: bool = True
 
     _workarena_task: AbstractServiceNowTask | None = PrivateAttr(default=None)
+    _validate_cache: tuple[Any, ...] | None = PrivateAttr(default=None)
+    _validate_cache_key: tuple[Any, ...] | None = PrivateAttr(default=None)
 
     @property
     def _browser_tool(self) -> WorkArenaBrowserTool:
@@ -156,6 +140,8 @@ class WorkArenaTask(Task):
         logger.info(f"WorkArena page title: {page.title()}")
         logger.info(f"WorkArena task class: {self._workarena_task.__class__.__name__}")
 
+        self._validate_cache = None
+        self._validate_cache_key = None
         self._browser_tool.noop()
         time.sleep(self.wait_first_page_time)
         logger.info(f"WorkArena task goal: {goal}")
@@ -181,20 +167,36 @@ class WorkArenaTask(Task):
         chat = self._chat_tool
         return chat.messages if chat is not None else []
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
-        """Score the current task state via WorkArena's validate()."""
+    def _validate(self) -> tuple[float, bool, str, dict]:
+        """Call WorkArena's validate() with per-step caching to avoid duplicate REST calls.
+
+        Both evaluate() and finished() are called on every step when validate_per_step=True,
+        so this caches the result keyed on (chat_messages, page_url) and reuses it within
+        the same step.
+        """
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
         page = self._browser_tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
+        chat_messages = self._chat_messages
+        cache_key = (
+            tuple((m.get("role"), m.get("message")) for m in chat_messages),
+            page.url,
+        )
+        if self._validate_cache is None or self._validate_cache_key != cache_key:
+            self._validate_cache = self._workarena_task.validate(page, chat_messages)
+            self._validate_cache_key = cache_key
+        return self._validate_cache  # type: ignore[return-value]
+
+    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+        """Score the current task state via WorkArena's validate()."""
+        reward, done, _user_message, task_info = self._validate()
         return reward, {"done": done, **task_info}
 
     def finished(self, obs: Observation) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = self._browser_tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
+        _reward, done, _user_message, _task_info = self._validate()
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
