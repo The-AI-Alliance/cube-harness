@@ -26,7 +26,7 @@ def trajectories_to_df(trajectories: list[Trajectory]) -> pd.DataFrame | None:
         record: dict[str, Any] = {"trajectory_id": traj.id}
         record.update(traj.metadata)
 
-        if traj.steps:
+        if traj.steps or traj.summary_stats:
             stats = compute_trajectory_stats(traj)
             record["cum_reward"] = stats["final_reward"]
             record["n_steps"] = stats["n_env_steps"]
@@ -35,12 +35,16 @@ def trajectories_to_df(trajectories: list[Trajectory]) -> pd.DataFrame | None:
             record["prompt_tokens"] = stats["prompt_tokens"]
             record["completion_tokens"] = stats["completion_tokens"]
 
-            last_env = None
-            for step in reversed(traj.steps):
-                if isinstance(step.output, EnvironmentOutput):
-                    last_env = step.output
-                    break
-            record["done"] = last_env.done if last_env else False
+            if traj.steps:
+                last_env = None
+                for step in reversed(traj.steps):
+                    if isinstance(step.output, EnvironmentOutput):
+                        last_env = step.output
+                        break
+                record["done"] = last_env.done if last_env else False
+            else:
+                reward = stats.get("final_reward", 0.0)
+                record["done"] = traj.reward_info.get("done", reward > 0)
         else:
             record["cum_reward"] = np.nan
             record["n_steps"] = np.nan
