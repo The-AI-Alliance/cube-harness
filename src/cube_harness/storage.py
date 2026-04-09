@@ -58,7 +58,7 @@ def _get_decompressor() -> zstandard.ZstdDecompressor:
 
 
 def _serialize_step(step: TrajectoryStep) -> bytes:
-    data = step.model_dump(serialize_as_any=True)
+    data = json.loads(step.model_dump_json())
     packed = msgpack.packb(data, use_bin_type=True)
     return _get_compressor().compress(packed)
 

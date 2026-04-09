@@ -301,7 +301,6 @@ class TestFileStorageLoadAll:
 
 
 class TestFileStorageWithImages:
-    @pytest.mark.xfail(reason="msgpack cannot serialize PIL Image objects")
     def test_save_and_load_trajectory_with_image(self, tmp_dir):
         storage = FileStorage(tmp_dir)
         img = Image.new("RGB", (100, 100), color="blue")
