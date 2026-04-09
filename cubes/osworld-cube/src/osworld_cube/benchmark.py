@@ -33,7 +33,7 @@ from cube.container import ContainerBackend
 from cube.task import TaskConfig
 from cube.vm import VMBackend
 
-from osworld_cube import OSWORLD_BASE_DIR, OSWORLD_REPO_DIR, OSWORLD_VM_DIR
+from osworld_cube._paths import OSWORLD_BASE_DIR, OSWORLD_REPO_DIR, OSWORLD_VM_DIR
 from osworld_cube.computer import ComputerConfig
 from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
 

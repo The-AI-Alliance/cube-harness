@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 from unittest.mock import MagicMock, patch
+import importlib.util
+import json
 
 from PIL import Image
 
@@ -569,9 +571,6 @@ class TestOSWorldBenchmark:
 # scripts/create_task_metadata.py
 # ---------------------------------------------------------------------------
 
-import importlib.util
-import json as _json
-
 _SCRIPT_PATH = Path(__file__).parent.parent / "scripts" / "create_task_metadata.py"
 
 
@@ -591,22 +590,24 @@ def _make_fake_repo(root: Path) -> Path:
     examples_dir.mkdir(parents=True)
 
     # Two tasks both in test_all; task-b also in test_small
-    (eval_dir / "test_all.json").write_text(_json.dumps({"os": ["task-a", "task-b"]}))
-    (eval_dir / "test_small.json").write_text(_json.dumps({"os": ["task-b"]}))
-    (eval_dir / "test_nogdrive.json").write_text(_json.dumps({}))
-    (eval_dir / "test_infeasible.json").write_text(_json.dumps({}))
+    (eval_dir / "test_all.json").write_text(json.dumps({"os": ["task-a", "task-b"]}))
+    (eval_dir / "test_small.json").write_text(json.dumps({"os": ["task-b"]}))
+    (eval_dir / "test_nogdrive.json").write_text(json.dumps({}))
+    (eval_dir / "test_infeasible.json").write_text(json.dumps({}))
 
     for task_id, instr in [("task-a", "Do A"), ("task-b", "Do B")]:
         (examples_dir / f"{task_id}.json").write_text(
-            _json.dumps({
-                "id": task_id,
-                "instruction": instr,
-                "snapshot": "init_state",
-                "os_type": "ubuntu",
-                "related_apps": ["os"],
-                "config": [],
-                "evaluator": {"func": "check_include_exclude"},
-            })
+            json.dumps(
+                {
+                    "id": task_id,
+                    "instruction": instr,
+                    "snapshot": "init_state",
+                    "os_type": "ubuntu",
+                    "related_apps": ["os"],
+                    "config": [],
+                    "evaluator": {"func": "check_include_exclude"},
+                }
+            )
         )
     return repo
 
@@ -621,7 +622,7 @@ class TestCreateTaskMetadata:
 
         assert count == 2
         assert out.exists()
-        tasks = _json.loads(out.read_text())
+        tasks = json.loads(out.read_text())
         assert len(tasks) == 2
         ids = {t["id"] for t in tasks}
         assert ids == {"task-a", "task-b"}
@@ -633,7 +634,7 @@ class TestCreateTaskMetadata:
         mod = _load_script()
         mod.generate_task_metadata(repo_dir=repo, output_path=out)
 
-        tasks = {t["id"]: t for t in _json.loads(out.read_text())}
+        tasks = {t["id"]: t for t in json.loads(out.read_text())}
         assert tasks["task-a"]["domain"] == "os"
         assert tasks["task-a"]["instruction"] == "Do A"
         assert tasks["task-a"]["snapshot"] == "init_state"
@@ -669,6 +670,7 @@ class TestCreateTaskMetadata:
 
     def test_missing_repo_raises_when_clone_disabled(self, tmp_path: Path) -> None:
         import pytest
+
         out = tmp_path / "task_metadata.json"
 
         mod = _load_script()
@@ -687,7 +689,7 @@ class TestCreateTaskMetadata:
         mod = _load_script()
         mod.generate_task_metadata(repo_dir=repo, output_path=out)
 
-        tasks = _json.loads(out.read_text())
+        tasks = json.loads(out.read_text())
         for task in tasks:
             assert "config" not in task
             assert "evaluator" not in task
@@ -744,7 +746,7 @@ class TestInstall:
             OSWorldBenchmark.install()
 
         assert (cache_dir / "task-a.json").exists()
-        exec_info = _json.loads((cache_dir / "task-a.json").read_text())
+        exec_info = json.loads((cache_dir / "task-a.json").read_text())
         assert "config" in exec_info
         assert "evaluator" in exec_info
 

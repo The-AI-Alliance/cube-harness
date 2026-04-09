@@ -96,6 +96,7 @@ class OSWorldTask(Task):
         metadata.extra_info["instruction"]  — used as the agent's goal text
         metadata.abstract_description       — short description of the task type (may be empty)
     """
+
     metadata: OSWorldTaskMetadata  # type: ignore[assignment] — TaskMetadata subclass with OSWorld-specific fields
 
     vm_backend: VMBackend | None = None
@@ -222,7 +223,7 @@ class OSWorldTask(Task):
         task_data = {
             "id": self.metadata.id,
             "instruction": self.metadata.instruction,
-            "config": self.metadata.extra_info.get("config", []),   # loaded from execution cache in make()
+            "config": self.metadata.extra_info.get("config", []),  # loaded from execution cache in make()
             "evaluator": self.metadata.extra_info.get("evaluator", {}),
             "snapshot": self.metadata.snapshot,
             "related_apps": self.metadata.related_apps,

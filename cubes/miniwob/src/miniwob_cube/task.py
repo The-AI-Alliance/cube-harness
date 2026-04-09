@@ -13,6 +13,7 @@ class MiniWobTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for MiniWob++ tasks.
     Adds cube-specific public fields that are safe to ship in task_metadata.json.
     """
+
     nondeterministic: bool = False
 
 

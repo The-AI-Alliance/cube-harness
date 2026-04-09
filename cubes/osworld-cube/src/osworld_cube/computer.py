@@ -6,7 +6,7 @@ This module re-exports everything for backwards compatibility and sets
 ComputerConfig.cache_dir to the osworld-cube benchmark cache directory.
 """
 
-from osworld_cube import OSWORLD_CACHE_DIR
+from osworld_cube._paths import OSWORLD_CACHE_DIR
 from cube_computer_tool.computer import ActionSpace, Computer13, ComputerBase, PyAutoGUIComputer
 from cube_computer_tool.computer import ComputerConfig as _BaseComputerConfig
 

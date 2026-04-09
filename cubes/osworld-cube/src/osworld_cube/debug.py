@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 _DEBUG_TASK_METADATA_JSON = Path(__file__).parent / "debug_task_metadata.json"
 
+
 class DebugOSWorldTaskConfig(OSWorldTaskConfig):
     def make(
         self,
@@ -68,7 +69,9 @@ class DebugOSWorldBenchmark(OSWorldBenchmark):
     """
 
     benchmark_metadata = OSWorldBenchmark.benchmark_metadata.model_copy(update={"num_tasks": 2, "named_subsets": {}})
-    task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]] = Benchmark.task_metadata_from_json(_DEBUG_TASK_METADATA_JSON)  # type: ignore[assignment]
+    task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]] = Benchmark.task_metadata_from_json(
+        _DEBUG_TASK_METADATA_JSON
+    )  # type: ignore[assignment]
     task_config_class: ClassVar[type[TaskConfig]] = DebugOSWorldTaskConfig
 
     @classmethod

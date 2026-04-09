@@ -38,78 +38,96 @@
 
 ---
 
-## Phase 2: Lightweight public metadata + per-task execution files
-
-> **Note:** Design decisions here are tentative — to be revisited after all Phase 1 cubes are done.
+## Phase 2: Typed public metadata + per-task execution cache
 
 ### Motivation
 
-`task_metadata.json` can become very large (e.g. swebench-live ~557 MB), mostly because every task embeds large fields (`problem_statement`, `patch`, `test_patch`, `fail_to_pass`, etc.) that are only needed at execution time, not for planning/inspection.
+`task_metadata.json` can be very large (swebench-live ~557 MB) because tasks embed heavy fields (`problem_statement`, `patch`, `test_patch`, etc.) that are only needed at execution time. These fields pollute public introspection and slow down import.
 
-### Proposed design
+### Design
 
-**1. `TaskMetadata` subclasses replace `extra_info` for public fields**
+**1. `task_metadata.json` is a shipped package resource**
 
-Each cube defines a typed `TaskMetadata` subclass with its lightweight public fields. `extra_info` starts empty and is reserved as the lazy-load destination for heavy execution data:
+Committed to the cube repo, included in the package release. Available at import time with no download required. Contains only lightweight public fields (small enough to load without hesitation).
+
+**2. Typed `TaskMetadata` subclasses replace `extra_info` for public fields**
+
+Each cube that needs cube-specific public fields defines a subclass. `extra_info` starts empty and is reserved exclusively for runtime execution data loaded in `TaskConfig.make()`.
 
 ```python
 # swebench_verified_cube/task.py
 class SWEBenchVerifiedTaskMetadata(TaskMetadata):
     repo: str
     difficulty: str = "unknown"
-    # splits, difficulty, etc. — small, public-facing
-    # NO more problem_statement/patch/etc. here
+    splits: list[str] = []
+    # NO problem_statement / patch / test_patch here
 ```
 
-`task_metadata.json` then contains only these small fields (serialized with `_type` so `__init_subclass__` reconstructs the right subclass automatically).
+`task_metadata.json` is serialized with `_type` so `__init_subclass__` reconstructs the right subclass. Cubes with no extra public fields skip this entirely.
 
-**2. Per-task execution files in `~/.cube/cache/<benchmark_name>/tasks/`**
+**3. Per-task execution data in `get_cache_dir(benchmark_name) / "tasks_execution_info"`**
 
-`install()` also writes one JSON file per task:
+Heavy fields live in one JSON file per task in the user's cube cache dir:
 ```
-~/.cube/cache/swebench-verified-cube/tasks/django__django-12345.json
+~/.cube/swebench-verified-cube/tasks_execution_info/django__django-12345.json
   → {"problem_statement": "...", "patch": "...", "test_patch": "...", ...}
 ```
-
-`uninstall()` removes both `task_metadata.json` and the cache directory.
-
-**3. Base class helper: `Benchmark.load_execution_info(task_id)`**
 
 `cube-standard` adds two classmethods to `Benchmark`:
 ```python
 @classmethod
-def execution_cache_dir(cls) -> Path:
+def task_execution_cache_dir(cls) -> Path:
     return get_cache_dir(cls.benchmark_metadata.name) / "tasks_execution_info"
 
 @classmethod
-def load_execution_info(cls, task_id: str) -> dict[str, Any]:
-    cache_file = cls.execution_cache_dir() / f"{task_id}.json"
+def load_task_execution_info(cls, task_id: str) -> dict[str, Any]:
+    cache_file = cls.task_execution_cache_dir() / f"{task_id}.json"
     if not cache_file.exists():
         raise RuntimeError(f"No execution data for {task_id!r}. Run `{cls.__name__}.install()`.")
     return json.loads(cache_file.read_text())
 ```
 
-**4. Cube `TaskConfig.make()` loads lazily — transparent to the agent**
+**4. Cube `TaskConfig.make()` loads execution info lazily**
 
 ```python
 def make(self, runtime_context=None, container_backend=None):
     metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
-    exec_info = SWEBenchVerifiedBenchmark.load_execution_info(self.task_id)
+    exec_info = SWEBenchVerifiedBenchmark.load_task_execution_info(self.task_id)
     metadata = metadata.model_copy(update={"extra_info": exec_info})
     return SWEBenchVerifiedTask(metadata=metadata, ...)
 ```
 
-`Task.reset()` and `Task.evaluate()` access `self.metadata.extra_info` exactly as before — **no changes to task logic**.
+`Task.reset()` and `Task.evaluate()` access `self.metadata.extra_info` as before — no changes to task logic. Works correctly in Ray workers because it reads from disk.
 
-> **Ray worker constraint:** `TaskConfig.make()` runs in a separate process (Ray worker) where the benchmark is never instantiated and `_setup()` is never called. This means any data injected into `task_metadata` by `_setup()` (e.g. `oracle_mode=True`) is **invisible** to Ray workers — they load `task_metadata.json` fresh. Phase 2 lazy loading via `load_execution_info()` in `TaskConfig.make()` correctly handles this because it reads from disk (not from in-memory ClassVar). This is also why `oracle_mode` and `include_hints` overrides set by the harness don't propagate to Ray workers in the current Phase 1 design.
+> **Ray worker note:** `_setup()` modifications to `task_metadata` (e.g. `oracle_mode=True`) are invisible to Ray workers. Phase 2 `load_task_execution_info()` in `make()` is the correct place to handle this.
 
 **5. `named_subsets` glob keys update**
 
-Since `splits`, `difficulty`, etc. are now first-class typed fields (not in `extra_info`), glob keys update from `"extra_info.splits"` → `"splits"`.
+Public fields that moved from `extra_info` to typed subclass fields update their glob keys: `"extra_info.splits"` → `"splits"`, etc.
 
-### Changes required
+**6. Cubes with no heavy data**
 
-| Component | Change |
-|-----------|--------|
-| `cube-standard` | Add `execution_cache_dir()` + `load_execution_info()` classmethods to `Benchmark` |
-| Each cube | Define `XTaskMetadata(TaskMetadata)` with lightweight fields; update `install()` to also write per-task cache files; update `TaskConfig.make()` to call `load_execution_info()`; update `named_subsets` glob keys |
+Cubes like `miniwob`, `arithmetic`, `workarena` have no per-task execution files at all. They skip steps 3–4 entirely. Their `task_metadata.json` (already a package resource) is the complete picture.
+
+---
+
+## Phase 3: `install()` responsibility split
+
+### Motivation
+
+Once `task_metadata.json` is a shipped package resource, `install()` no longer needs to generate it. Its only remaining job is populating the runtime execution cache for cubes that have heavy data.
+
+### Design
+
+**`install()` classmethod** (kept in the public API for cubes that need it):
+- Responsibility: download / generate per-task execution cache files into `task_execution_cache_dir()`
+- Cubes with no heavy data: don't define it (base no-op)
+- Called by users before running tasks: `MyCube.install()`
+
+**`scripts/generate_task_metadata.py`** (developer-only, not part of the published package):
+- Responsibility: regenerate `task_metadata.json` from scratch (e.g. re-download HF dataset, re-read repo files)
+- Lives in the cube's source repo for reproducibility
+- Not expected from all cube developers — only needed when the task list itself changes
+- Not imported or shipped in the wheel
+
+This cleanly separates "what users run to set up a cube" (`install()`) from "what cube developers run to update the shipped metadata" (`scripts/generate_task_metadata.py`).
