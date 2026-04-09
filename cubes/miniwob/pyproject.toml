@@ -2,7 +2,7 @@
 name = "miniwob-cube"
 version = "1.0.0"
 description = "MiniWob++ benchmark for cube"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "cube-standard",
     "miniwob>=1.0",
@@ -15,6 +15,12 @@ miniwob-cube = "miniwob_cube.benchmark:MiniWobBenchmark"
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
+
+[tool.uv-build]
+include = ["src/miniwob_cube/task_metadata.json"]
+
+[tool.uv.sources]
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task-metadata" }
 
 [tool.ruff]
 fix = true
