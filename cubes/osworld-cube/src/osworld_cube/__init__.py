@@ -22,5 +22,4 @@ __all__ = [
     # Debug helpers
     "get_debug_benchmark",
     "make_debug_agent",
-    "get_debug_benchmark",
 ]
