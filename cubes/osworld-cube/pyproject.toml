@@ -2,7 +2,7 @@
 name = "osworld-cube"
 version = "0.2.0"
 description = "OSWorld benchmark ported to the CUBE protocol"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "cube-standard",
     "cube-computer-tool",
@@ -46,6 +46,14 @@ dependencies = [
 [project.entry-points."cube.benchmarks"]
 osworld-cube = "osworld_cube.benchmark:OSWorldBenchmark"
 
+[project.optional-dependencies]
+azure = [
+    "cube-infra-azure",
+]
+aws = [
+    "cube-infra-aws",
+]
+
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
@@ -64,8 +72,11 @@ markers = [
 override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-standard = { path = "../../../cube-standard", editable = true }
-cube-computer-tool = { path = "../../../cube-standard/cube-tools/cube-computer-tool", editable = true }
+cube-standard = { path = "../../cube-standard", editable = true }
+cube-computer-tool = { path = "../../cube-standard/cube-tools/cube-computer-tool", editable = true }
+cube-vm-backend = { path = "../../cube-standard/cube-resources/cube-vm-backend", editable = true }
+cube-infra-azure = { path = "../../cube-standard/cube-resources/cube-infra-azure", editable = true }
+cube-infra-aws = { path = "../../cube-standard/cube-resources/cube-infra-aws", editable = true }
 
 
 [tool.ruff]
