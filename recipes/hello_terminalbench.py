@@ -2,7 +2,7 @@
 
 Usage:
     uv run recipes/hello_terminalbench.py debug              # 1 task, sequential
-    uv run recipes/hello_terminalbench.py easy               # 4 easy tasks
+    uv run recipes/hello_terminalbench.py easy               # 4 easy tasks, sequential
     uv run recipes/hello_terminalbench.py full --model openai/gpt-4o
 """
 
@@ -50,14 +50,15 @@ def main(mode: str, model: str = "openai/gpt-5-nano") -> None:
     benchmark = TerminalBenchBenchmark(
         container_backend=container_backend,
         default_tool_config=tool_config,
-        shuffle=True,
-        shuffle_seed=42,
-        max_tasks={"debug": 1, "easy": 4}.get(mode),
-        difficulty_filter="easy" if mode == "easy" else None,
     )
-
     benchmark.install()
     benchmark.setup()
+
+    if mode == "easy":
+        benchmark = benchmark.named_subset("easy")  # 4 tasks
+    elif mode == "debug":
+        tasks = list(benchmark.task_metadata.keys())[:1]
+        benchmark = benchmark.subset_from_list(tasks)
 
     exp = Experiment(
         name="terminalbench-cube",
