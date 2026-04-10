@@ -435,7 +435,7 @@ class FileStorage:
     # --- Episode configs ---
 
     def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
-        traj_id = f"{episode_config.task_id}_ep{episode_config.id}"
+        traj_id = f"{episode_config.task_config.task_id}_ep{episode_config.id}"
         ep_dir = self._episode_dir(traj_id)
         ep_dir.mkdir(parents=True, exist_ok=True)
         config_path = ep_dir / "episode_config.json"

@@ -2,7 +2,6 @@
 
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 from cube.benchmark import Benchmark as CubeBenchmark
@@ -24,7 +23,6 @@ from cube_harness.core import (
     TrajectoryStep,
 )
 from cube_harness.episode import Episode
-from cube_harness.legacy import Benchmark, EnvConfig, Environment, Task
 from cube_harness.llm import LLMConfig, Prompt
 from cube_harness.tool import ToolWithTelemetry
 
@@ -183,69 +181,6 @@ def mock_tool_config() -> MockToolConfig:
     return MockToolConfig()
 
 
-# --- Task fixtures ---
-
-
-class MockTask(Task):
-    """Mock task implementation for testing."""
-
-    id = "mock_task_1"
-
-    def __init__(self, goal: str = "Complete the test task"):
-        self.goal = goal
-        self.setup_called = False
-        self.teardown_called = False
-        self.validate_called = False
-
-    def setup(self, tool) -> tuple[Observation, dict]:
-        self.setup_called = True
-        return Observation.from_text(self.goal), {"task_type": "mock"}
-
-    def teardown(self) -> None:
-        self.teardown_called = True
-
-    def validate_task(self, obs: Observation) -> tuple[float, dict]:
-        self.validate_called = True
-        return 1.0, {"success": True}
-
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        return actions
-
-
-@pytest.fixture
-def mock_task() -> MockTask:
-    """Mock task for testing."""
-    return MockTask()
-
-
-# --- Benchmark fixtures ---
-
-
-class SerializableBenchmark(Benchmark):
-    """Simple benchmark without custom __init__ for JSON serialization tests."""
-
-    def setup(self):
-        pass
-
-    def close(self):
-        pass
-
-    def load_tasks(self) -> list[Task]:
-        return []
-
-
-@pytest.fixture
-def mock_env_config(mock_tool_config, mock_task) -> EnvConfig:
-    """Mock environment config with mock tool."""
-    return EnvConfig(task=mock_task, tool_config=mock_tool_config)
-
-
-@pytest.fixture
-def mock_tool_env(mock_task, mock_tool) -> Environment:
-    """Mock ToolEnv for testing."""
-    return Environment(task=mock_task, tool=mock_tool)
-
-
 # --- Agent fixtures ---
 
 
@@ -290,49 +225,6 @@ def mock_agent_config() -> MockAgentConfig:
 def mock_agent(mock_agent_config) -> MockAgent:
     """Mock agent for testing."""
     return MockAgent(config=mock_agent_config)
-
-
-# --- Benchmark fixtures ---
-
-
-class MockBenchmark(Benchmark):
-    """Mock benchmark for testing."""
-
-    setup_called: bool = False
-    close_called: bool = False
-
-    def __init__(self, tasks_list: list[Any], tool_config: ToolConfig, metadata: dict | None = None):
-        super().__init__(tool_config=tool_config, metadata=metadata or {})
-        self._tasks = tasks_list
-
-    def setup(self):
-        self.setup_called = True
-
-    def close(self):
-        self.close_called = True
-
-    def load_tasks(self) -> list[Task]:
-        return self._tasks
-
-
-@pytest.fixture
-def mock_benchmark(mock_task, mock_tool_config) -> MockBenchmark:
-    """Mock benchmark with one task."""
-    return MockBenchmark(tasks_list=[mock_task], tool_config=mock_tool_config)
-
-
-# --- Episode fixtures ---
-
-
-@pytest.fixture
-def mock_episode(tmp_dir, mock_agent_config, mock_env_config) -> Episode:
-    """Sample episode for testing."""
-    return Episode(
-        id=0,
-        output_dir=tmp_dir,
-        agent_config=mock_agent_config,
-        env_config=mock_env_config,
-    )
 
 
 # --- Cube mock classes ---
@@ -389,3 +281,14 @@ def mock_cube_task_config() -> MockCubeTaskConfig:
 def mock_cube_benchmark() -> MockCubeBenchmark:
     """Cube benchmark with two mock tasks."""
     return MockCubeBenchmark()
+
+
+@pytest.fixture
+def mock_episode(tmp_dir, mock_agent_config, mock_cube_task_config) -> Episode:
+    """Sample episode for testing."""
+    return Episode(
+        id=0,
+        output_dir=tmp_dir,
+        agent_config=mock_agent_config,
+        task_config=mock_cube_task_config,
+    )
