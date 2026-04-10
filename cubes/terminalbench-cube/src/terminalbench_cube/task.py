@@ -52,7 +52,7 @@ class TerminalBenchTask(Task):
             "category": extra.get("category", ""),
         }
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, TerminalBenchTool)
         extra = self.metadata.extra_info
 
@@ -88,7 +88,7 @@ class TerminalBenchTask(Task):
             "output_preview": output[:1000] if output else "",
         }
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         return False
 
     def close(self) -> None:
