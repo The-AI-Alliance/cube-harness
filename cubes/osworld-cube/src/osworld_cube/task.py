@@ -17,6 +17,7 @@ import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from PIL import Image
 from pydantic import PrivateAttr
@@ -123,14 +124,12 @@ class OSWorldTask(Task):
         maps a free local port → VM:5000.
         """
         if self._handle is not None and self._handle.endpoint:
-            from urllib.parse import urlparse
-
             server_port = urlparse(self._handle.endpoint).port or _SERVER_PORT
             return _CHROMIUM_PORT, _VLC_PORT, server_port
         return _CHROMIUM_PORT, _VLC_PORT, _SERVER_PORT
 
     def _setup_task(self, task_data: dict) -> Observation:
-        """Restore VM snapshot, run setup scripts, wait, return initial observation.
+        """Run setup scripts, wait for VM to stabilise, return initial observation.
 
         Called from reset(). Uses SetupController for OSWorld-specific task
         configuration scripts.
@@ -189,12 +188,12 @@ class OSWorldTask(Task):
 
     def reset(self) -> tuple[Observation, dict]:
         """
-        Restore the VM snapshot, run setup scripts, and return the initial obs.
+        Launch the VM (if needed), run setup scripts, and return the initial obs.
 
         Steps:
           1. Launch VM if not yet running (via infra)
           2. Build task_data dict from metadata.extra_info
-          3. Restore VM snapshot, run setup scripts, wait for stabilisation
+          3. Run setup scripts, wait for VM to stabilise
           4. Post-process the observation (SoM or linearize)
           5. Prepend task instruction as text observation
           6. Return (obs, info)

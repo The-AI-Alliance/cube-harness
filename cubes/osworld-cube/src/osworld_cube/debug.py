@@ -18,9 +18,7 @@ Usage::
 
 from __future__ import annotations
 
-import importlib
 import logging
-import os
 from pathlib import Path
 
 from cube import LocalInfraConfig
@@ -28,6 +26,7 @@ from cube.core import Action, ActionSchema, Observation
 from cube.resource import InfraConfig
 from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
+from osworld_cube.infra_loader import load_runtime_infra_from_config_file
 
 logger = logging.getLogger(__name__)
 
@@ -128,29 +127,10 @@ def _get_default_infra() -> InfraConfig:
     """Resolve the default infra for debug runs.
 
     Priority:
-      1. `CUBE_TEST_INFRA_PROVIDER=azure|aws` for live integration runs
+      1. `OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/infra.json`
       2. `LocalInfraConfig()` for the standard zero-arg `cube test` path
-
-    NOTE: This env-var-based approach is temporary. It will be replaced with a
-    proper infra selection mechanism once one is designed.
     """
-    provider = os.environ.get("CUBE_TEST_INFRA_PROVIDER")
-    if provider is None:
-        return LocalInfraConfig()
-
-    provider_to_module = {
-        "aws": ("cube_infra_aws", "AWSInfraConfig"),
-        "azure": ("cube_infra_azure", "AzureInfraConfig"),
-    }
-    module_name, class_name = provider_to_module.get(provider, (None, None))
-    if module_name is None or class_name is None:
-        raise ValueError(
-            f"Unsupported CUBE_TEST_INFRA_PROVIDER value {provider!r}. Expected one of: {sorted(provider_to_module)}"
-        )
-
-    module = importlib.import_module(module_name)
-    infra_cls = getattr(module, class_name)
-    return infra_cls()
+    return load_runtime_infra_from_config_file() or LocalInfraConfig()
 
 
 def get_debug_benchmark(
