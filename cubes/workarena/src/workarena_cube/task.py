@@ -1,7 +1,6 @@
 """WorkArena task implementation for the CUBE framework."""
 
 import importlib
-import inspect
 import logging
 import time
 from typing import Any, Protocol, runtime_checkable
@@ -21,6 +20,23 @@ from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_ACTION_NAMES = frozenset(
+    {
+        "browser_press_key",
+        "browser_type",
+        "browser_click",
+        "browser_drag",
+        "browser_hover",
+        "browser_select_option",
+        "browser_mouse_click_xy",
+        "browser_wait",
+        "browser_back",
+        "browser_forward",
+        "noop",
+        "workarena_cheat",
+        "send_message",
+    }
+)
 
 
 @runtime_checkable
@@ -161,17 +177,9 @@ class WorkArenaTask(Task):
 
     @property
     def _chat_messages(self) -> list[dict]:
-        """Return the current chat message history.
-
-        Prefers ChatTool messages when present. Falls back to the browser tool's
-        chat_messages property (populated via send_msg_to_user when using BrowsergymTool).
-        Tools without chat_messages (e.g. SyncPlaywrightTool) return an empty list.
-        """
+        """Return the current chat message history, or empty list if no chat tool."""
         chat = self._chat_tool
-        if chat is not None:
-            return chat.messages
-        tool = self._browser_tool
-        return getattr(tool, "chat_messages", [])
+        return chat.messages if chat is not None else []
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
@@ -190,19 +198,12 @@ class WorkArenaTask(Task):
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter actions based on task contract.
-
-        - send_message: only available when a ChatTool is present
-        - send_msg_to_user: only available for tasks whose validate() reads chat_messages
-          (i.e. tasks that expect a natural-language answer from the agent, like chart
-          value retrieval or knowledge-base search). Hiding it from other tasks prevents
-          agents from using it as a reasoning channel and wasting their action budget.
-        """
-        filtered = actions
+        """Filter to BID browser actions supported by WorkArena."""
+        supported_actions = _SUPPORTED_ACTION_NAMES
         if self._chat_tool is None:
-            filtered = [a for a in filtered if a.name != "send_message"]
-        if not self.metadata.extra_info.get("requires_chat_answer", False):
-            filtered = [a for a in filtered if a.name != "send_msg_to_user"]
+            supported_actions = supported_actions - {"send_message"}
+        filtered = [a for a in actions if a.name in supported_actions]
+        logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
         return filtered
 
     def close(self) -> None:
@@ -220,26 +221,15 @@ class WorkArenaTask(Task):
 class WorkArenaTaskConfig(TaskConfig):
     """Serializable configuration for a single WorkArena task."""
 
-    task_class_path: str | None = None
-    requires_chat_answer: bool = False
-
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
-        from cube.task import TaskMetadata
+        from workarena_cube.benchmark import WorkArenaBenchmark
 
         _ = runtime_context, container_backend
-        if self.task_class_path is None:
-            raise ValueError(f"task_class_path is required to instantiate WorkArenaTask (task_id={self.task_id})")
-        meta = TaskMetadata(
-            id=self.task_id,
-            extra_info={
-                "task_class_path": self.task_class_path,
-                "requires_chat_answer": self.requires_chat_answer,
-            },
-        )
+        meta = WorkArenaBenchmark.task_metadata[self.task_id]
         return WorkArenaTask(
             metadata=meta,
             tool_config=self.tool_config,

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from browsergym.core.action.highlevel import HighLevelActionSet
 from cube.core import Action, Observation
 from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
@@ -351,8 +352,6 @@ class TestBuildActionSchemas:
     """Tests for _build_action_schemas."""
 
     def test_default_subsets_include_expected_actions(self) -> None:
-        from browsergym.core.action.highlevel import HighLevelActionSet
-
         action_set = HighLevelActionSet(subsets=["chat", "infeas", "bid", "nav", "tab"], multiaction=False)
         schemas = _build_action_schemas(action_set)
         names = {s.name for s in schemas}
@@ -370,8 +369,6 @@ class TestBuildActionSchemas:
         assert "new_tab" in names
 
     def test_workarena_subset(self) -> None:
-        from browsergym.core.action.highlevel import HighLevelActionSet
-
         action_set = HighLevelActionSet(subsets=["workarena"], multiaction=False)
         schemas = _build_action_schemas(action_set)
         names = {s.name for s in schemas}
@@ -381,8 +378,6 @@ class TestBuildActionSchemas:
         assert "noop" in names
 
     def test_schemas_have_parameters(self) -> None:
-        from browsergym.core.action.highlevel import HighLevelActionSet
-
         action_set = HighLevelActionSet(subsets=["bid"], multiaction=False)
         schemas = _build_action_schemas(action_set)
 

@@ -79,13 +79,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
-        # Accumulated send_msg_to_user messages — passed to WorkArena validate() as chat history
-        self._chat_messages: list[dict] = []
-
-    @property
-    def chat_messages(self) -> list[dict]:
-        """Messages sent via send_msg_to_user, in bgym chat protocol format."""
-        return self._chat_messages
 
     # === Action set: built from bgym's HighLevelActionSet ===
 
@@ -101,11 +94,16 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         """Serialise an Action to a bgym action string, execute it, and return the observation."""
         action_str = _action_to_bgym_string(action)
 
+        # Capture checkbox/radio state before the click so the fallback can compare
+        checkbox_state_before: bool | None = None
+        if action.name == "click" and "bid" in action.arguments:
+            checkbox_state_before = self._get_checkbox_state(action.arguments["bid"])
+
         result = self._execute_bgym_step(action_str)
 
         # Checkbox/radio fallback for click actions
-        if action.name == "click" and "bid" in action.arguments:
-            result = self._checkbox_fallback(action.arguments["bid"], result)
+        if checkbox_state_before is not None:
+            result = self._checkbox_fallback(action.arguments["bid"], checkbox_state_before, result)
 
         obs = self.page_obs()
         action_obs = Observation(contents=[Content.from_data(result, tool_call_id=action.id)])
@@ -157,7 +155,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_info = {"source": "reset"}
         self._last_reward = 0.0
         self._last_terminated = False
-        self._chat_messages = []
 
     def close(self) -> None:
         self._close_runtime()
@@ -217,9 +214,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
                 result = f"Failed (infeasible): {error_msg}"
             else:
-                # Accumulate messages for WorkArena validate() — format mirrors bgym's chat protocol
-                for msg in user_messages:
-                    self._chat_messages.append({"role": "assistant", "message": msg, "timestamp": time.time()})
                 self._last_info = {
                     "source": "action",
                     "action": action_str,
@@ -238,19 +232,17 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     # === Checkbox/radio JS fallback ===
 
-    def _checkbox_fallback(self, bid: str, result: str) -> str:
+    def _checkbox_fallback(self, bid: str, state_before: bool, result: str) -> str:
         """After a click, verify checkbox/radio toggled; use JS fallback if not."""
-        state_before = self._get_checkbox_state(bid)
-        if state_before is None:
-            return result
-
-        # Re-check state after the click already happened
         state_after = self._get_checkbox_state(bid)
-        if state_after == state_before:
-            self._toggle_checkbox_js(bid, not state_before)
-            state_after_js = self._get_checkbox_state(bid)
-            logger.info(colored(f"Checkbox/radio {bid} clicked with JS fallback, state: {state_after_js}", "cyan"))
-            self._execute_bgym_step("noop()")  # Update obs/info
+        if state_after is None or state_after != state_before:
+            return result  # Element gone or state changed — click worked
+
+        # State didn't change, try JS fallback
+        self._toggle_checkbox_js(bid, not state_before)
+        state_after_js = self._get_checkbox_state(bid)
+        logger.info(colored(f"Checkbox/radio {bid} JS fallback, state: {state_after_js}", "cyan"))
+        self._execute_bgym_step("noop()")  # Update obs/info
         return result
 
     def _get_frame_for_bid(self, bid: str) -> Page | Frame:
@@ -420,16 +412,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 # === Module-level helpers ===
 
 
-_ACTION_DESCRIPTION_OVERRIDES: dict[str, str] = {
-    "send_msg_to_user": (
-        "Send a message to the user. Use this to communicate answers, results, or information "
-        "the user asked for. This is NOT a thinking or reasoning tool — do not use it to log "
-        "your observations or plan your next steps. Only call this when you have something "
-        "meaningful to communicate to the user."
-    ),
-}
-
-
 def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
     """Convert bgym's HighLevelActionSet to a list of ActionSchema objects."""
     tool_descs = action_set.to_tool_description(api="openai")
@@ -439,7 +421,7 @@ def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
         # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
         name = desc["name"]
-        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
+        description = desc.get("description", name)
         schemas.append(ActionSchema(name=name, description=description, parameters=params))
     return schemas
 

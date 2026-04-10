@@ -6,6 +6,9 @@
 tmp/
 temp/
 
+# Personal experiment recipes (committed recipes are in recipes/)
+recipes/allac_recipe.py
+
 # Releases
 releases/*.temp
 
