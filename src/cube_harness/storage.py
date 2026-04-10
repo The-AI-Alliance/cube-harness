@@ -435,15 +435,10 @@ class FileStorage:
     # --- Episode configs ---
 
     def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
-        config_dir = self.output_dir / "episode_configs"
-        config_dir.mkdir(parents=True, exist_ok=True)
-        config_path = config_dir / f"episode_{episode_config.id}_task_{episode_config.task_id}.json"
-        if config_path.exists():
-            raise FileExistsError(
-                f"Episode config already exists: {config_path},"
-                " are you trying to resume without setting the flag Experiment.resume?"
-            )
-
+        traj_id = f"{episode_config.task_id}_ep{episode_config.id}"
+        ep_dir = self._episode_dir(traj_id)
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        config_path = ep_dir / "episode_config.json"
         with open(config_path, "w") as f:
             f.write(episode_config.model_dump_json(indent=2, serialize_as_any=True))
         logger.info(f"Saved episode config to {config_path}")
@@ -456,14 +451,17 @@ class FileStorage:
 
         return EpisodeConfig.model_validate(data)
 
+    def _episode_config_dirs(self) -> Iterator[Path]:
+        """Yield all non-archived episode dirs that have episode_config.json (planned or run)."""
+        episodes_dir = self.output_dir / EPISODES_DIR
+        if not episodes_dir.exists():
+            return
+        for ep_dir in episodes_dir.iterdir():
+            if ep_dir.is_dir() and ARCHIVED_MARKER not in ep_dir.name and (ep_dir / "episode_config.json").exists():
+                yield ep_dir
+
     def list_episode_configs(self) -> list[Path]:
-        seen_names: set[str] = set()
-        result: list[Path] = []
-        for search_dir in [self.output_dir / "episode_configs", self.output_dir]:
-            if not search_dir.exists():
-                continue
-            for p in search_dir.glob("episode_*_task_*.json"):
-                if p.name not in seen_names:
-                    seen_names.add(p.name)
-                    result.append(p)
-        return result
+        v2_configs = [ep_dir / "episode_config.json" for ep_dir in self._episode_config_dirs()]
+        v1_config_dir = self.output_dir / "episode_configs"
+        v1_configs = list(v1_config_dir.glob("episode_*_task_*.json")) if v1_config_dir.exists() else []
+        return v2_configs + v1_configs

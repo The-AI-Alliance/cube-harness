@@ -91,7 +91,7 @@ class TestCubeEpisode:
         )
         episode.storage.save_episode_config(episode.config)
 
-        config_path = tmp_dir / "episode_configs" / f"episode_0_task_{mock_cube_task_config.task_id}.json"
+        config_path = tmp_dir / "episodes" / f"{mock_cube_task_config.task_id}_ep0" / "episode_config.json"
         reloaded = Episode.load_episode_from_config(config_path)  # no benchmark arg
 
         assert reloaded.config == episode.config
@@ -108,6 +108,6 @@ class TestCubeEpisode:
         )
         episode.storage.save_episode_config(episode.config)
 
-        config_path = tmp_dir / "episode_configs" / f"episode_0_task_{mock_env_config.task.id}.json"
+        config_path = tmp_dir / "episodes" / f"{mock_env_config.task.id}_ep0" / "episode_config.json"
         with pytest.raises(ValueError, match="benchmark must be a cube_harness.legacy.Benchmark instance"):
             Episode.load_episode_from_config(config_path)  # no benchmark arg
