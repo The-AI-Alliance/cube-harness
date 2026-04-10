@@ -6,8 +6,8 @@
 tmp/
 temp/
 
-# Personal experiment recipes (committed recipes are in recipes/)
-recipes/allac_recipe.py
+# Personal experiment recipes (shared recipes are committed without the custom_ prefix)
+recipes/custom_*
 
 # Releases
 releases/*.temp
