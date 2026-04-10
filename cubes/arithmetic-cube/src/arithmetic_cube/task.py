@@ -20,13 +20,13 @@ class SolveArithmeticTask(Task):
         question = f"What is {ei['a']} {ei['op']} {ei['b']}?"
         return Observation.from_text(question), {"question": question, "expected": self._expected}
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, ArithmeticTool)
         answer = self.tool.last_answer
         correct = answer == self._expected
         return (1.0 if correct else 0.0), {"answer": answer, "expected": self._expected, "correct": correct}
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         assert isinstance(self.tool, ArithmeticTool)
         return self.tool.last_answer is not None
 

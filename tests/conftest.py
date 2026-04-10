@@ -344,14 +344,14 @@ class MockCubeTask(CubeTask):
     def reset(self) -> tuple[Observation, dict]:
         return Observation.from_text("Cube task goal"), {}
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict]:  # noqa: ARG002
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict]:
         return 1.0, {"success": True}
 
 
 class MockCubeTaskConfig(CubeTaskConfig):
     """Cube TaskConfig that instantiates a MockCubeTask."""
 
-    def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:  # noqa: ARG002
+    def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:
         return MockCubeTask(
             metadata=TaskMetadata(id=self.task_id),
             tool_config=self.tool_config or MockToolConfig(),

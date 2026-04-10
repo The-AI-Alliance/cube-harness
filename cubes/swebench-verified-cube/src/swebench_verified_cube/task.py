@@ -69,7 +69,7 @@ class SWEBenchVerifiedTask(Task):
             "difficulty": self.metadata.difficulty,
         }
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, SWEBenchTool)
         extra = self.metadata.extra_info
 
