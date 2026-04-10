@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import io
-import json
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
@@ -12,7 +10,10 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
+from cube import LocalInfraConfig
 from cube.core import Action, Observation, TextContent
+from cube.resource import InfraConfig, ResourceHandle
+from cube.task import TaskMetadata
 
 # ---------------------------------------------------------------------------
 # Patch targets — pointing at cube_computer_tool and osworld_cube.task
@@ -107,6 +108,18 @@ class TestComputerConfig:
 
         cfg = ComputerConfig()
         assert cfg.action_space == ActionSpace.COMPUTER_13
+
+
+class TestDebugBenchmark:
+    def test_get_debug_benchmark_defaults_to_local_infra(self) -> None:
+        from unittest.mock import patch
+
+        from osworld_cube.debug import get_debug_benchmark
+
+        with patch("osworld_cube.debug.load_runtime_infra_from_config_file", return_value=None):
+            benchmark = get_debug_benchmark()
+
+        assert isinstance(benchmark.infra, LocalInfraConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -245,12 +258,18 @@ class TestComputer:
 # ---------------------------------------------------------------------------
 
 
-def _make_task_metadata(task_id: str = "t1", instruction: str = "Do something"):
-    from cube.task import TaskMetadata
+def _make_task_metadata(task_id: str = "t1", instruction: str = "Do something") -> TaskMetadata:
+    from osworld_cube.task import OSWorldTaskMetadata
 
-    return TaskMetadata(
+    return OSWorldTaskMetadata(
         id=task_id,
         abstract_description=instruction,
+        domain="os",
+        instruction=instruction,
+        snapshot="init_state",
+        os_type="ubuntu",
+        related_apps=[],
+        test_sets=["debug"],
         extra_info={
             "domain": "os",
             "snapshot": "init_state",
@@ -271,6 +290,14 @@ def _make_mock_vm(server_port: int = 15000, chromium_port: int = 19222, vlc_port
     return vm
 
 
+def _make_mock_handle(server_port: int = 15000) -> MagicMock:
+    """Return a Mock that looks like a ResourceHandle."""
+    handle = MagicMock(spec=ResourceHandle)
+    handle.endpoint = f"http://localhost:{server_port}"
+    handle.run_id = "test-run-id-1234"
+    return handle
+
+
 # ---------------------------------------------------------------------------
 # OSWorldTask
 # ---------------------------------------------------------------------------
@@ -284,16 +311,15 @@ class TestOSWorldTask:
         task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
         assert task._computer is not None
         assert task._computer._vm is None
-        assert task._vm is None
+        assert task._handle is None
 
-    def test_reset_with_vm_backend_launches_vm(self) -> None:
+    def test_reset_with_infra_launches_vm(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
-        from osworld_cube.vm_backend import LocalQEMUVMBackend
 
-        mock_vm = _make_mock_vm()
-        mock_backend = MagicMock(spec=LocalQEMUVMBackend)
-        mock_backend.launch.return_value = mock_vm
+        mock_handle = _make_mock_handle()
+        mock_infra = MagicMock(spec=InfraConfig)
+        mock_infra.launch.return_value = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -306,12 +332,12 @@ class TestOSWorldTask:
             task = OSWorldTask(
                 metadata=_make_task_metadata(),
                 tool_config=ComputerConfig(),
-                vm_backend=mock_backend,
+                infra=mock_infra,
             )
             obs, info = task.reset()
 
-        mock_backend.launch.assert_called_once()
-        assert task._vm is mock_vm
+        mock_infra.launch.assert_called_once()
+        assert task._handle is mock_handle
         assert isinstance(obs, Observation)
 
     def test_reset_returns_obs_and_info(self) -> None:
@@ -319,8 +345,8 @@ class TestOSWorldTask:
         from osworld_cube.task import OSWorldTask
 
         task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        task._handle = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -329,7 +355,7 @@ class TestOSWorldTask:
         ):
             mock_guest = _make_mock_guest()
             mock_ga_cls.return_value = mock_guest
-            task._computer.attach_vm(mock_vm)
+            task._computer.attach_endpoint(mock_handle.endpoint)
 
             obs, info = task.reset()
 
@@ -344,8 +370,8 @@ class TestOSWorldTask:
         from osworld_cube.task import OSWorldTask
 
         task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        task._handle = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -353,7 +379,7 @@ class TestOSWorldTask:
             patch(PATCH_SLEEP),
         ):
             mock_ga_cls.return_value = _make_mock_guest()
-            task._computer.attach_vm(mock_vm)
+            task._computer.attach_endpoint(mock_handle.endpoint)
             task._computer._is_done = True
             task.reset()
             assert task._computer._is_done is False
@@ -363,8 +389,7 @@ class TestOSWorldTask:
         from osworld_cube.task import OSWorldTask
 
         task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        task._handle = _make_mock_handle()
         task._current_task_config = {"id": "t1", "evaluator": {"func": "check_file"}}
         task._computer._guest = _make_mock_guest()
 
@@ -376,13 +401,21 @@ class TestOSWorldTask:
         assert "evaluator" in info
 
     def test_evaluate_no_evaluator_returns_zero(self) -> None:
-        from cube.task import TaskMetadata
-
         from osworld_cube.computer import ComputerConfig
-        from osworld_cube.task import OSWorldTask
+        from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
 
         task = OSWorldTask(
-            metadata=TaskMetadata(id="no-eval", extra_info={}),
+            metadata=OSWorldTaskMetadata(
+                id="no-eval",
+                abstract_description="",
+                domain="os",
+                instruction="",
+                snapshot="init_state",
+                os_type="ubuntu",
+                related_apps=[],
+                test_sets=["debug"],
+                extra_info={},
+            ),
             tool_config=ComputerConfig(),
         )
         reward, info = task.evaluate(Observation())
@@ -407,8 +440,8 @@ class TestOSWorldTask:
             metadata=_make_task_metadata(),
             tool_config=ComputerConfig(observe_after_action=False),
         )
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        task._handle = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -418,7 +451,7 @@ class TestOSWorldTask:
         ):
             mock_ga_cls.return_value = _make_mock_guest()
             mock_eval_cls.return_value.evaluate.return_value = 1.0
-            task._computer.attach_vm(mock_vm)
+            task._computer.attach_endpoint(mock_handle.endpoint)
             task.reset()
 
             env_out = task.step(Action(name="done", arguments={}))
@@ -435,8 +468,8 @@ class TestOSWorldTask:
             metadata=_make_task_metadata(),
             tool_config=ComputerConfig(observe_after_action=False),
         )
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        task._handle = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -444,263 +477,87 @@ class TestOSWorldTask:
             patch(PATCH_SLEEP),
         ):
             mock_ga_cls.return_value = _make_mock_guest()
-            task._computer.attach_vm(mock_vm)
+            task._computer.attach_endpoint(mock_handle.endpoint)
             task.reset()
 
             env_out = task.step(Action(name="click", arguments={"x": 10, "y": 20}))
         assert env_out.done is False
 
-    def test_close_stops_vm(self) -> None:
+    def test_close_closes_handle(self) -> None:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
         task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        task._handle = mock_handle
         task._computer._guest = _make_mock_guest()
 
         task.close()
-        mock_vm.stop.assert_called_once()
-        assert task._vm is None
-
-
-# ---------------------------------------------------------------------------
-# OSWorldTestSet
-# ---------------------------------------------------------------------------
-
-
-class TestOSWorldTestSet:
-    def test_enum_values_are_filenames(self) -> None:
-        from osworld_cube.benchmark import OSWorldTestSet
-
-        assert OSWorldTestSet.TEST_ALL.value == "test_all.json"
-        assert OSWorldTestSet.TEST_INFEASIBLE.value == "test_infeasible.json"
-        assert OSWorldTestSet.TEST_NOGDRIVE.value == "test_nogdrive.json"
-        assert OSWorldTestSet.TEST_SMALL.value == "test_small.json"
-
-    def test_enum_is_str_subclass(self) -> None:
-        from osworld_cube.benchmark import OSWorldTestSet
-
-        assert isinstance(OSWorldTestSet.TEST_ALL, str)
-        assert OSWorldTestSet.TEST_ALL == "test_all.json"
-
-    def test_enum_from_string(self) -> None:
-        from osworld_cube.benchmark import OSWorldTestSet
-
-        assert OSWorldTestSet("test_small.json") is OSWorldTestSet.TEST_SMALL
-
-
-# ---------------------------------------------------------------------------
-# OSWorldBenchmark
-# ---------------------------------------------------------------------------
-
-
-def _make_osworld_repo(tmpdir: Path) -> Path:
-    """Create a minimal fake OSWorld repo with 2 tasks in 2 domains."""
-    eval_dir = tmpdir / "evaluation_examples"
-    (eval_dir / "examples" / "chrome").mkdir(parents=True)
-    (eval_dir / "examples" / "os").mkdir(parents=True)
-
-    test_set = {"chrome": ["chrome-1"], "os": ["os-1"]}
-    (eval_dir / "test_all.json").write_text(json.dumps(test_set))
-
-    (eval_dir / "examples" / "chrome" / "chrome-1.json").write_text(
-        json.dumps(
-            {
-                "id": "chrome-1",
-                "instruction": "Open Chrome",
-                "snapshot": "init_state",
-                "config": [],
-                "evaluator": {"func": "check_url"},
-                "related_apps": ["chrome"],
-            }
-        )
-    )
-    (eval_dir / "examples" / "os" / "os-1.json").write_text(
-        json.dumps(
-            {
-                "id": "os-1",
-                "instruction": "Open terminal",
-                "snapshot": "init_state",
-                "config": [],
-                "evaluator": {"func": "check_process"},
-                "related_apps": [],
-            }
-        )
-    )
-    return eval_dir
+        mock_handle.close.assert_called_once()
+        assert task._handle is None
 
 
 class TestOSWorldBenchmark:
     def test_benchmark_metadata(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
 
-        assert OSWorldBenchmark.benchmark_metadata.name == "osworld"
+        assert OSWorldBenchmark.benchmark_metadata.name == "osworld-cube"
         assert OSWorldBenchmark.task_config_class.__name__ == "OSWorldTaskConfig"
 
-    def test_load_all_tasks_from_repo(self) -> None:
+    def test_load_all_tasks_from_shipped_metadata(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
-        from osworld_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-            bench = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                test_set_name="test_all.json",
-            )
-            bench.setup()
-
-            assert len(bench.task_metadata) == 2
-            assert "chrome-1" in bench.task_metadata
-            assert "os-1" in bench.task_metadata
+        assert len(OSWorldBenchmark.task_metadata) > 0
+        assert all(tm.test_sets for tm in OSWorldBenchmark.task_metadata.values())
 
     def test_domain_filter_via_subset_from_glob(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
         from osworld_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-            bench = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                test_set_name="test_all.json",
-            )
-            bench.setup()
-            chrome_bench = bench.subset_from_glob("extra_info.domain", "chrome")
+        chrome_bench = OSWorldBenchmark(default_tool_config=ComputerConfig()).subset_from_glob("domain", "chrome")
 
-            assert len(chrome_bench.task_metadata) == 1
-            assert "chrome-1" in chrome_bench.task_metadata
+        assert len(chrome_bench.task_metadata) > 0
+        assert all(tm.domain == "chrome" for tm in chrome_bench.task_metadata.values())
+
+    def test_named_subset_test_small(self) -> None:
+        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.computer import ComputerConfig
+
+        bench = OSWorldBenchmark(default_tool_config=ComputerConfig()).named_subset("test_small")
+        assert len(bench.task_metadata) > 0
+        assert all("test_small" in tm.test_sets for tm in bench.task_metadata.values())
 
     def test_get_task_configs_carries_metadata(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
         from osworld_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-            bench = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-            )
-            bench.setup()
-
-            configs = list(bench.get_task_configs())
-            assert len(configs) == 2
-            for cfg in configs:
-                assert isinstance(cfg, OSWorldTaskConfig)
-                assert cfg.metadata is not None
-                assert cfg.task_id == cfg.metadata.id
+        bench = OSWorldBenchmark(default_tool_config=ComputerConfig())
+        configs = list(bench.get_task_configs())
+        assert len(configs) == len(bench.task_metadata)
+        for cfg in configs:
+            assert isinstance(cfg, OSWorldTaskConfig)
+            assert cfg.task_id in bench.task_metadata
 
     def test_task_config_make_produces_osworld_task(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-            bench = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-            )
-            bench.setup()
+        bench = OSWorldBenchmark(default_tool_config=ComputerConfig())
+        cfg = next(bench.get_task_configs())
+        task = cfg.make()
 
-            cfg = next(bench.get_task_configs())
-            task = cfg.make()
+        assert isinstance(task, OSWorldTask)
+        assert task.metadata.id == cfg.task_id
+        assert "config" in task.metadata.extra_info
+        assert "evaluator" in task.metadata.extra_info
 
-            assert isinstance(task, OSWorldTask)
-            assert task.metadata.id == cfg.task_id
-
-    def test_load_from_flat_json_file(self) -> None:
+    def test_named_subset_accepts_known_subset(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
         from osworld_cube.computer import ComputerConfig
 
-        tasks_data = [
-            {
-                "id": "flat-1",
-                "instruction": "Flat task 1",
-                "domain": "os",
-                "snapshot": "init_state",
-                "config": [],
-                "evaluator": {},
-                "related_apps": [],
-            },
-            {
-                "id": "flat-2",
-                "instruction": "Flat task 2",
-                "domain": "chrome",
-                "snapshot": "init_state",
-                "config": [],
-                "evaluator": {},
-                "related_apps": [],
-            },
-        ]
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump(tasks_data, f)
-            tasks_file = f.name
-
-        bench = OSWorldBenchmark(
-            default_tool_config=ComputerConfig(),
-            tasks_file=tasks_file,
-        )
-        bench.setup()
-
-        assert len(bench.task_metadata) == 2
-        assert bench.task_metadata["flat-1"].abstract_description == "Flat task 1"
-        assert bench.task_metadata["flat-2"].extra_info["domain"] == "chrome"
-
-    def test_fix_settings_paths(self) -> None:
-        from osworld_cube.benchmark import OSWORLD_REPO_DIR, OSWorldBenchmark
-        from osworld_cube.computer import ComputerConfig
-
-        bench = OSWorldBenchmark(default_tool_config=ComputerConfig())
-        task_data = {
-            "id": "t",
-            "config": [{"type": "setup", "parameters": {"settings_file": "configs/x.json"}}],
-        }
-        fixed = bench._fix_settings_paths(task_data)
-
-        assert fixed["config"][0]["parameters"]["settings_file"] == str(OSWORLD_REPO_DIR / "configs/x.json")
-
-    def test_test_set_name_accepts_enum(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
-        from osworld_cube.computer import ComputerConfig
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-            bench = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                test_set_name=OSWorldTestSet.TEST_ALL,
-            )
-            bench.setup()
-            assert len(bench.task_metadata) == 2
-
-    def test_test_set_name_selects_subset(self) -> None:
-        """Different enum values load different task subsets from the repo."""
-        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
-        from osworld_cube.computer import ComputerConfig
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_osworld_repo(Path(tmpdir))
-            (eval_dir / "test_small.json").write_text(json.dumps({"chrome": ["chrome-1"]}))
-
-            bench_all = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                test_set_name=OSWorldTestSet.TEST_ALL,
-            )
-            bench_small = OSWorldBenchmark(
-                default_tool_config=ComputerConfig(),
-                test_set_path=str(eval_dir),
-                test_set_name=OSWorldTestSet.TEST_SMALL,
-            )
-            bench_all.setup()
-            bench_small.setup()
-
-            assert len(bench_all.task_metadata) == 2
-            assert len(bench_small.task_metadata) == 1
-            assert "chrome-1" in bench_small.task_metadata
-            assert "os-1" not in bench_small.task_metadata
+        bench = OSWorldBenchmark(default_tool_config=ComputerConfig()).named_subset("test_all")
+        assert len(bench.task_metadata) == len(OSWorldBenchmark.task_metadata)
 
     def test_close_does_not_raise(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark

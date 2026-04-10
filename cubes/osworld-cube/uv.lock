@@ -117,6 +117,104 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-core"
+version = "1.39.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/83/bbde3faa84ddcb8eb0eca4b3ffb3221252281db4ce351300fe248c5c70b1/azure_core-1.39.0.tar.gz", hash = "sha256:8a90a562998dd44ce84597590fff6249701b98c0e8797c95fcdd695b54c35d74", size = 367531, upload-time = "2026-03-19T01:31:29.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7e/d6/8ebcd05b01a580f086ac9a97fb9fac65c09a4b012161cc97c21a336e880b/azure_core-1.39.0-py3-none-any.whl", hash = "sha256:4ac7b70fab5438c3f68770649a78daf97833caa83827f91df9c14e0e0ea7d34f", size = 218318, upload-time = "2026-03-19T01:31:31.25Z" },
+]
+
+[[package]]
+name = "azure-identity"
+version = "1.25.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "cryptography" },
+    { name = "msal" },
+    { name = "msal-extensions" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/0e/3a63efb48aa4a5ae2cfca61ee152fbcb668092134d3eb8bfda472dd5c617/azure_identity-1.25.3.tar.gz", hash = "sha256:ab23c0d63015f50b630ef6c6cf395e7262f439ce06e5d07a64e874c724f8d9e6", size = 286304, upload-time = "2026-03-13T01:12:20.892Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/9a/417b3a533e01953a7c618884df2cb05a71e7b68bdbce4fbdb62349d2a2e8/azure_identity-1.25.3-py3-none-any.whl", hash = "sha256:f4d0b956a8146f30333e071374171f3cfa7bdb8073adb8c3814b65567aa7447c", size = 192138, upload-time = "2026-03-13T01:12:22.951Z" },
+]
+
+[[package]]
+name = "azure-mgmt-compute"
+version = "37.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-mgmt-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e2/e3/c887e27260754014dc63fc33bf612f1c7f1751f74e80d1aaa32491af3ffa/azure_mgmt_compute-37.2.0.tar.gz", hash = "sha256:23499d4d5ad2b2bf40a4c59df2684cc4c9cef0f9672a4e842bb9a1cf6b62f628", size = 534068, upload-time = "2026-01-27T06:39:05.39Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/78/8dcdb92dd9f716d08a3ac6b31c31a12cfcf8c430b2c312cbf9cc6e4695e8/azure_mgmt_compute-37.2.0-py3-none-any.whl", hash = "sha256:70741c26ac94c30408a3b20f4fdfe93e6481e308b3c14a6dbefdfd4794028616", size = 686212, upload-time = "2026-01-27T06:39:07.016Z" },
+]
+
+[[package]]
+name = "azure-mgmt-core"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/99/fa9e7551313d8c7099c89ebf3b03cd31beb12e1b498d575aa19bb59a5d04/azure_mgmt_core-1.6.0.tar.gz", hash = "sha256:b26232af857b021e61d813d9f4ae530465255cb10b3dde945ad3743f7a58e79c", size = 30818, upload-time = "2025-07-03T02:02:24.093Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/26/c79f962fd3172b577b6f38685724de58b6b4337a51d3aad316a43a4558c6/azure_mgmt_core-1.6.0-py3-none-any.whl", hash = "sha256:0460d11e85c408b71c727ee1981f74432bc641bb25dfcf1bb4e90a49e776dbc4", size = 29310, upload-time = "2025-07-03T02:02:25.203Z" },
+]
+
+[[package]]
+name = "azure-mgmt-network"
+version = "30.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-mgmt-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9a/e5/31cf174ef67087532f159083e2e007507fe163f58c58fbd0e08d05209cf4/azure_mgmt_network-30.2.0.tar.gz", hash = "sha256:9b17c259e6344808aaa80a34bbc4b13f16bc01185dd9db137eaa0ae26664861a", size = 708178, upload-time = "2026-02-13T03:45:39.617Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/5a/14c8cfb1655267dfed7529d35e5dd6581746238c9f50d4307b9e2faaacf8/azure_mgmt_network-30.2.0-py3-none-any.whl", hash = "sha256:a87edffd7c38aa9d3494daa8d42914213b0863a9072cf8c7c7e48018b12b6532", size = 631894, upload-time = "2026-02-13T03:45:41.738Z" },
+]
+
+[[package]]
+name = "azure-mgmt-storage"
+version = "24.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-mgmt-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3d/10/9b243a0742d781b73aa23bfe7f5ba88d29665035c4fa86b5ccac57664e71/azure_mgmt_storage-24.0.1.tar.gz", hash = "sha256:a7f7068163b308e5f1f718541ac8014f7ff9219da0463bf7346ee29d9c349938", size = 213354, upload-time = "2026-03-24T08:01:55.092Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/f3/2d1465fb0df080bee99969990bb9c6e902e9cb1ffea733b96deffec6e0be/azure_mgmt_storage-24.0.1-py3-none-any.whl", hash = "sha256:3c3fda5f8f02d9b77141783c34798840052598aca1fa9549c8e4d2ebe0afb701", size = 291281, upload-time = "2026-03-24T08:01:56.431Z" },
+]
+
+[[package]]
+name = "azure-storage-blob"
+version = "12.28.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "cryptography" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/24/072ba8e27b0e2d8fec401e9969b429d4f5fc4c8d4f0f05f4661e11f7234a/azure_storage_blob-12.28.0.tar.gz", hash = "sha256:e7d98ea108258d29aa0efbfd591b2e2075fa1722a2fae8699f0b3c9de11eff41", size = 604225, upload-time = "2026-01-06T23:48:57.282Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/3a/6ef2047a072e54e1142718d433d50e9514c999a58f51abfff7902f3a72f8/azure_storage_blob-12.28.0-py3-none-any.whl", hash = "sha256:00fb1db28bf6a7b7ecaa48e3b1d5c83bfadacc5a678b77826081304bd87d6461", size = 431499, upload-time = "2026-01-06T23:48:58.995Z" },
+]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.14.3"
 source = { registry = "https://pypi.org/simple" }
@@ -127,6 +225,34 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c3/b0/1c6a16426d389813b48d95e26898aff79abbde42ad353958ad95cc8c9b21/beautifulsoup4-4.14.3.tar.gz", hash = "sha256:6292b1c5186d356bba669ef9f7f051757099565ad9ada5dd630bd9de5fa7fb86", size = 627737, upload-time = "2025-11-30T15:08:26.084Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl", hash = "sha256:0918bfe44902e6ad8d57732ba310582e98da931428d231a5ecb9e7c703a735bb", size = 107721, upload-time = "2025-11-30T15:08:24.087Z" },
+]
+
+[[package]]
+name = "boto3"
+version = "1.42.87"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore" },
+    { name = "jmespath" },
+    { name = "s3transfer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cb/f6/3f908a1313a8c8d5bf19f0cae3c372dd757569d75e8e3eee4c57fcd4e286/boto3-1.42.87.tar.gz", hash = "sha256:b5b86a826f8f12c7d38679f35bd0135807a6867a21eb8be6dea7c27aeb14ec14", size = 112793, upload-time = "2026-04-09T19:39:50.194Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/52/69ebde82ce8b47cdee52b2450b2cbf1b3b107e192a3223bf88a567373d85/boto3-1.42.87-py3-none-any.whl", hash = "sha256:15cc1404b3ccbcfe17bd5834d467b1b28d53d9aca44e3798dc44876ac57362e6", size = 140557, upload-time = "2026-04-09T19:39:47.669Z" },
+]
+
+[[package]]
+name = "botocore"
+version = "1.42.87"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jmespath" },
+    { name = "python-dateutil" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/96/59/606c6cb6d42bf8ca3f422c6345401134e56d671385dc2b80fb4b09c51e67/botocore-1.42.87.tar.gz", hash = "sha256:1c6cc9555c1feec50b290a42de70ba6f04826c009562c2c12bb9990d0258482d", size = 15193113, upload-time = "2026-04-09T19:39:37.492Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/1f/94e1b020fd87b52f092fdd111d9800f2411dc113a0957d0d85b7d2c7f247/botocore-1.42.87-py3-none-any.whl", hash = "sha256:32832df27c039cc1a518289afe0f6006296d3df26603b5f66e911457e67f0146", size = 14871982, upload-time = "2026-04-09T19:39:32.847Z" },
 ]
 
 [[package]]
@@ -353,8 +479,8 @@ wheels = [
 
 [[package]]
 name = "cube-computer-tool"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.2.0"
+source = { editable = "../../cube-standard/cube-tools/cube-computer-tool" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
@@ -362,15 +488,74 @@ dependencies = [
     { name = "requests-toolbelt" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/2f/271ccfc8861448c6a98daab175734309d18f4428cee7c383b2592f042b08/cube_computer_tool-0.1.0.tar.gz", hash = "sha256:3a642be504ee8604bae5227b599fbfc44deecad31a1509fe18a89f6247c0efba", size = 12002, upload-time = "2026-03-18T18:09:07.242Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/ec/60df3ffcc0510cf186b70efe5f656f9135205598ac40c5811dce0bbda937/cube_computer_tool-0.1.0-py3-none-any.whl", hash = "sha256:f1fddfc892fffc971f8f4ccc6b20f8b2ad83305639a0f9307f8126224df57a3e", size = 14265, upload-time = "2026-03-18T18:09:06.141Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "cube-standard" },
+    { name = "pillow", specifier = ">=9.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "requests-toolbelt", specifier = ">=0.10" },
+    { name = "tqdm", specifier = ">=4.60" },
 ]
+provides-extras = ["dev"]
+
+[[package]]
+name = "cube-infra-aws"
+version = "0.1.0"
+source = { editable = "../../cube-standard/cube-resources/cube-infra-aws" }
+dependencies = [
+    { name = "boto3" },
+    { name = "botocore" },
+    { name = "cube-standard" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "boto3", specifier = ">=1.34" },
+    { name = "botocore", specifier = ">=1.34" },
+    { name = "cube-standard", editable = "../../cube-standard" },
+    { name = "requests", specifier = ">=2.28" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0" }]
+
+[[package]]
+name = "cube-infra-azure"
+version = "0.1.0"
+source = { editable = "../../cube-standard/cube-resources/cube-infra-azure" }
+dependencies = [
+    { name = "azure-identity" },
+    { name = "azure-mgmt-compute" },
+    { name = "azure-mgmt-network" },
+    { name = "azure-mgmt-storage" },
+    { name = "azure-storage-blob" },
+    { name = "cube-standard" },
+    { name = "requests" },
+    { name = "tqdm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "azure-identity", specifier = ">=1.15" },
+    { name = "azure-mgmt-compute", specifier = ">=31.0" },
+    { name = "azure-mgmt-network", specifier = ">=25.0" },
+    { name = "azure-mgmt-storage", specifier = ">=21.0" },
+    { name = "azure-storage-blob", specifier = ">=12.28.0" },
+    { name = "cube-standard", editable = "../../cube-standard" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "tqdm", specifier = ">=4.60" },
+]
+
+[package.metadata.requires-dev]
+dev = []
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc3"
-source = { registry = "https://pypi.org/simple" }
+version = "0.1.0rc5"
+source = { editable = "../../cube-standard" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -378,26 +563,52 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "rich" },
+    { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/63/3c/0de4767b4d0e47d921ab4f1edd9bd2ebd52a3298fb365547ea8f49ab6f34/cube_standard-0.1.0rc3.tar.gz", hash = "sha256:08bb37ee30e7b12c86a0d5847b60a2a816e1d72ba0aa70ac3ce822c1dfce5af6", size = 54860, upload-time = "2026-03-23T18:56:26.194Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/b3/0f7e7066a0a3ec65aba5e0be6901c311ee8340470da9e00d04c2d6fb985f/cube_standard-0.1.0rc3-py3-none-any.whl", hash = "sha256:913aa9a560ce4296e64a73f2356f3f4abbd34f93546864b9eab76b62df04fb44", size = 72037, upload-time = "2026-03-23T18:56:24.908Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "counter-cube", marker = "extra == 'dev'", editable = "../../cube-standard/examples/counter-cube" },
+    { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.142.0" },
+    { name = "docker", marker = "extra == 'docker'", specifier = ">=7.1.0" },
+    { name = "docstring-parser", specifier = ">=0.16" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
+    { name = "modal", marker = "extra == 'modal'", specifier = ">=1.3.3" },
+    { name = "pillow", specifier = ">=9.0" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.6.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.0.0" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "rich", specifier = ">=13.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
+    { name = "tenacity", marker = "extra == 'daytona'", specifier = ">=9.1.4" },
+    { name = "tenacity", marker = "extra == 'docker'", specifier = ">=9.1.4" },
+    { name = "tenacity", marker = "extra == 'modal'", specifier = ">=9.1.4" },
+    { name = "tenacity", marker = "extra == 'toolkit'", specifier = ">=9.1.4" },
+    { name = "tqdm", specifier = ">=4.60" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
+provides-extras = ["dev", "docker", "daytona", "modal", "toolkit"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pre-commit", specifier = ">=4.5.1" }]
 
 [[package]]
 name = "cube-vm-backend"
 version = "0.2.1"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../../cube-standard/cube-resources/cube-vm-backend" }
 dependencies = [
     { name = "cube-standard" },
     { name = "requests" },
     { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/3d/c0d7a76e05dc3915b22833cdeaabedf3fd87a54f37588513f0b7a5e12302/cube_vm_backend-0.2.1.tar.gz", hash = "sha256:e7adce4fbe08e4bd9088958535148ad76476e85c28c0d0aa3513be861f623c5b", size = 9850, upload-time = "2026-03-23T18:42:52.592Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/55/7bb318189cafef4af88686da306c2dbe322f3b4f60800c3f3d4632117be1/cube_vm_backend-0.2.1-py3-none-any.whl", hash = "sha256:b3957c1129e8ddc7999694b1b2750fbdb1ce3f393dfb5a952b0c443ff52b66a5", size = 14474, upload-time = "2026-03-23T18:42:51.226Z" },
 ]
 
 [package.optional-dependencies]
@@ -405,6 +616,17 @@ docker = [
     { name = "docker" },
     { name = "tenacity" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "cube-standard", editable = "../../cube-standard" },
+    { name = "docker", marker = "extra == 'docker'", specifier = ">=7.1.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "tenacity", marker = "extra == 'docker'", specifier = ">=8.0" },
+    { name = "tqdm", specifier = ">=4.60" },
+]
+provides-extras = ["docker", "dev"]
 
 [[package]]
 name = "decorator"
@@ -719,6 +941,24 @@ wheels = [
 ]
 
 [[package]]
+name = "isodate"
+version = "0.7.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/4d/e940025e2ce31a8ce1202635910747e5a87cc3a6a6bb2d00973375014749/isodate-0.7.2.tar.gz", hash = "sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6", size = 29705, upload-time = "2024-10-08T23:04:11.5Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/aa/0aca39a37d3c7eb941ba736ede56d689e7be91cab5d9ca846bde3999eba6/isodate-0.7.2-py3-none-any.whl", hash = "sha256:28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15", size = 22320, upload-time = "2024-10-08T23:04:09.501Z" },
+]
+
+[[package]]
+name = "jmespath"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/59/322338183ecda247fb5d1763a6cbe46eff7222eaeebafd9fa65d4bf5cb11/jmespath-1.1.0.tar.gz", hash = "sha256:472c87d80f36026ae83c6ddd0f1d05d4e510134ed462851fd5f754c8c3cbb88d", size = 27377, upload-time = "2026-01-22T16:35:26.279Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/2f/967ba146e6d58cf6a652da73885f52fc68001525b4197effc174321d70b4/jmespath-1.1.0-py3-none-any.whl", hash = "sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64", size = 20419, upload-time = "2026-01-22T16:35:24.919Z" },
+]
+
+[[package]]
 name = "joblib"
 version = "1.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -884,6 +1124,32 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "msal"
+version = "1.36.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/de/cb/b02b0f748ac668922364ccb3c3bff5b71628a05f5adfec2ba2a5c3031483/msal-1.36.0.tar.gz", hash = "sha256:3f6a4af2b036b476a4215111c4297b4e6e236ed186cd804faefba23e4990978b", size = 174217, upload-time = "2026-04-09T10:20:33.525Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/d3/414d1f0a5f6f4fe5313c2b002c54e78a3332970feb3f5fed14237aa17064/msal-1.36.0-py3-none-any.whl", hash = "sha256:36ecac30e2ff4322d956029aabce3c82301c29f0acb1ad89b94edcabb0e58ec4", size = 121547, upload-time = "2026-04-09T10:20:32.336Z" },
+]
+
+[[package]]
+name = "msal-extensions"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "msal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/01/99/5d239b6156eddf761a636bded1118414d161bd6b7b37a9335549ed159396/msal_extensions-1.3.1.tar.gz", hash = "sha256:c5b0fd10f65ef62b5f1d62f4251d51cbcaf003fcedae8c91b040a488614be1a4", size = 23315, upload-time = "2025-03-14T23:51:03.902Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/75/bd9b7bb966668920f06b200e84454c8f3566b102183bc55c5473d96cb2b9/msal_extensions-1.3.1-py3-none-any.whl", hash = "sha256:96d3de4d034504e969ac5e85bae8106c8373b5c6568e4c8fa7af2eca9dbe6bca", size = 20583, upload-time = "2025-03-14T23:51:03.016Z" },
 ]
 
 [[package]]
@@ -1102,7 +1368,7 @@ wheels = [
 
 [[package]]
 name = "osworld-cube"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -1144,6 +1410,14 @@ dependencies = [
     { name = "xmltodict" },
 ]
 
+[package.optional-dependencies]
+aws = [
+    { name = "cube-infra-aws" },
+]
+azure = [
+    { name = "cube-infra-azure" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -1153,9 +1427,11 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "cssselect", specifier = ">=1.2" },
-    { name = "cube-computer-tool" },
-    { name = "cube-standard" },
-    { name = "cube-vm-backend", extras = ["docker"] },
+    { name = "cube-computer-tool", editable = "../../cube-standard/cube-tools/cube-computer-tool" },
+    { name = "cube-infra-aws", marker = "extra == 'aws'", editable = "../../cube-standard/cube-resources/cube-infra-aws" },
+    { name = "cube-infra-azure", marker = "extra == 'azure'", editable = "../../cube-standard/cube-resources/cube-infra-azure" },
+    { name = "cube-standard", editable = "../../cube-standard" },
+    { name = "cube-vm-backend", extras = ["docker"], editable = "../../cube-standard/cube-resources/cube-vm-backend" },
     { name = "fastdtw", specifier = ">=0.3" },
     { name = "formulas", specifier = ">=1.2" },
     { name = "imagehash", specifier = ">=4.3" },
@@ -1189,6 +1465,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.60" },
     { name = "xmltodict", specifier = ">=0.13" },
 ]
+provides-extras = ["azure", "aws"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.2" }]
@@ -1598,6 +1875,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631, upload-time = "2025-06-21T13:39:12.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217, upload-time = "2025-06-21T13:39:07.939Z" },
+]
+
+[[package]]
+name = "pyjwt"
+version = "2.12.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/27/a3b6e5bf6ff856d2509292e95c8f57f0df7017cf5394921fc4e4ef40308a/pyjwt-2.12.1.tar.gz", hash = "sha256:c74a7a2adf861c04d002db713dd85f84beb242228e671280bf709d765b03672b", size = 102564, upload-time = "2026-03-13T19:27:37.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/7a/8dd906bd22e79e47397a61742927f6747fe93242ef86645ee9092e610244/pyjwt-2.12.1-py3-none-any.whl", hash = "sha256:28ca37c070cad8ba8cd9790cd940535d40274d22f80ab87f3ac6a713e6e8454c", size = 29726, upload-time = "2026-03-13T19:27:35.677Z" },
+]
+
+[package.optional-dependencies]
+crypto = [
+    { name = "cryptography" },
 ]
 
 [[package]]
@@ -2072,6 +2363,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/da/8a/22b7beea3ee0d44b1916c0c1cb0ee3af23b700b6da9f04991899d0c555d4/rsa-4.9.1.tar.gz", hash = "sha256:e7bdbfdb5497da4c07dfd35530e1a902659db6ff241e39d9953cad06ebd0ae75", size = 29034, upload-time = "2025-04-16T09:51:18.218Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/8d/0133e4eb4beed9e425d9a98ed6e081a55d195481b7632472be1af08d2f6b/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762", size = 34696, upload-time = "2025-04-16T09:51:17.142Z" },
+]
+
+[[package]]
+name = "s3transfer"
+version = "0.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "botocore" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/04/74127fc843314818edfa81b5540e26dd537353b123a4edc563109d8f17dd/s3transfer-0.16.0.tar.gz", hash = "sha256:8e990f13268025792229cd52fa10cb7163744bf56e719e0b9cb925ab79abf920", size = 153827, upload-time = "2025-12-01T02:30:59.114Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/51/727abb13f44c1fcf6d145979e1535a35794db0f6e450a0cb46aa24732fe2/s3transfer-0.16.0-py3-none-any.whl", hash = "sha256:18e25d66fed509e3868dc1572b3f427ff947dd2c56f844a5bf09481ad3f3b2fe", size = 86830, upload-time = "2025-12-01T02:30:57.729Z" },
 ]
 
 [[package]]
