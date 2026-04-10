@@ -1,3 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "cube-harness",
+#     "miniwob-cube",
+# ]
+#
+# [tool.uv.sources]
+# cube-harness = { path = "..", editable = true }
+# miniwob-cube = { path = "../cubes/miniwob", editable = true }
+# ///
+
 import sys
 
 from cube_browser_tool import PlaywrightConfig
@@ -33,7 +45,6 @@ def main(debug: bool) -> None:
         run_with_ray(
             exp,
             n_cpus=4,
-            trace_output=f"{exp.output_dir}/traces",
             otlp_endpoint="http://localhost:4318/v1/traces",
         )
 

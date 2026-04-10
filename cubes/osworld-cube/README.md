@@ -155,6 +155,7 @@ The OSWorld repo is cloned once to `$CUBE_CACHE_DIR/osworld-cube/OSWorld` and pi
 |----------|---------|-------------|
 | `CUBE_CACHE_DIR` | `~/.cube` | Root directory for VMs and cache |
 | `PROXY_CONFIG_FILE` | *(not set)* | Path to proxy config JSON for OSWorld network routing (e.g. `dataimpulse.json`) |
+| `OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE` | *(not set)* | Path to a JSON file describing the `InfraConfig` class and kwargs to use for debug runs and integration tests. Falls back to `LocalInfraConfig()` when unset. |
 
 `install()` automatically appends `PROXY_CONFIG_FILE=$CUBE_CACHE_DIR/osworld-cube/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json` to `.env` if not already defined.
 
@@ -200,6 +201,45 @@ Or run directly:
 
 ```bash
 python -m osworld_cube.debug
+```
+
+To run debug flows or integration tests against a non-local `InfraConfig`, point
+`OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE` at a JSON file with this shape:
+
+```json
+{
+  "class": "package.module:InfraConfigClass",
+  "kwargs": {
+    "key": "value"
+  }
+}
+```
+
+Example Azure config:
+
+```json
+{
+  "class": "cube_infra_azure:AzureInfraConfig",
+  "kwargs": {
+    "resource_group": "<resource-group>",
+    "storage_account": "<storage-account>",
+    "vnet_name": "<vnet-name>",
+    "nsg_name": "<nsg-name>",
+    "image_name_suffix": "<image-name-suffix>"
+  }
+}
+```
+
+Example usage:
+
+```bash
+OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/osworld-azure-infra.json \
+uv run --project cubes/osworld-cube pytest cubes/osworld-cube/tests/test_cube.py -m integration -s -v
+```
+
+```bash
+OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/osworld-azure-infra.json \
+uv run --project cubes/osworld-cube python -m osworld_cube.debug
 ```
 
 ## Package Structure

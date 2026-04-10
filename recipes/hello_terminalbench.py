@@ -1,3 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "cube-harness",
+#     "terminalbench-cube",
+# ]
+#
+# [tool.uv.sources]
+# cube-harness = { path = "..", editable = true }
+# terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
+# ///
+
 """Run terminalbench-cube with AgentLab2.
 
 Usage:

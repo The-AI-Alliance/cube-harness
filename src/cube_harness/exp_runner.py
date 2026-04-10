@@ -2,7 +2,6 @@
 
 import logging
 import time
-from pathlib import Path
 from uuid import uuid4
 
 import ray
@@ -30,7 +29,6 @@ def run_with_ray(
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
     episode_timeout: float | None = 3600.0,
-    trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
     model: str | None = None,
     agent_name: str | None = None,
@@ -38,7 +36,6 @@ def run_with_ray(
     model = model or _extract_model(exp)
     tracer = get_tracer(
         exp.name,
-        output_dir=trace_output,
         otlp_endpoint=otlp_endpoint,
         model=model,
         agent_name=agent_name,
@@ -158,7 +155,6 @@ def _poll_ray(
 def run_sequentially(
     exp: Experiment,
     debug_limit: int | None = None,
-    trace_output: str | Path | None = None,
     otlp_endpoint: str | None = None,
     model: str | None = None,
     agent_name: str | None = None,
@@ -166,7 +162,6 @@ def run_sequentially(
     model = model or _extract_model(exp)
     tracer = get_tracer(
         exp.name,
-        output_dir=trace_output,
         otlp_endpoint=otlp_endpoint,
         model=model,
         agent_name=agent_name,
