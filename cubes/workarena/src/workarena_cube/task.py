@@ -9,7 +9,7 @@ from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import ActionSchema, Observation
-from cube.task import Task, TaskConfig
+from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import Toolbox, tool_action
 from cube.tools.browser import BrowserTool
 from cube_browser_playwright import PlaywrightSession, PlaywrightSessionConfig, Viewport
@@ -19,24 +19,6 @@ from playwright.sync_api import Page
 from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-        "browser_wait",
-        "browser_back",
-        "browser_forward",
-        "noop",
-        "workarena_cheat",
-        "send_message",
-    }
-)
 
 
 @runtime_checkable
@@ -93,35 +75,19 @@ class WorkArenaCheatToolConfig(PlaywrightConfig):
 
 
 class WorkArenaTask(Task):
-    """
-    CUBE Task wrapper for WorkArena ServiceNow tasks.
-
-    ---
-    Future optimization note:
-
-    Both `finished()` and `evaluate()` call `self._workarena_task.validate()`,
-    which makes a live ServiceNow API call. With `validate_per_step=True`,
-    the base `Task.step()` calls both on every step, resulting in
-    two identical round-trips per step.
-
-    Future improvement: if the above becomes a performance bottleneck, we can cache the
-    result of `validate()` keyed on `(chat_key, hash(page.content()))` where:
-    `chat_key = tuple((m["role"], m["timestamp"], m["message"]) for m in chat_messages)`.
-    Both `finished()` and `evaluate()` would call a shared `_validate()` helper
-    that returns the cached result when the key is unchanged, and refreshes it otherwise.
-    The `page.content()` hash captures SPA state changes that do not update the URL,
-    at the cost of a DOM serialization on each cache-miss check.
-    """
+    """CUBE Task wrapper for WorkArena ServiceNow tasks."""
 
     seed: int
     wait_first_page_time: float = 10.0
     validate_per_step: bool = True
 
     _workarena_task: AbstractServiceNowTask | None = PrivateAttr(default=None)
+    _validate_cache: tuple[Any, ...] | None = PrivateAttr(default=None)
+    _validate_cache_key: tuple[Any, ...] | None = PrivateAttr(default=None)
 
     @property
     def _browser_tool(self) -> WorkArenaBrowserTool:
-        """Resolve the playwright tool whether the tool is direct or inside a Toolbox."""
+        """Resolve the browser tool whether it's direct or inside a Toolbox."""
         if isinstance(self.tool, Toolbox):
             tool = self.tool.find_tool(BrowserTool)
             if tool is None:
@@ -141,6 +107,25 @@ class WorkArenaTask(Task):
             return self.tool.find_tool(ChatTool)
         return None
 
+    def _wire_chat_callbacks(self) -> None:
+        """Wire BrowsergymTool's bgym callbacks to the ChatSession.
+
+        Routes send_msg_to_user and report_infeasible through ChatSession so that
+        WorkArena's validate() can read chat_messages, and infeasibility reports are
+        captured in the chat history.
+
+        Only needed when BrowsergymConfig includes "chat" or "infeas" subsets (backward
+        compat). When using Toolbox(BrowsergymTool, ChatTool) with pure browser subsets,
+        the agent calls ChatTool.send_message / ChatTool.report_infeasible directly.
+        """
+        from cube_harness.tools.browsergym import BrowsergymTool
+
+        chat = self._chat_tool
+        browser = self._browser_tool
+        if chat is not None and isinstance(browser, BrowsergymTool):
+            browser._on_send_message_to_user = lambda msg: chat.session.send_message(msg)
+            browser._on_report_infeasible = lambda msg: chat.session.add_message("infeasible", msg)
+
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
         task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
@@ -149,6 +134,9 @@ class WorkArenaTask(Task):
         if isinstance(self._browser_tool, WorkArenaCheatTool):
             self._browser_tool._workarena_task = self._workarena_task
         self.tool.reset()
+        self._wire_chat_callbacks()
+        self._validate_cache = None
+        self._validate_cache_key = None
         page = self._browser_tool.page
         goal, task_info = self._workarena_task.setup(page)
 
@@ -181,30 +169,43 @@ class WorkArenaTask(Task):
         chat = self._chat_tool
         return chat.messages if chat is not None else []
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
-        """Score the current task state via WorkArena's validate()."""
+    def _validate(self) -> tuple[float, bool, str, dict]:
+        """Call WorkArena's validate() with per-step caching to avoid duplicate REST calls.
+
+        Both evaluate() and finished() are called on every step when validate_per_step=True,
+        so this caches the result keyed on (chat_messages, page_url) and reuses it within
+        the same step.
+        """
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
         page = self._browser_tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
+        chat_messages = self._chat_messages
+        cache_key = (
+            tuple((m.get("role"), m.get("message")) for m in chat_messages),
+            page.url,
+        )
+        if self._validate_cache is None or self._validate_cache_key != cache_key:
+            self._validate_cache = self._workarena_task.validate(page, chat_messages)
+            self._validate_cache_key = cache_key
+        return self._validate_cache  # type: ignore[return-value]
+
+    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+        """Score the current task state via WorkArena's validate()."""
+        reward, done, _user_message, task_info = self._validate()
         return reward, {"done": done, **task_info}
 
     def finished(self, obs: Observation) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = self._browser_tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
+        _reward, done, _user_message, _task_info = self._validate()
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter to BID browser actions supported by WorkArena."""
-        supported_actions = _SUPPORTED_ACTION_NAMES
+        """Filter actions: remove send_message when no ChatTool is present."""
         if self._chat_tool is None:
-            supported_actions = supported_actions - {"send_message"}
-        filtered = [a for a in actions if a.name in supported_actions]
-        logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
-        return filtered
+            return [a for a in actions if a.name != "send_message"]
+        return actions
 
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
@@ -219,17 +220,27 @@ class WorkArenaTask(Task):
 
 
 class WorkArenaTaskConfig(TaskConfig):
-    """Serializable configuration for a single WorkArena task."""
+    """Serializable configuration for a single WorkArena task.
+
+    Embeds task_class_path so that make() can construct TaskMetadata without
+    depending on the ClassVar WorkArenaBenchmark.task_metadata — which is empty
+    in Ray worker processes.
+    """
+
+    task_class_path: str | None = None
 
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
-        from workarena_cube.benchmark import WorkArenaBenchmark
-
         _ = runtime_context, container_backend
-        meta = WorkArenaBenchmark.task_metadata[self.task_id]
+        if self.task_class_path is None:
+            raise ValueError(f"task_class_path is required to instantiate WorkArenaTask (task_id={self.task_id})")
+        meta = TaskMetadata(
+            id=self.task_id,
+            extra_info={"task_class_path": self.task_class_path},
+        )
         return WorkArenaTask(
             metadata=meta,
             tool_config=self.tool_config,

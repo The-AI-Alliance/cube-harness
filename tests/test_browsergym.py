@@ -43,7 +43,7 @@ class TestBrowsergymConfig:
         assert config.use_axtree is True
         assert config.use_screenshot is True
         assert config.prune_html is True
-        assert config.action_subsets == ["chat", "infeas", "bid", "nav", "tab"]
+        assert config.action_subsets == ["bid", "nav", "tab"]
 
     def test_custom_config_values(self) -> None:
         config = BrowsergymConfig(
@@ -503,20 +503,23 @@ class TestBrowsergymToolActionSet:
     """Tests for action_set property."""
 
     def test_action_set_contains_bgym_native_actions(self) -> None:
-        """Test that action_set contains bgym's native action names."""
+        """Test that default action_set contains pure browser actions only."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
         action_names = {a.name for a in tool.action_set}
 
-        # Should contain bgym native names, not old cube-specific names
+        # Default subsets (bid, nav, tab) should include browser actions
         assert "click" in action_names
         assert "fill" in action_names
         assert "hover" in action_names
         assert "scroll" in action_names
         assert "goto" in action_names
         assert "noop" in action_names
-        assert "send_msg_to_user" in action_names
+
+        # Chat/infeas actions should NOT be in default config — they belong to ChatTool
+        assert "send_msg_to_user" not in action_names
+        assert "report_infeasible" not in action_names
 
         # Old names should NOT be present
         assert "browser_click" not in action_names

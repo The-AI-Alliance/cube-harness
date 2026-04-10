@@ -1,5 +1,6 @@
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -36,8 +37,11 @@ class BrowsergymConfig(ToolConfig):
     # Browser configuration (launch parameters)
     browser: PlaywrightSessionConfig = Field(default_factory=PlaywrightSessionConfig)
 
-    # Action configuration
-    action_subsets: list[str] = Field(default=["chat", "infeas", "bid", "nav", "tab"])
+    # Action configuration — pure browser actions only.
+    # Chat ("send_msg_to_user") and infeasibility ("report_infeasible") are handled
+    # by ChatTool when used in a Toolbox. Add "chat"/"infeas" here only if running
+    # standalone without a ChatTool.
+    action_subsets: list[str] = Field(default=["bid", "nav", "tab"])
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
@@ -60,9 +64,16 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
     for execution. Manages its own ``PlaywrightSession`` lifecycle.
     """
 
-    def __init__(self, config: BrowsergymConfig) -> None:
+    def __init__(
+        self,
+        config: BrowsergymConfig,
+        on_send_message_to_user: Callable[[str], None] | None = None,
+        on_report_infeasible: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__()
         self.config = config
+        self._on_send_message_to_user = on_send_message_to_user
+        self._on_report_infeasible = on_report_infeasible
         self._action_set = HighLevelActionSet(subsets=config.action_subsets, multiaction=False)
         self._action_schemas: list[ActionSchema] | None = None
         self._session: PlaywrightSession | None = None
@@ -190,10 +201,16 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 report_infeasible_instructions=lambda message: infeasible_messages.append(message),
             )
             if infeasible_messages:
+                if self._on_report_infeasible is not None:
+                    for msg in infeasible_messages:
+                        self._on_report_infeasible(msg)
                 error_msg = "; ".join(infeasible_messages)
                 self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
                 result = f"Failed (infeasible): {error_msg}"
             else:
+                if self._on_send_message_to_user is not None:
+                    for msg in user_messages:
+                        self._on_send_message_to_user(msg)
                 self._last_info = {
                     "source": "action",
                     "action": action_str,
