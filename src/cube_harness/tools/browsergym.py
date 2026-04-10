@@ -60,8 +60,12 @@ class BrowsergymConfig(ToolConfig):
 class BrowsergymTool(ToolWithTelemetry, BrowserTool):
     """Browser tool using BrowserGym's action set on a Playwright Page.
 
-    Uses ``HighLevelActionSet`` for action schemas and ``execute_python_code``
-    for execution. Manages its own ``PlaywrightSession`` lifecycle.
+    Exposes bgym's native actions (click, fill, scroll, ...) as tool actions.
+    Pure browser — chat and infeasibility actions belong to ChatTool.
+
+    Optional callbacks ``on_send_message_to_user`` and ``on_report_infeasible``
+    route bgym's callbacks to an external ChatSession when "chat"/"infeas"
+    subsets are included for backward compatibility.
     """
 
     def __init__(
