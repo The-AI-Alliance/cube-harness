@@ -61,7 +61,7 @@ Three new harness-side abstractions, all implementing or wrapping the existing `
 
 | Abstraction | Purpose |
 |---|---|
-| `BenchmarkPool` | N copies of the **same** benchmark type, different server instances. Round-robin task assignment for load distribution. |
+| `BenchmarkPool` | N copies of the **same** benchmark type, different server instances. Least-loaded assignment for load distribution. |
 | `CompositeBenchmark` | N **different** benchmark types combined into one evaluation suite. Each sub-benchmark manages its own resources. |
 | `ResourcePool` | Pre-warmed VM/container handles for task-scoped resources. Recycles handles between tasks via snapshot revert. |
 
@@ -71,51 +71,24 @@ Three new harness-side abstractions, all implementing or wrapping the existing `
 
 Wraps N benchmark instances (same type, different servers) behind a single `Benchmark` interface.
 
-```python
-class BenchmarkPool(CubeBenchmark):
-    benchmarks: list[CubeBenchmark]
+Task assignment is **dynamic, least-loaded**: when a worker is ready for a new task,
+it acquires a slot on whichever instance currently has the fewest active agents.
+This naturally handles variable task durations — fast instances get more tasks.
 
-    def _setup(self) -> None:
-        for b in self.benchmarks:
-            b.setup()
-
-    def close(self) -> None:
-        for b in self.benchmarks:
-            b.close()
-
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        # All sub-benchmarks have the same task list; only instance differs.
-        # Round-robin assignment ensures even load.
-        configs = list(self.benchmarks[0].get_task_configs())
-        n = len(self.benchmarks)
-        for i, tc in enumerate(configs):
-            self._assignments[tc.task_id] = i % n
-            yield tc
-
-    def _runtime_context_for(self, task_config: TaskConfig) -> RuntimeContext:
-        """Return the runtime context for the sub-benchmark assigned to this task."""
-        idx = self._assignments[task_config.task_id]
-        return self.benchmarks[idx]._runtime_context
-```
+A Ray Actor tracks active counts per instance and hands out `runtime_context` for
+the least-loaded one. Workers release the slot when the episode finishes.
 
 ### Wiring: per-task runtime context
 
 Today, `Experiment._create_all_episodes()` passes a single `self.benchmark._runtime_context`
-to every episode (experiment.py:89). With a pool, each task needs
-the context of its assigned sub-benchmark.
+to every episode (experiment.py:89). With dynamic assignment, the runtime context
+is determined at dispatch time (not at config generation time).
 
-**Required change** — small modification to `Experiment._create_all_episodes()`:
+Two options:
+- **Ray Actor**: episodes acquire their instance slot before running, receive the right `runtime_context`
+- **`_runtime_context_for()` protocol**: `Experiment` calls `benchmark._runtime_context_for(tc)` per task — simpler but static
 
-```python
-for i, tc in enumerate(task_configs):
-    if hasattr(self.benchmark, '_runtime_context_for'):
-        ctx = self.benchmark._runtime_context_for(tc)
-    else:
-        ctx = self.benchmark._runtime_context
-    episodes.append(Episode(..., runtime_context=ctx, ...))
-```
-
-This keeps `Benchmark` (cube-standard) unchanged; only `Experiment` (cube-harness) learns the new protocol.
+The Ray Actor approach is preferred since it also serves the RL persistent-worker path (section 4).
 
 ### Benchmark implementation changes
 
@@ -373,12 +346,11 @@ each worker has its own VM.
 
 | Scenario | Mechanism | Concurrency limit |
 |---|---|---|
-| BenchmarkPool (WorkArena) | Static round-robin + `n_cpus` | `N_instances * max_concurrent_agents` |
+| BenchmarkPool (WorkArena) | Least-loaded via Ray Actor | `N_instances * max_concurrent_agents` |
 | ResourcePool (OSWorld) | Ray Actor semaphore | `pool_size` |
 | RL persistent workers | Fixed worker count | `N_workers` |
 
-Static round-robin is sufficient for evaluation. For RL (where task runtimes vary widely),
-the persistent-worker model naturally load-balances since workers pull tasks when free.
+Least-loaded assignment and persistent workers both naturally handle variable task durations.
 
 ---
 
@@ -399,7 +371,7 @@ the persistent-worker model naturally load-balances since workers pull tasks whe
 
 ## Non-Goals
 
-- **Dynamic load balancing**: Static round-robin is sufficient initially. Persistent workers naturally load-balance for RL.
+- **Sophisticated scheduling**: Least-loaded is sufficient. No need for priority queues or estimated task durations.
 - **Cross-machine resource coordination**: ResourcePool runs within a single Ray cluster. Multi-cluster is out of scope.
 - **Auto-scaling**: Pool sizes are fixed at init. Elastic scaling is a future concern.
 
@@ -408,5 +380,5 @@ the persistent-worker model naturally load-balances since workers pull tasks whe
 ## Open Questions
 
 1. **`revert_snapshot()` on ResourceHandle**: Add to cube-standard as a no-op base method, or keep it infra-specific in cube-harness?
-2. **Shared task queue vs. static assignment**: For BenchmarkPool, static round-robin is simple but doesn't account for variable task durations. Worth adding a dynamic queue upfront?
+2. **Single Ray Actor for both BenchmarkPool and ResourcePool?** Both use acquire/release semantics — could share a common `SlotPool` actor.
 3. **Episode serialization with handles**: Ray workers need handles but `ResourceHandle` is not serializable. Persistent workers (Ray Actors) solve this. Is there a simpler path?
