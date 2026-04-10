@@ -132,6 +132,17 @@ class Experiment(TypedBaseModel):
             data = json.load(f)
         return cls.model_validate(data)
 
+    def _trajectory_id_from_config(self, config_file: Path) -> str | None:
+        """Return trajectory_id for a config file, handling both V2 and V1 filename formats."""
+        if config_file.name == "episode_config.json":
+            # V2: trajectory_id is the parent directory name
+            return config_file.parent.name
+        parsed = self._parse_episode_config_filename(config_file)
+        if parsed:
+            episode_id, task_id = parsed
+            return f"{task_id}_ep{episode_id}"
+        return None
+
     def _parse_episode_config_filename(self, config_file: Path) -> tuple[int, str] | None:
         """
         Parse episode config filename to extract episode id and task_id.
@@ -200,10 +211,8 @@ class Experiment(TypedBaseModel):
         """
         episodes = []
         for config_file in config_files:
-            parsed = self._parse_episode_config_filename(config_file)
-            if parsed:
-                episode_id, task_id = parsed
-                trajectory_id = f"{task_id}_ep{episode_id}"
+            trajectory_id = self._trajectory_id_from_config(config_file)
+            if trajectory_id:
                 should_include = (
                     trajectory_id in filter_trajectory_ids if include else trajectory_id not in filter_trajectory_ids
                 )

@@ -1,3 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "cube-harness",
+#     "swebench-live-cube",
+# ]
+#
+# [tool.uv.sources]
+# cube-harness = { path = "..", editable = true }
+# swebench-live-cube = { path = "../cubes/swebench-live-cube", editable = true }
+# ///
+
 """Run swebench-live-cube with AgentLab2.
 
 Usage:
