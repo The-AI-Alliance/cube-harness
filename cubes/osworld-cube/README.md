@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-`osworld-cube` clones the [OSWorld repository](https://github.com/xlang-ai/OSWorld) automatically on first `setup()` into `~/.cube/osworld-cube/OSWorld` (i.e. `$CUBE_CACHE_DIR/osworld-cube/OSWorld`). The repo is used only for task configurations (JSON files under `evaluation_examples/`) — `desktop_env` is not used.
+`osworld-cube` ships its lightweight task metadata in [`src/osworld_cube/task_metadata.json`](src/osworld_cube/task_metadata.json). On first `install()`, it clones the [OSWorld repository](https://github.com/xlang-ai/OSWorld) into `~/.cube/osworld-cube/OSWorld` (i.e. `$CUBE_CACHE_DIR/osworld-cube/OSWorld`) to populate the heavier per-task execution cache under `~/.cube/osworld-cube/tasks_execution_info/`.
 
 ### Platform support
 
@@ -31,7 +31,7 @@ The OSWorld VM images are **x86_64 only**. Hardware acceleration requirements di
 
 ## Overview
 
-`osworld-cube` wraps OSWorld desktop-automation tasks as CUBE-compliant `Task` and `Tool` objects. Agents interact with real VM/container desktops through a unified interface, choosing between two action spaces.
+`osworld-cube` wraps OSWorld desktop-automation tasks as CUBE-compliant `Task` and `Tool` objects. Agents interact with real VM/container desktops through a unified interface, choosing between two action spaces. The benchmark task list is loaded from the shipped `task_metadata.json`; `install()` only prepares the local OSWorld repo and caches the heavier per-task execution payloads.
 
 ## Installation
 
@@ -45,7 +45,7 @@ uv pip install -e .
 
 ```python
 from osworld_cube import OSWorldTask, ComputerConfig
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
+from cube import LocalInfraConfig
 from cube.task import TaskMetadata
 
 task = OSWorldTask(
@@ -61,7 +61,7 @@ task = OSWorldTask(
         },
     ),
     tool_config=ComputerConfig(),
-    vm_backend=OSWorldQEMUVMBackend(),
+    infra=LocalInfraConfig(),
 )
 
 obs, info = task.reset()
@@ -77,11 +77,9 @@ task.close()
 
 ```python
 from osworld_cube import OSWorldBenchmark, ComputerConfig
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 bench = OSWorldBenchmark(
     default_tool_config=ComputerConfig(),
-    vm_backend=OSWorldQEMUVMBackend(),
 )
 bench.setup()
 for task_config in bench.get_task_configs():
@@ -145,11 +143,11 @@ Set `use_som=True` on `OSWorldTask` / `OSWorldBenchmark` to switch to Set-of-Mar
 |------|-------|
 | OSWorld repo | [`xlang-ai/OSWorld`](https://github.com/xlang-ai/OSWorld) |
 | Pinned commit | `e695a10` |
-| Task suite version | `1.0.0` (369 tasks) |
+| Task suite version | `1.0.0` (368 tasks) |
 | VM image | Ubuntu 22.04 |
 | Task index files | `test_all.json`, `test_small.json`, `test_nogdrive.json`, `test_infeasible.json` |
 
-The OSWorld repo is cloned once to `$CUBE_CACHE_DIR/osworld-cube/OSWorld` and pinned to commit `e695a10`.
+The OSWorld repo is cloned once to `$CUBE_CACHE_DIR/osworld-cube/OSWorld` and pinned to commit `e695a10` so `install()` can populate the execution cache.
 
 ## Environment Variables
 
@@ -159,7 +157,7 @@ The OSWorld repo is cloned once to `$CUBE_CACHE_DIR/osworld-cube/OSWorld` and pi
 | `PROXY_CONFIG_FILE` | *(not set)* | Path to proxy config JSON for OSWorld network routing (e.g. `dataimpulse.json`) |
 | `OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE` | *(not set)* | Path to a JSON file describing the `InfraConfig` class and kwargs to use for debug runs and integration tests. Falls back to `LocalInfraConfig()` when unset. |
 
-`setup()` automatically appends `PROXY_CONFIG_FILE=$CUBE_CACHE_DIR/osworld-cube/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json` to `.env` if not already defined.
+`install()` automatically appends `PROXY_CONFIG_FILE=$CUBE_CACHE_DIR/osworld-cube/OSWorld/evaluation_examples/settings/proxy/dataimpulse.json` to `.env` if not already defined.
 
 ### Example `.env`
 
@@ -186,7 +184,6 @@ A deterministic `DebugAgent` replays hardcoded action sequences without an LLM:
 from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
 bench = get_debug_benchmark()
-bench.install()
 bench.setup()
 for config in bench.get_task_configs():
     task = config.make()

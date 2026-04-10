@@ -1,3 +1,4 @@
+from osworld_cube._paths import OSWORLD_BASE_DIR, OSWORLD_CACHE_DIR, OSWORLD_REPO_DIR, OSWORLD_VM_DIR
 from osworld_cube.computer import (
     Computer13,
     ComputerBase,
@@ -22,4 +23,9 @@ __all__ = [
     # Debug helpers
     "get_debug_benchmark",
     "make_debug_agent",
+    # Paths
+    "OSWORLD_BASE_DIR",
+    "OSWORLD_REPO_DIR",
+    "OSWORLD_VM_DIR",
+    "OSWORLD_CACHE_DIR",
 ]

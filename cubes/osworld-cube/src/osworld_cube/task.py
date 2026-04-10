@@ -20,12 +20,12 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from PIL import Image
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers OSWorldTask.model_rebuild()
 from cube.core import Observation
 from cube.resource import InfraConfig, ResourceHandle, VMResourceConfig
-from cube.task import Task
+from cube.task import Task, TaskMetadata
 
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
 
@@ -48,6 +48,17 @@ OSWORLD_UBUNTU_RESOURCE = VMResourceConfig(
 _CHROMIUM_PORT = 9222
 _VLC_PORT = 8080
 _SERVER_PORT = 5000
+
+
+class OSWorldTaskMetadata(TaskMetadata):
+    """OSWorld-specific task metadata shipped ahead of execution."""
+
+    domain: str
+    instruction: str
+    snapshot: str = "init_state"
+    os_type: str = "ubuntu"
+    related_apps: list[str] = Field(default_factory=list)
+    test_sets: list[str] = Field(default_factory=list)
 
 
 class OSWorldTask(Task):
@@ -81,6 +92,8 @@ class OSWorldTask(Task):
         metadata.abstract_description  — used as the agent's goal text
     """
 
+    metadata: OSWorldTaskMetadata  # type: ignore[assignment]
+
     infra: InfraConfig | None = None
     """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
     Each task gets a fresh VM launched from the provisioned image via infra.launch()."""
@@ -99,11 +112,6 @@ class OSWorldTask(Task):
     def _computer(self) -> "ComputerBase":
         """Return self.tool cast to ComputerBase for type-checker satisfaction."""
         return self.tool  # type: ignore[return-value]
-
-    def _os_type(self) -> str:
-        """Return the OS type string ('ubuntu' or 'windows') for axtree processing."""
-        raw = self.metadata.extra_info.get("os_type", "Ubuntu")
-        return raw.lower()
 
     def _ensure_vm(self) -> None:
         """Launch the VM if not already running via infra.launch()."""
@@ -204,26 +212,26 @@ class OSWorldTask(Task):
 
         task_data = {
             "id": self.metadata.id,
-            "instruction": self.metadata.abstract_description,
+            "instruction": self.metadata.instruction,
             "config": extra.get("config", []),
             "evaluator": extra.get("evaluator", {}),
-            "snapshot": extra.get("snapshot", "init_state"),
-            "related_apps": extra.get("related_apps", []),
+            "snapshot": self.metadata.snapshot,
+            "related_apps": self.metadata.related_apps,
         }
 
-        logger.info("Resetting OSWorldTask %s (domain=%s)", self.metadata.id, extra.get("domain", "unknown"))
+        logger.info("Resetting OSWorldTask %s (domain=%s)", self.metadata.id, self.metadata.domain)
 
         obs = self._setup_task(task_data)
         obs = self.obs_postprocess(obs)
 
-        goal_obs = Observation.from_text(f"Task: {self.metadata.abstract_description}")
+        goal_obs = Observation.from_text(f"Task: {self.metadata.instruction}")
         obs = goal_obs + obs
 
         info = {
             "task_id": self.metadata.id,
-            "task_domain": extra.get("domain", "unknown"),
-            "task_snapshot": extra.get("snapshot", "init_state"),
-            "task_related_apps": extra.get("related_apps", []),
+            "task_domain": self.metadata.domain,
+            "task_snapshot": self.metadata.snapshot,
+            "task_related_apps": self.metadata.related_apps,
         }
         return obs, info
 
@@ -262,7 +270,7 @@ class OSWorldTask(Task):
 
     def _postprocess_linearize(self, obs: Observation) -> Observation:
         """Replace raw axtree XML with a linearized tab-separated table."""
-        platform = self._os_type()
+        platform = self.metadata.os_type.lower()
         new_contents = []
         for content in obs.contents:
             if content.name == "accessibility_tree":
@@ -282,7 +290,7 @@ class OSWorldTask(Task):
         Falls back to _postprocess_linearize if screenshot or axtree are missing,
         or if the annotation fails.
         """
-        platform = self._os_type()
+        platform = self.metadata.os_type.lower()
 
         screenshot_content = None
         axtree_content = None

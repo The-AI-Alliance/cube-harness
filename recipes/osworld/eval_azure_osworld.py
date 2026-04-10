@@ -7,22 +7,21 @@ Prerequisites:
     See cube-resources/cube-infra-azure/README.md for full setup instructions.
 
 Usage:
-    # Debug mode (debug_tasks.json, sequential)
+    # Debug mode (embedded debug benchmark, sequential)
     uv run recipes/osworld/eval_azure_osworld.py debug
 
-    # Eval mode (test_small, 3 parallel workers)
+    # Eval mode (test_small subset, 3 parallel workers)
     uv run recipes/osworld/eval_azure_osworld.py
 """
 
 import logging
 import os
 import sys
-from pathlib import Path
 
-import osworld_cube
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
+from osworld_cube import get_debug_benchmark
+from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
@@ -101,22 +100,19 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
-    benchmark = OSWorldBenchmark(
-        default_tool_config=tool_config,
-        use_som=False,
-        tasks_file=tasks_file,
-        test_set_name=OSWorldTestSet.TEST_SMALL,
-        infra=INFRA,
+    benchmark = (
+        get_debug_benchmark(infra=INFRA) if debug else OSWorldBenchmark(default_tool_config=tool_config, infra=INFRA)
     )
     benchmark.setup()
+    if not debug:
+        benchmark = benchmark.named_subset("test_small")
 
     # Provision all resources the benchmark needs (idempotent — no-ops if already ready).
     for resource in benchmark.resources:
         INFRA.provision(resource)
 
     exp = Experiment(
-        name="osworld_azure_gpt5_mini",
+        name="osworld_azure_gpt5_mini_new",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -126,7 +122,7 @@ def main(debug: bool) -> None:
     try:
         if debug:
             print("\n" + "=" * 60)
-            print("DEBUG MODE: Running debug_tasks.json sequentially on Azure")
+            print("DEBUG MODE: Running embedded debug benchmark sequentially on Azure")
             print("=" * 60)
             print(f"Output directory: {output_dir}")
             print(f"Model: {llm_config.model_name}")
@@ -135,7 +131,7 @@ def main(debug: bool) -> None:
             run_sequentially(exp)
         else:
             print("\n" + "=" * 60)
-            print("EVAL MODE: Running OSWorld TEST_SMALL on Azure")
+            print("EVAL MODE: Running OSWorld test_small subset on Azure")
             print("=" * 60)
             print(f"Output directory: {output_dir}")
             print(f"Model: {llm_config.model_name}")
