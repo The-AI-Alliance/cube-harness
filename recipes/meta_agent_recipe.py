@@ -19,7 +19,6 @@ Adding task hints:
 
 import sys
 
-from cube_browser_tool import PlaywrightConfig
 from miniwob_cube.benchmark import MiniWobBenchmark
 
 from cube_harness import make_experiment_output_dir
@@ -27,6 +26,7 @@ from cube_harness.agents.genny import GennyConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+from cube_harness.tools.browsergym import BrowsergymConfig
 
 
 class MiniWobSubset(MiniWobBenchmark):
@@ -69,7 +69,7 @@ def main(debug: bool) -> None:
         },
     )
 
-    tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
+    tool_config = BrowsergymConfig(use_screenshot=True, use_axtree=True, use_html=False)
     benchmark = MiniWobSubset(default_tool_config=tool_config, task_ids=task_ids)
 
     output_dir = make_experiment_output_dir("genny", "miniwob-meta")
