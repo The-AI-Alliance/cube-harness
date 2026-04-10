@@ -66,8 +66,8 @@ Temporary hacks (e.g. a blunt hint that masks a tool bug) are only acceptable as
 ## Entry Point
 
 ```bash
-uv run recipes/meta_agent_recipe.py debug   # 2 tasks, sequential
-uv run recipes/meta_agent_recipe.py         # full subset run
+uv run recipes/meta_agent_web_recipe.py debug   # 2 tasks, sequential
+uv run recipes/meta_agent_web_recipe.py         # full subset run
 ```
 
 Edit `task_ids` in the recipe to focus on failing tasks. Edit `GennyConfig.task_hints` / `hint` to add hints.
@@ -168,7 +168,7 @@ Key `GennyConfig` levers: `render_last_n_obs`, `max_obs_chars`, `enable_summariz
 
 | | |
 |---|---|
-| Recipe | `recipes/meta_agent_recipe.py` |
+| Recipe | `recipes/meta_agent_web_recipe.py` |
 | Genny | `src/cube_harness/agents/genny.py` |
 | Results API | `src/cube_harness/results.py` |
 | Results root | `~/cube_harness_results/` |
