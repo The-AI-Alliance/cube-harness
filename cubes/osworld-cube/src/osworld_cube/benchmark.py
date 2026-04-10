@@ -27,15 +27,16 @@ from dotenv import load_dotenv
 from pathlib import Path
 from typing import ClassVar
 
-from pydantic import model_validator
+from cube import LocalInfraConfig
+from pydantic import Field, model_validator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
+from cube.resource import InfraConfig, ResourceConfig
 from cube.task import TaskConfig, TaskMetadata
-from cube.vm import VMBackend
 
 from osworld_cube.computer import ComputerConfig, _CUBE_CACHE_ROOT
-from osworld_cube.task import OSWorldTask
+from osworld_cube.task import OSWORLD_UBUNTU_RESOURCE, OSWorldTask
 
 logger = logging.getLogger(__name__)
 
@@ -106,13 +107,13 @@ class OSWorldTaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored for OSWorld — tasks are deterministic)
-        vm_backend:  VMBackend to use for this task (passed by benchmark.get_task_configs()).
-
-    make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
-    populated by OSWorldBenchmark.setup()).
+        metadata:    TaskMetadata for this task. Stored directly on the config so
+                     the config is self-contained and safe to send to Ray workers.
+        infra:       InfraConfig to use for this task.
     """
 
-    vm_backend: VMBackend | None = None
+    metadata: TaskMetadata
+    infra: InfraConfig | None = None
 
     def make(
         self,
@@ -120,17 +121,15 @@ class OSWorldTaskConfig(TaskConfig):
         container_backend: ContainerBackend | None = None,
     ) -> OSWorldTask:
         """Instantiate OSWorldTask from this config."""
-        metadata = OSWorldBenchmark.task_metadata[self.task_id]
-
         if self.tool_config is None:
             raise ValueError(
                 f"OSWorldTaskConfig for task '{self.task_id}' has no tool_config. "
                 "Pass default_tool_config=ComputerConfig(...) to OSWorldBenchmark."
             )
         return OSWorldTask(
-            metadata=metadata,
+            metadata=self.metadata,
             tool_config=self.tool_config,
-            vm_backend=self.vm_backend,
+            infra=self.infra,
             runtime_context=runtime_context,
             container_backend=container_backend,
         )
@@ -204,9 +203,12 @@ class OSWorldBenchmark(Benchmark):
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
-    vm_backend: VMBackend | None = None
-    """VM backend used to provision VMs for each task. If None, tasks will fail
-    unless a VM is attached externally via computer.attach_vm()."""
+    infra: InfraConfig | None = Field(default_factory=LocalInfraConfig)
+    """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+    Each task gets a fresh VM launched from the provisioned image."""
+
+    resources: list[ResourceConfig] = [OSWORLD_UBUNTU_RESOURCE]
+    """VM image required to run OSWorld tasks (declared for the harness resource lifecycle)."""
 
     @model_validator(mode="after")
     def _warn_on_conflicting_task_source(self) -> "OSWorldBenchmark":
@@ -214,18 +216,15 @@ class OSWorldBenchmark(Benchmark):
             logger.warning("Both 'tasks_file' and 'test_set_name' were specified — 'tasks_file' takes precedence.")
         return self
 
-    # ------------------------------------------------------------------
-    # get_task_configs() override — inject vm_backend into each config
-    # ------------------------------------------------------------------
-
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield OSWorldTaskConfig objects, injecting vm_backend from the benchmark."""
+        """Yield OSWorldTaskConfig objects, injecting infra."""
         for tm in self.task_metadata.values():
             yield OSWorldTaskConfig(
                 task_id=tm.id,
+                metadata=tm,
                 tool_config=self.default_tool_config,
                 seed=None,
-                vm_backend=self.vm_backend,
+                infra=self.infra,
             )
 
     # ------------------------------------------------------------------
@@ -391,10 +390,10 @@ class OSWorldBenchmark(Benchmark):
         OSWORLD_VM_DIR.mkdir(parents=True, exist_ok=True)
 
     def _get_provider(self) -> str:
-        """Return provider name derived from vm_backend type."""
-        if self.vm_backend is None:
+        """Return provider name derived from infra type."""
+        if self.infra is None:
             return "none"
-        return type(self.vm_backend).__name__
+        return type(self.infra).__name__
 
     # ------------------------------------------------------------------
     # install() — available for manual invocation; called from _setup()
@@ -417,4 +416,12 @@ class OSWorldBenchmark(Benchmark):
         load_dotenv()  # Load the .env file
         logger.info(f"Set PROXY_CONFIG_FILE={os.environ.get('PROXY_CONFIG_FILE', 'not set')}")
 
-        logger.info("VM images will be downloaded automatically on first task reset.")
+        if isinstance(self.infra, LocalInfraConfig):
+            for resource in self.resources:
+                if self.infra.provision_status(resource) == "ready":
+                    logger.info("Local resource %s already provisioned", resource.name)
+                    continue
+                logger.info("Provisioning local resource %s...", resource.name)
+                self.infra.provision(resource)
+
+        logger.info("OSWorld install complete.")

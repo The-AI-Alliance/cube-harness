@@ -21,11 +21,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from cube import LocalInfraConfig
 from cube.core import Action, ActionSchema, Observation
-from cube.vm import VMBackend
+from cube.resource import InfraConfig
 from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
+from osworld_cube.infra_loader import load_runtime_infra_from_config_file
 
 logger = logging.getLogger(__name__)
 
@@ -122,20 +123,33 @@ class DebugAgent:
 # ---------------------------------------------------------------------------
 
 
-def get_debug_benchmark(vm_backend: VMBackend | None = None) -> OSWorldBenchmark:
+def _get_default_infra() -> InfraConfig:
+    """Resolve the default infra for debug runs.
+
+    Priority:
+      1. `OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/infra.json`
+      2. `LocalInfraConfig()` for the standard zero-arg `cube test` path
+    """
+    return load_runtime_infra_from_config_file() or LocalInfraConfig()
+
+
+def get_debug_benchmark(
+    infra: InfraConfig | None = None,
+) -> OSWorldBenchmark:
     """Return an OSWorldBenchmark scoped to the debug tasks.
 
     Uses debug_tasks.json as the task source — no OSWorld repo clone required.
-    The caller (cube.testing) is responsible for calling install() and setup().
+    The caller is responsible for calling install() and setup().
 
     Args:
-        vm_backend: Backend to use. Defaults to OSWorldQEMUVMBackend (Linux/KVM).
-                    Pass OSWorldDockerVMBackend() to run on macOS via Docker.
+        infra: InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+               Each task gets a fresh VM from the provisioned image.
     """
+    resolved_infra = infra or _get_default_infra()
     return OSWorldBenchmark(
         tasks_file=str(_TASKS_FILE),
         default_tool_config=ComputerConfig(),
-        vm_backend=vm_backend or OSWorldQEMUVMBackend(),
+        infra=resolved_infra,
     )
 
 

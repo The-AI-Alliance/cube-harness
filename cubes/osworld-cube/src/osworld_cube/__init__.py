@@ -20,6 +20,6 @@ __all__ = [
     "OSWorldBenchmark",
     "OSWorldTaskConfig",
     # Debug helpers
-    "make_debug_agent",
     "get_debug_benchmark",
+    "make_debug_agent",
 ]
