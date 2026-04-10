@@ -203,7 +203,8 @@ class Episode:
             setup_fn = env.setup
 
         agent = self.config.agent_config.make(action_set, task_id=self.config.task_id)
-        return self._run_loop(setup_fn, step_fn, close_fn, agent)
+        extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
+        return self._run_loop(setup_fn, step_fn, close_fn, agent, extra_metadata=extra_metadata)
 
     def _run_loop(
         self,
@@ -211,6 +212,7 @@ class Episode:
         step_fn: Callable,
         close_fn: Callable,
         agent,
+        extra_metadata: dict | None = None,
     ) -> Trajectory:
         """Shared run loop used by both the cube path and the legacy path."""
         task_id = self.config.task_id
@@ -226,6 +228,7 @@ class Episode:
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
+                        **(extra_metadata or {}),
                         **env_output.info,
                     },
                     start_time=start_time,
