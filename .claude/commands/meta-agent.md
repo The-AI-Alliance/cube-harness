@@ -63,6 +63,8 @@ Token cost, wall-clock time, parallelism, benchmark setup overhead. Worth fixing
 
 Temporary hacks (e.g. a blunt hint that masks a tool bug) are only acceptable as a diagnostic step to confirm a hypothesis. They must not be committed as the final fix.
 
+**When fixing a bug, write a unit test first if practical.** A test that fails on the buggy code and passes after the fix documents the root cause and guards against regression. Skip when it's too slow, too costly, too stochastic, or genuinely hard to isolate in a unit test — but default to trying.
+
 ---
 
 ## Entry Point
