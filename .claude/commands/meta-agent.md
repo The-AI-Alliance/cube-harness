@@ -46,6 +46,8 @@ Token cost, wall-clock time, parallelism, benchmark setup overhead. Worth fixing
 
 **Pick tasks that fail but should succeed.** Avoid tasks with fundamental ambiguity or that require capabilities the agent fundamentally lacks. A task that sometimes passes is a better target than one that never passes.
 
+**Start cheap, scale up.** Prefer short tasks (few steps, fast setup) when selecting what to run first — they give signal faster and cost less. Once a cheap task stops yielding new information, move to harder ones. Stop adding tasks when the marginal diagnostic value no longer justifies the cost.
+
 **Use causal interventions, not hunches.** Before writing a fix, write a minimal intervention (a hint, a one-line code change, a different prompt) that would confirm your hypothesis. If the intervention works → root cause confirmed → write the real fix. If not → revise the hypothesis.
 
 **Fixes go in the right place, always.**
@@ -149,7 +151,12 @@ Key `GennyConfig` levers: `render_last_n_obs`, `max_obs_chars`, `enable_summariz
 
 - Scaffolding changes → `feat/meta-agent`
 - Each fix → `feat/meta-agent/iter-N-<description>` → PR against `feat/meta-agent`
-- Log every iteration in `meta_agent_log.md`:
+
+**Experiment journal** — `experiments/meta_agent_log.md` in the repo, committed to `feat/meta-agent`.
+This is shared state: it tracks *why* each fix was made, which is as important as the fix itself.
+Raw results dirs (`~/cube_harness_results/`) stay local (too large, machine-specific).
+
+Append one entry per iteration when committing the fix PR:
 
 ```markdown
 ## Iteration N — YYYY-MM-DD
@@ -169,6 +176,7 @@ Key `GennyConfig` levers: `render_last_n_obs`, `max_obs_chars`, `enable_summariz
 | | |
 |---|---|
 | Recipe | `recipes/meta_agent_web_recipe.py` |
+| Journal | `experiments/meta_agent_log.md` |
 | Genny | `src/cube_harness/agents/genny.py` |
 | Results API | `src/cube_harness/results.py` |
 | Results root | `~/cube_harness_results/` |
