@@ -201,7 +201,7 @@ class WorkArenaTask(Task):
             return self._browser_tool._chat_messages_ref
         return self._chat_tool.messages if self._chat_tool else []
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
@@ -209,7 +209,7 @@ class WorkArenaTask(Task):
         reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
         return reward, {"done": done, **task_info}
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")

@@ -245,7 +245,7 @@ class OSWorldTask(Task):
         }
         return obs, info
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict]:
         """
         Call the task evaluator and return (reward, info).
 
@@ -268,7 +268,7 @@ class OSWorldTask(Task):
             "expected": evaluator_cfg.get("expected", {}),
         }
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         """Return True if the task has reached a terminal state (done() or fail() called)."""
         return self._computer._is_done
 
