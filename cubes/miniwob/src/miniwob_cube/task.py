@@ -12,6 +12,17 @@ logger = logging.getLogger(__name__)
 
 _SUPPORTED_ACTION_NAMES = frozenset(
     {
+        # Native bgym action names (thin-wrapper API, BrowsergymConfig)
+        "press",
+        "fill",
+        "click",
+        "dblclick",
+        "drag_and_drop",
+        "hover",
+        "select_option",
+        "scroll",
+        "noop",
+        # Legacy BidBrowserActionSpace names (PlaywrightConfig / old bgym wrapper)
         "browser_press_key",
         "browser_type",
         "browser_click",
