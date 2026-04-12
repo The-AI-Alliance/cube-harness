@@ -23,7 +23,33 @@ WORKARENA_DEFAULT_HINT: str = ""
 # Iteration history:
 #   v1 (2026-04-10): chart tasks all failed because agent didn't know to call send_message.
 #                    Sort tasks failed because agent clicked column headers instead of filter UI.
+#   v2 (2026-04-12): create tasks: added submit_form() hint. The visible "Submit" buttons call
+#                    sysverb_insert_and_stay which navigates to a new empty form without saving.
+#                    submit_form() calls gsftSubmit() directly in gsft_main, triggering WorkArena's
+#                    validation patch that writes localStorage (required for reward). Verified via
+#                    localStorage inspection that the sys_id key is correctly written when
+#                    submit_form() is used.
+#                    Reference fields (Caller, Assignment Group, etc.) require keyboard_type_into
+#                    to trigger autocomplete — browser_type bypasses keyboard events.
+
+_CREATE_HINT: str = (
+    "To submit the form: call `submit_form()` — do NOT click the visible Submit button. "
+    "The Submit button uses sysverb_insert_and_stay which navigates away without saving. "
+    "submit_form() calls the correct save action that records the result. "
+    "For reference fields that show an autocomplete dropdown (e.g. Caller, Assignment group, "
+    "Configuration item): use `keyboard_type_into(bid=<field_bid>, text=<value>)` to type "
+    "character-by-character, which triggers the autocomplete. After typing, wait one step "
+    "(noop), then find the suggestion in the AXTree and click it. "
+    "For plain text or select fields, use browser_type() or browser_select_option() as usual."
+)
+
 WORKARENA_TASK_HINTS: dict[str, str] = {
+    # --- Create tasks ---
+    "workarena.servicenow.create-incident": _CREATE_HINT,
+    "workarena.servicenow.create-hardware-asset": _CREATE_HINT,
+    "workarena.servicenow.create-change-request": _CREATE_HINT,
+    "workarena.servicenow.create-user": _CREATE_HINT,
+    "workarena.servicenow.create-problem": _CREATE_HINT,
     # --- Chart tasks ---
     # Single-chart: agent reads the single numeric value from the AXTree chart region
     # and must respond with ONLY the number (no label, no units).

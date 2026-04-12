@@ -6,7 +6,7 @@ from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.core import Content, EnvironmentOutput, Observation, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from cube.tool import ToolConfig
 from opentelemetry.trace import StatusCode
@@ -246,7 +246,7 @@ class Episode:
                     with tracer.step(f"turn_{turns}") as span:
                         ts = time.time()
                         try:
-                            agent_output = agent.step(env_output.obs)
+                            agent_output = agent.step(_obs_with_validation_message(env_output))
                         except Exception as e:
                             logger.exception(f"Error in agent.step() at turn {turns}: {e}")
                             agent_output = AgentOutput(error=StepError.from_exception(e))
@@ -367,3 +367,23 @@ def _compute_summary_stats(traj: Trajectory) -> dict:
         "cost": cost,
         "final_reward": final_reward,
     }
+
+
+def _obs_with_validation_message(env_output: EnvironmentOutput) -> Observation:
+    """Return obs augmented with the task's validation message, if any.
+
+    WorkArena (and other tasks) set env_output.info['message'] to explain why the
+    task is not yet solved (e.g. 'The form has not been submitted.'). Without this,
+    the agent never sees why it's failing and has no signal to correct its approach.
+
+    The message is appended after all other content (not prepended) so that
+    tool-role messages (which must follow assistant tool_calls) remain at the
+    start of the content list. Genny's _windowed_history strips leading tool-role
+    messages, which would remove the validation message if it were first.
+    No message is added when done=True (episode over) or when the message is empty.
+    """
+    message = (env_output.info or {}).get("message", "")
+    if not message or env_output.done:
+        return env_output.obs
+    msg_content = Content.from_data(f"[Task feedback] {message}", name="validation_message")
+    return Observation(contents=list(env_output.obs.contents) + [msg_content])

@@ -27,6 +27,12 @@ from pydantic import Field
 
 from cube_harness.tool import ToolWithTelemetry
 
+try:
+    from cube.tool import tool_action
+except ImportError:  # pragma: no cover — older cube versions
+    def tool_action(fn):  # type: ignore[misc]
+        return fn
+
 logger = logging.getLogger(__name__)
 
 
@@ -205,6 +211,113 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         return result
 
     # === Observation extraction ===
+
+    # === Extra actions (not in BidBrowserActionSpace protocol) ===
+
+    @tool_action
+    def keyboard_type_into(self, bid: str, text: str) -> str:
+        """Type text character-by-character into a BID element, firing keyboard events per character.
+
+        Use this instead of browser_type() for autocomplete fields (e.g. ServiceNow reference
+        fields like Caller, Assignment group) where fill() bypasses keyboard events and
+        autocomplete suggestions never appear. press_sequentially() fires keydown+input+keyup
+        per character, triggering autocomplete dropdowns.
+        """
+        logger.info(f"keyboard_type_into: bid={bid!r} text={text!r}")
+        result = "Success"
+        try:
+            frame = self._get_frame_for_bid(bid)
+            locator = frame.get_by_test_id(bid)
+            locator.press_sequentially(text, delay=50)
+        except Exception as e:
+            result = f"Failed: {type(e).__name__}: {e}"
+        self._last_obs = self._extract_bgym_obs()
+        self._last_info = {"source": "action", "action": f"keyboard_type_into({bid!r})", "action_error": "" if result == "Success" else result}
+        self._last_reward = 0.0
+        self._last_terminated = False
+        return result
+
+    @tool_action
+    def submit_form(self) -> str:
+        """Submit a ServiceNow create-record form by calling gsftSubmit() directly in gsft_main.
+
+        The visible React Submit buttons bypass WorkArena's gsftSubmit hook (they use
+        sysverb_insert_and_stay, which navigates to a new empty form without writing localStorage).
+        Calling gsftSubmit() directly in the gsft_main iframe triggers the WorkArena validation
+        patch which writes localStorage[session_sys_id_field] before submitting. Use this
+        instead of clicking the visible Submit button on ServiceNow create-record tasks.
+        """
+        result = "Success"
+        try:
+            gsft_frame = next((f for f in self.page.frames if f.name == "gsft_main"), None)
+            if gsft_frame is None:
+                return "Failed: gsft_main frame not found — not on a ServiceNow form"
+            # Find a real form element and set sys_action so old_gsftSubmit doesn't throw.
+            # WorkArena's patch writes localStorage[session_sys_id_field] before calling
+            # old_gsftSubmit, but old_gsftSubmit throws when form.sys_action is null.
+            # Wrapping in try/catch (JS side) lets the localStorage write complete even if
+            # old_gsftSubmit throws, and the returned dict lets us diagnose what happened.
+            ls_info: dict = gsft_frame.evaluate(
+                """() => {
+                    const btn = document.querySelector('#sysverb_insert');
+                    const form = document.querySelector('form');
+                    if (form) { form.sys_action = 'sysverb_insert'; }
+                    let gsftError = null;
+                    try {
+                        gsftSubmit(btn, form || null, 'sysverb_insert');
+                    } catch(e) {
+                        gsftError = e.message;
+                    }
+                    // Collect relevant localStorage keys for diagnosis
+                    const lsKeys = Object.keys(localStorage).filter(k => k.includes('sys_id') || k.includes('session'));
+                    const lsSnapshot = {};
+                    lsKeys.forEach(k => { lsSnapshot[k] = localStorage.getItem(k); });
+                    return {gsftError, lsSnapshot};
+                }"""
+            )
+            ls_snapshot = ls_info.get("lsSnapshot", {})
+            gsft_error = ls_info.get("gsftError")
+            if gsft_error:
+                logger.info(f"submit_form: gsftSubmit threw (expected): {gsft_error}")
+            logger.info(f"submit_form: localStorage sys_id keys after call: {ls_snapshot}")
+            if not ls_snapshot:
+                result = "Failed: gsftSubmit completed but no sys_id written to localStorage"
+        except Exception as e:
+            result = f"Failed: {type(e).__name__}: {e}"
+        self._last_obs = self._extract_bgym_obs()
+        self._last_info = {"source": "action", "action": "submit_form()", "action_error": "" if result == "Success" else result}
+        self._last_reward = 0.0
+        self._last_terminated = False
+        return result
+
+    @tool_action
+    def js_eval(self, code: str, frame: str = "main") -> str:
+        """Evaluate JavaScript in the browser and return the JSON-serialized result.
+
+        Useful for inspecting DOM state, reading localStorage, checking field values,
+        or diagnosing why an action isn't working as expected.
+
+        Args:
+            code: JavaScript expression to evaluate. The result is JSON-serialized.
+                  Example: "document.title"
+                  Example: "JSON.stringify(localStorage)"
+                  Example: "g_form.getUniqueValue()"
+            frame: Frame to evaluate in. "main" = top-level page. Any other string
+                   is matched against iframe names (e.g. "gsft_main" for ServiceNow).
+        """
+        import json
+
+        try:
+            if frame == "main":
+                target = self.page
+            else:
+                target = next((f for f in self.page.frames if f.name == frame), None)
+                if target is None:
+                    return f"Failed: frame {frame!r} not found"
+            raw = target.evaluate(f"() => {{ try {{ return {code}; }} catch(e) {{ return 'JS error: ' + e.message; }} }}")
+            return json.dumps(raw, default=str)
+        except Exception as e:
+            return f"Failed: {type(e).__name__}: {e}"
 
     def _extract_bgym_obs(self) -> dict[str, Any]:
         page = self.page
