@@ -33,14 +33,16 @@ WORKARENA_DEFAULT_HINT: str = ""
 #                    to trigger autocomplete — browser_type bypasses keyboard events.
 
 _CREATE_HINT: str = (
-    "To submit the form: call `submit_form()` — do NOT click the visible Submit button. "
-    "The Submit button uses sysverb_insert_and_stay which navigates away without saving. "
-    "submit_form() calls the correct save action that records the result. "
+    "Read the task goal carefully and fill in EVERY field it specifies before submitting. "
+    "Missing even one field will result in failure — do not skip any. "
     "For reference fields that show an autocomplete dropdown (e.g. Caller, Assignment group, "
     "Configuration item): use `keyboard_type_into(bid=<field_bid>, text=<value>)` to type "
     "character-by-character, which triggers the autocomplete. After typing, wait one step "
     "(noop), then find the suggestion in the AXTree and click it. "
-    "For plain text or select fields, use browser_type() or browser_select_option() as usual."
+    "For plain text fields, use browser_type(). For dropdowns/selects, use browser_select_option(). "
+    "To submit the form: call `submit_form()` — do NOT click the visible Submit button. "
+    "The Submit button navigates away without saving. submit_form() calls the correct action. "
+    "IMPORTANT: submit_form() is final — once called the episode ends, so set ALL fields first."
 )
 
 WORKARENA_TASK_HINTS: dict[str, str] = {
