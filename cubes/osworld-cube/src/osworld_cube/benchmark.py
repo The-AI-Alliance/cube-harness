@@ -233,14 +233,13 @@ class OSWorldBenchmark(Benchmark):
         provider = type(self.infra).__name__ if self.infra else "none"
         logger.info(f"Setting up OSWorldBenchmark (provider={provider})...")
 
-        # Seting up infrastructure (provisioning VM images)
-        if isinstance(self.infra, LocalInfraConfig):
-            for resource in self.resources:
-                if self.infra.provision_status(resource) == "ready":
-                    logger.info("Local resource %s already provisioned", resource.name)
-                    continue
-                logger.info("Provisioning local resource %s...", resource.name)
-                self.infra.provision(resource)
+        # Setting up infrastructure (provisioning VM images)
+        for resource in self.resources:
+            if self.infra.provision_status(resource) == "ready":
+                logger.info("Local resource %s already provisioned", resource.name)
+                continue
+            logger.info("Provisioning local resource %s...", resource.name)
+            self.infra.provision(resource)
 
         # OSWorld manages its own VM lifecycle via desktop_env — no shared runtime
         # infrastructure is needed. Populate _runtime_context to suppress the
