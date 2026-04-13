@@ -1,15 +1,15 @@
 import logging
 import os
 from typing import Dict
-from xml.etree import ElementTree
 from urllib.parse import urlparse
+from xml.etree import ElementTree
 
 import cv2
 import imagehash
 import librosa
 import numpy as np
-from PIL import Image
 from fastdtw import fastdtw
+from PIL import Image
 from scipy.spatial.distance import cosine
 from skimage.metrics import structural_similarity as ssim
 

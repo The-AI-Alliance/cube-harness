@@ -1,7 +1,7 @@
 import importlib.util
 import json
-import sys
 import re
+import sys
 import zipfile
 from difflib import SequenceMatcher
 from typing import Dict
@@ -218,9 +218,9 @@ def check_python_file_by_test_suite(actual_files, test_file, **options) -> float
     - Proper resource cleanup
     - Working directory management
     """
+    import logging
     import os
     import uuid
-    import logging
     from pathlib import Path
 
     logger = logging.getLogger(__name__)

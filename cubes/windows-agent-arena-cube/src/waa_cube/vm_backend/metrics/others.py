@@ -2,8 +2,7 @@ import logging
 import os
 import os.path
 import zipfile
-from typing import List, Dict
-from typing import Union, TypeVar
+from typing import Dict, List, TypeVar, Union
 
 import lxml.html
 from lxml.html import HtmlElement

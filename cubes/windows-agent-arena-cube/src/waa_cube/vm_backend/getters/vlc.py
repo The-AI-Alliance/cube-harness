@@ -1,7 +1,7 @@
 import logging
 import os
-from typing import Dict
 from collections import Counter
+from typing import Dict
 
 import requests
 

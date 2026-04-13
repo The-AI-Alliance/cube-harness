@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Union
+from typing import Dict
 
 logger = logging.getLogger("waa_cube.vm_backend.metrics.edge")
 

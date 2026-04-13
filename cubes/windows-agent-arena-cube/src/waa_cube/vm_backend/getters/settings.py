@@ -46,7 +46,7 @@ def get_default_browser(env, config: Dict[str, str]):
     result = env.controller.get_registry_key(key_path, setting_path)
     try:
         decoded_result = result["output"].split("\n")[0]
-    except Exception as e:
+    except Exception:
         return "Error"
     return decoded_result
 
@@ -109,7 +109,7 @@ def get_system_timezone(env, config: Dict[str, str]):
 
         if display_name and standard_name:
             return display_name
-    except Exception as e:
+    except Exception:
         return "Error getting the timezone"
     return "Unable to get time zone"
 
@@ -125,7 +125,7 @@ def get_desktop_background(env, config: Dict[str, str]):
     try:
         if wallpaper_path == "":
             return "True"
-    except Exception as e:
+    except Exception:
         return "error"
     return "False"
 
@@ -150,6 +150,6 @@ def get_system_notifications(env, config: Dict[str, str]):
                 return "True"
         else:
             return "False"
-    except Exception as e:
+    except Exception:
         print("Error retrieving notification setting")
         return "Uanble to get the notifications settings state"

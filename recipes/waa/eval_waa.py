@@ -90,13 +90,24 @@ def main(debug: bool) -> None:
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
         vm_backend=WAADockerVMBackend(
-            cpu_cores=8,  # Match WAA's default VM sizing.
+            cpu_cores=4,  # Reduced for 16-core machine with 2 parallel workers
         ),
         # tasks_file=tasks_file,
         test_set_name="test_small.json",
     )
     benchmark.install()
     benchmark.setup()
+
+    # Exclude chrome/msedge tasks: Chrome DevTools (CDP) setup has a timing
+    # issue — Playwright gets a 502 connecting to the CDP port before Chrome
+    # is fully ready.  Until the setup_controller adds a CDP-readiness retry,
+    # skip these domains to avoid false failures.
+    keep_ids = [
+        tid
+        for tid, meta in benchmark.task_metadata.items()
+        if meta.extra_info.get("domain") not in ("chrome", "msedge")
+    ]
+    benchmark = benchmark.subset_from_list(keep_ids)
 
     exp = Experiment(
         name="waa_genny_gpt5",
@@ -120,9 +131,9 @@ def main(debug: bool) -> None:
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print("Parallelism: 3 workers")
+        print("Parallelism: 2 workers")
         print("=" * 60 + "\n")
-        run_with_ray(exp, n_cpus=3)
+        run_with_ray(exp, n_cpus=2)
 
 
 if __name__ == "__main__":

@@ -9,8 +9,7 @@ import os
 import re
 import sqlite3
 from numbers import Number
-from typing import Callable, Any, Union
-from typing import Dict, List, Pattern
+from typing import Any, Callable, Dict, List, Pattern, Union
 
 import lxml.etree
 import pdfplumber

@@ -3,20 +3,7 @@ import logging
 import os
 import platform
 import sqlite3
-from io import BytesIO, StringIO
-from contextlib import redirect_stdout
-from typing import Dict, Any, List
-from urllib.parse import unquote, urlparse, parse_qs
-
-import lxml.etree
-import requests
-from lxml.cssselect import CSSSelector
-from lxml.etree import _Element
-from playwright.sync_api import sync_playwright, expect
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive, GoogleDriveFileList, GoogleDriveFile
-
-import LnkParse3
+from typing import Dict
 
 logger = logging.getLogger("waa_cube.vm_backend.getters.edge")
 

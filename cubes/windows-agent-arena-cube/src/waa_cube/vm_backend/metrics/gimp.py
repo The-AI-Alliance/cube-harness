@@ -1,11 +1,11 @@
-import os
 import logging
+import os
 from typing import List, Union
 
 import cv2
 import numpy as np
-from skimage.metrics import structural_similarity as ssim
 from PIL import Image, ImageChops, ImageStat
+from skimage.metrics import structural_similarity as ssim
 
 
 def compare_image_list(pred_img_path_list: Union[str, List[str]], gold_img_path_list: Union[str, List[str]]) -> float:
@@ -593,9 +593,9 @@ def safe_open_image_with_retry(file_path, max_retries=3, retry_delay=0.5):
     """
     Safely open an image file with retry mechanism for handling truncated files
     """
+    import logging
     import os
     import time
-    import logging
 
     logger = logging.getLogger(__name__)
 

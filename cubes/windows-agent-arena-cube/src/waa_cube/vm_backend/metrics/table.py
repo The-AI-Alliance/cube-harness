@@ -5,8 +5,7 @@ import os.path
 
 # import operator
 from numbers import Number
-from typing import Any, Union, cast, Callable
-from typing import Dict, List, Tuple, Set
+from typing import Any, Callable, Dict, List, Set, Tuple, Union, cast
 
 import openpyxl
 import pandas as pd
@@ -21,15 +20,13 @@ from rapidfuzz import fuzz
 from waa_cube.vm_backend.metrics.utils import (
     _match_value_to_rule,
     _read_cell_style,
-    read_cell_value,
-)
-from waa_cube.vm_backend.metrics.utils import (
     load_charts,
-    load_sparklines,
-    load_rows_or_cols,
-    load_xlsx_styles,
     load_filters,
     load_pivot_tables,
+    load_rows_or_cols,
+    load_sparklines,
+    load_xlsx_styles,
+    read_cell_value,
 )
 
 # from openpyxl.utils import coordinate_to_tuple

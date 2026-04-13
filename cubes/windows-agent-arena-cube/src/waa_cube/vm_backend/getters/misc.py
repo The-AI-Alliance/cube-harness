@@ -1,6 +1,7 @@
 import logging
-from typing import TypeVar, Dict
 from datetime import datetime, timedelta
+from typing import Dict, TypeVar
+
 import pytz
 import requests
 

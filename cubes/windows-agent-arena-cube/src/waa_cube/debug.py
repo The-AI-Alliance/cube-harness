@@ -134,8 +134,10 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 
 if __name__ == "__main__":
     import sys
-    import waa_cube.debug as _mod
+
     from cube.testing import run_debug_suite
+
+    import waa_cube.debug as _mod
 
     logging.basicConfig(
         level=logging.INFO,

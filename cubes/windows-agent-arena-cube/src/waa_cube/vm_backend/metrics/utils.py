@@ -10,13 +10,13 @@ import re
 import zipfile
 
 # import pandas as pd
-from typing import Any, TypeVar, Union, Iterable, Optional, Callable
-from typing import Dict, List, Set, Match, Tuple, Pattern
-from urllib.parse import urlparse, urlunparse, ParseResult
+from typing import Any, Callable, Dict, Iterable, List, Match, Optional, Pattern, Set, Tuple, TypeVar, Union
+from urllib.parse import ParseResult, urlparse, urlunparse
 
 import formulas
 import lxml.cssselect
 import lxml.etree
+import tldextract
 import xmltodict
 from lxml.etree import _Element
 from openpyxl import Workbook
@@ -27,11 +27,10 @@ from openpyxl.pivot.cache import CacheSource as PivotCacheSource
 from openpyxl.pivot.table import TableDefinition as PivotTableDefinition
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import coordinate_to_tuple, get_column_letter
-from openpyxl.worksheet.cell_range import MultiCellRange, CellRange
+from openpyxl.worksheet.cell_range import CellRange, MultiCellRange
 from openpyxl.worksheet.dimensions import DimensionHolder
 from openpyxl.worksheet.filters import AutoFilter, SortState
 from openpyxl.worksheet.worksheet import Worksheet
-import tldextract
 
 V = TypeVar("Value")
 

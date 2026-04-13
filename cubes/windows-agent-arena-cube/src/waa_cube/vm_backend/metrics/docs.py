@@ -1,26 +1,24 @@
 import logging
 import os
 import re
+import struct
+import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
-import tempfile
-import subprocess
-import struct
-import numpy as np
 from io import BytesIO
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 import easyocr
-from PIL import Image
+import numpy as np
 from docx import Document
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_TAB_ALIGNMENT
 from docx.shared import RGBColor
 from odf.opendocument import load
-from odf.text import P
-from odf.text import Span
+from odf.text import P, Span
+from PIL import Image
 from rapidfuzz import fuzz
-from skimage.color import deltaE_ciede2000
-from skimage.color import rgb2lab
+from skimage.color import deltaE_ciede2000, rgb2lab
 
 logger = logging.getLogger("desktopenv.metric.docs")
 
