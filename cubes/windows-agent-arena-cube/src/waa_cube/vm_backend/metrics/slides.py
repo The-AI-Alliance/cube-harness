@@ -4,8 +4,8 @@ import zipfile
 from math import sqrt
 
 from pptx import Presentation
-from pptx.util import Inches
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.util import Inches
 
 logger = logging.getLogger("desktopenv.metric.slides")
 

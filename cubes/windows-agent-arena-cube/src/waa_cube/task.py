@@ -17,15 +17,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from PIL import Image
-from pydantic import PrivateAttr
-
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers WAATask.model_rebuild()
 from cube.core import Observation
 from cube.task import Task
 from cube.vm import VM, VMBackend, VMConfig
-
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
+from PIL import Image
+from pydantic import PrivateAttr
 
 from waa_cube.vm_backend.evaluator import Evaluator
 from waa_cube.vm_backend.setup_controller import SetupController
@@ -113,6 +111,13 @@ class WAATask(Task):
             snapshot = task_data.get("snapshot", "init_state")
             self._vm.restore_snapshot(snapshot)
 
+        # Refresh port forwarders immediately after snapshot restore so that
+        # setup steps (which call the Flask server through host port mapping)
+        # have working connectivity.
+        if hasattr(self._vm, "refresh_proxies"):
+            logger.info("Refreshing port forwarders after snapshot reset")
+            self._vm.refresh_proxies()
+
         setup_steps = task_data.get("config") or []
         if setup_steps:
             chromium_port, vlc_port, _ = self._get_vm_ports()
@@ -132,10 +137,6 @@ class WAATask(Task):
         if did_something:
             logger.info("Waiting %ds for VM to stabilise...", _POST_SNAPSHOT_SLEEP)
             time.sleep(_POST_SNAPSHOT_SLEEP)
-
-        if hasattr(self._vm, "refresh_proxies"):
-            logger.info("Refreshing iptables DNAT rules after snapshot reset")
-            self._vm.refresh_proxies()
 
         return self._computer.get_observation()
 

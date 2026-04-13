@@ -28,9 +28,8 @@ from typing import Optional
 import docker
 import docker.errors
 import requests
-from dotenv import load_dotenv
-
 from cube.vm import VM, VMBackend, VMConfig
+from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
@@ -71,6 +70,7 @@ def _release_port_reservation(lock_path: str) -> None:
         os.remove(lock_path)
     except OSError:
         pass
+
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +275,7 @@ class WAADockerManager:
         self._start_container()
         self._wait_for_ready()
         self._start_proxies()
+        self._verify_host_connectivity()
 
     def _container_status(self) -> str:
         """Return the current Docker status for the managed container."""
@@ -326,36 +327,36 @@ class WAADockerManager:
             logger.warning("Could not check for stale containers: %s", exc)
 
     def _start_proxies(self) -> None:
-        """Set up iptables DNAT rules to forward container ports to the Windows VM.
+        """No-op: the dockurr/windows base image handles port forwarding natively.
 
-        The Windows guest runs at 20.20.20.21 on the container's TAP network.
-        Docker maps host ports → container ports (5000, 9222, 8080), but nothing
-        listens on those container ports directly. iptables PREROUTING DNAT
-        redirects incoming traffic on those ports to the VM. POSTROUTING
-        MASQUERADE ensures return packets route correctly through the bridge.
-
-        The WAA container runs with NET_ADMIN and network.sh already enables
-        ip_forward, so only the per-port DNAT rules need adding here.
+        The base image's networking scripts set up iptables DNAT rules from the
+        container's interface to the Windows VM at 20.20.20.21.  Docker port
+        mapping (host → container) combined with the base image's DNAT
+        (container → VM) provides end-to-end connectivity without any extra
+        forwarders.
         """
-        vm_ip = "20.20.20.21"
-        self._require_running_container("refresh guest port proxies")
 
-        self._container.exec_run(
-            "/bin/bash -c 'iptables -t nat -A POSTROUTING -d 20.20.20.21 -j MASQUERADE 2>/dev/null || true'",
-            demux=False,
+    def _verify_host_connectivity(self) -> None:
+        """Verify the host can reach the VM Flask server through the port-forwarding chain.
+
+        Raises RuntimeError if the probe fails after retries.
+        """
+        url = f"http://localhost:{self._server_port}/probe"
+        for attempt in range(12):
+            try:
+                resp = requests.get(url, timeout=5)
+                if resp.status_code == 200:
+                    logger.info("Host→VM connectivity verified via %s", url)
+                    return
+                logger.debug("Probe returned %d (attempt %d/12)", resp.status_code, attempt + 1)
+            except Exception:
+                logger.debug("Probe failed (attempt %d/12), retrying in 5s…", attempt + 1)
+            time.sleep(5)
+        raise RuntimeError(
+            f"Cannot reach WAA VM from host via {url} after 60s.\n"
+            "Port forwarding from host → Docker container → VM is not working.\n"
+            "Check that the container is running and the VM Flask server is up."
         )
-
-        for port in [5000, 9222, 8080]:
-            cmd = (
-                f"iptables -t nat -A PREROUTING -i eth0 -p tcp --dport {port} "
-                f"-j DNAT --to-destination {vm_ip}:{port} 2>&1"
-            )
-            result = self._container.exec_run(f"/bin/bash -c '{cmd}'", demux=False)
-            if result.exit_code != 0:
-                output = result.output.decode("utf-8", errors="replace").strip() if result.output else ""
-                logger.warning("Failed to set up DNAT for port %d: %s", port, output)
-            else:
-                logger.debug("Set up DNAT: container eth0:%d → %s:%d", port, vm_ip, port)
 
     def _pull_image_if_needed(self) -> None:
         if self.pull_policy == "always":
@@ -395,7 +396,12 @@ class WAADockerManager:
         )
         self._container = self._client.containers.run(
             self.image,
-            command="/entry.sh --prepare-image false --start-client false",
+            # Pass as a single-element list so Docker does not split it.
+            # The image ENTRYPOINT is ["/bin/bash", "-c"], so Docker runs:
+            #   bash -c "/entry.sh --prepare-image false --start-client false"
+            # If we pass a plain string, the SDK splits it into a list and
+            # the args become bash positional params instead of entry.sh args.
+            command=["/entry.sh --prepare-image false --start-client false"],
             name=self._container_name,
             detach=True,
             cap_add=["NET_ADMIN"],
@@ -557,8 +563,11 @@ class WAADockerVM(VM):
         self._manager.restore_snapshot(name)
 
     def refresh_proxies(self) -> None:
-        """Re-apply iptables DNAT rules after a network reset (e.g. post-close_all)."""
-        self._manager._start_proxies()
+        """No-op: the base image's iptables DNAT rules persist across snapshot restores.
+
+        Snapshot restores only call /setup/close_all on the Windows guest, which
+        does not affect the container's network namespace or iptables rules.
+        """
 
     def is_alive(self) -> bool:
         """Return True if the underlying Docker container is still running."""
@@ -693,8 +702,8 @@ class WAADockerVMBackend(VMBackend):
         )
         container = client.containers.run(
             self.waa_image,
-            command="-c '/entry.sh --prepare-image true --start-client false'",
-            entrypoint="/bin/bash",
+            command=["-c", "/entry.sh --prepare-image true --start-client false"],
+            entrypoint=["/bin/bash"],
             detach=True,
             cap_add=["NET_ADMIN"],
             devices=devices,

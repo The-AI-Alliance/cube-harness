@@ -4,16 +4,15 @@ import os
 import platform
 import sqlite3
 import time
-from urllib.parse import unquote
-from typing import Dict, Any
-from urllib.parse import urlparse, parse_qs
+from typing import Any, Dict
+from urllib.parse import parse_qs, unquote, urlparse
 
 import lxml.etree
 import requests
 from lxml.cssselect import CSSSelector
 from playwright.sync_api import sync_playwright
 from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive, GoogleDriveFileList, GoogleDriveFile
+from pydrive.drive import GoogleDrive, GoogleDriveFile, GoogleDriveFileList
 
 _accessibility_ns_map = {
     "st": "uri:deskat:state.at-spi.gnome.org",
@@ -2382,7 +2381,7 @@ def get_macys_product_url_parse(env, config: Dict[str, str]):
     - Men_regular_size_t, Price_discount_range (as list), Sleeve_length: as before, None if not found
     All fields are None if not found for robustness.
     """
-    from urllib.parse import urlparse, unquote
+    from urllib.parse import unquote, urlparse
 
     result = {}
     # 1. Parse URL

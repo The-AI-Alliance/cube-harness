@@ -20,9 +20,8 @@ from pathlib import Path
 from typing import Any, Union
 
 import requests
-from requests_toolbelt.multipart.encoder import MultipartEncoder
-
 from cube_computer_tool.guest_agent import GuestAgent
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 logger = logging.getLogger(__name__)
 

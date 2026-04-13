@@ -1,5 +1,6 @@
 import logging
 from typing import Dict
+
 import requests
 
 logger = logging.getLogger("waa_cube.vm_backend.getters.general")
