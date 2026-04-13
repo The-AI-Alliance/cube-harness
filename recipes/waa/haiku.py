@@ -105,12 +105,23 @@ def main(debug: bool) -> None:
     tasks_file = str(Path(waa_cube.__file__).parent / "debug_tasks.json") if debug else None
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
-        vm_backend=WAADockerVMBackend(),
+        vm_backend=WAADockerVMBackend(cpu_cores=4),
         tasks_file=tasks_file,
         test_set_name="test_small.json",
     )
     benchmark.install()
     benchmark.setup()
+
+    # Exclude chrome/msedge tasks: Chrome DevTools (CDP) setup has a timing
+    # issue — Playwright gets a 502 connecting to the CDP port before Chrome
+    # is fully ready.
+    if not debug:
+        keep_ids = [
+            tid
+            for tid, meta in benchmark.task_metadata.items()
+            if meta.extra_info.get("domain") not in ("chrome", "msedge")
+        ]
+        benchmark = benchmark.subset_from_list(keep_ids)
 
     exp = Experiment(
         name="waa_genny_haiku_3obs_100actions",
@@ -134,9 +145,9 @@ def main(debug: bool) -> None:
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print("Parallelism: 3 workers")
+        print("Parallelism: 2 workers")
         print("=" * 60 + "\n")
-        run_with_ray(exp, n_cpus=3)
+        run_with_ray(exp, n_cpus=2)
 
 
 if __name__ == "__main__":
