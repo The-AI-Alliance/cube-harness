@@ -138,14 +138,36 @@ def archive_experiment(results_dir: Path, exp_name: str) -> None:
 
 def _is_experiment_dir(dir_path: Path) -> bool:
     """Return True if dir_path is a valid (non-archived) experiment directory."""
-    return dir_path.is_dir() and not dir_path.name.startswith("_") and (dir_path / "trajectories").exists()
+    if not dir_path.is_dir() or dir_path.name.startswith("_"):
+        return False
+    if (dir_path / "episodes").exists():
+        return True
+    if (dir_path / "trajectories").exists():
+        return True
+    return any(
+        f.name.endswith(".metadata.json") and ".archived_" not in f.name for f in dir_path.glob("*.metadata.json")
+    )
+
+
+def _count_episodes(dir_path: Path) -> int:
+    episodes_dir = dir_path / "episodes"
+    if episodes_dir.exists():
+        return sum(1 for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name)
+    n = len([f for f in dir_path.glob("*.metadata.json") if ".archived_" not in f.name])
+    if n > 0:
+        return n
+    traj_dir = dir_path / "trajectories"
+    if traj_dir.exists():
+        return len([f for f in traj_dir.glob("*.metadata.json") if ".archived_" not in f.name])
+    return 0
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
     """Return sorted list of experiment directory names with trajectory counts.
 
     Returns ["Select experiment directory"] + names sorted most-recent first.
-    Only includes non-archived directories that contain a 'trajectories/' subdirectory.
+    Includes directories that have trajectory metadata in the same dir (flat layout)
+    or under a ``trajectories/`` subdirectory (legacy).
     Directories whose names start with '_' (e.g. _archive) are excluded.
     """
     sentinel = "Select experiment directory"
@@ -156,7 +178,7 @@ def get_directory_contents(results_dir: Path) -> list[str]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
+        n_trajs = _count_episodes(dir_path)
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return [sentinel] + sorted(exp_descriptions, reverse=True)
@@ -198,16 +220,18 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
 
     Columns: selected (bool), experiment (str), date (str), n_trajs (int).
     The date column contains "YYYY-MM-DD HH:MM" when a time is available.
-    Only includes directories that contain a 'trajectories/' subdirectory.
+    Counts trajectories via ``*.metadata.json`` in the experiment dir (flat layout)
+    or under ``trajectories/`` (legacy), matching :func:`get_directory_contents`.
     Sorted most-recent first (ISO datetime strings sort lexicographically).
     """
     if not results_dir or not results_dir.exists():
         return []
+
     rows = []
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = len(list((dir_path / "trajectories").glob("*.jsonl")))
+        n_trajs = _count_episodes(dir_path)
         rows.append(
             {
                 "selected": False,
@@ -766,6 +790,8 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
     duration, prompt_tokens, completion_tokens, cached_tokens, cache_creation_tokens,
     cost, final_reward.
     """
+    if traj.summary_stats:
+        return traj.summary_stats
     n_env_steps = 0
     n_agent_steps = 0
     total_actions = 0

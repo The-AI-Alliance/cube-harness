@@ -1,3 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "cube-harness",
+#     "workarena-cube",
+# ]
+#
+# [tool.uv.sources]
+# cube-harness = { path = "..", editable = true }
+# workarena-cube = { path = "../cubes/workarena", editable = true }
+# ///
+
 """Example recipe for running WorkArena benchmark with cube-harness.
 
 This recipe demonstrates how to run WorkArena tasks using the BrowserGym tool.
@@ -27,7 +39,10 @@ Usage:
 
 import sys
 
+from cube.tool import ToolboxConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
+from cube_chat_tool import ChatToolConfig
+from workarena_cube.benchmark import WorkArenaBenchmark
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -36,12 +51,6 @@ from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
-
-try:
-    from workarena_cube.benchmark import WorkArenaBenchmark
-except ImportError:
-    print("WorkArena benchmark requires 'workarena-cube'. Run `make install` to install all optional dependencies.")
-    sys.exit(1)
 
 _LLM = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
 
@@ -66,11 +75,16 @@ def main(debug: bool, agent: str) -> None:
     agent_config = AGENTS[agent]
     output_dir = make_experiment_output_dir(agent, "workarena", tag="l1")
 
-    tool_config = BrowsergymConfig(
-        browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
-        use_screenshot=True,
-        use_axtree=True,
-        use_html=False,
+    tool_config = ToolboxConfig(
+        tool_configs=[
+            BrowsergymConfig(
+                browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
+                use_screenshot=True,
+                use_axtree=True,
+                use_html=False,
+            ),
+            ChatToolConfig(),
+        ]
     )
 
     # Configure WorkArena benchmark

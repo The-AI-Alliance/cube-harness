@@ -6,6 +6,9 @@
 tmp/
 temp/
 
+# Personal experiment recipes (shared recipes are committed without the custom_ prefix)
+recipes/custom_*
+
 # Releases
 releases/*.temp
 

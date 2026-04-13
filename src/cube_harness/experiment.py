@@ -52,7 +52,7 @@ class Experiment(TypedBaseModel):
         storage = FileStorage(self.output_dir)
         config_files = storage.list_episode_configs()
         if not config_files:
-            logger.warning(f"No episode configs found in {self.output_dir / 'episode_configs'}, creating from scratch")
+            logger.warning(f"No episode configs found in {self.output_dir}, creating from scratch")
             return self._create_all_episodes()
 
         started_ids = self._load_started_trajectory_ids()
@@ -86,6 +86,8 @@ class Experiment(TypedBaseModel):
                     task_config=tc,
                     exp_name=self.name,
                     max_steps=self.max_steps,
+                    runtime_context=self.benchmark._runtime_context,
+                    container_backend=self.benchmark.container_backend,
                 )
                 for i, tc in enumerate(task_configs)
             ]
@@ -130,6 +132,17 @@ class Experiment(TypedBaseModel):
             data = json.load(f)
         return cls.model_validate(data)
 
+    def _trajectory_id_from_config(self, config_file: Path) -> str | None:
+        """Return trajectory_id for a config file, handling both V2 and V1 filename formats."""
+        if config_file.name == "episode_config.json":
+            # V2: trajectory_id is the parent directory name
+            return config_file.parent.name
+        parsed = self._parse_episode_config_filename(config_file)
+        if parsed:
+            episode_id, task_id = parsed
+            return f"{task_id}_ep{episode_id}"
+        return None
+
     def _parse_episode_config_filename(self, config_file: Path) -> tuple[int, str] | None:
         """
         Parse episode config filename to extract episode id and task_id.
@@ -168,39 +181,19 @@ class Experiment(TypedBaseModel):
         return last_env_step.done
 
     def _load_successful_trajectory_ids(self, storage: FileStorage) -> set[str]:
-        """Load trajectory IDs for episodes that completed successfully.
-
-        Args:
-            storage: FileStorage instance to load trajectories from.
-
-        Returns:
-            Set of trajectory IDs that completed successfully.
-        """
         successful = set()
-        traj_dir = self.output_dir / "trajectories"
-        if traj_dir.exists():
-            for metadata_file in traj_dir.glob("*.metadata.json"):
-                trajectory_id = metadata_file.stem.replace(".metadata", "")
-                try:
-                    trajectory = storage.load_trajectory(trajectory_id)
-                    if self._is_trajectory_successful(trajectory):
-                        successful.add(trajectory_id)
-                except Exception as e:
-                    logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
+        for trajectory_id in storage.list_trajectory_ids():
+            try:
+                trajectory = storage.load_trajectory(trajectory_id)
+                if self._is_trajectory_successful(trajectory):
+                    successful.add(trajectory_id)
+            except Exception as e:
+                logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
         return successful
 
     def _load_started_trajectory_ids(self) -> set[str]:
-        """Load trajectory IDs for episodes that have been started.
-
-        Returns:
-            Set of trajectory IDs that have metadata files on disk.
-        """
-        started = set()
-        traj_dir = self.output_dir / "trajectories"
-        if traj_dir.exists():
-            for metadata_file in traj_dir.glob("*.metadata.json"):
-                started.add(metadata_file.stem.replace(".metadata", ""))
-        return started
+        storage = FileStorage(self.output_dir)
+        return set(storage.list_trajectory_ids())
 
     def _find_episodes_to_relaunch(
         self, config_files: list[Path], filter_trajectory_ids: set[str], include: bool = True
@@ -218,10 +211,8 @@ class Experiment(TypedBaseModel):
         """
         episodes = []
         for config_file in config_files:
-            parsed = self._parse_episode_config_filename(config_file)
-            if parsed:
-                episode_id, task_id = parsed
-                trajectory_id = f"{task_id}_ep{episode_id}"
+            trajectory_id = self._trajectory_id_from_config(config_file)
+            if trajectory_id:
                 should_include = (
                     trajectory_id in filter_trajectory_ids if include else trajectory_id not in filter_trajectory_ids
                 )
