@@ -280,9 +280,14 @@ class GennyConfig(AgentConfig):
     # Use this when one hint applies to a whole task subset (one config per subset).
     hint: str = ""
 
-    # Per-task hints: task_id → hint text. Takes precedence over `hint` when a task_id match is found.
-    # Populated by the meta-agent to guide the LLM on specific tasks without spawning a config per task.
+    # Per-task hints: task_id -> hint text. Takes precedence over `hint` when a task_id match is found.
+    # These are general or task-specific hints that help the LLM work better.
     task_hints: dict[str, str] = {}
+
+    # Per-task precision: task_id -> text that clarifies the goal when the task description
+    # is under-defined (e.g. expected answer format, submission method). Injected as part of
+    # the goal — not as a separate hint section.
+    task_precision: dict[str, str] = {}
 
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
@@ -321,6 +326,8 @@ class Genny(Agent):
         self.task_id = task_id
         # task_hints takes precedence over the general hint; falls back to hint if no match.
         self._task_hint: str = config.task_hints.get(task_id, config.hint) if task_id else config.hint
+        # task_precision is injected as part of the goal, not as a hint.
+        self._task_precision: str = config.task_precision.get(task_id, "") if task_id else ""
         self.llm: LLM = config.llm_config.make()
         # Summarize LLM uses the same config as the act LLM (including tool_choice) so the
         # full request — messages, tools, and parameters — is identical between the two passes
@@ -411,6 +418,9 @@ class Genny(Agent):
         """
         messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.goal)
+        if self._task_precision:
+            messages.append({"role": "user", "content": f"## Additional task details\n\n{self._task_precision}"})
+            messages.append({"role": "assistant", "content": "Understood."})
         if self._task_hint:
             messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
             messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
