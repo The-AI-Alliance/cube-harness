@@ -3,35 +3,12 @@ from typing import Any
 
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import ActionSchema, Content, Observation
+from cube.core import Content, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tools.browser import BrowserTool
 from PIL import Image
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        # Native bgym action names (thin-wrapper API, BrowsergymConfig)
-        "press",
-        "fill",
-        "click",
-        "dblclick",
-        "drag_and_drop",
-        "hover",
-        "select_option",
-        "scroll",
-        "noop",
-        # Legacy BidBrowserActionSpace names (PlaywrightConfig / old bgym wrapper)
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-    }
-)
 
 
 class MiniWobTask(Task):
@@ -63,11 +40,6 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
 
     def finished(self, obs: Observation) -> bool:
         return self.tool.evaluate_js("() => {return WOB_DONE_GLOBAL;}")
-
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        filtered = [a for a in actions if a.name in _SUPPORTED_ACTION_NAMES]
-        logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
-        return filtered
 
     def obs_postprocess(self, obs: Observation) -> Observation:
         contents = []

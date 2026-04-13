@@ -90,12 +90,11 @@ class WorkArenaBenchmark(Benchmark):
             task_id = task_class.get_task_id()
             if task_id not in self.task_metadata:
                 continue
-            extra = self.task_metadata[task_id].extra_info
             yield WorkArenaTaskConfig(
                 task_id=task_id,
                 seed=seed,
                 tool_config=self.default_tool_config,
-                task_class_path=extra.get("task_class_path"),
+                metadata=self.task_metadata[task_id],
             )
 
     def close(self) -> None:
