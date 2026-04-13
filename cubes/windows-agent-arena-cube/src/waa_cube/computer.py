@@ -1,6 +1,5 @@
 """ComputerConfig re-export with WAA-specific cache defaults."""
 
-
 import cube
 from cube_computer_tool.computer import ActionSpace, Computer13, ComputerBase, PyAutoGUIComputer
 from cube_computer_tool.computer import ComputerConfig as _BaseComputerConfig

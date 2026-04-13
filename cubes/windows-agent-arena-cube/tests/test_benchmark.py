@@ -8,9 +8,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from PIL import Image
-
 from cube.core import Action, Observation, TextContent
+from cube.task import TaskMetadata
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Patch targets
@@ -61,9 +61,7 @@ def _make_task_metadata(
     task_id: str = "t1",
     instruction: str = "Do something",
     snapshot: str = "vscode",
-) -> "TaskMetadata":  # type: ignore[name-defined]
-    from cube.task import TaskMetadata
-
+) -> TaskMetadata:
     return TaskMetadata(
         id=task_id,
         abstract_description=instruction,
@@ -454,7 +452,7 @@ class TestWAABenchmark:
 
         import pytest
 
-        from waa_cube.benchmark import WAABenchmark, WAA_EVAL_EXAMPLES_ENV
+        from waa_cube.benchmark import WAA_EVAL_EXAMPLES_ENV, WAABenchmark
         from waa_cube.computer import ComputerConfig
 
         # Ensure env var is not set
@@ -475,9 +473,7 @@ class TestWAABenchmark:
         with tempfile.TemporaryDirectory() as tmpdir:
             eval_dir = Path(tmpdir) / "evaluation_examples_windows"
             (eval_dir / "examples" / "vscode").mkdir(parents=True)
-            (eval_dir / "test_all.json").write_text(
-                json.dumps({"vscode": ["missing-task", "vs-1"]})
-            )
+            (eval_dir / "test_all.json").write_text(json.dumps({"vscode": ["missing-task", "vs-1"]}))
             (eval_dir / "examples" / "vscode" / "vs-1.json").write_text(
                 json.dumps(
                     {

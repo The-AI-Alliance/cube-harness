@@ -96,7 +96,7 @@ def get_system_timezone(env, config: Dict[str, str]):
     """
     Fetches the system timezone from the VM.
     """
-    command = "powershell -Command \"Get-TimeZone | Select-Object -Property DisplayName, StandardName | ConvertTo-Json\""
+    command = 'powershell -Command "Get-TimeZone | Select-Object -Property DisplayName, StandardName | ConvertTo-Json"'
     try:
         result = env.controller.execute_shell_command(command)
         data = json.loads(result["output"])

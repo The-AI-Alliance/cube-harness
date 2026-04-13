@@ -17,9 +17,7 @@ Usage:
 """
 
 import sys
-from pathlib import Path
 
-import waa_cube
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 from waa_cube.vm_backend.backend import WAADockerVMBackend

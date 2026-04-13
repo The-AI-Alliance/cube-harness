@@ -65,9 +65,7 @@ class DebugAgent:
 
     def __init__(self, task_id: str) -> None:
         if task_id not in _TASK_ACTIONS:
-            raise ValueError(
-                f"No debug actions registered for task {task_id!r}. Known tasks: {list(_TASK_ACTIONS)}"
-            )
+            raise ValueError(f"No debug actions registered for task {task_id!r}. Known tasks: {list(_TASK_ACTIONS)}")
         self._task_id = task_id
         self._step = 0
         self._actions = list(_TASK_ACTIONS[task_id])
@@ -80,9 +78,7 @@ class DebugAgent:
     def get_action(self, obs: Observation) -> Action:
         """Return the next predetermined action."""
         if self._step >= len(self._actions):
-            raise StopIteration(
-                f"[DebugAgent] task={self._task_id!r}: all {len(self._actions)} actions exhausted"
-            )
+            raise StopIteration(f"[DebugAgent] task={self._task_id!r}: all {len(self._actions)} actions exhausted")
         action = self._actions[self._step]
         logger.info(
             "[DebugAgent] task=%r  step=%d/%d  action=%s  args=%s",

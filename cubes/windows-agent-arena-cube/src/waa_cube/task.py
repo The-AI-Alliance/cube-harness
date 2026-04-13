@@ -1,12 +1,12 @@
 """WAATask — CUBE task for a single WindowsAgentArena desktop-automation episode.
 
-    task = WAATask(metadata=..., tool_config=ComputerConfig(...), vm_backend=WAADockerVMBackend(...))
-    obs, info = task.reset()
-    while not done:
-        action = agent(obs, task.action_set)
-        env_out = task.step(action)
-        obs, done = env_out.obs, env_out.done
-    task.close()
+task = WAATask(metadata=..., tool_config=ComputerConfig(...), vm_backend=WAADockerVMBackend(...))
+obs, info = task.reset()
+while not done:
+    action = agent(obs, task.action_set)
+    env_out = task.step(action)
+    obs, done = env_out.obs, env_out.done
+task.close()
 """
 
 from __future__ import annotations
