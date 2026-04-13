@@ -25,9 +25,7 @@ def get_url_shortcuts_on_desktop(env, config: Dict[str, str]):
     desktop_directory_tree = env.controller.get_vm_directory_tree(desktop_path)
 
     shortcuts_paths = [
-        file["name"]
-        for file in desktop_directory_tree["children"]
-        if file["name"].endswith(shortcut_extension)
+        file["name"] for file in desktop_directory_tree["children"] if file["name"].endswith(shortcut_extension)
     ]
 
     short_cuts = {}
@@ -209,7 +207,9 @@ def get_cookie_data_from_edge(env, config: Dict[str, str]):
     """
     os_type = env.vm_platform
     if "user_data_dir" in config:
-        assert "\\" not in config["user_data_dir"], "user_data_dir cannot contain backslash"  # maybe sanitize user_data_dir
+        assert "\\" not in config["user_data_dir"], (
+            "user_data_dir cannot contain backslash"
+        )  # maybe sanitize user_data_dir
         assert "'" not in config["user_data_dir"], "user_data_dir cannot contain single backticks"
         chrome_cookie_file_path = env.controller.execute_python_command(
             f"import os; print(os.path.join(os.path.expandvars('{config['user_data_dir']}'), 'Default/Network/Cookies'))"
@@ -330,7 +330,9 @@ def get_cookie_data_for_edge(env, config: Dict[str, str]):
     """
     os_type = env.vm_platform
     if "user_data_dir" in config:
-        assert "\\" not in config["user_data_dir"], "user_data_dir cannot contain backslash"  # maybe sanitize user_data_dir
+        assert "\\" not in config["user_data_dir"], (
+            "user_data_dir cannot contain backslash"
+        )  # maybe sanitize user_data_dir
         assert "'" not in config["user_data_dir"], "user_data_dir cannot contain single backticks"
         edge_cookie_file_path = env.controller.execute_python_command(
             f"import os; print(os.path.join(os.path.expandvars('{config['user_data_dir']}'), 'Default/Network/Cookies'))"

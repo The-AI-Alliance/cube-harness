@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 WAA_DOCKER_IMAGE = "windowsarena/winarena:latest"
 
-_VM_READY_TIMEOUT = 900        # seconds to wait on normal boot
+_VM_READY_TIMEOUT = 900  # seconds to wait on normal boot
 _VM_READY_TIMEOUT_FIRST = 1800  # seconds to wait on first boot (Windows doing one-time setup)
 _VM_READY_POLL_INTERVAL = 5  # seconds between readiness polls
 _QMP_TIMEOUT = 30  # seconds to wait for QMP response after loadvm
@@ -70,7 +70,6 @@ def _release_port_reservation(lock_path: str) -> None:
         os.remove(lock_path)
     except OSError:
         pass
-
 
 
 # ---------------------------------------------------------------------------
@@ -438,9 +437,7 @@ class WAADockerManager:
         first_boot = not boot_marker.exists()
         timeout = _VM_READY_TIMEOUT_FIRST if first_boot else _VM_READY_TIMEOUT
         if first_boot:
-            logger.info(
-                "First boot detected (no windows.boot marker) — using extended timeout of %ds", timeout
-            )
+            logger.info("First boot detected (no windows.boot marker) — using extended timeout of %ds", timeout)
         deadline = time.monotonic() + timeout
         logger.info("Waiting for WAA VM to be ready (probing 20.20.20.21:5000/probe inside container)…")
         while time.monotonic() < deadline:
@@ -727,8 +724,7 @@ class WAADockerVMBackend(VMBackend):
 
         if exit_code != 0:
             raise RuntimeError(
-                f"WAA image preparation failed with exit code {exit_code}.\n"
-                "Check the logs above for details."
+                f"WAA image preparation failed with exit code {exit_code}.\nCheck the logs above for details."
             )
         final_image = next(
             (storage_dir / name for name in ("data.qcow2", "data.img") if (storage_dir / name).exists()),

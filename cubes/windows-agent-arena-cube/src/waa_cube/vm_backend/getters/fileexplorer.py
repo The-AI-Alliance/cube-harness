@@ -163,9 +163,9 @@ def get_is_file_hidden(env, config):
 
 
 def get_vm_active_window_title(env, config) -> str:
-    window_title = env.controller.execute_python_command(
-        "import pyautogui; print(pyautogui.getActiveWindowTitle())"
-    )["output"].strip()
+    window_title = env.controller.execute_python_command("import pyautogui; print(pyautogui.getActiveWindowTitle())")[
+        "output"
+    ].strip()
     logger.info(f"Window title: {window_title}")
     return window_title
 
