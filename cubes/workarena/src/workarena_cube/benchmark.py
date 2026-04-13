@@ -84,6 +84,7 @@ class WorkArenaBenchmark(Benchmark):
             "l2": ("extra_info.level", "l2"),
             "l3": ("extra_info.level", "l3"),
         },
+        num_tasks=333,
     )
     # task_metadata: populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
