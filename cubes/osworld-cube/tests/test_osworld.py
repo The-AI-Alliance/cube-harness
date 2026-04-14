@@ -576,6 +576,8 @@ class TestOSWorldBenchmark:
 
         bench = OSWorldBenchmark()
         cfg = next(bench.get_task_configs())
+
+        OSWorldBenchmark.install()  # ensure execution cache is populated for cfg.make()
         task = cfg.make()
 
         assert isinstance(task, OSWorldTask)
