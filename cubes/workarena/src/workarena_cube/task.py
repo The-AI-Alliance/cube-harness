@@ -3,40 +3,22 @@
 import importlib
 import logging
 import time
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, List, Protocol, override, runtime_checkable
 
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import ActionSchema, Observation
+from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
 from cube.task import Task, TaskConfig
-from cube.tool import Toolbox, tool_action
+from cube.tool import Toolbox
 from cube.tools.browser import BrowserTool
-from cube_browser_playwright import PlaywrightSession, PlaywrightSessionConfig, Viewport
-from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
+from cube_browser_playwright import PlaywrightSessionConfig, Viewport
 from cube_chat_tool import ChatTool
 from playwright.sync_api import Page
+from workarena_cube.tools import WorkArenaCheatTool, WorkArenaInfeasibleTool
 from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-        "browser_wait",
-        "browser_back",
-        "browser_forward",
-        "noop",
-        "workarena_cheat",
-        "send_message",
-    }
-)
 
 
 @runtime_checkable
@@ -68,60 +50,19 @@ class WorkArenaBrowserTool(Protocol):
     def page_obs(self) -> Observation: ...
 
 
-class WorkArenaCheatTool(SyncPlaywrightTool):
-    """SyncPlaywrightTool with an additional workarena_cheat action — for debug use only."""
-
-    def __init__(self, config: PlaywrightConfig, session: PlaywrightSession) -> None:
-        super().__init__(config, session)
-        self._workarena_task: AbstractServiceNowTask | None = None
-
-    @tool_action
-    def workarena_cheat(self) -> str:
-        """Execute the WorkArena built-in cheat to solve the task automatically."""
-        if self._workarena_task is None:
-            return "No WorkArena task initialized — cheat unavailable."
-        self._workarena_task.cheat(self.page, [])
-        return "WorkArena cheat executed."
-
-
-class WorkArenaCheatToolConfig(PlaywrightConfig):
-    """PlaywrightConfig variant that creates a WorkArenaCheatTool."""
-
-    def make(self, container: Any = None) -> WorkArenaCheatTool:
-        session = self.browser.make()
-        return WorkArenaCheatTool(self, session)
-
-
 class WorkArenaTask(Task):
-    """
-    CUBE Task wrapper for WorkArena ServiceNow tasks.
-
-    ---
-    Future optimization note:
-
-    Both `finished()` and `evaluate()` call `self._workarena_task.validate()`,
-    which makes a live ServiceNow API call. With `validate_per_step=True`,
-    the base `Task.step()` calls both on every step, resulting in
-    two identical round-trips per step.
-
-    Future improvement: if the above becomes a performance bottleneck, we can cache the
-    result of `validate()` keyed on `(chat_key, hash(page.content()))` where:
-    `chat_key = tuple((m["role"], m["timestamp"], m["message"]) for m in chat_messages)`.
-    Both `finished()` and `evaluate()` would call a shared `_validate()` helper
-    that returns the cached result when the key is unchanged, and refreshes it otherwise.
-    The `page.content()` hash captures SPA state changes that do not update the URL,
-    at the cost of a DOM serialization on each cache-miss check.
-    """
+    """CUBE Task wrapper for WorkArena ServiceNow tasks."""
 
     seed: int
     wait_first_page_time: float = 10.0
     validate_per_step: bool = True
 
     _workarena_task: AbstractServiceNowTask | None = PrivateAttr(default=None)
+    _validate_cache: tuple[Any, ...] | None = PrivateAttr(default=None)
 
     @property
     def _browser_tool(self) -> WorkArenaBrowserTool:
-        """Resolve the playwright tool whether the tool is direct or inside a Toolbox."""
+        """Resolve the browser tool whether it's direct or inside a Toolbox."""
         if isinstance(self.tool, Toolbox):
             tool = self.tool.find_tool(BrowserTool)
             if tool is None:
@@ -141,6 +82,14 @@ class WorkArenaTask(Task):
             return self.tool.find_tool(ChatTool)
         return None
 
+    @property
+    def _infeasible_tool(self) -> WorkArenaInfeasibleTool | None:
+        """Return the WorkArenaInfeasibleTool if present in a Toolbox, else None."""
+        if isinstance(self.tool, Toolbox):
+            tool = self.tool.find_tool(WorkArenaInfeasibleTool)
+            return tool if isinstance(tool, WorkArenaInfeasibleTool) else None
+        return None
+
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
         task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
@@ -149,6 +98,7 @@ class WorkArenaTask(Task):
         if isinstance(self._browser_tool, WorkArenaCheatTool):
             self._browser_tool._workarena_task = self._workarena_task
         self.tool.reset()
+        self._validate_cache = None
         page = self._browser_tool.page
         goal, task_info = self._workarena_task.setup(page)
 
@@ -177,34 +127,52 @@ class WorkArenaTask(Task):
 
     @property
     def _chat_messages(self) -> list[dict]:
-        """Return the current chat message history, or empty list if no chat tool."""
-        chat = self._chat_tool
-        return chat.messages if chat is not None else []
+        """Return combined chat and infeasible messages."""
+        messages: list[dict] = []
+        if (chat := self._chat_tool) is not None:
+            messages.extend(chat.messages)
+        if (infeasible := self._infeasible_tool) is not None:
+            messages.extend(infeasible.messages)
+        return messages
+
+    def _validate(self) -> tuple[float, bool, str, dict]:
+        """Call WorkArena's validate() with per-step caching.
+
+        Both evaluate() and finished() call this on every step. The cache avoids
+        duplicate ServiceNow REST calls within the same step. It is cleared after
+        the first consumer reads it, so the next step gets a fresh call.
+        """
+        if self._workarena_task is None:
+            raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
+        if self._validate_cache is None:
+            page = self._browser_tool.page
+            self._validate_cache = self._workarena_task.validate(page, self._chat_messages)
+        return self._validate_cache  # type: ignore[return-value]
+
+    @override
+    def step(self, action: Action | List[Action]) -> EnvironmentOutput:
+        self._validate_cache = None
+        return super().step(action)
 
     def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
-        if self._workarena_task is None:
-            raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
-        page = self._browser_tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
+        reward, done, _user_message, task_info = self._validate()
         return reward, {"done": done, **task_info}
 
     def finished(self, obs: Observation) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = self._browser_tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
+        _reward, done, _user_message, _task_info = self._validate()
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter to BID browser actions supported by WorkArena."""
-        supported_actions = _SUPPORTED_ACTION_NAMES
+        """Filter actions based on available tools."""
         if self._chat_tool is None:
-            supported_actions = supported_actions - {"send_message"}
-        filtered = [a for a in actions if a.name in supported_actions]
-        logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
-        return filtered
+            actions = [a for a in actions if a.name != "send_message"]
+        if self._infeasible_tool is None:
+            actions = [a for a in actions if a.name != "report_infeasible"]
+        return actions
 
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
@@ -219,7 +187,14 @@ class WorkArenaTask(Task):
 
 
 class WorkArenaTaskConfig(TaskConfig):
-    """Serializable configuration for a single WorkArena task."""
+    """Serializable configuration for a single WorkArena task.
+
+    Embeds task_class_path so that make() can construct TaskMetadata without
+    depending on the ClassVar WorkArenaBenchmark.task_metadata — which is empty
+    in Ray worker processes.
+    """
+
+    task_class_path: str
 
     def make(
         self,

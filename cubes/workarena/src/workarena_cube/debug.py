@@ -27,7 +27,8 @@ from cube.task import TaskConfig, TaskMetadata
 from cube.testing import run_debug_suite
 
 from workarena_cube.benchmark import WorkArenaBenchmark
-from workarena_cube.task import WorkArenaCheatToolConfig, WorkArenaTaskConfig
+from workarena_cube.task import WorkArenaTaskConfig
+from workarena_cube.tools import WorkArenaCheatToolConfig
 
 logger = logging.getLogger(__name__)
 
