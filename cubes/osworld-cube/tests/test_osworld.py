@@ -572,9 +572,9 @@ class TestOSWorldBenchmark:
 
         bench = OSWorldBenchmark()
         cfg = next(bench.get_task_configs())
-
-        OSWorldBenchmark.install()  # ensure execution cache is populated for cfg.make()
-        task = cfg.make()
+        fake_exec_info = {"config": [], "evaluator": {"func": "check_file"}}
+        with patch.object(OSWorldBenchmark, "load_task_execution_info", return_value=fake_exec_info):
+            task = cfg.make()
 
         assert isinstance(task, OSWorldTask)
         assert task.metadata.id == cfg.task_id
