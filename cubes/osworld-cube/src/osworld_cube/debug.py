@@ -1,9 +1,18 @@
 """
 Deterministic debug agent for testing OSWorldTask end-to-end without an LLM.
 
-Each debug task in debug_task_metadata.json has a hardcoded action sequence that
-completes it successfully. Used to validate the CUBE task loop in CI or local
-development without requiring an LLM.
+Each debug task in debug_tasks.json has a hardcoded action sequence that
+completes it successfully. Used to validate the CUBE task loop in CI or
+local development without requiring an LLM.
+
+Public API
+----------
+make_debug_agent(task_id)    → DebugAgent
+get_debug_benchmark()        → OSWorldBenchmark
+
+Usage:
+    # Run all debug tasks and print a JSON report
+    python -m osworld_cube.debug
 """
 
 from __future__ import annotations
@@ -87,6 +96,9 @@ class DebugOSWorldBenchmark(OSWorldBenchmark):
         """No-op: debug task execution data is embedded in debug_task_metadata.json."""
         logger.info("DebugOSWorldBenchmark.uninstall() — nothing to do")
 
+# ---------------------------------------------------------------------------
+# Hardcoded action sequences per task ID
+# ---------------------------------------------------------------------------
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
     "simple-create-file": [
@@ -107,6 +119,9 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
     ],
 }
 
+# ---------------------------------------------------------------------------
+# DebugAgent
+# ---------------------------------------------------------------------------
 
 class DebugAgent:
     """Deterministic debug agent that replays a fixed action sequence for a task."""
@@ -117,11 +132,24 @@ class DebugAgent:
         self._task_id = task_id
         self._step = 0
         self._actions = list(_TASK_ACTIONS[task_id])
+        logger.debug(
+            "[DebugAgent] Initialised for task=%r with %d actions",
+            task_id,
+            len(self._actions),
+        )
 
     def get_action(self, obs: Observation) -> Action:
         if self._step >= len(self._actions):
-            raise StopIteration(f"All actions exhausted for task {self._task_id!r}")
+            raise StopIteration(f"[DebugAgent] task={self._task_id!r}: all {len(self._actions)} actions exhausted")
         action = self._actions[self._step]
+        logger.debug(
+            "[DebugAgent] task=%r  step=%d/%d  action=%s  args=%s",
+            self._task_id,
+            self._step + 1,
+            len(self._actions),
+            action.name,
+            action.arguments or "",
+        )
         self._step += 1
         return action
 
@@ -130,6 +158,12 @@ class DebugAgent:
 
 
 def _get_default_infra() -> InfraConfig:
+    """Resolve the default infra for debug runs.
+
+    Priority:
+      1. `OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/infra.json`
+      2. `LocalInfraConfig()` for the standard zero-arg `cube test` path
+    """
     return load_runtime_infra_from_config_file() or LocalInfraConfig()
 
 

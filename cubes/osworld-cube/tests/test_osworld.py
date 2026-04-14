@@ -113,13 +113,9 @@ class TestComputerConfig:
 
 class TestDebugBenchmark:
     def test_get_debug_benchmark_defaults_to_local_infra(self) -> None:
-        from unittest.mock import patch
-
         from osworld_cube.debug import get_debug_benchmark
 
-        with patch("osworld_cube.debug.load_runtime_infra_from_config_file", return_value=None):
-            benchmark = get_debug_benchmark()
-
+        benchmark = get_debug_benchmark()
         assert isinstance(benchmark.infra, LocalInfraConfig)
 
 
