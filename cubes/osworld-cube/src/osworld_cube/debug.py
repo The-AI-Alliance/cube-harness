@@ -96,6 +96,7 @@ class DebugOSWorldBenchmark(OSWorldBenchmark):
         """No-op: debug task execution data is embedded in debug_task_metadata.json."""
         logger.info("DebugOSWorldBenchmark.uninstall() — nothing to do")
 
+
 # ---------------------------------------------------------------------------
 # Hardcoded action sequences per task ID
 # ---------------------------------------------------------------------------
@@ -122,6 +123,7 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
 # ---------------------------------------------------------------------------
 # DebugAgent
 # ---------------------------------------------------------------------------
+
 
 class DebugAgent:
     """Deterministic debug agent that replays a fixed action sequence for a task."""
