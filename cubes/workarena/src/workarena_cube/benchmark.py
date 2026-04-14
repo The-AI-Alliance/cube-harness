@@ -48,12 +48,6 @@ class WorkArenaBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Enumerate WorkArena task classes and seeds for the configured level."""
-        # Check the instance-level shadow, not the class-level ClassVar — this ensures
-        # each instance sets up its own task_metadata independently, even if another
-        # instance already populated the class-level dict.
-        if "task_metadata" in self.__dict__:
-            logger.debug("WorkArena benchmark already set up, skipping.")
-            return
         logger.info(f"Setting up WorkArena benchmark (level={self.level})")
         task_tuples = get_all_tasks_agents(
             filter=self.level,
@@ -66,20 +60,23 @@ class WorkArenaBenchmark(Benchmark):
             random.shuffle(task_tuples)
         self._task_tuples = task_tuples
         self._runtime_context = {"level": self.level, "n_tasks": len(task_tuples)}
-        metadata: dict[str, TaskMetadata] = {}
-        for task_class, _seed in task_tuples:
-            task_id = task_class.get_task_id()
-            task_class_path = f"{task_class.__module__}.{task_class.__qualname__}"
-            metadata[task_id] = TaskMetadata(
-                id=task_id,
-                extra_info={"task_class_path": task_class_path, "level": self.level},
-            )
-        # Populate instance-level shadow so each instance sees its own task view
-        # (e.g. after subset_from_list / subset_from_glob). Also update the class-level
-        # attr so TaskConfig.make() can look up tasks via the ClassVar without re-running setup().
-        object.__setattr__(self, "task_metadata", metadata)
-        type(self).task_metadata = metadata
-        logger.info(f"WorkArena benchmark setup complete: {len(task_tuples)} task(s)")
+
+        # Only build task_metadata if it's not already set as an instance shadow.
+        # An instance shadow means this is a subset (created by subset_from_list) —
+        # task_metadata was already restricted to the desired subset, so we keep it.
+        # _task_tuples still holds all tasks; get_task_configs() filters by task_metadata.
+        if "task_metadata" not in self.__dict__:
+            metadata: dict[str, TaskMetadata] = {}
+            for task_class, _seed in task_tuples:
+                task_id = task_class.get_task_id()
+                task_class_path = f"{task_class.__module__}.{task_class.__qualname__}"
+                metadata[task_id] = TaskMetadata(
+                    id=task_id,
+                    extra_info={"task_class_path": task_class_path, "level": self.level},
+                )
+            object.__setattr__(self, "task_metadata", metadata)
+            type(self).task_metadata = metadata
+        logger.info(f"WorkArena benchmark setup complete: {len(self.task_metadata)} task(s)")
 
     def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
         """Yield one WorkArenaTaskConfig per (task_class, seed) tuple.
