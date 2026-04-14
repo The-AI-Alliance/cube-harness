@@ -107,7 +107,7 @@ def main(debug: bool) -> None:
         default_tool_config=tool_config,
         vm_backend=WAADockerVMBackend(cpu_cores=4),
         tasks_file=tasks_file,
-        test_set_name="test_small.json",
+        test_set_name="test_all.json",
     )
     benchmark.install()
     benchmark.setup()
