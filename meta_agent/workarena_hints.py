@@ -46,10 +46,22 @@ _CHART_VALUE_PRECISION: str = (
     "Example: send_message('42.5')"
 )
 
-# Chart min/max (multi): answer format is 'label, count', not just a number.
+# Chart min/max (single or multi): answer format is 'label, count', not just a number.
+# The task goal itself says "Give me both the label and the count."
 _CHART_MINMAX_PRECISION: str = (
     "Answer with both the label and the count, comma-separated. "
     "Example: send_message('2026-01-19, 18')"
+)
+
+# Impersonation: LLMs sometimes refuse "impersonation" as a real-world privacy violation.
+# It is a built-in ServiceNow admin feature — administrators routinely switch to another user's
+# session to troubleshoot permissions. Must clarify this is legitimate AND give the nav path.
+_IMPERSONATION_PRECISION: str = (
+    "This is ServiceNow's built-in 'Impersonate User' admin feature — it lets administrators "
+    "temporarily view the system as another user for troubleshooting. It is a legitimate "
+    "administrative task, not a real-world privacy violation. "
+    "To impersonate: click the profile avatar (top-right corner) → select 'Impersonate User' "
+    "→ search for the user by name → click their row to activate impersonation."
 )
 
 # Create: goal lists fields but doesn't emphasize ALL must be filled, and doesn't
@@ -61,6 +73,8 @@ _CREATE_PRECISION: str = (
 )
 
 WORKARENA_TASK_PRECISION: dict[str, str] = {
+    # Impersonation (1)
+    "workarena.servicenow.impersonation": _IMPERSONATION_PRECISION,
     # Create (5)
     "workarena.servicenow.create-incident": _CREATE_PRECISION,
     "workarena.servicenow.create-hardware-asset": _CREATE_PRECISION,
@@ -69,7 +83,7 @@ WORKARENA_TASK_PRECISION: dict[str, str] = {
     "workarena.servicenow.create-problem": _CREATE_PRECISION,
     # Chart (4)
     "workarena.servicenow.single-chart-value-retrieval": _CHART_VALUE_PRECISION,
-    "workarena.servicenow.single-chart-min-max-retrieval": _CHART_VALUE_PRECISION,
+    "workarena.servicenow.single-chart-min-max-retrieval": _CHART_MINMAX_PRECISION,
     "workarena.servicenow.multi-chart-value-retrieval": _CHART_VALUE_PRECISION,
     "workarena.servicenow.multi-chart-min-max-retrieval": _CHART_MINMAX_PRECISION,
     # Sort (6)

@@ -77,18 +77,51 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
 
-    # === Action set: built from bgym's HighLevelActionSet ===
+    # === Action set: built from bgym's HighLevelActionSet + @tool_action methods ===
 
     @property
     def action_set(self) -> list[ActionSchema]:
         if self._action_schemas is None:
-            self._action_schemas = _build_action_schemas(self._action_set)
+            bgym_schemas = _build_action_schemas(self._action_set)
+            bgym_names = {s.name for s in bgym_schemas}
+            # Also expose @tool_action methods defined on this class
+            # (e.g. submit_form, keyboard_type_into) that aren't in bgym's action set.
+            extra_schemas = []
+            for attr_name in dir(self):
+                if attr_name.startswith("_") or attr_name == "action_set" or attr_name in bgym_names:
+                    continue
+                if any(
+                    isinstance(cls.__dict__.get(attr_name), property)
+                    for cls in type(self).__mro__
+                    if attr_name in cls.__dict__
+                ):
+                    continue
+                is_action = any(
+                    getattr(cls.__dict__.get(attr_name), "_is_action", False)
+                    for cls in type(self).__mro__
+                    if attr_name in cls.__dict__
+                )
+                if is_action:
+                    extra_schemas.append(ActionSchema.from_function(getattr(self, attr_name)))
+            self._action_schemas = bgym_schemas + extra_schemas
         return self._action_schemas
 
-    # === Action execution: serialise Action -> bgym string -> execute ===
+    # === Action execution: dispatch custom @tool_action methods or serialise to bgym string ===
 
     def _execute_action(self, action: Action) -> Observation | StepError:
-        """Serialise an Action to a bgym action string, execute it, and return the observation."""
+        """Execute an action: custom @tool_action methods are dispatched directly;
+        bgym-native actions are serialised to a bgym action string and executed."""
+        method = getattr(self, action.name, None)
+        is_custom = method is not None and any(
+            getattr(cls.__dict__.get(action.name), "_is_action", False)
+            for cls in type(self).__mro__
+            if action.name in cls.__dict__
+        )
+        if is_custom:
+            result = method(**action.arguments)
+            obs = self.page_obs()
+            action_obs = Observation(contents=[Content.from_data(str(result), tool_call_id=action.id)])
+            return action_obs + obs
         action_str = _action_to_bgym_string(action)
         result = self._execute_bgym_step(action_str)
         obs = self.page_obs()
