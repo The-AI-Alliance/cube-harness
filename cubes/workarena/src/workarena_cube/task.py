@@ -176,6 +176,7 @@ class WorkArenaTask(Task):
             actions = [a for a in actions if a.name != "report_infeasible"]
         return actions
 
+
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
         if self._workarena_task is not None:
