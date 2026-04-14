@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Load .env so credentials are available even when the shell didn't source ~/.zshrc.
 # Ray workers inherit the parent process env, so this must run before ray.init().
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 from cube.tool import ToolboxConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig

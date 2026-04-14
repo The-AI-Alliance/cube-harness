@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Load .env so credentials are available even when the shell didn't source ~/.zshrc.
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 from miniwob_cube.benchmark import MiniWobBenchmark
 from miniwob_hints import MINIWOB_DEFAULT_HINT, MINIWOB_TASK_HINTS
