@@ -77,14 +77,14 @@ def main(debug: bool, agent: str, level: int) -> None:
     output_dir = make_experiment_output_dir(agent, "workarena", tag=f"l{level}")
 
     tools_configs = [
-            BrowsergymConfig(
-                browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
-                use_screenshot=True,
-                use_axtree=True,
-                use_html=False,
-            ),
-            ChatToolConfig(),
-        ]
+        BrowsergymConfig(
+            browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
+            use_screenshot=True,
+            use_axtree=True,
+            use_html=False,
+        ),
+        ChatToolConfig(),
+    ]
     if level > 1:
         tools_configs.append(WorkArenaInfeasibleToolConfig())
     tool_config = ToolboxConfig(tool_configs=tools_configs)
