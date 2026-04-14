@@ -22,20 +22,12 @@ from cube.task import TaskConfig
 from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
 
-import cube
 from cube import LocalInfraConfig
-from cube.core import Action, ActionSchema, Observation
-from cube.container import ContainerBackend
 from cube.testing import run_debug_suite
-from cube.task import TaskConfig
 from cube.resource import InfraConfig
-from cube.benchmark import Benchmark
 
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
-from cube.resource import InfraConfig
 from osworld_cube.computer import ComputerConfig
 from osworld_cube.infra_loader import load_runtime_infra_from_config_file
-from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +64,9 @@ class DebugOSWorldBenchmark(OSWorldBenchmark):
     embedded in extra_info, so no OSWorld repo clone or execution cache is needed.
     """
 
-    benchmark_metadata = OSWorldBenchmark.benchmark_metadata.model_copy(update={"name": "osworld-cube-debug", "num_tasks": 2, "named_subsets": {}})
+    benchmark_metadata = OSWorldBenchmark.benchmark_metadata.model_copy(
+        update={"name": "osworld-cube-debug", "num_tasks": 2, "named_subsets": {}}
+    )
     task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]] = Benchmark.task_metadata_from_json(
         _DEBUG_TASK_METADATA_JSON
     )  # type: ignore[assignment]
@@ -92,7 +86,6 @@ class DebugOSWorldBenchmark(OSWorldBenchmark):
     def uninstall(cls) -> None:
         """No-op: debug task execution data is embedded in debug_task_metadata.json."""
         logger.info("DebugOSWorldBenchmark.uninstall() — nothing to do")
-
 
 
 _TASK_ACTIONS: dict[str, list[Action]] = {

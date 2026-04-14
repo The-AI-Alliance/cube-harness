@@ -25,9 +25,8 @@ import subprocess
 from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
-from typing import ClassVar, cast
+from typing import ClassVar
 
-from cube import task
 from dotenv import load_dotenv
 from pydantic import Field
 
@@ -51,6 +50,7 @@ OSWORLD_COMMIT = "e695a10"
 # ---------------------------------------------------------------------------
 # helper functions for install()
 # ---------------------------------------------------------------------------
+
 
 def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
     """Append PROXY_CONFIG_FILE to .env if it is not already defined there.
@@ -77,7 +77,9 @@ def _build_task_execution_info_from_repo() -> dict[str, dict]:
     """
     Build heavy per-task execution info from the OSWorld repo.
     """
-    assert OSWORLD_REPO_DIR.exists(), f"OSWorld repo not found at {OSWORLD_REPO_DIR}. Run OSWorldBenchmark.install() to clone it first."
+    assert OSWORLD_REPO_DIR.exists(), (
+        f"OSWorld repo not found at {OSWORLD_REPO_DIR}. Run OSWorldBenchmark.install() to clone it first."
+    )
     eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
     exec_info_by_id: dict[str, dict] = {}
 
@@ -122,6 +124,7 @@ def _build_task_execution_info_from_repo() -> dict[str, dict]:
 # OSWorldTestSet
 # ---------------------------------------------------------------------------
 
+
 class OSWorldTestSet(str, enum.Enum):
     """Valid test-set index files shipped with the OSWorld repo."""
 
@@ -130,9 +133,11 @@ class OSWorldTestSet(str, enum.Enum):
     TEST_NOGDRIVE = "test_nogdrive.json"
     TEST_SMALL = "test_small.json"
 
+
 # ---------------------------------------------------------------------------
 # OSWorldTaskConfig
 # ---------------------------------------------------------------------------
+
 
 class OSWorldTaskConfig(TaskConfig):
     """
@@ -363,7 +368,9 @@ class OSWorldBenchmark(Benchmark):
                 if cache_file.read_text() == new_content:
                     continue
                 else:
-                    logger.warning(f"Execution cache for task {task_id} already exists but content differs from repo; overwriting")
+                    logger.warning(
+                        f"Execution cache for task {task_id} already exists but content differs from repo; overwriting"
+                    )
             cache_file.write_text(new_content)
             written += 1
 

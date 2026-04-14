@@ -20,13 +20,12 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from PIL import Image
-from pydantic import Field, PrivateAttr
+from pydantic import PrivateAttr
 
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers OSWorldTask.model_rebuild()
 from cube.core import Observation
 from cube.task import Task, TaskMetadata
 from cube.resource import InfraConfig, ResourceHandle, VMResourceConfig
-from cube.task import Task, TaskMetadata
 
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
 
@@ -58,6 +57,7 @@ class OSWorldTaskMetadata(TaskMetadata):
     Heavy execution data (config, evaluator) lives in the per-task execution
     cache and is loaded lazily by OSWorldTaskConfig.make().
     """
+
     domain: str  # Desktop domain, e.g. 'chrome', 'os', 'libreoffice_calc'.
     test_sets: list[str]  # OSWorld test sets this task belongs to, e.g. ['test_all', 'test_small'].
     instruction: str  # Full agent-facing task instruction.
