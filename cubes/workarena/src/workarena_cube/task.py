@@ -74,13 +74,22 @@ class WorkArenaCheatTool(SyncPlaywrightTool):
     def __init__(self, config: PlaywrightConfig, session: PlaywrightSession) -> None:
         super().__init__(config, session)
         self._workarena_task: AbstractServiceNowTask | None = None
+        self._chat_messages_ref: list[dict] = []
+
+    def reset(self) -> None:
+        super().reset()
+        self._workarena_task = None
+        self._chat_messages_ref = []
 
     @tool_action
     def workarena_cheat(self) -> str:
-        """Execute the WorkArena built-in cheat to solve the task automatically."""
+        """
+        Execute the WorkArena built-in cheat to solve the task automatically.
+        The .cheat() call mutates self._chat_messages_ref in-place by appending the answer.
+        """
         if self._workarena_task is None:
             return "No WorkArena task initialized — cheat unavailable."
-        self._workarena_task.cheat(self.page, [])
+        self._workarena_task.cheat(self.page, self._chat_messages_ref)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
         return "WorkArena cheat executed."
 
 
@@ -138,17 +147,19 @@ class WorkArenaTask(Task):
     def _chat_tool(self) -> ChatTool | None:
         """Return the ChatTool if present in a Toolbox, else None."""
         if isinstance(self.tool, Toolbox):
-            return self.tool.find_tool(ChatTool)
+            return self.tool.find_tool(ChatTool)  # type: ignore
         return None
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
         task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
         self._workarena_task = task_class(seed=self.seed)
+        if self._workarena_task is None:
+            raise RuntimeError("Failed to initialize WorkArena task.")
         _apply_task_runtime_preferences(self._browser_tool, self._workarena_task)
+        self.tool.reset()
         if isinstance(self._browser_tool, WorkArenaCheatTool):
             self._browser_tool._workarena_task = self._workarena_task
-        self.tool.reset()
         page = self._browser_tool.page
         goal, task_info = self._workarena_task.setup(page)
 
@@ -177,24 +188,33 @@ class WorkArenaTask(Task):
 
     @property
     def _chat_messages(self) -> list[dict]:
-        """Return the current chat message history, or empty list if no chat tool."""
-        chat = self._chat_tool
-        return chat.messages if chat is not None else []
+        """Return the chat message list passed to WorkArena's validate().
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+        Normal path (ChatTool): a copy of session history — safe for parallel episodes,
+        always current because send_message() writes before evaluate() runs.
+
+        Cheat path (WorkArenaCheatTool, no ChatTool): the live _chat_messages_ref list.
+        cheat() appends directly to whatever list it receives, so cheat() and validate()
+        must share the same list instance.
+        """
+        if self._chat_tool is None and isinstance(self._browser_tool, WorkArenaCheatTool):
+            return self._browser_tool._chat_messages_ref
+        return self._chat_tool.messages if self._chat_tool else []
+
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         """Score the current task state via WorkArena's validate()."""
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
         page = self._browser_tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
+        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
         return reward, {"done": done, **task_info}
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
-            return False
+            raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
         page = self._browser_tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
+        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
@@ -230,6 +250,7 @@ class WorkArenaTaskConfig(TaskConfig):
 
         _ = runtime_context, container_backend
         meta = WorkArenaBenchmark.task_metadata[self.task_id]
+        assert self.tool_config, f"WorkArenaTaskConfig requires a tool_config, got {self.tool_config}"
         return WorkArenaTask(
             metadata=meta,
             tool_config=self.tool_config,

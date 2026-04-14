@@ -20,6 +20,9 @@ workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmark"
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
 
+[tool.uv.sources]
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task-metadata" }
+
 [tool.ruff]
 fix = true
 line-length = 120

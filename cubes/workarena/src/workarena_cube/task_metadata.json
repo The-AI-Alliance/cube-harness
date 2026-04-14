@@ -1,0 +1,4331 @@
+[
+  {
+    "id": "workarena.servicenow.multi-chart-value-retrieval",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.dashboard.MultiChartValueRetrievalTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.multi-chart-min-max-retrieval",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.dashboard.MultiChartMinMaxRetrievalTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.single-chart-value-retrieval",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.dashboard.SingleChartValueRetrievalTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.single-chart-min-max-retrieval",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.dashboard.SingleChartMinMaxRetrievalTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.create-change-request",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.form.CreateChangeRequestTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.create-incident",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.form.CreateIncidentTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.create-hardware-asset",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.form.CreateHardwareAssetTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.create-problem",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.form.CreateProblemTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.create-user",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.form.CreateUserTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.knowledge-base-search",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.knowledge.KnowledgeBaseSearchTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-asset-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.FilterAssetListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-change-request-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.FilterChangeRequestListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-hardware-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.FilterHardwareListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-incident-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.FilterIncidentListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-service-catalog-item-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.FilterServiceCatalogItemListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-user-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.FilterUserListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.sort-asset-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.SortAssetListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.sort-change-request-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.SortChangeRequestListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.sort-hardware-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.SortHardwareListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.sort-incident-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.SortIncidentListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.sort-service-catalog-item-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.SortServiceCatalogItemListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.sort-user-list",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.list.SortUserListTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.all-menu",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.navigation.AllMenuTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.impersonation",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.navigation.ImpersonationTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-developer-laptop",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderDeveloperLaptopTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-ipad-mini",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderIpadMiniTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-ipad-pro",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderIpadProTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-sales-laptop",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderSalesLaptopTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-standard-laptop",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderStandardLaptopTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-apple-watch",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderAppleWatchTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-apple-mac-book-pro15",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderAppleMacBookPro15Task",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-development-laptop-p-c",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderDevelopmentLaptopPCTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.order-loaner-laptop",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.service_catalog.OrderLoanerLaptopTask",
+      "level": "l1",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-filter-problems-and-mark-duplicates-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityFilterProblemsAndMarkDuplicatesSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.high-priority-filter-problems-and-mark-duplicates-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.HighPriorityFilterProblemsAndMarkDuplicatesSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-filter-problems-and-mark-duplicates-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicFilterProblemsAndMarkDuplicatesSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-filter-problems-and-mark-duplicates-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicFilterProblemsAndMarkDuplicatesLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-filter-problems-and-mark-duplicates-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityFilterProblemsAndMarkDuplicatesLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.high-priority-filter-problems-and-mark-duplicates-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.HighPriorityFilterProblemsAndMarkDuplicatesMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.high-priority-filter-problems-and-mark-duplicates-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.HighPriorityFilterProblemsAndMarkDuplicatesLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-filter-problems-and-mark-duplicates-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicFilterProblemsAndMarkDuplicatesMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-filter-problems-and-mark-duplicates-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityFilterProblemsAndMarkDuplicatesMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.workload-balancing-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkloadBalancingSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.workload-balancing-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkloadBalancingLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.workload-balancing-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkloadBalancingMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.work-assignment-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkAssignmentLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-assignment-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityAssignmentMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.work-assignment-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkAssignmentMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-assignment-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityAssignmentLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-assignment-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityAssignmentSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.work-assignment-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkAssignmentSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-fix-basic-uniform-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesFixBasicUniformRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-basic-uniform-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesBasicUniformRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-fix-wide-tight-priority-varied-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesFixWideTightPriorityVariedRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-priority-varied-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesPriorityVariedRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-basic-varied-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesBasicVariedRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-fix-basic-varied-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesFixBasicVariedRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-fix-priority-uniform-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesFixPriorityUniformRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-fix-wide-priority-varied-risk-change-request-scheduling-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesFixWidePriorityVariedRiskChangeRequestSchedulingTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-order-development-laptop-p-c-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderDevelopmentLaptopPCTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-create-incident-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinCreateIncidentTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-create-problem-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinCreateProblemTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-hardware-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterHardwareListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-filter-hardware-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxFilterHardwareListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-apple-watch2-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestAppleWatch2TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.get-warranty-expiration-date-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.GetWarrantyExpirationDateTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-sales-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderSalesLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-order-apple-watch-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderAppleWatchTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-incident-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterIncidentListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-microsoft-surface-pro3-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestMicrosoftSurfacePro3TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-developer-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderDeveloperLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-orderi-pad-pro-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderiPadProTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-asset-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterAssetListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-filter-asset-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxFilterAssetListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-windows-surface-pro4-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestWindowsSurfacePro4TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-loaner-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderLoanerLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-order-loaner-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderLoanerLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-google-nexus7-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestGoogleNexus7TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-ipad-pro-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderIpadProTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-filter-user-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxFilterUserListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-galaxy-note20-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestGalaxyNote20TaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-user-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterUserListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.amount-based-expense-management-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.AmountBasedExpenseManagementMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-expense-management-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicExpenseManagementLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.amount-based-expense-management-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.AmountBasedExpenseManagementLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.easy-expense-management-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.EasyExpenseManagementLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-expense-management-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicExpenseManagementMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-expense-management-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicExpenseManagementSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.easy-expense-management-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.EasyExpenseManagementSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.date-based-expense-management-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DateBasedExpenseManagementMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.amount-based-expense-management-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.AmountBasedExpenseManagementSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.date-based-expense-management-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DateBasedExpenseManagementLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.easy-expense-management-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.EasyExpenseManagementMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.date-based-expense-management-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DateBasedExpenseManagementSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-uniform-expenses-and-delete-wrong-investments-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemUniformExpensesAndDeleteWrongInvestmentsSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-find-total-return-and-select-investments-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesFindTotalReturnAndSelectInvestmentsLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-find-total-return-and-select-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-find-total-return-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndFindTotalReturnMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-find-total-return-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndFindTotalReturnLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-delete-wrong-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndDeleteWrongInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-find-total-return-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndFindTotalReturnLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-uniform-expenses-and-select-investments-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemUniformExpensesAndSelectInvestmentsSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-trivial-expenses-and-find-total-return-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterTrivialExpensesAndFindTotalReturnSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-select-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndSelectInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-find-total-return-and-select-investments-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesFindTotalReturnAndSelectInvestmentsLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-and-delete-wrong-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesAndDeleteWrongInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-two-items-uniform-expenses-and-find-total-return-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterTwoItemsUniformExpensesAndFindTotalReturnSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-delete-wrong-investments-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndDeleteWrongInvestmentsLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-select-investments-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndSelectInvestmentsLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-select-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndSelectInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-trivial-expenses-and-find-total-return-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterTrivialExpensesAndFindTotalReturnMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-delete-wrong-investments-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndDeleteWrongInvestmentsLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-and-find-total-return-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesAndFindTotalReturnMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-find-total-return-and-select-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-find-total-return-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndFindTotalReturnMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-and-find-total-return-large-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesAndFindTotalReturnLargeTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-delete-wrong-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndDeleteWrongInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-find-total-return-and-select-investments-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesFindTotalReturnAndSelectInvestmentsSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-find-total-return-and-select-investments-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesFindTotalReturnAndSelectInvestmentsSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-uniform-expenses-find-total-return-and-select-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemUniformExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-delete-wrong-investments-small-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndDeleteWrongInvestmentsSmallTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-find-total-return-and-select-investments-medium-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-mean-orderi-pad-pro-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMeanOrderiPadProTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-median-order-apple-macbook-pro15-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMedianOrderAppleMacbookPro15TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-mode-order-apple-watch-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndModeOrderAppleWatchTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-create-incident-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeCreateIncidentTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-create-incident-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianCreateIncidentTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-create-incident-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanCreateIncidentTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-create-problem-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeCreateProblemTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-create-problem-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianCreateProblemTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-create-problem-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanCreateProblemTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-lesser-filter-user-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanLesserFilterUserListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-greater-filter-user-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianGreaterFilterUserListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-lesser-filter-asset-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeLesserFilterAssetListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-request-apple-iphone13-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanRequestAppleIphone13TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-request-apple-ipad3-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianRequestAppleIpad3TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-request-galaxy-note20-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeRequestGalaxyNote20TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-incident-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateIncidentTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-ipad-pro-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderIpadProTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-hardware-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterHardwareListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-asset-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortAssetListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.off-board-user-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.OffBoardUserTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.on-board-user-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.OnBoardUserTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-hardware-asset-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateHardwareAssetTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-apple-mac-book-pro15-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderAppleMacBookPro15TaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-change-request-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterChangeRequestListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-change-request-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortChangeRequestListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-developer-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderDeveloperLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-service-catalog-item-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterServiceCatalogItemListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-incident-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortIncidentListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-change-request-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateChangeRequestTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-incident-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterIncidentListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-sales-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderSalesLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-problem-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateProblemTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-development-laptop-p-c-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderDevelopmentLaptopPCTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-user-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortUserListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-user-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateUserTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-loaner-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderLoanerLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-hardware-asset-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateHardwareAssetWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-problem-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateProblemTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-ipad-mini-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderIpadMiniWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-apple-watch-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderAppleWatchTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-service-catalog-item-list-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterServiceCatalogItemListWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-user-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterUserListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-hardware-list-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortHardwareListWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-service-catalog-item-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortServiceCatalogItemListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-user-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateUserWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-ipad-pro-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderIpadProWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-user-list-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterUserListWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-change-request-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterChangeRequestListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-asset-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortAssetListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-incident-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateIncidentWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-change-request-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateChangeRequestTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-apple-watch-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderAppleWatchWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-ipad-mini-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderIpadMiniTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-asset-list-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterAssetListWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-incident-list-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterIncidentListTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-incident-list-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortIncidentListWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-problem-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateProblemWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-hardware-asset-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateHardwareAssetTaskL2",
+      "level": "l2",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-development-laptop-p-c-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderDevelopmentLaptopPCWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-developer-laptop-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderDeveloperLaptopTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-service-catalog-item-list-with-reason-l2",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortServiceCatalogItemListWithReasonTaskL2",
+      "level": "l2",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-filter-problems-and-mark-duplicates-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityFilterProblemsAndMarkDuplicatesSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.high-priority-filter-problems-and-mark-duplicates-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.HighPriorityFilterProblemsAndMarkDuplicatesSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-filter-problems-and-mark-duplicates-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicFilterProblemsAndMarkDuplicatesSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-filter-problems-and-mark-duplicates-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicFilterProblemsAndMarkDuplicatesLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-filter-problems-and-mark-duplicates-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityFilterProblemsAndMarkDuplicatesLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.high-priority-filter-problems-and-mark-duplicates-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.HighPriorityFilterProblemsAndMarkDuplicatesMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.high-priority-filter-problems-and-mark-duplicates-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.HighPriorityFilterProblemsAndMarkDuplicatesLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-filter-problems-and-mark-duplicates-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicFilterProblemsAndMarkDuplicatesMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-filter-problems-and-mark-duplicates-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityFilterProblemsAndMarkDuplicatesMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.workload-balancing-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkloadBalancingSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.workload-balancing-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkloadBalancingLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.workload-balancing-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkloadBalancingMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.work-assignment-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkAssignmentLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-assignment-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityAssignmentMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.work-assignment-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkAssignmentMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-assignment-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityAssignmentLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.priority-assignment-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.PriorityAssignmentSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.work-assignment-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.WorkAssignmentSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-fix-basic-uniform-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesFixBasicUniformRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-basic-uniform-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesBasicUniformRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-fix-wide-tight-priority-varied-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesFixWideTightPriorityVariedRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-priority-varied-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesPriorityVariedRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-basic-varied-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesBasicVariedRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-fix-basic-varied-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesFixBasicVariedRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.two-changes-fix-priority-uniform-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.TwoChangesFixPriorityUniformRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.three-changes-fix-wide-priority-varied-risk-change-request-scheduling-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.ThreeChangesFixWidePriorityVariedRiskChangeRequestSchedulingTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-order-development-laptop-p-c-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderDevelopmentLaptopPCTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-create-incident-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinCreateIncidentTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-create-problem-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinCreateProblemTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-hardware-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterHardwareListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-filter-hardware-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxFilterHardwareListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-apple-watch2-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestAppleWatch2TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.get-warranty-expiration-date-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.GetWarrantyExpirationDateTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-sales-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderSalesLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-order-apple-watch-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderAppleWatchTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-incident-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterIncidentListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-microsoft-surface-pro3-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestMicrosoftSurfacePro3TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-developer-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderDeveloperLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-orderi-pad-pro-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderiPadProTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-asset-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterAssetListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-filter-asset-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxFilterAssetListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-windows-surface-pro4-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestWindowsSurfacePro4TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-loaner-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderLoanerLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-max-order-loaner-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMaxOrderLoanerLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-google-nexus7-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestGoogleNexus7TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-requested-items-and-order-ipad-pro-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRequestedItemsAndOrderIpadProTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-filter-user-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxFilterUserListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-max-request-galaxy-note20-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMaxRequestGalaxyNote20TaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-min-filter-user-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMinFilterUserListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.amount-based-expense-management-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.AmountBasedExpenseManagementMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-expense-management-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicExpenseManagementLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.amount-based-expense-management-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.AmountBasedExpenseManagementLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.easy-expense-management-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.EasyExpenseManagementLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-expense-management-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicExpenseManagementMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.basic-expense-management-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.BasicExpenseManagementSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.easy-expense-management-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.EasyExpenseManagementSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.date-based-expense-management-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DateBasedExpenseManagementMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.amount-based-expense-management-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.AmountBasedExpenseManagementSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.date-based-expense-management-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DateBasedExpenseManagementLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.easy-expense-management-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.EasyExpenseManagementMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.date-based-expense-management-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DateBasedExpenseManagementSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-uniform-expenses-and-delete-wrong-investments-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemUniformExpensesAndDeleteWrongInvestmentsSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-find-total-return-and-select-investments-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesFindTotalReturnAndSelectInvestmentsLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-find-total-return-and-select-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-find-total-return-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndFindTotalReturnMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-find-total-return-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndFindTotalReturnLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-delete-wrong-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndDeleteWrongInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-find-total-return-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndFindTotalReturnLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-uniform-expenses-and-select-investments-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemUniformExpensesAndSelectInvestmentsSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-trivial-expenses-and-find-total-return-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterTrivialExpensesAndFindTotalReturnSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-select-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndSelectInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-find-total-return-and-select-investments-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesFindTotalReturnAndSelectInvestmentsLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-and-delete-wrong-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesAndDeleteWrongInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-two-items-uniform-expenses-and-find-total-return-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterTwoItemsUniformExpensesAndFindTotalReturnSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-delete-wrong-investments-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndDeleteWrongInvestmentsLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-select-investments-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndSelectInvestmentsLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-select-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndSelectInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-trivial-expenses-and-find-total-return-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterTrivialExpensesAndFindTotalReturnMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-delete-wrong-investments-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndDeleteWrongInvestmentsLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-and-find-total-return-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesAndFindTotalReturnMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-find-total-return-and-select-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-find-total-return-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndFindTotalReturnMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-and-find-total-return-large-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesAndFindTotalReturnLargeTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-three-items-uniform-expenses-and-delete-wrong-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterThreeItemsUniformExpensesAndDeleteWrongInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-find-total-return-and-select-investments-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesFindTotalReturnAndSelectInvestmentsSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-find-total-return-and-select-investments-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesFindTotalReturnAndSelectInvestmentsSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-uniform-expenses-find-total-return-and-select-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemUniformExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-random-expenses-and-delete-wrong-investments-small-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterRandomExpensesAndDeleteWrongInvestmentsSmallTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.filter-single-item-expenses-find-total-return-and-select-investments-medium-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.FilterSingleItemExpensesFindTotalReturnAndSelectInvestmentsMediumTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-mean-orderi-pad-pro-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMeanOrderiPadProTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-median-order-apple-macbook-pro15-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndMedianOrderAppleMacbookPro15TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-catalog-and-mode-order-apple-watch-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveCatalogAndModeOrderAppleWatchTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-create-incident-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeCreateIncidentTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-create-incident-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianCreateIncidentTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-create-incident-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanCreateIncidentTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-create-problem-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeCreateProblemTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-create-problem-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianCreateProblemTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-create-problem-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanCreateProblemTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-lesser-filter-user-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanLesserFilterUserListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-greater-filter-user-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianGreaterFilterUserListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-lesser-filter-asset-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeLesserFilterAssetListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mean-request-apple-iphone13-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMeanRequestAppleIphone13TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-median-request-apple-ipad3-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndMedianRequestAppleIpad3TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.dashboard-retrieve-incident-and-mode-request-galaxy-note20-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.DashboardRetrieveIncidentAndModeRequestGalaxyNote20TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-incident-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateIncidentTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-ipad-pro-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderIpadProTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-hardware-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterHardwareListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-asset-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortAssetListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.off-board-user-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.OffBoardUserTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.on-board-user-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.OnBoardUserTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-hardware-asset-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateHardwareAssetTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-apple-mac-book-pro15-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderAppleMacBookPro15TaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-change-request-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterChangeRequestListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-change-request-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortChangeRequestListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-developer-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderDeveloperLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-service-catalog-item-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterServiceCatalogItemListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-incident-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortIncidentListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-change-request-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateChangeRequestTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-filter-incident-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndFilterIncidentListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-sales-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderSalesLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-problem-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateProblemTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-development-laptop-p-c-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderDevelopmentLaptopPCTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-sort-user-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndSortUserListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-create-user-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndCreateUserTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.navigate-and-order-loaner-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.NavigateAndOrderLoanerLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-hardware-asset-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateHardwareAssetWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-problem-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateProblemTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-ipad-mini-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderIpadMiniWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-apple-watch-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderAppleWatchTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-service-catalog-item-list-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterServiceCatalogItemListWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-user-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterUserListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-hardware-list-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortHardwareListWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-service-catalog-item-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortServiceCatalogItemListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-user-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateUserWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-ipad-pro-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderIpadProWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-user-list-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterUserListWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-change-request-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterChangeRequestListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-asset-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortAssetListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-incident-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateIncidentWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-change-request-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateChangeRequestTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-apple-watch-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderAppleWatchWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-ipad-mini-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderIpadMiniTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-asset-list-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterAssetListWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-filter-incident-list-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndFilterIncidentListTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-incident-list-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortIncidentListWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-problem-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateProblemWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-create-hardware-asset-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndCreateHardwareAssetTaskL3",
+      "level": "l3",
+      "in_human_curriculum": true
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-development-laptop-p-c-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderDevelopmentLaptopPCWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-order-developer-laptop-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndOrderDeveloperLaptopTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  },
+  {
+    "id": "workarena.servicenow.infeasible-navigate-and-sort-service-catalog-item-list-with-reason-l3",
+    "split": "test",
+    "abstract_description": "",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "extra_info": {
+      "task_class_path": "browsergym.workarena.tasks.compositional.InfeasibleNavigateAndSortServiceCatalogItemListWithReasonTaskL3",
+      "level": "l3",
+      "in_human_curriculum": false
+    },
+    "_type": "cube.task.TaskMetadata"
+  }
+]

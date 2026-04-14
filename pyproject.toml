@@ -45,6 +45,9 @@ build-backend = "uv_build"
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
+[tool.uv.sources]
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard"} # TODO: remove once 0.1.0rc5 released
+
 [tool.ruff]
 fix = true
 line-length = 120

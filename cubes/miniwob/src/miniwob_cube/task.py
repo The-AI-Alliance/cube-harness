@@ -8,6 +8,15 @@ from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tools.browser import BrowserTool
 from PIL import Image
 
+
+class MiniWobTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for MiniWob++ tasks.
+    Adds cube-specific public fields that are safe to ship in task_metadata.json.
+    """
+
+    nondeterministic: bool = False
+
+
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_ACTION_NAMES = frozenset(
@@ -45,12 +54,12 @@ class MiniWobTask(Task):
         obs = Observation.from_text(goal) + self.obs_postprocess(self.tool.page_obs())
         return obs, {**info, "task_id": self.id, "task_url": self.url, "goal": goal}
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         result = self.tool.evaluate_js("""() => {
 return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GLOBAL, WOB_EPISODE_ID, WOB_TASK_READY];}""")
         return _parse_validation_result(result)
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         return self.tool.evaluate_js("() => {return WOB_DONE_GLOBAL;}")
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:

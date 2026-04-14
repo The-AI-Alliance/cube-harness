@@ -24,6 +24,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Make the package importable when executed from the cube root without a venv
+# activation step. This is a no-op when the package is already installed.
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from osworld_cube.benchmark import OSWORLD_COMMIT, OSWorldTestSet
@@ -52,10 +54,25 @@ def generate_task_metadata(
     force: bool = False,
     clone_if_missing: bool = True,
 ) -> int:
-    """Parse the OSWorld repo and write task_metadata.json."""
+    """Parse the OSWorld repo and write task_metadata.json.
+
+    Args:
+        repo_dir:          Path to the cloned OSWorld repo.
+        output_path:       Destination path for the JSON file.
+                           Defaults to src/osworld_cube/task_metadata.json.
+        force:             Overwrite even if output_path already exists.
+        clone_if_missing:  Clone the repo if repo_dir does not exist.
+                           When False, raises RuntimeError instead.
+
+    Returns:
+        Number of tasks written (0 if skipped due to idempotency).
+
+    Raises:
+        RuntimeError: If repo_dir does not exist and clone_if_missing=False.
+    """
     if output_path.exists() and not force:
         logger.info(
-            "task_metadata.json already exists at %s - skipping. Pass force=True to regenerate.",
+            "task_metadata.json already exists at %s — skipping. Pass force=True to regenerate.",
             output_path,
         )
         return 0
@@ -69,6 +86,7 @@ def generate_task_metadata(
 
     eval_examples_dir = repo_dir / "evaluation_examples"
 
+    # Collect which test sets each task_id belongs to
     task_sets: dict[str, list[str]] = {}
     task_raw: dict[str, dict] = {}
 

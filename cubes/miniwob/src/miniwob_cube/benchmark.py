@@ -1,4 +1,3 @@
-import json
 import logging
 import subprocess
 import sys
@@ -10,25 +9,11 @@ from pathlib import Path
 from typing import ClassVar, Generator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.task import TaskConfig, TaskMetadata
+from cube.task import TaskConfig
 
-from miniwob_cube.task import MiniWobTaskConfig
+from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
 
 logger = logging.getLogger(__name__)
-
-
-def _load_miniwob_task_metadata() -> dict[str, TaskMetadata]:
-    tasks_file = Path(__file__).parent / "miniwob_tasks.json"
-    with open(tasks_file) as f:
-        task_infos = json.load(f)
-    return {
-        t["subdomain"]: TaskMetadata(
-            id=t["subdomain"],
-            abstract_description=t["desc"],
-            extra_info={"nondeterministic": t.get("nondeterministic", False)},
-        )
-        for t in task_infos
-    }
 
 
 class MiniWobBenchmark(Benchmark):
@@ -39,7 +24,7 @@ class MiniWobBenchmark(Benchmark):
         num_tasks=125,
         tags=["browser", "web", "ui"],
     )
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = _load_miniwob_task_metadata()
+    task_metadata: ClassVar[dict[str, MiniWobTaskMetadata]]  # type: ignore - will be populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = MiniWobTaskConfig
 
     html_path: str = files("miniwob").joinpath("html").as_posix()  # type: ignore

@@ -3,7 +3,7 @@ Computer tool re-exports for osworld-cube.
 
 The implementation has moved to cube-computer-tool (cube_computer_tool).
 This module re-exports everything for backwards compatibility and sets
-ComputerConfig.cache_dir to the osworld-cube cache directory.
+ComputerConfig.cache_dir to the osworld-cube benchmark cache directory.
 """
 
 from osworld_cube._paths import OSWORLD_CACHE_DIR

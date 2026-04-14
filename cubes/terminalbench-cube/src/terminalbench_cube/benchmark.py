@@ -1,8 +1,9 @@
 """Benchmark for terminalbench-cube — real-world terminal tasks with pytest-based validation."""
 
+import base64
 import io
+import json
 import logging
-import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -10,8 +11,6 @@ import tomllib
 from pathlib import Path
 from random import Random
 from typing import ClassVar
-
-from datasets import Dataset, load_from_disk
 
 from cube import get_cache_dir
 from cube.benchmark import Benchmark, BenchmarkMetadata
@@ -21,9 +20,11 @@ from terminalbench_cube.task import TerminalBenchTaskConfig
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATASET_PATH = str(get_cache_dir("terminal_bench_v2"))
+DEFAULT_DATASET_PATH = get_cache_dir("terminal_bench_v2")
 
 REPO_URL = "https://github.com/laude-institute/terminal-bench-2.git"
+
+_TASK_METADATA_JSON = Path(__file__).parent / "task_metadata.json"
 
 
 def _parse_gb(value: str | int) -> float:
@@ -40,6 +41,37 @@ def _parse_gb(value: str | int) -> float:
     return 4.0
 
 
+def _build_task_metadata(tasks: list[dict]) -> dict[str, TaskMetadata]:
+    """Build task_metadata from raw task dicts. archive is stored as a base64 string."""
+    metadata: dict[str, TaskMetadata] = {}
+    for t in tasks:
+        tid = t["task_id"]
+        archive = t["archive"]
+        archive_b64 = base64.b64encode(archive).decode() if isinstance(archive, bytes) else archive
+        metadata[tid] = TaskMetadata(
+            id=tid,
+            abstract_description=t["base_description"][:200],
+            recommended_max_steps=t.get("max_agent_timeout_sec", 900) // 10,
+            container_config=ContainerConfig(
+                image=t.get("docker_image", "python:3.13"),
+                cpu_cores=float(t.get("cpus", 1)),
+                ram_gb=_parse_gb(t.get("memory", "4G")),
+                disk_gb=_parse_gb(t.get("storage", "10G")),
+            ),
+            extra_info={
+                "instruction": t["base_description"],
+                "archive": archive_b64,
+                "difficulty": t.get("difficulty", "unknown"),
+                "category": t.get("category", ""),
+                "tags": t.get("tags", []),
+                "max_agent_timeout_sec": t.get("max_agent_timeout_sec", 900),
+                "max_test_timeout_sec": t.get("max_test_timeout_sec", 900),
+                "oracle_mode": False,
+            },
+        )
+    return metadata
+
+
 class TerminalBenchBenchmark(Benchmark):
     """Terminal-Bench 2 — real-world terminal tasks with pytest-based validation."""
 
@@ -48,13 +80,12 @@ class TerminalBenchBenchmark(Benchmark):
         version="0.1.0",
         description="Real-world terminal tasks (compile, debug, deploy) with pytest-based validation",
         tags=["terminal", "swe", "docker"],
+        num_tasks=89,
     )
-
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
+    # task_metadata: populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = TerminalBenchTaskConfig
 
     # User-configurable fields
-    dataset_path: str = DEFAULT_DATASET_PATH
     shuffle: bool = True
     shuffle_seed: int = 42
     max_tasks: int | None = None
@@ -65,68 +96,18 @@ class TerminalBenchBenchmark(Benchmark):
 
     # ── Benchmark lifecycle ────────────────────────────────────────
 
-    def _setup(self) -> None:
-        """Load dataset, apply filters, and populate task_metadata."""
-        # Only skip loading if this instance already has its own shadow (i.e. was
-        # already set up).  We deliberately do NOT guard on the class-level attr
-        # because that would prevent a fresh instance from loading its own task
-        # set when a previous setup already populated the ClassVar with a different set.
-        if "task_metadata" in self.__dict__:
-            logger.info("Task metadata already loaded, skipping setup")
-            return
+    @classmethod
+    def install(cls) -> None:
+        """Clone terminal-bench-2 repo and save task_metadata.json.
 
-        dataset_path = Path(self.dataset_path)
-        if not dataset_path.exists():
-            raise FileNotFoundError(
-                f"Terminal-Bench dataset not found at {self.dataset_path}. Run benchmark.install() first."
-            )
+        Clones laude-institute/terminal-bench-2, reads each task directory,
+        and saves all task data (including base64-encoded archives) to
+        task_metadata.json next to this module.
 
-        tasks_data = self._filter_tasks(list(load_from_disk(str(dataset_path))))
-
-        metadata: dict[str, TaskMetadata] = {}
-        for t in tasks_data:
-            tid = t["task_id"]
-            metadata[tid] = TaskMetadata(
-                id=tid,
-                abstract_description=t["base_description"][:200],
-                recommended_max_steps=t.get("max_agent_timeout_sec", 900) // 10,
-                container_config=ContainerConfig(
-                    image=t.get("docker_image", "python:3.13"),
-                    cpu_cores=float(t.get("cpus", 1)),
-                    ram_gb=_parse_gb(t.get("memory", "4G")),
-                    disk_gb=_parse_gb(t.get("storage", "10G")),
-                ),
-                extra_info={
-                    "instruction": t["base_description"],
-                    "archive": t["archive"],
-                    "difficulty": t.get("difficulty", "unknown"),
-                    "category": t.get("category", ""),
-                    "tags": t.get("tags", []),
-                    "max_agent_timeout_sec": t.get("max_agent_timeout_sec", 900),
-                    "max_test_timeout_sec": t.get("max_test_timeout_sec", 900),
-                    "oracle_mode": self.oracle_mode,
-                },
-            )
-
-        # Populate instance-level shadow so each instance sees its own filtered view
-        # (e.g. after subset_from_list / subset_from_glob).
-        object.__setattr__(self, "task_metadata", metadata)
-        # Also update the class-level attr so TaskConfig.make() can look up tasks
-        # via the ClassVar in the same process without re-running setup().
-        type(self).task_metadata = metadata
-        logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
-
-    def close(self) -> None:
-        # Containers are closed per-task in TerminalBenchTask.close(), so nothing to clean up here.
-        logger.info("Terminal-Bench benchmark closed")
-
-    # ── Dataset installation ───────────────────────────────────────
-
-    def install(self) -> None:
-        """Clone terminal-bench-2 repo and export as HuggingFace dataset."""
-        outdir = Path(self.dataset_path).resolve()
-        if outdir.exists():
-            logger.info(f"Dataset already exists at {outdir}, skipping install")
+        Safe to call multiple times: skips if task_metadata.json already exists.
+        """
+        if _TASK_METADATA_JSON.exists():
+            logger.info("task_metadata.json already exists, skipping installation")
             return
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -141,41 +122,60 @@ class TerminalBenchBenchmark(Benchmark):
             tasks = []
             for item in sorted(repo_dir.iterdir()):
                 if item.is_dir() and (item / "task.toml").exists():
-                    task = self._load_task_from_repo(item)
+                    task = cls._load_task_from_repo(item)
                     if task:
                         tasks.append(task)
                         logger.info(f"  Loaded: {task['task_id']} ({task['difficulty']})")
 
-            ds = Dataset.from_list(tasks)
-            outdir.mkdir(parents=True, exist_ok=True)
-            ds.save_to_disk(str(outdir))
-        logger.info(f"Dataset saved to: {outdir}")
+        metadata = _build_task_metadata(tasks)
+        _TASK_METADATA_JSON.write_text(json.dumps([tm.model_dump() for tm in metadata.values()], indent=2))
+        cls.task_metadata = metadata
+        logger.info(f"Saved {len(metadata)} tasks to {_TASK_METADATA_JSON}")
 
-    def uninstall(self) -> None:
-        """Remove the locally cached Terminal-Bench dataset."""
-        outdir = Path(self.dataset_path).resolve()
-        if outdir.exists():
-            shutil.rmtree(outdir)
-            logger.info(f"Removed dataset at {outdir}")
-        else:
-            logger.info(f"No dataset found at {outdir}, nothing to uninstall")
+    @classmethod
+    def uninstall(cls) -> None:
+        """Remove task_metadata.json."""
+        if _TASK_METADATA_JSON.exists():
+            _TASK_METADATA_JSON.unlink()
+            cls.task_metadata = {}
+            logger.info(f"Removed {_TASK_METADATA_JSON}")
+
+    def _setup(self) -> None:
+        """Apply instance-level filters and runtime config to the pre-loaded task_metadata."""
+        if "task_metadata" in self.__dict__:
+            logger.info("Task metadata already loaded, skipping setup")
+            return
+
+        tasks = list(type(self).task_metadata.values())
+        tasks = self._filter_tasks(tasks)
+
+        if self.oracle_mode:
+            tasks = [t.model_copy(update={"extra_info": {**t.extra_info, "oracle_mode": True}}) for t in tasks]
+
+        metadata = {t.id: t for t in tasks}
+        object.__setattr__(self, "task_metadata", metadata)
+        type(self).task_metadata = metadata
+        logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
+
+    def close(self) -> None:
+        logger.info("Terminal-Bench benchmark closed")
 
     # ── Private helpers ────────────────────────────────────────────
 
-    def _filter_tasks(self, tasks_data: list[dict]) -> list[dict]:
-        """Apply filtering, shuffling, and slicing to raw task data."""
+    def _filter_tasks(self, tasks: list[TaskMetadata]) -> list[TaskMetadata]:
+        """Apply filtering, shuffling, and slicing to a list of TaskMetadata."""
         if self.task_ids:
             id_set = set(self.task_ids)
-            tasks_data = [t for t in tasks_data if t["task_id"] in id_set]
+            tasks = [t for t in tasks if t.id in id_set]
         if self.difficulty_filter:
-            tasks_data = [t for t in tasks_data if t.get("difficulty", "").lower() == self.difficulty_filter.lower()]
+            tasks = [t for t in tasks if t.extra_info.get("difficulty", "").lower() == self.difficulty_filter.lower()]
         if self.category_filter:
-            tasks_data = [t for t in tasks_data if t.get("category", "").lower() == self.category_filter.lower()]
+            tasks = [t for t in tasks if t.extra_info.get("category", "").lower() == self.category_filter.lower()]
         if self.shuffle:
-            Random(self.shuffle_seed).shuffle(tasks_data)
+            Random(self.shuffle_seed).shuffle(tasks)
         if self.max_tasks:
-            tasks_data = tasks_data[: self.max_tasks]
-        return tasks_data
+            tasks = tasks[: self.max_tasks]
+        return tasks
 
     @staticmethod
     def _load_task_from_repo(task_dir: Path) -> dict | None:
