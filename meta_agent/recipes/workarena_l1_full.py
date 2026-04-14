@@ -6,6 +6,7 @@ Usage:
     uv run recipes/workarena_l1_full.py gpt-5.4-mini           # single model, no hints
     uv run recipes/workarena_l1_full.py debug                   # sequential, 1 task
     uv run recipes/workarena_l1_full.py headless-off            # force headless=False
+    uv run recipes/workarena_l1_full.py retry /path/to/exp     # retry crashed episodes
 
 Code fixes (always active):
     - AXTree: with_clickable=True, readonly/focusable visible
@@ -57,12 +58,19 @@ def make_agent(llm_config: LLMConfig, use_hints: bool = False) -> GennyConfig:
     )
 
 
-def run_for_model(model_key: str, llm_config: LLMConfig, debug: bool, headless: bool, use_hints: bool) -> None:
+def run_for_model(
+    model_key: str,
+    llm_config: LLMConfig,
+    debug: bool,
+    headless: bool,
+    use_hints: bool,
+    retry_dir: Path | None = None,
+) -> None:
     tool_config = ToolboxConfig(
         tool_configs=[
             BrowsergymConfig(
-                browser=PlaywrightSessionConfig(headless=headless, timeout=30000),
-                use_screenshot=False,
+                browser=PlaywrightSessionConfig(headless=headless, timeout=60000),
+                use_screenshot=True,
                 use_axtree=True,
                 use_html=False,
             ),
@@ -74,38 +82,58 @@ def run_for_model(model_key: str, llm_config: LLMConfig, debug: bool, headless: 
     benchmark.setup()
 
     suffix = "hints" if use_hints else "nohints"
-    output_dir = make_experiment_output_dir("genny", f"workarena-l1-{suffix}-{model_key}")
+    if retry_dir is not None:
+        output_dir = retry_dir
+        retry_failed = True
+        resume = True
+    else:
+        output_dir = make_experiment_output_dir("genny", f"workarena-l1-{suffix}-{model_key}")
+        retry_failed = False
+        resume = False
+
     exp = Experiment(
         name=f"workarena-l1-{suffix}-{model_key}",
         output_dir=output_dir,
         agent_config=make_agent(llm_config, use_hints=use_hints),
         benchmark=benchmark,
         max_steps=40,
+        retry_failed=retry_failed,
+        resume=resume,
     )
 
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_with_ray(exp, n_cpus=5)
 
 
-def main(debug: bool, headless: bool, models: list[str], use_hints: bool) -> None:
+def main(debug: bool, headless: bool, models: list[str], use_hints: bool, retry_dir: Path | None) -> None:
     for model_key in models:
         llm_config = MODEL_CONFIGS[model_key]
         hint_label = "WITH hints" if use_hints else "NO hints (code fixes only)"
-        print(f"\n=== {model_key} | {hint_label} | headless={headless} ===")
-        run_for_model(model_key, llm_config, debug, headless, use_hints)
+        label = f"RETRY {retry_dir}" if retry_dir else hint_label
+        print(f"\n=== {model_key} | {label} | headless={headless} ===")
+        run_for_model(model_key, llm_config, debug, headless, use_hints, retry_dir)
 
 
 if __name__ == "__main__":
-    args = set(sys.argv[1:])
-    debug = "debug" in args
-    headless = not debug and "headless-off" not in args
-    use_hints = "hints" in args
+    args = sys.argv[1:]
+    args_set = set(args)
+    debug = "debug" in args_set
+    headless = not debug and "headless-off" not in args_set
+    use_hints = "hints" in args_set
 
-    known_flags = {"debug", "headless-off", "hints"}
-    selected = [k for k in MODEL_CONFIGS if k in args]
+    retry_dir: Path | None = None
+    if "retry" in args_set:
+        retry_idx = args.index("retry")
+        if retry_idx + 1 < len(args):
+            retry_dir = Path(args[retry_idx + 1])
+        else:
+            print("ERROR: 'retry' flag requires a path argument", file=sys.stderr)
+            sys.exit(1)
+
+    selected = [k for k in MODEL_CONFIGS if k in args_set]
     if not selected:
         selected = ["gpt-5.4"]  # default to gpt-5.4
 
-    main(debug=debug, headless=headless, models=selected, use_hints=use_hints)
+    main(debug=debug, headless=headless, models=selected, use_hints=use_hints, retry_dir=retry_dir)
