@@ -18,7 +18,6 @@ Usage:
 
 import sys
 
-from osworld_cube import get_debug_benchmark
 from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
 
@@ -84,10 +83,12 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    benchmark = get_debug_benchmark() if debug else OSWorldBenchmark(default_tool_config=tool_config)
+    benchmark = OSWorldBenchmark(
+        default_tool_config=tool_config,
+        use_som=False,
+    )
     benchmark.setup()
-    if not debug:
-        benchmark = benchmark.named_subset("test_small")
+    benchmark = benchmark.named_subset("test_small")
 
     exp = Experiment(
         name="osworld_genny_gpt5",
@@ -99,7 +100,7 @@ def main(debug: bool) -> None:
 
     if debug:
         print("\n" + "=" * 60)
-        print("DEBUG MODE: Running embedded debug benchmark sequentially")
+        print("DEBUG MODE: Running test_small sequentially")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")

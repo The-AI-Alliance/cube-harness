@@ -17,12 +17,10 @@ Usage:
 import logging
 import os
 import sys
-from pathlib import Path
 
-import osworld_cube
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
+from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
@@ -101,19 +99,13 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
     benchmark = OSWorldBenchmark(
         default_tool_config=tool_config,
         use_som=False,
-        tasks_file=tasks_file,
-        test_set_name=OSWorldTestSet.TEST_SMALL,
         infra=INFRA,
     )
     benchmark.setup()
-
-    # Provision all resources the benchmark needs (idempotent — no-ops if already ready).
-    for resource in benchmark.resources:
-        INFRA.provision(resource)
+    benchmark = benchmark.named_subset("test_small")
 
     exp = Experiment(
         name="osworld_azure_gpt5_mini",
@@ -126,7 +118,7 @@ def main(debug: bool) -> None:
     try:
         if debug:
             print("\n" + "=" * 60)
-            print("DEBUG MODE: Running debug_tasks.json sequentially on Azure")
+            print("DEBUG MODE: Running test_small sequentially on Azure")
             print("=" * 60)
             print(f"Output directory: {output_dir}")
             print(f"Model: {llm_config.model_name}")
