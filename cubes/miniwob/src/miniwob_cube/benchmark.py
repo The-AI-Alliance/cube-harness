@@ -1,4 +1,3 @@
-import copy
 import json
 import logging
 import subprocess
@@ -56,28 +55,6 @@ class MiniWobBenchmark(Benchmark):
     _stderr_file: object | None = None
 
     model_config = {"arbitrary_types_allowed": True}
-
-    def __deepcopy__(self, memo: dict) -> "MiniWobBenchmark":
-        """Deepcopy that skips un-picklable runtime state (server process, file handles).
-
-        The base Benchmark.subset_from_list() uses copy.deepcopy() to clone the
-        benchmark before overriding task_metadata.  After setup() is called, the
-        private attrs (_server_process, _stdout_file, _stderr_file) contain OS-level
-        objects (subprocess.Popen, file handles) that cannot be deepcopied.
-
-        This override reconstructs the instance from its Pydantic model fields only,
-        leaving private attrs at their defaults (None), so subset_from_list() works
-        both before *and* after setup(). The returned instance has no running server.
-        """
-        field_values = {name: copy.deepcopy(getattr(self, name), memo) for name in self.model_fields}
-        new = type(self)(**field_values)
-        # Preserve any instance-level ClassVar shadows (set by prior subset_from_list calls).
-        if "benchmark_metadata" in self.__dict__:
-            object.__setattr__(new, "benchmark_metadata", copy.copy(self.__dict__["benchmark_metadata"]))
-        if "task_metadata" in self.__dict__:
-            object.__setattr__(new, "task_metadata", dict(self.__dict__["task_metadata"]))
-        memo[id(self)] = new
-        return new
 
     @property
     def base_url(self) -> str:
