@@ -5,18 +5,15 @@ the linearized accessibility tree for element coordinates, without screenshots
 or Set-of-Marks scaffolding.
 
 Prerequisites:
-    OSWorld repo cloned to ~/.cube/OSWorld/
-    (auto-cloned on first run if missing)
+    OSWorld benchmark metadata is shipped in cubes/osworld-cube/src/osworld_cube/task_metadata.json.
+    The OSWorld repo is cloned on first install to populate per-task execution cache files.
 
 Usage:
-    # Debug mode (2 tasks, sequential)
+    # Debug mode (embedded debug benchmark, sequential)
     uv run recipes/eval_osworld.py debug
 
-    # Eval mode (all tasks, 3 workers)
+    # Eval mode (test_small subset, 3 workers)
     uv run recipes/eval_osworld.py
-
-    # Custom task subset via tasks_file
-    TASKS_FILE=/path/to/tasks.json uv run recipes/eval_osworld.py
 """
 
 import sys
@@ -111,7 +108,7 @@ def main(debug: bool) -> None:
         run_sequentially(exp)
     else:
         print("\n" + "=" * 60)
-        print("EVAL MODE: Running OSWorld tasks with Ray")
+        print("EVAL MODE: Running OSWorld test_small subset with Ray")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")

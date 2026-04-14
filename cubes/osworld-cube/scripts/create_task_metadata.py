@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate src/osworld_cube/task_metadata.json from the OSWorld repo.
 
-This is a developer tool.  Run it after cloning (or updating) the OSWorld repo
-to regenerate the shipped package resource.  The output file is committed to
-the repository — end users never need to run this script.
+This is a developer tool. Run it after cloning (or updating) the OSWorld repo
+to regenerate the shipped package resource. The output file is committed to
+the repository - end users never need to run this script.
 
 The script clones the repo automatically if it is not already present.
 

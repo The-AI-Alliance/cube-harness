@@ -116,7 +116,6 @@ class TestDebugBenchmark:
         from osworld_cube.debug import get_debug_benchmark
 
         benchmark = get_debug_benchmark()
-
         assert isinstance(benchmark.infra, LocalInfraConfig)
 
 
@@ -530,20 +529,39 @@ class TestOSWorldBenchmark:
         assert OSWorldBenchmark.benchmark_metadata.name == "osworld-cube"
         assert OSWorldBenchmark.task_config_class.__name__ == "OSWorldTaskConfig"
 
+    def test_load_all_tasks_from_shipped_metadata(self) -> None:
+        from osworld_cube.benchmark import OSWorldBenchmark
+
+        assert len(OSWorldBenchmark.task_metadata) > 0
+        assert all(tm.test_sets for tm in OSWorldBenchmark.task_metadata.values())
+
     def test_domain_filter_via_subset_from_glob(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark
 
         bench = OSWorldBenchmark()
         chrome_bench = bench.subset_from_glob("domain", "chrome")
+        assert isinstance(chrome_bench, OSWorldBenchmark)
+        assert len(chrome_bench.task_metadata) > 0
         assert len(chrome_bench.task_metadata) < len(bench.task_metadata)
         assert all(tm.domain == "chrome" for tm in chrome_bench.task_metadata.values())
 
-    def test_get_task_configs_returns_osworld_task_configs(self) -> None:
+    def test_named_subset_test_small(self) -> None:
+        from osworld_cube.benchmark import OSWorldBenchmark
+
+        bench = OSWorldBenchmark()
+        small_bench = bench.named_subset("test_small")
+        assert isinstance(small_bench, OSWorldBenchmark)
+        assert len(small_bench.task_metadata) > 0
+        assert len(small_bench.task_metadata) < len(bench.task_metadata)
+        assert all("test_small" in tm.test_sets for tm in small_bench.task_metadata.values())
+
+    def test_get_task_configs_carries_metadata(self) -> None:
         from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 
         bench = OSWorldBenchmark()
         configs = list(bench.get_task_configs())
-        assert len(configs) == 368
+        assert len(configs) == len(bench.task_metadata) == 368
+
         for cfg in configs:
             assert isinstance(cfg, OSWorldTaskConfig)
             assert cfg.task_id in bench.task_metadata
@@ -560,12 +578,21 @@ class TestOSWorldBenchmark:
 
         assert isinstance(task, OSWorldTask)
         assert task.metadata.id == cfg.task_id
+        assert "config" in task.metadata.extra_info
+        assert "evaluator" in task.metadata.extra_info
+
+    def test_test_all_has_all_tasks(self) -> None:
+        from osworld_cube.benchmark import OSWorldBenchmark
+
+        bench = OSWorldBenchmark().named_subset("test_all")
+        assert len(bench.task_metadata) == len(OSWorldBenchmark.task_metadata)
 
     def test_use_som_propagates_to_task_configs(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
 
         bench = OSWorldBenchmark(use_som=True)
         cfg = next(bench.get_task_configs())
+        assert isinstance(cfg, OSWorldTaskConfig)
         assert cfg.use_som is True
 
     def test_close_does_not_raise(self) -> None:

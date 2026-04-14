@@ -58,23 +58,12 @@ class OSWorldTaskMetadata(TaskMetadata):
     cache and is loaded lazily by OSWorldTaskConfig.make().
     """
 
-    domain: str
-    """Desktop domain, e.g. 'chrome', 'os', 'libreoffice_calc'."""
-
-    test_sets: list[str]
-    """OSWorld test sets this task belongs to, e.g. ['test_all', 'test_small']."""
-
-    instruction: str
-    """Full agent-facing task instruction."""
-
-    snapshot: str
-    """VM snapshot name to restore before the task starts."""
-
-    os_type: str
-    """Guest OS type used for accessibility-tree linearisation ('ubuntu' or 'windows')."""
-
-    related_apps: list[str]
-    """Applications involved in the task, e.g. ['chrome', 'libreoffice_calc']."""
+    domain: str  # Desktop domain, e.g. 'chrome', 'os', 'libreoffice_calc'.
+    test_sets: list[str]  # OSWorld test sets this task belongs to, e.g. ['test_all', 'test_small'].
+    instruction: str  # Full agent-facing task instruction.
+    snapshot: str  # VM snapshot name to restore before the task starts.
+    os_type: str  # Guest OS type used for accessibility-tree linearisation ('ubuntu' or 'windows').
+    related_apps: list[str]  # Applications involved in the task, e.g. ['chrome', 'libreoffice_calc'].
 
 
 class OSWorldTask(Task):
@@ -229,7 +218,7 @@ class OSWorldTask(Task):
             "id": self.metadata.id,
             "instruction": self.metadata.instruction,
             "config": self.metadata.extra_info.get("config", []),  # loaded from execution cache in make()
-            "evaluator": self.metadata.extra_info.get("evaluator", {}),
+            "evaluator": self.metadata.extra_info.get("evaluator", {}),  # loaded from execution cache in make()
             "snapshot": self.metadata.snapshot,
             "related_apps": self.metadata.related_apps,
         }
