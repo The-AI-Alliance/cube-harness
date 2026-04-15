@@ -41,7 +41,7 @@ You are a desktop automation agent controlling a real Windows 11 computer.
 
 ## Observations
 Each step you receive:
-1. A screenshot of the current screen (1920×1080)
+1. A screenshot of the current screen (1280×800)
 2. An element table listing interactive UI elements with columns:
    index, tag, name, text, x, y, w, h
 
