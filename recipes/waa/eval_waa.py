@@ -84,11 +84,9 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    # tasks_file = str(Path(waa_cube.__file__).parent / "debug_tasks.json") if debug else None
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
         vm_backend=WAADockerVMBackend(cpu_cores=8),
-        # tasks_file=tasks_file,
         test_set_name="test_small.json",
     )
     benchmark.install()
