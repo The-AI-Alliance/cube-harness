@@ -19,9 +19,7 @@ Usage:
 
 import sys
 from datetime import datetime
-from pathlib import Path
 
-import waa_cube
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 from waa_cube.vm_backend.backend import WAADockerVMBackend
@@ -102,11 +100,9 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    tasks_file = str(Path(waa_cube.__file__).parent / "debug_tasks.json") if debug else None
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
         vm_backend=WAADockerVMBackend(cpu_cores=8),
-        tasks_file=tasks_file,
         test_set_name="test_all.json",
     )
     benchmark.install()
@@ -115,13 +111,12 @@ def main(debug: bool) -> None:
     # Exclude chrome/msedge tasks: Chrome DevTools (CDP) setup has a timing
     # issue — Playwright gets a 502 connecting to the CDP port before Chrome
     # is fully ready.
-    if not debug:
-        keep_ids = [
-            tid
-            for tid, meta in benchmark.task_metadata.items()
-            if meta.extra_info.get("domain") not in ("chrome", "msedge")
-        ]
-        benchmark = benchmark.subset_from_list(keep_ids)
+    keep_ids = [
+        tid
+        for tid, meta in benchmark.task_metadata.items()
+        if meta.extra_info.get("domain") not in ("chrome", "msedge")
+    ]
+    benchmark = benchmark.subset_from_list(keep_ids)
 
     exp = Experiment(
         name="waa_genny_haiku_3obs_100actions",
