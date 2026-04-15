@@ -1,18 +1,16 @@
 """Deterministic debug agent for testing WAATask end-to-end with a live VM.
 
-Each debug task in debug_tasks.json uses an infeasible evaluator: the agent
-calls ``fail()`` and the evaluator returns reward=1.0. This validates the full
-CUBE task loop — VM startup, snapshot restore, screenshot capture, and
-evaluation — without requiring the agent to perform any GUI actions.
-
-Public API
-----------
+Public API (required by cube.testing.run_debug_suite)
+-----------------------------------------------------
 make_debug_agent(task_id)    → DebugAgent
-get_debug_benchmark()        → WAABenchmark
+get_debug_benchmark()        → DebugWAABenchmark
 
 Usage::
 
-    # Run all debug tasks and print a JSON report
+    # Via cube CLI
+    cube test waa-cube
+
+    # Directly
     python -m waa_cube.debug
 """
 
@@ -20,25 +18,77 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import ClassVar
 
+from cube.benchmark import Benchmark
+from cube.container import ContainerBackend
 from cube.core import Action, ActionSchema, Observation
-from cube.vm import VMBackend
+from cube.task import TaskConfig, TaskMetadata
 
-from waa_cube.benchmark import WAABenchmark
+from waa_cube.benchmark import WAABenchmark, WAATaskConfig
 from waa_cube.computer import ComputerConfig
+from waa_cube.task import WAATask
 from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 logger = logging.getLogger(__name__)
 
-_TASKS_FILE = Path(__file__).parent / "debug_tasks.json"
+_DEBUG_TASK_METADATA_JSON = Path(__file__).parent / "debug_task_metadata.json"
+
+
+# ---------------------------------------------------------------------------
+# Debug benchmark and task config
+# ---------------------------------------------------------------------------
+
+
+class DebugWAATaskConfig(WAATaskConfig):
+    def make(
+        self,
+        runtime_context: dict | None = None,
+        container_backend: ContainerBackend | None = None,
+    ) -> WAATask:
+        metadata = DebugWAABenchmark.task_metadata[self.task_id]
+        return WAATask(
+            metadata=metadata,
+            tool_config=self.tool_config or ComputerConfig(),
+            vm_backend=self.vm_backend,
+            runtime_context=runtime_context,
+            container_backend=container_backend,
+        )
+
+
+class DebugWAABenchmark(WAABenchmark):
+    """WAABenchmark scoped to debug tasks only.
+
+    Loads task_metadata from debug_task_metadata.json — config and evaluator are
+    embedded in extra_info, so no WAA repo or evaluation_examples_windows/ is needed.
+    """
+
+    benchmark_metadata = WAABenchmark.benchmark_metadata.model_copy(update={"name": "waa-cube-debug", "num_tasks": 2})
+    task_metadata: ClassVar[dict[str, TaskMetadata]] = Benchmark.task_metadata_from_json(_DEBUG_TASK_METADATA_JSON)
+    task_config_class: ClassVar[type[TaskConfig]] = DebugWAATaskConfig
+
+    def install(self) -> None:
+        """No-op: debug task data is embedded in debug_task_metadata.json."""
+        if self.vm_backend is not None and isinstance(self.vm_backend, WAADockerVMBackend):
+            self.vm_backend.install()
+
 
 # ---------------------------------------------------------------------------
 # Hardcoded action sequences per task ID
 # ---------------------------------------------------------------------------
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
+    "waa-debug-notepad": [
+        # Win+R → type notepad → Enter → done
+        Action(name="run_pyautogui", arguments={"code": "pyautogui.hotkey('win', 'r')"}),
+        Action(
+            name="run_pyautogui",
+            arguments={"code": "import time; time.sleep(1); pyautogui.typewrite('notepad', interval=0.05)"},
+        ),
+        Action(name="run_pyautogui", arguments={"code": "pyautogui.press('enter')"}),
+        Action(name="done", arguments={}),
+    ],
     "waa-debug-infeasible": [
-        # Signal that the task is infeasible — triggers reward=1.0 from the evaluator
         Action(name="fail", arguments={}),
     ],
 }
@@ -50,18 +100,7 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
 
 
 class DebugAgent:
-    """Deterministic debug agent that replays a fixed action sequence for a given task.
-
-    Interface matches the stress-test spec:
-        agent = make_debug_agent(task_id)
-        action = agent.get_action(obs)
-
-    Args:
-        task_id: ID of the debug task to run. Must match a key in _TASK_ACTIONS.
-
-    Raises:
-        ValueError: If task_id has no registered action sequence.
-    """
+    """Deterministic debug agent that replays a fixed action sequence for a task."""
 
     def __init__(self, task_id: str) -> None:
         if task_id not in _TASK_ACTIONS:
@@ -69,63 +108,44 @@ class DebugAgent:
         self._task_id = task_id
         self._step = 0
         self._actions = list(_TASK_ACTIONS[task_id])
-        logger.debug(
-            "[DebugAgent] Initialised for task=%r with %d actions",
-            task_id,
-            len(self._actions),
-        )
 
     def get_action(self, obs: Observation) -> Action:
-        """Return the next predetermined action."""
         if self._step >= len(self._actions):
             raise StopIteration(f"[DebugAgent] task={self._task_id!r}: all {len(self._actions)} actions exhausted")
         action = self._actions[self._step]
         logger.info(
-            "[DebugAgent] task=%r  step=%d/%d  action=%s  args=%s",
+            "[DebugAgent] task=%r  step=%d/%d  action=%s",
             self._task_id,
             self._step + 1,
             len(self._actions),
             action.name,
-            action.arguments or "",
         )
         self._step += 1
         return action
 
     def __call__(self, obs: Observation, action_set: list[ActionSchema]) -> Action:
-        """Callable shorthand — delegates to get_action() for task-loop compatibility."""
         return self.get_action(obs)
 
 
 # ---------------------------------------------------------------------------
-# Public helpers
+# Public helpers (required by cube.testing.run_debug_suite)
 # ---------------------------------------------------------------------------
 
 
-def get_debug_benchmark(vm_backend: VMBackend | None = None) -> WAABenchmark:
-    """Return a WAABenchmark scoped to the debug tasks.
-
-    Uses debug_tasks.json as the task source — no evaluation_examples_windows/
-    directory required. The caller (cube.testing) is responsible for calling
-    install() and setup().
-
-    Args:
-        vm_backend: Backend to use. Defaults to WAADockerVMBackend (requires
-                    Docker and a pre-built Windows QEMU image).
-    """
-    return WAABenchmark(
-        tasks_file=str(_TASKS_FILE),
+def get_debug_benchmark() -> DebugWAABenchmark:
+    """Return a WAABenchmark scoped to the debug tasks."""
+    return DebugWAABenchmark(
         default_tool_config=ComputerConfig(),
-        vm_backend=vm_backend or WAADockerVMBackend(),
+        vm_backend=WAADockerVMBackend(cpu_cores=8),
     )
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
-    """Return a fresh DebugAgent for the given task_id."""
     return DebugAgent(task_id)
 
 
 # ---------------------------------------------------------------------------
-# __main__ — run all debug tasks, print JSON report
+# __main__
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -142,6 +162,5 @@ if __name__ == "__main__":
     )
 
     results = run_debug_suite("waa-cube", _mod)
-
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] <= 0]
     sys.exit(1 if failed else 0)
