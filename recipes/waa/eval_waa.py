@@ -87,9 +87,7 @@ def main(debug: bool) -> None:
     # tasks_file = str(Path(waa_cube.__file__).parent / "debug_tasks.json") if debug else None
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
-        vm_backend=WAADockerVMBackend(
-            cpu_cores=4,  # Reduced for 16-core machine with 2 parallel workers
-        ),
+        vm_backend=WAADockerVMBackend(cpu_cores=8),
         # tasks_file=tasks_file,
         test_set_name="test_small.json",
     )
@@ -125,13 +123,12 @@ def main(debug: bool) -> None:
         run_sequentially(exp)
     else:
         print("\n" + "=" * 60)
-        print("EVAL MODE: Running WAA tasks with Ray")
+        print("EVAL MODE: Running WAA tasks sequentially")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
-        print("Parallelism: 2 workers")
         print("=" * 60 + "\n")
-        run_with_ray(exp, n_cpus=2)
+        run_sequentially(exp)
 
 
 if __name__ == "__main__":
