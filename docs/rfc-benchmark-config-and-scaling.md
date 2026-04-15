@@ -118,7 +118,101 @@ benchmark = config.make(infra)
 
 ---
 
-## Part 2 — CompositeBenchmark
+## Part 2 — BenchmarkPool
+
+### Problem
+
+WorkArena (ServiceNow) and WebArena degrade under load — roughly 7 concurrent agents per server. At RL scale (100s of rollouts), you need N server instances and dynamic load balancing.
+
+### Design
+
+`BenchmarkPool` accepts one `BenchmarkConfig` and calls `config.make(infra)` N times, each targeting a different server. A Ray Actor encapsulates active agent counts per instance and assigns incoming tasks to the least-loaded one.
+
+```python
+class BenchmarkPool(Benchmark):
+    def __init__(self, config: BenchmarkConfig, infra: InfraConfig, n_servers: int):
+        # config.make(infra) is called n_servers times.
+        # Each call provisions/launches a separate L2 resource (a different server
+        # endpoint) and returns a live Benchmark.
+        self._benchmarks = [config.make(infra) for _ in range(n_servers)]
+        # Actor handle is serializable — Ray workers can call it from any process.
+        self._actor = LoadBalancerActor.remote(n_servers)
+```
+
+`BenchmarkConfig.make()` is the key: without it there is no clean way to instantiate N identical benchmarks from one config. `InfraConfig` is responsible for handing out N distinct server endpoints on successive `make()` calls (e.g. from a pool of pre-provisioned ServiceNow instances).
+
+### Task dispatch via `_runtime_context_for()`
+
+**The server assignment must happen at task execution time**, not at episode creation time. Today `Experiment._create_all_episodes()` bakes `benchmark._runtime_context` into each `Episode` upfront. For `BenchmarkPool` that would freeze every task to the same server before any worker runs.
+
+The fix is a small protocol extension: `Episode.run()` calls `benchmark._runtime_context_for(task_config)` lazily — on the Ray worker, at the moment the task is about to start — instead of reading a pre-baked context dict:
+
+```python
+# Episode.run() — new behavior
+ctx = self.benchmark._runtime_context_for(self.task_config)  # lazy, blocking
+try:
+    task = self.task_config.make(runtime_context=ctx, ...)
+    ...
+finally:
+    self.benchmark._release_context(ctx)
+```
+
+The default `Benchmark` implementation just returns `self._runtime_context` (unchanged behavior). `BenchmarkPool` overrides it:
+
+```python
+class BenchmarkPool(Benchmark):
+    def _runtime_context_for(self, task_config: TaskConfig) -> RuntimeContext:
+        # Blocks until the least-loaded server has a free slot.
+        # The actor handle is serializable, so this works from any Ray worker.
+        idx = ray.get(self._actor.acquire.remote())
+        return {**self._benchmarks[idx]._runtime_context, "_pool_slot": idx}
+
+    def _release_context(self, ctx: RuntimeContext) -> None:
+        ray.get(self._actor.release.remote(ctx["_pool_slot"]))
+```
+
+The `LoadBalancerActor` is an **implementation detail fully encapsulated inside `BenchmarkPool`**. `Episode` and Ray workers never call it directly — they only interact through the `_runtime_context_for` / `_release_context` protocol on `Benchmark`.
+
+```python
+@ray.remote
+class LoadBalancerActor:
+    def __init__(self, n_servers: int, max_per_server: int):
+        self._active = [0] * n_servers
+        self._max = max_per_server
+
+    def acquire(self) -> int:
+        """Block until a slot is free; return the least-loaded server index."""
+        while True:
+            candidates = [i for i, c in enumerate(self._active) if c < self._max]
+            if candidates:
+                idx = min(candidates, key=lambda i: self._active[i])
+                self._active[idx] += 1
+                return idx
+            time.sleep(0.1)   # or use async actor pattern to avoid spinning
+
+    def release(self, idx: int) -> None:
+        self._active[idx] -= 1
+```
+
+Ray Actors process calls one at a time (serialized), so `acquire()` / `release()` are race-free with no additional locking.
+
+### Usage
+
+```python
+# WorkArena loads all 333 tasks (L1+L2+L3) at import time.
+# Level filtering is done via named_subset(), not via a constructor arg.
+pool = BenchmarkPool(
+    config=WorkArenaBenchmarkConfig().named_subset("l1"),
+    infra=AzureInfraConfig(...),
+    n_servers=3,
+)
+exp = Experiment(name="workarena-l1", benchmark=pool, ...)
+run_with_ray(exp, n_cpus=21)    # 3 servers × 7 agents each
+```
+
+---
+
+## Part 3 — CompositeBenchmark
 
 ### Problem
 
@@ -187,72 +281,6 @@ exp = Experiment(name="multi_bench", benchmark=composite.make(azure_infra), ...)
 
 ---
 
-## Part 3 — BenchmarkPool
-
-### Problem
-
-WorkArena (ServiceNow) and WebArena degrade under load — roughly 7 concurrent agents per server. At RL scale (100s of rollouts), you need N server instances and dynamic load balancing.
-
-### Design
-
-`BenchmarkPool` accepts one `BenchmarkConfig` and calls `config.make(infra)` N times in the **main process**, each targeting a different server. This produces N live `Benchmark` instances — one per server slot — that stay in the main process for their entire lifetime.
-
-`BenchmarkConfig.make()` is the key: without it there is no clean way to instantiate N identical benchmarks from one config. `InfraConfig` is responsible for handing out N distinct server endpoints on successive `make()` calls (e.g. from a pool of pre-provisioned ServiceNow instances).
-
-#### What crosses the process boundary
-
-`Benchmark` instances **never** leave the main process. They hold subprocess handles, browser connections, and other OS-level state that cannot be serialized to Ray workers. Only **`RuntimeContext` dicts** (plain Python dicts) cross the process boundary — they are exactly what `task_config.make(runtime_context=ctx)` already expects.
-
-`LoadBalancerActor` holds a list of `RuntimeContext` dicts (one per slot), not `Benchmark` references. It hands out a context dict when a slot is free and reclaims it when the task finishes.
-
-#### Dispatch flow
-
-1. `run_with_ray` dispatches all N tasks to Ray immediately (non-blocking). Ray's scheduler queues them normally.
-2. Each Ray worker, inside the `run_episode` remote function, calls `actor.acquire()` on the `LoadBalancerActor` — this blocks until a slot is free and returns the corresponding `RuntimeContext` dict.
-3. The worker calls `task_config.make(runtime_context=ctx)` with that dict, runs the episode, then calls `actor.release(slot_idx)`.
-4. `Episode` itself is unchanged — slot acquisition lives in the `run_episode` Ray wrapper, not inside `Episode`.
-
-The actor handle is the only non-dict object that crosses process boundaries. Ray actor handles are natively serializable; `run_with_ray` passes it to each `run_episode.remote(episode, lb_actor=handle)` call.
-
-#### LoadBalancerActor
-
-The actor holds one `RuntimeContext` dict per slot and is the sole gatekeeper for those dicts. Because Ray actors process calls one at a time, `acquire()` / `release()` are race-free with no additional locking.
-
-```python
-@ray.remote
-class LoadBalancerActor:
-    def __init__(self, contexts: list[RuntimeContext]):
-        # One RuntimeContext dict per server slot — plain dicts, fully serializable.
-        self._contexts = contexts
-        self._free = list(range(len(contexts)))
-
-    def acquire(self) -> tuple[int, RuntimeContext]:
-        """Block until a slot is free; return (slot_idx, context)."""
-        while not self._free:
-            time.sleep(0.05)   # or use async actor pattern to avoid spinning
-        idx = self._free.pop(0)
-        return idx, self._contexts[idx]
-
-    def release(self, slot_idx: int) -> None:
-        self._free.append(slot_idx)
-```
-
-### Usage
-
-```python
-# WorkArena loads all 333 tasks (L1+L2+L3) at import time.
-# Level filtering is done via named_subset(), not via a constructor arg.
-pool = BenchmarkPool(
-    config=WorkArenaBenchmarkConfig().named_subset("l1"),
-    infra=AzureInfraConfig(...),
-    n_servers=3,
-)
-exp = Experiment(name="workarena-l1", benchmark=pool, ...)
-run_with_ray(exp, n_cpus=21)    # 3 servers × 7 agents each
-```
-
----
-
 ## Part 4 — ResourcePool (RL-scale, future)
 
 For task-scoped resources (OSWorld VMs, per-task containers), each task currently pays a ~60s VM launch cost. A `ResourcePool` pre-warms N VMs and recycles them via snapshot revert.
@@ -281,7 +309,7 @@ The shape is documented in the prior design (`docs/BENCHMARK_POOL_DESIGN.md`, se
 | New `BenchmarkPool` | `src/cube_harness/benchmark_pool.py`. Calls `config.make(infra)` N times. |
 | New `CompositeBenchmarkConfig` | `src/cube_harness/composite_benchmark.py`. Serializable list of `BenchmarkConfig`. |
 | New `CompositeBenchmark` | Runtime object; routes tasks to sub-benchmark `_runtime_context`. |
-| `run_with_ray` wiring | Pass `lb_actor` handle to each `run_episode.remote()` call when running with a `BenchmarkPool`; slot acquisition happens in the Ray wrapper, not in `Episode`. |
+| `Experiment` wiring | Support `_runtime_context_for(task_config)` protocol for composite/pool dispatch. |
 
 ### Per-cube effort
 
@@ -325,5 +353,5 @@ Once these merge, per-cube migration to `BenchmarkConfig` is purely mechanical f
 3. **`InfraConfig` in `make()` vs passed at experiment time**  
    Should `infra_config` be passed to `make()` or stored on the config? Passing at `make()` is cleaner — the config describes *what*, not *where* to run it.
 
-4. **`run_episode` wrapper and slot acquisition**  
-   Slot acquisition for `BenchmarkPool` happens inside the `run_episode` Ray remote function, not inside `Episode`. This keeps `Episode` unchanged and avoids serializing `Benchmark` objects to workers. The open question is whether `run_with_ray` should detect a `BenchmarkPool` and inject the actor handle automatically, or whether `BenchmarkPool` exposes a `prepare_runner()` hook that wraps the remote function.
+4. **`_runtime_context_for()` protocol**  
+   `Experiment` today reads one `benchmark._runtime_context`. For `CompositeBenchmark` and `BenchmarkPool`, the context is per-task. `_runtime_context_for(task_config)` is the natural extension — needs to be added to the `Benchmark` interface.
