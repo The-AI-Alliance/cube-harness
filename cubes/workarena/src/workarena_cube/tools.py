@@ -99,6 +99,7 @@ class WorkArenaCheatTool(SyncPlaywrightTool):
         self._workarena_task.cheat(self.page, self._chat_messages_ref)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
         return "WorkArena cheat executed."
 
+
 class WorkArenaCheatToolConfig(PlaywrightConfig):
     """PlaywrightConfig variant that creates a WorkArenaCheatTool."""
 

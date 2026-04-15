@@ -21,7 +21,6 @@ from pydantic import PrivateAttr
 logger = logging.getLogger(__name__)
 
 
-
 class WorkArenaTask(Task):
     """CUBE Task wrapper for WorkArena ServiceNow tasks."""
 
@@ -103,7 +102,7 @@ class WorkArenaTask(Task):
     def _chat_messages(self) -> list[dict]:
         """
         Return combined chat and infeasible messages.
-        
+
         Normal path (ChatTool): a copy of session history — safe for parallel episodes,
         always current because send_message() writes before evaluate() runs.
 
@@ -131,7 +130,7 @@ class WorkArenaTask(Task):
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
         if self._validate_cache is None:
             page = self._browser_tool.page
-            self._validate_cache = self._workarena_task.validate(page, self._chat_messages)    # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
+            self._validate_cache = self._workarena_task.validate(page, self._chat_messages)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
         return self._validate_cache  # type: ignore[return-value]
 
     @override
