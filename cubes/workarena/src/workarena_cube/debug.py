@@ -23,7 +23,7 @@ from cube.core import Action, ActionSchema, Observation
 from cube.testing import run_debug_suite
 
 from workarena_cube.benchmark import WorkArenaBenchmark
-from workarena_cube.task import WorkArenaCheatToolConfig
+from workarena_cube.tools import WorkArenaCheatToolConfig
 
 logger = logging.getLogger(__name__)
 

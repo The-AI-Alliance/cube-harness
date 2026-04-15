@@ -24,18 +24,21 @@ import shutil
 import subprocess
 from collections.abc import Generator
 from copy import deepcopy
-from dotenv import load_dotenv
 from pathlib import Path
 from typing import ClassVar
 
+from dotenv import load_dotenv
+from pydantic import Field
+
+from cube import LocalInfraConfig
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
+from cube.resource import InfraConfig, ResourceConfig
 from cube.task import TaskConfig
-from cube.vm import VMBackend
 
 from osworld_cube._paths import OSWORLD_BASE_DIR, OSWORLD_REPO_DIR, OSWORLD_VM_DIR
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
+from osworld_cube.task import OSWORLD_UBUNTU_RESOURCE, OSWorldTask, OSWorldTaskMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ OSWORLD_COMMIT = "e695a10"
 
 
 # ---------------------------------------------------------------------------
-# .env helper
+# helper functions for install()
 # ---------------------------------------------------------------------------
 
 
@@ -68,6 +71,53 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
     with env_path.open("a") as f:
         f.write(f"\n{key}={value}\n")
     logger.info(f"Appended {key} to {env_path}")
+
+
+def _build_task_execution_info_from_repo() -> dict[str, dict]:
+    """
+    Build heavy per-task execution info from the OSWorld repo.
+    """
+    assert OSWORLD_REPO_DIR.exists(), (
+        f"OSWorld repo not found at {OSWORLD_REPO_DIR}. Run OSWorldBenchmark.install() to clone it first."
+    )
+    eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
+    exec_info_by_id: dict[str, dict] = {}
+
+    for test_set_file in eval_examples_dir.glob("test_*.json"):
+        with open(test_set_file) as f:
+            tasks_by_domain: dict[str, list[str]] = json.load(f)
+        for domain_name, task_ids in tasks_by_domain.items():
+            for task_id in task_ids:
+                task_file = eval_examples_dir / "examples" / domain_name / f"{task_id}.json"
+                if not task_file.exists():
+                    logger.warning("Task file not found: %s", task_file)
+                    continue
+                try:
+                    with open(task_file) as f:
+                        td = json.load(f)
+                except Exception as e:
+                    logger.error("Failed to load task %s: %s", task_id, e)
+                    continue
+
+                raw = {"config": td.get("config", []), "evaluator": td.get("evaluator", {})}
+                if task_id in exec_info_by_id:
+                    assert raw == exec_info_by_id[task_id], (
+                        f"Task {task_id!r} appears in domain {domain_name!r} with content "
+                        f"that conflicts with a previously loaded copy"
+                    )
+                    continue
+                exec_info_by_id[task_id] = raw
+
+    # Convert relative paths in config to absolute paths pointing to the repo.
+    exec_info_by_id_abs = {
+        task_id: {
+            "config": OSWorldBenchmark._fix_config_paths(raw["config"]),
+            "evaluator": raw["evaluator"],
+        }
+        for task_id, raw in exec_info_by_id.items()
+    }
+    logger.info("Built %d task execution info entries from OSWorld repo", len(exec_info_by_id_abs))
+    return exec_info_by_id_abs
 
 
 # ---------------------------------------------------------------------------
@@ -97,14 +147,12 @@ class OSWorldTaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored for OSWorld — tasks are deterministic)
-        vm_backend:  VMBackend to use for this task (passed by benchmark.get_task_configs()).
-
-    make() looks up TaskMetadata from OSWorldBenchmark.task_metadata (a ClassVar
-    populated by OSWorldBenchmark.setup()).
+        use_som:     Passed by OSWorldBenchmark
+        infra:       InfraConfig to use for this task.
     """
 
-    vm_backend: VMBackend | None = None
     use_som: bool = False
+    infra: InfraConfig | None = None
 
     def make(
         self,
@@ -118,18 +166,12 @@ class OSWorldTaskConfig(TaskConfig):
         """
         metadata = OSWorldBenchmark.task_metadata[self.task_id]
         exec_info = OSWorldBenchmark.load_task_execution_info(self.task_id)
-        fixed_config = OSWorldBenchmark._fix_config_paths(exec_info.get("config", []))
-        metadata = metadata.model_copy(update={"extra_info": {**exec_info, "config": fixed_config}})
+        metadata = metadata.model_copy(update={"extra_info": exec_info})
 
-        if self.tool_config is None:
-            raise ValueError(
-                f"OSWorldTaskConfig for task '{self.task_id}' has no tool_config. "
-                "Pass default_tool_config=ComputerConfig(...) to OSWorldBenchmark."
-            )
         return OSWorldTask(
             metadata=metadata,
-            tool_config=self.tool_config,
-            vm_backend=self.vm_backend,
+            tool_config=self.tool_config or ComputerConfig(),
+            infra=self.infra,
             runtime_context=runtime_context,
             container_backend=container_backend,
             use_som=self.use_som,
@@ -149,13 +191,12 @@ class OSWorldBenchmark(Benchmark):
 
     Class-level attributes (required by cube.benchmark.Benchmark):
         benchmark_metadata:  ClassVar[BenchmarkMetadata]
-        task_metadata:       ClassVar[dict[str, TaskMetadata]]  (placeholder {}; populated in _setup())
+        task_metadata:       ClassVar[dict[str, OSWorldTaskMetadata]]
         task_config_class:   type[TaskConfig] = OSWorldTaskConfig
 
     Constructor params (set by benchmark users):
         default_tool_config:  ComputerConfig  — how to connect to the VM (action_space selects variant)
         use_som:              bool            — Set-of-Marks mode for all tasks
-        vm_backend:           VMBackend | None — backend to provision VMs; None = attach externally
 
     To filter by domain or any other metadata field, call subset_from_glob() after setup():
         bench.setup()
@@ -177,7 +218,7 @@ class OSWorldBenchmark(Benchmark):
             "ram_gb": 8,
             "disk_gb": 40,
         },
-        num_tasks=369,
+        num_tasks=368,
         tags=["desktop", "gui", "multimodal"],
         named_subsets={
             "test_all": ("test_sets", "*'test_all'*"),
@@ -186,34 +227,34 @@ class OSWorldBenchmark(Benchmark):
             "test_infeasible": ("test_sets", "*'test_infeasible'*"),
         },
     )
-    task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]]  # type: ignore[assignment]  # narrowed subtype
+    task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]]  # type: ignore[assignment] - narrowed subtype
     task_config_class: ClassVar[type[TaskConfig]] = OSWorldTaskConfig
 
     # ------------------------------------------------------------------
     # Instance fields
     # ------------------------------------------------------------------
-    default_tool_config: ComputerConfig = ComputerConfig()  # type: ignore[assignment]
+    default_tool_config: ComputerConfig = ComputerConfig()  # type: ignore[assignment] - narrowed subtype
 
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
 
-    vm_backend: VMBackend | None = None
-    """VM backend used to provision VMs for each task. If None, tasks will fail
-    unless a VM is attached externally via computer.attach_vm()."""
+    infra: InfraConfig = Field(default_factory=LocalInfraConfig)
+    """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
+    Each task gets a fresh VM launched from the provisioned image."""
+
+    resources: list[ResourceConfig] = [OSWORLD_UBUNTU_RESOURCE]
+    """VM image required to run OSWorld tasks (declared for the harness resource lifecycle)."""
 
     # ------------------------------------------------------------------
-    # cache_dir() override — set to OSWORLD_BASE_DIR so that task execution info and repo clone are stored under the same directory
+    # overrides
     # ------------------------------------------------------------------
     @classmethod
     def cache_dir(cls) -> Path:
+        """set to OSWORLD_BASE_DIR so that task execution info and repo clone are stored under the same directory"""
         return OSWORLD_BASE_DIR
 
-    # ------------------------------------------------------------------
-    # get_task_configs() override — inject vm_backend into each config
-    # ------------------------------------------------------------------
-
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield task config objects, injecting vm_backend and use_som from the benchmark."""
+        """Yield OSWorldTaskConfig objects, injecting infra and use_som from the benchmark."""
         tc_cls = self.task_config_class
         assert issubclass(tc_cls, OSWorldTaskConfig)
         for tm in self.task_metadata.values():
@@ -221,8 +262,8 @@ class OSWorldBenchmark(Benchmark):
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
                 seed=None,
-                vm_backend=self.vm_backend,
                 use_som=self.use_som,
+                infra=self.infra,
             )
 
     # ------------------------------------------------------------------
@@ -231,8 +272,17 @@ class OSWorldBenchmark(Benchmark):
 
     def _setup(self) -> None:
         """Prepare benchmark for task execution. Essentially a no-op in this case."""
-        provider = type(self.vm_backend).__name__ if self.vm_backend else "none"
+        provider = type(self.infra).__name__
         logger.info(f"Setting up OSWorldBenchmark (provider={provider})...")
+
+        # Setting up infrastructure (provisioning VM images)
+        for resource in self.resources:
+            if self.infra.provision_status(resource) == "ready":
+                logger.info("Resource %s already provisioned", resource.name)
+                continue
+            logger.info("Provisioning resource %s...", resource.name)
+            self.infra.provision(resource)
+
         # OSWorld manages its own VM lifecycle via desktop_env — no shared runtime
         # infrastructure is needed. Populate _runtime_context to suppress the
         # Benchmark.setup() warning that fires when it is left empty.
@@ -249,11 +299,15 @@ class OSWorldBenchmark(Benchmark):
         logger.info("Closing OSWorldBenchmark — no global resources to release")
 
     @staticmethod
-    def _fix_config_paths(config: list) -> list:
-        """Rewrite relative settings_file paths in config items to absolute paths."""
+    def _fix_config_paths(config: list[dict]) -> list[dict]:
+        """
+        Prepend OSWorld repo path to settings_file paths in config items.
+
+        Keeps relative paths working regardless of CWD.
+        """
         result = deepcopy(config)
-        for item in result:
-            params = item.get("parameters", {})
+        for config_item in result:
+            params = config_item.get("parameters", {})
             if "settings_file" in params:
                 params["settings_file"] = str(OSWORLD_REPO_DIR / params["settings_file"])
         return result
@@ -300,34 +354,26 @@ class OSWorldBenchmark(Benchmark):
         ensure_proxy_config_in_env()
         load_dotenv()  # Load the .env file
         logger.info(f"Set PROXY_CONFIG_FILE={os.environ.get('PROXY_CONFIG_FILE', 'not set')}")
-        logger.info("VM images will be downloaded automatically on first task reset.")
 
-        eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
+        exec_info_by_id_abs = _build_task_execution_info_from_repo()
+
         exec_cache_dir = cls.task_execution_cache_dir()
         exec_cache_dir.mkdir(parents=True, exist_ok=True)
-
         written = 0
-        for task_id, tm in cls.task_metadata.items():
+        for task_id, exec_info in exec_info_by_id_abs.items():
             cache_file = exec_cache_dir / f"{task_id}.json"
+            new_content = json.dumps(exec_info, indent=2)
             if cache_file.exists():
-                continue
-            task_file = eval_examples_dir / "examples" / tm.domain / f"{task_id}.json"
-            if not task_file.exists():
-                logger.warning(f"Task file not found: {task_file}")
-                continue
-            try:
-                with open(task_file) as f:
-                    td = json.load(f)
-                exec_info = {
-                    "config": td.get("config", []),
-                    "evaluator": td.get("evaluator", {}),
-                }
-                cache_file.write_text(json.dumps(exec_info, indent=2))
-                written += 1
-            except Exception as e:
-                logger.error(f"Failed to write execution cache for {task_id}: {e}")
+                if cache_file.read_text() == new_content:
+                    continue
+                else:
+                    logger.warning(
+                        f"Execution cache for task {task_id} already exists but content differs from repo; overwriting"
+                    )
+            cache_file.write_text(new_content)
+            written += 1
 
-        logger.info(f"Wrote {written} new execution cache files to {exec_cache_dir}")
+        logger.info(f"Wrote {written} execution cache files to {exec_cache_dir}")
         logger.info("OSWorldBenchmark.install() done")
 
     @classmethod

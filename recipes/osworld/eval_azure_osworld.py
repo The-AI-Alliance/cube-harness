@@ -1,23 +1,25 @@
-"""OSWorld Eval — Genny agent with GPT-5-mini and accessibility tree observations.
+"""OSWorld eval on Azure — Genny agent with GPT-5-mini and accessibility tree observations.
 
-Uses the Genny agent (explicit context management, rolling summaries) with
-the linearized accessibility tree for element coordinates, without screenshots
-or Set-of-Marks scaffolding.
+Uses AzureInfraConfig to launch fresh VMs per task. Mirrors the non-Azure
+OSWorld recipe configuration while using Azure-backed VM provisioning.
 
 Prerequisites:
-    OSWorld benchmark metadata is shipped in cubes/osworld-cube/src/osworld_cube/task_metadata.json.
-    The OSWorld repo is cloned on first install to populate per-task execution cache files.
+    See cube-resources/cube-infra-azure/README.md for full setup instructions.
 
 Usage:
-    # Debug mode (test_small subset, sequential)
-    uv run recipes/osworld/eval_osworld.py debug
+    # Debug mode (debug_tasks.json, sequential)
+    uv run recipes/osworld/eval_azure_osworld.py debug
 
-    # Eval mode (test_small subset, 3 workers)
-    uv run recipes/osworld/eval_osworld.py
+    # Eval mode (test_small, 3 parallel workers)
+    uv run recipes/osworld/eval_azure_osworld.py
 """
 
+import logging
+import os
 import sys
 
+from cube_infra_azure import AzureInfraConfig
+from dotenv import load_dotenv
 from osworld_cube.benchmark import OSWorldBenchmark
 from osworld_cube.computer import ComputerConfig
 
@@ -26,6 +28,20 @@ from cube_harness.agents.genny import GennyConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+for _noisy in ("azure.core.pipeline.policies.http_logging_policy", "azure.identity", "urllib3.connectionpool"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+INFRA = AzureInfraConfig(
+    resource_group=os.environ.get("AZURE_RESOURCE_GROUP") or "ui_assist",
+    storage_account=os.environ.get("AZURE_STORAGE_ACCOUNT") or "cubeexpvhd",
+    vnet_name="vnet-westus2",
+    nsg_name="osworld-nsg",
+    image_name_suffix="-aj",
+)
 
 OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
 You are a desktop automation agent controlling a real Ubuntu computer.
@@ -65,14 +81,14 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 
 
 def main(debug: bool) -> None:
-    output_dir = make_experiment_output_dir("genny", "osworld-cube")
+    output_dir = make_experiment_output_dir("genny_azure", "osworld-cube")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE,
-        max_actions=15,
-        render_last_n_obs=1,
+        max_actions=100,
+        render_last_n_obs=3,
         enable_summarize=False,
         tools_as_text=False,
     )
@@ -86,35 +102,49 @@ def main(debug: bool) -> None:
     benchmark = OSWorldBenchmark(
         default_tool_config=tool_config,
         use_som=False,
+        infra=INFRA,
     )
     benchmark.setup()
     benchmark = benchmark.named_subset("test_small")
 
+    # Provision all resources the benchmark needs (idempotent — no-ops if already ready).
+    for resource in benchmark.resources:
+        INFRA.provision(resource)
+
     exp = Experiment(
-        name="osworld_genny_gpt5",
+        name="osworld_azure_gpt5_mini",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
         max_steps=15,
     )
 
-    if debug:
-        print("\n" + "=" * 60)
-        print("DEBUG MODE: Running test_small sequentially")
-        print("=" * 60)
-        print(f"Output directory: {output_dir}")
-        print(f"Model: {llm_config.model_name}")
-        print("=" * 60 + "\n")
-        run_sequentially(exp)
-    else:
-        print("\n" + "=" * 60)
-        print("EVAL MODE: Running OSWorld test_small subset with Ray")
-        print("=" * 60)
-        print(f"Output directory: {output_dir}")
-        print(f"Model: {llm_config.model_name}")
-        print("Parallelism: 3 workers")
-        print("=" * 60 + "\n")
-        run_with_ray(exp, n_cpus=3)
+    try:
+        if debug:
+            print("\n" + "=" * 60)
+            print("DEBUG MODE: Running test_small sequentially on Azure")
+            print("=" * 60)
+            print(f"Output directory: {output_dir}")
+            print(f"Model: {llm_config.model_name}")
+            print(f"Infra: {INFRA.fingerprint()}")
+            print("=" * 60 + "\n")
+            run_sequentially(exp)
+        else:
+            print("\n" + "=" * 60)
+            print("EVAL MODE: Running OSWorld TEST_SMALL on Azure")
+            print("=" * 60)
+            print(f"Output directory: {output_dir}")
+            print(f"Model: {llm_config.model_name}")
+            print(f"Infra: {INFRA.fingerprint()}")
+            print("Parallelism: 3 workers")
+            print("=" * 60 + "\n")
+            run_with_ray(exp, n_cpus=40)
+    finally:
+        # Sweep any VMs orphaned by Ray force-kills or worker crashes.
+        # Normal completions are already cleaned up by task.close() in episode.py.
+        deleted = INFRA.cleanup_orphaned_resources()
+        if deleted:
+            print(f"Cleaned up {len(deleted)} orphaned VM(s): {deleted}")
 
 
 if __name__ == "__main__":
