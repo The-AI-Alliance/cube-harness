@@ -170,19 +170,7 @@ class WAABenchmark(Benchmark):
     # ------------------------------------------------------------------
 
     def _setup(self) -> None:
-        """Load task metadata from tasks_file or evaluation_examples_windows/."""
-        if "task_metadata" not in self.__dict__:
-            if self.tasks_file is not None:
-                if not Path(self.tasks_file).exists():
-                    raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
-                loaded = self._load_task_metadata_from_file(self.tasks_file)
-            else:
-                loaded = self._load_task_metadata()
-            # Per-instance shadow for test isolation
-            object.__setattr__(self, "task_metadata", loaded)
-            # Also update class-level so make() can find tasks in-process
-            type(self).task_metadata = loaded
-
+        """Initialise runtime state (task metadata is already loaded in install())."""
         if isinstance(self.vm_backend, WAADockerVMBackend):
             self.vm_backend.cleanup_stale_overlays()
 
@@ -195,6 +183,17 @@ class WAABenchmark(Benchmark):
         Delegates to WAADockerVMBackend.install() when vm_backend is configured.
         No-op if no vm_backend is set (e.g. when using an externally managed VM).
         """
+        # Load task metadata early so the base-class setup() guard is satisfied.
+        if "task_metadata" not in self.__dict__:
+            if self.tasks_file is not None:
+                if not Path(self.tasks_file).exists():
+                    raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
+                loaded = self._load_task_metadata_from_file(self.tasks_file)
+            else:
+                loaded = self._load_task_metadata()
+            object.__setattr__(self, "task_metadata", loaded)
+            type(self).task_metadata = loaded
+
         if self.vm_backend is None:
             logger.info("No vm_backend set — skipping WAA image preparation")
             return
