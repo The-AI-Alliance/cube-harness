@@ -169,22 +169,16 @@ class WAABenchmark(Benchmark):
     # _setup()
     # ------------------------------------------------------------------
 
-    def _ensure_task_metadata(self) -> None:
-        """Load task metadata if not already populated (idempotent)."""
-        if self.task_metadata:
-            return
-        if self.tasks_file is not None:
-            if not Path(self.tasks_file).exists():
-                raise FileNotFoundError(f"tasks_file not found: {self.tasks_file}")
-            loaded = self._load_task_metadata_from_file(self.tasks_file)
-        else:
-            loaded = self._load_task_metadata()
-        object.__setattr__(self, "task_metadata", loaded)
-        type(self).task_metadata = loaded
-
     def _setup(self) -> None:
-        """Initialise runtime state. Loads task metadata if needed (Ray workers)."""
-        self._ensure_task_metadata()
+        """Initialise runtime state.
+
+        If tasks_file is set (debug mode), overlay its tasks onto the shipped
+        task_metadata.json so the debug task is available at runtime.
+        """
+        if self.tasks_file is not None:
+            loaded = self._load_task_metadata_from_file(self.tasks_file)
+            object.__setattr__(self, "task_metadata", {**self.task_metadata, **loaded})
+            type(self).task_metadata = self.task_metadata
 
         if isinstance(self.vm_backend, WAADockerVMBackend):
             self.vm_backend.cleanup_stale_overlays()
@@ -192,19 +186,12 @@ class WAABenchmark(Benchmark):
         self._runtime_context = {"waa": True}
         logger.info("WAABenchmark ready with %d tasks", len(self.task_metadata))
 
-    def setup(self) -> None:
-        """Override base setup() — load metadata before the guard check."""
-        self._ensure_task_metadata()
-        super().setup()
-
     def install(self) -> None:
         """Prepare the Windows VM image if not already built.
 
         Delegates to WAADockerVMBackend.install() when vm_backend is configured.
         No-op if no vm_backend is set (e.g. when using an externally managed VM).
         """
-        self._ensure_task_metadata()
-
         if self.vm_backend is None:
             logger.info("No vm_backend set — skipping WAA image preparation")
             return
