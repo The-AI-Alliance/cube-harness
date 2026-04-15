@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import io
-import json
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -73,42 +71,6 @@ def _make_task_metadata(
             "related_apps": ["vscode"],
         },
     )
-
-
-def _make_waa_eval_dir(tmpdir: Path) -> Path:
-    """Create a minimal fake evaluation_examples_windows/ with 2 tasks."""
-    eval_dir = tmpdir / "evaluation_examples_windows"
-    (eval_dir / "examples" / "vscode").mkdir(parents=True)
-    (eval_dir / "examples" / "chrome").mkdir(parents=True)
-
-    test_set = {"vscode": ["vs-1"], "chrome": ["ch-1"]}
-    (eval_dir / "test_all.json").write_text(json.dumps(test_set))
-
-    (eval_dir / "examples" / "vscode" / "vs-1.json").write_text(
-        json.dumps(
-            {
-                "id": "vs-1",
-                "instruction": "Open VS Code",
-                "snapshot": "vscode",
-                "config": [{"type": "launch", "parameters": {"command": ["code"]}}],
-                "evaluator": {"func": "check_json_settings", "expected": {}},
-                "related_apps": ["vscode"],
-            }
-        )
-    )
-    (eval_dir / "examples" / "chrome" / "ch-1.json").write_text(
-        json.dumps(
-            {
-                "id": "ch-1",
-                "instruction": "Open Chrome",
-                "snapshot": "chrome",
-                "config": [],
-                "evaluator": {"func": "is_expected_tabs", "expected": {}},
-                "related_apps": ["chrome"],
-            }
-        )
-    )
-    return eval_dir
 
 
 # ---------------------------------------------------------------------------
@@ -355,144 +317,102 @@ class TestWAABenchmark:
         assert "windows" in WAABenchmark.benchmark_metadata.tags
         assert WAABenchmark.task_config_class.__name__ == "WAATaskConfig"
 
-    def test_load_tasks_from_eval_dir(self) -> None:
+    def test_task_metadata_loaded_at_import(self) -> None:
+        """task_metadata.json is auto-loaded by __init_subclass__."""
+        from waa_cube.benchmark import WAABenchmark
+
+        assert len(WAABenchmark.task_metadata) > 100
+
+    def test_task_metadata_has_required_fields(self) -> None:
+        from waa_cube.benchmark import WAABenchmark
+
+        for tid, meta in list(WAABenchmark.task_metadata.items())[:5]:
+            assert meta.id == tid
+            assert "domain" in meta.extra_info
+            assert "snapshot" in meta.extra_info
+            assert "evaluator" in meta.extra_info
+
+    def test_setup_without_vm_backend(self) -> None:
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_waa_eval_dir(Path(tmpdir))
-            bench = WAABenchmark(
-                eval_examples_dir=str(eval_dir),
-                default_tool_config=ComputerConfig(),
-            )
-            bench.setup()
+        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench.setup()
+        assert len(bench.task_metadata) > 100
 
-            assert len(bench.task_metadata) == 2
-            assert "vs-1" in bench.task_metadata
-            assert "ch-1" in bench.task_metadata
-
-    def test_task_metadata_extra_info(self) -> None:
+    def test_subset_from_list_filters(self) -> None:
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_waa_eval_dir(Path(tmpdir))
-            bench = WAABenchmark(eval_examples_dir=str(eval_dir), default_tool_config=ComputerConfig())
-            bench.setup()
+        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench.setup()
 
-            meta = bench.task_metadata["vs-1"]
-            assert meta.extra_info["domain"] == "vscode"
-            assert meta.extra_info["snapshot"] == "vscode"
-            assert meta.abstract_description == "Open VS Code"
-
-    def test_subset_from_glob_filters_domain(self) -> None:
-        from waa_cube.benchmark import WAABenchmark
-        from waa_cube.computer import ComputerConfig
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_waa_eval_dir(Path(tmpdir))
-            bench = WAABenchmark(eval_examples_dir=str(eval_dir), default_tool_config=ComputerConfig())
-            bench.setup()
-
-            vscode_bench = bench.subset_from_glob("extra_info.domain", "vscode")
-            assert len(vscode_bench.task_metadata) == 1
-            assert "vs-1" in vscode_bench.task_metadata
+        keep_ids = [
+            tid
+            for tid, meta in bench.task_metadata.items()
+            if meta.extra_info.get("domain") not in ("chrome", "msedge")
+        ]
+        filtered = bench.subset_from_list(keep_ids)
+        assert len(filtered.task_metadata) < len(bench.task_metadata)
+        for meta in filtered.task_metadata.values():
+            assert meta.extra_info["domain"] not in ("chrome", "msedge")
 
     def test_get_task_configs_yields_waa_task_config(self) -> None:
         from waa_cube.benchmark import WAABenchmark, WAATaskConfig
         from waa_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_waa_eval_dir(Path(tmpdir))
-            bench = WAABenchmark(eval_examples_dir=str(eval_dir), default_tool_config=ComputerConfig())
-            bench.setup()
+        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench.setup()
 
-            configs = list(bench.get_task_configs())
-            assert len(configs) == 2
-            for cfg in configs:
-                assert isinstance(cfg, WAATaskConfig)
-                assert cfg.task_id in bench.task_metadata
+        configs = list(bench.get_task_configs())
+        assert len(configs) == len(bench.task_metadata)
+        for cfg in configs:
+            assert isinstance(cfg, WAATaskConfig)
+            assert cfg.task_id in bench.task_metadata
 
     def test_task_config_make_produces_waa_task(self) -> None:
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_waa_eval_dir(Path(tmpdir))
-            bench = WAABenchmark(eval_examples_dir=str(eval_dir), default_tool_config=ComputerConfig())
-            bench.setup()
+        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench.setup()
 
-            cfg = next(bench.get_task_configs())
-            task = cfg.make()
+        cfg = next(bench.get_task_configs())
+        task = cfg.make()
 
-            assert isinstance(task, WAATask)
-            assert task.metadata.id == cfg.task_id
+        assert isinstance(task, WAATask)
+        assert task.metadata.id == cfg.task_id
 
     def test_vm_backend_injected_into_configs(self) -> None:
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
         from waa_cube.vm_backend.backend import WAADockerVMBackend
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = _make_waa_eval_dir(Path(tmpdir))
-            mock_backend = MagicMock(spec=WAADockerVMBackend)
-            bench = WAABenchmark(
-                eval_examples_dir=str(eval_dir),
-                default_tool_config=ComputerConfig(),
-                vm_backend=mock_backend,
-            )
-            bench.setup()
+        mock_backend = MagicMock(spec=WAADockerVMBackend)
+        bench = WAABenchmark(
+            default_tool_config=ComputerConfig(),
+            vm_backend=mock_backend,
+        )
+        bench.setup()
 
-            for cfg in bench.get_task_configs():
-                assert cfg.vm_backend is mock_backend
+        for cfg in bench.get_task_configs():
+            assert cfg.vm_backend is mock_backend
 
-    def test_missing_eval_dir_raises(self) -> None:
-        import os
-
-        import pytest
-
-        from waa_cube.benchmark import WAA_EVAL_EXAMPLES_ENV, WAABenchmark
-        from waa_cube.computer import ComputerConfig
-
-        # Ensure env var is not set
-        env_backup = os.environ.pop(WAA_EVAL_EXAMPLES_ENV, None)
-        try:
-            bench = WAABenchmark(default_tool_config=ComputerConfig())
-            with pytest.raises((ValueError, FileNotFoundError)):
-                bench.setup()
-        finally:
-            if env_backup is not None:
-                os.environ[WAA_EVAL_EXAMPLES_ENV] = env_backup
-
-    def test_missing_task_file_logged_not_raised(self) -> None:
-        """Missing individual task JSON files are logged but don't abort loading."""
+    def test_debug_tasks_overlay(self) -> None:
+        """tasks_file overlays debug tasks onto shipped metadata."""
+        import waa_cube
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            eval_dir = Path(tmpdir) / "evaluation_examples_windows"
-            (eval_dir / "examples" / "vscode").mkdir(parents=True)
-            (eval_dir / "test_all.json").write_text(json.dumps({"vscode": ["missing-task", "vs-1"]}))
-            (eval_dir / "examples" / "vscode" / "vs-1.json").write_text(
-                json.dumps(
-                    {
-                        "id": "vs-1",
-                        "instruction": "Test",
-                        "snapshot": "vscode",
-                        "config": [],
-                        "evaluator": {},
-                        "related_apps": [],
-                    }
-                )
-            )
+        debug_file = str(Path(waa_cube.__file__).parent / "debug_tasks.json")
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), tasks_file=debug_file)
+        bench.setup()
 
-            bench = WAABenchmark(eval_examples_dir=str(eval_dir), default_tool_config=ComputerConfig())
-            bench.setup()
-
-            # Only the task with a real file should be loaded
-            assert len(bench.task_metadata) == 1
-            assert "vs-1" in bench.task_metadata
+        debug_ids = [tid for tid in bench.task_metadata if "debug" in tid]
+        assert len(debug_ids) >= 1
+        # Shipped metadata is still there
+        assert len(bench.task_metadata) > 100
 
     def test_close_does_not_raise(self) -> None:
         from waa_cube.benchmark import WAABenchmark
