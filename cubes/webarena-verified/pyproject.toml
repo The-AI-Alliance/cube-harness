@@ -21,7 +21,7 @@ build-backend = "uv_build"
 include = ["src/webarena_verified_cube/task_metadata.json"]
 
 [tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard"}  # TODO: remove once 0.1.0rc5 released
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "feat/local-docker-infra" }
 
 [tool.ruff]
 fix = true

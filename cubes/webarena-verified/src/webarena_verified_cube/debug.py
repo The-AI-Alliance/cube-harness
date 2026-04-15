@@ -7,8 +7,9 @@ The evaluation may return reward=0 because task.evaluate() passes a
 FinalAgentResponse object directly to wav.evaluate_task(), which expects str/dict.
 Only errors (Python exceptions) are treated as failures.
 
-The debug suite requires a running shopping-admin server. It is started automatically
-when this script is invoked directly. A local Docker daemon must be available.
+The debug suite uses tasks 0 and 1 (shopping_admin RETRIEVE tasks). The shopping_admin
+container is started automatically via the benchmark's infra field — a local Docker
+daemon must be available.
 
 Public API (cube.testing protocol)
 -----------------------------------
@@ -22,7 +23,6 @@ Usage:
 from __future__ import annotations
 
 import logging
-import subprocess
 import sys
 
 from cube.benchmark import Benchmark
@@ -78,42 +78,11 @@ def get_debug_benchmark() -> Benchmark:
     return bench.subset_from_list(_DEBUG_TASK_IDS)
 
 
-def _start_debug_server() -> None:
-    """Start the shopping-admin server required by the debug suite.
-
-    Requires a local Docker daemon. Prints a clear error and exits if the
-    command fails (Docker not running, webarena-verified not installed, etc.).
-    """
-    cmd = ["webarena-verified", "env", "start", "--site"]
-    sites = [env.value for env in _DEBUG_WAV_CONFIG.environments]  # type: ignore[attr-defined]
-    cmd += sites
-    try:
-        result = subprocess.run(cmd, check=False)
-    except FileNotFoundError:
-        print(
-            f"\nERROR: 'webarena-verified' command not found.\n"
-            f"Make sure the package is installed, then run:\n"
-            f"  {' '.join(cmd)}\n",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    if result.returncode != 0:
-        print(
-            f"\nERROR: Failed to start the {', '.join(sites)} server(s) (exit code {result.returncode}).\n"
-            f"Make sure Docker is running and try manually:\n"
-            f"  {' '.join(cmd)}\n",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
 if __name__ == "__main__":
     import webarena_verified_cube.debug as _this_module
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    _start_debug_server()
     results = run_debug_suite("webarena-verified-cube", _this_module)
 
     failed = [r for r in results if r["error"] or r["reward"] != 1.0]
