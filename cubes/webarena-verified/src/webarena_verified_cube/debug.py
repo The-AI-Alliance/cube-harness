@@ -76,11 +76,8 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 
 
 def get_debug_benchmark() -> Benchmark:
-    return WebArenaVerifiedBenchmark(
-        wav_config=_DEBUG_WAV_CONFIG,
-        task_ids_filter=[int(tid) for tid in _DEBUG_TASK_IDS],
-        default_tool_config=ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
-    )
+    bench = WebArenaVerifiedBenchmark(wav_config=_DEBUG_WAV_CONFIG)
+    return bench.subset_from_list(_DEBUG_TASK_IDS)
 
 
 def _start_debug_server() -> None:
