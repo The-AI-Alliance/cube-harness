@@ -61,9 +61,7 @@ def _build_task_metadata() -> dict[str, WorkArenaTaskMetadata]:
     for level in ("l2", "l3"):
         human_ids: set[str] = {
             task_class.get_task_id()
-            for task_class, _ in get_all_tasks_agents(
-                filter=level, meta_seed=0, n_seed_l1=1, is_agent_curriculum=False
-            )
+            for task_class, _ in get_all_tasks_agents(filter=level, meta_seed=0, n_seed_l1=1, is_agent_curriculum=False)
         }
         for task_class, _ in get_all_tasks_agents(filter=level, meta_seed=0, n_seed_l1=1, is_agent_curriculum=True):
             task_id = task_class.get_task_id()

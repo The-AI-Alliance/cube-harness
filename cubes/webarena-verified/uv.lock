@@ -187,7 +187,7 @@ wheels = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc5"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard#a5947a02c00e68e9ccd258f2cd8cfba07ad2dd17" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=feat%2Flocal-docker-infra#da5e1adca8c8e0d12b5e84106ddb715082e7c4b9" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -1241,7 +1241,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-browser-tool", specifier = ">=0.2.0" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=feat%2Flocal-docker-infra" },
     { name = "pillow" },
     { name = "webarena-verified" },
 ]
