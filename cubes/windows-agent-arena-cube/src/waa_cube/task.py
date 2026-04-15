@@ -42,6 +42,41 @@ _VM_SCREEN_WIDTH = 1280
 _VM_SCREEN_HEIGHT = 800
 
 
+def _reformat_axtree(raw: str) -> str:
+    """Reformat linearize_accessibility_tree output into the agent-facing table.
+
+    Input columns (from linearize_accessibility_tree):
+        tag  name  text  class  description  position (top-left x&y)  size (w&h)
+
+    Output columns:
+        index  tag  name  text  x  y  w  h
+
+    Drops class (pywinauto internal) and description (almost always empty).
+    Unpacks position/size tuple strings into separate integer columns.
+    """
+    lines = raw.splitlines()
+    if not lines:
+        return raw
+
+    out = ["index\ttag\tname\ttext\tx\ty\tw\th"]
+    idx = 1
+    for line in lines[1:]:  # skip header
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+        tag, name, text = parts[0], parts[1], parts[2]
+        # parts[3]=class, parts[4]=description — dropped
+        pos_str, size_str = parts[5], parts[6]
+        try:
+            x, y = (int(v.strip()) for v in pos_str.strip("()").split(","))
+            w, h = (int(v.strip()) for v in size_str.strip("()").split(","))
+        except ValueError:
+            continue
+        out.append(f"{idx}\t{tag}\t{name}\t{text}\t{x}\t{y}\t{w}\t{h}")
+        idx += 1
+    return "\n".join(out)
+
+
 class WAATask(Task):
     """A single WAA desktop-automation task running inside a Windows 11 VM.
 
@@ -270,41 +305,6 @@ class WAATask(Task):
             else:
                 new_contents.append(content)
         return obs.model_copy(update={"contents": new_contents})
-
-
-def _reformat_axtree(raw: str) -> str:
-    """Reformat linearize_accessibility_tree output into the agent-facing table.
-
-    Input columns (from linearize_accessibility_tree):
-        tag  name  text  class  description  position (top-left x&y)  size (w&h)
-
-    Output columns:
-        index  tag  name  text  x  y  w  h
-
-    Drops class (pywinauto internal) and description (almost always empty).
-    Unpacks position/size tuple strings into separate integer columns.
-    """
-    lines = raw.splitlines()
-    if not lines:
-        return raw
-
-    out = ["index\ttag\tname\ttext\tx\ty\tw\th"]
-    idx = 1
-    for line in lines[1:]:  # skip header
-        parts = line.split("\t")
-        if len(parts) < 7:
-            continue
-        tag, name, text = parts[0], parts[1], parts[2]
-        # parts[3]=class, parts[4]=description — dropped
-        pos_str, size_str = parts[5], parts[6]
-        try:
-            x, y = (int(v.strip()) for v in pos_str.strip("()").split(","))
-            w, h = (int(v.strip()) for v in size_str.strip("()").split(","))
-        except ValueError:
-            continue
-        out.append(f"{idx}\t{tag}\t{name}\t{text}\t{x}\t{y}\t{w}\t{h}")
-        idx += 1
-    return "\n".join(out)
 
     def _postprocess_som(self, obs: Observation) -> Observation:
         """Annotate screenshot with numbered bounding boxes (Set-of-Marks).
