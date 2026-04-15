@@ -123,13 +123,15 @@ class WAATask(Task):
             chromium_port, vlc_port, _ = self._get_vm_ports()
             task_cache_dir = str(Path(self._computer.config.cache_dir) / task_data.get("id", "task"))
             Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
+            screen_width = getattr(self.vm_backend, "screen_width", 1280)
+            screen_height = getattr(self.vm_backend, "screen_height", 800)
             setup_ctrl = SetupController(
                 guest=self._computer._guest,
                 chromium_port=chromium_port,
                 vlc_port=vlc_port,
                 cache_dir=task_cache_dir,
-                screen_width=1920,
-                screen_height=1080,
+                screen_width=screen_width,
+                screen_height=screen_height,
             )
             setup_ctrl.setup(setup_steps)
 
@@ -239,13 +241,22 @@ class WAATask(Task):
         return self._postprocess_linearize(obs)
 
     def _postprocess_linearize(self, obs: Observation) -> Observation:
-        """Replace raw axtree XML with a linearized tab-separated table."""
+        """Replace raw axtree XML with a clean indexed table for the agent.
+
+        Converts the raw XML to a tab-separated table with columns:
+            index  tag  name  text  x  y  w  h
+
+        Drops the class and description columns (noise) and unpacks the
+        position/size tuple strings into separate integer columns so the
+        agent can compute click centres with: cx = x + w//2, cy = y + h//2.
+        """
         platform = self._os_type()
         new_contents = []
         for content in obs.contents:
             if content.name == "accessibility_tree":
                 try:
-                    axtree_txt = linearize_accessibility_tree(content.data, platform=platform)
+                    raw = linearize_accessibility_tree(content.data, platform=platform)
+                    axtree_txt = _reformat_axtree(raw)
                     new_contents.append(content.model_copy(update={"data": axtree_txt, "name": "axtree_txt"}))
                 except Exception as exc:
                     logger.warning("Failed to linearize accessibility tree: %s", exc)
@@ -253,6 +264,41 @@ class WAATask(Task):
             else:
                 new_contents.append(content)
         return obs.model_copy(update={"contents": new_contents})
+
+
+def _reformat_axtree(raw: str) -> str:
+    """Reformat linearize_accessibility_tree output into the agent-facing table.
+
+    Input columns (from linearize_accessibility_tree):
+        tag  name  text  class  description  position (top-left x&y)  size (w&h)
+
+    Output columns:
+        index  tag  name  text  x  y  w  h
+
+    Drops class (pywinauto internal) and description (almost always empty).
+    Unpacks position/size tuple strings into separate integer columns.
+    """
+    lines = raw.splitlines()
+    if not lines:
+        return raw
+
+    out = ["index\ttag\tname\ttext\tx\ty\tw\th"]
+    idx = 1
+    for line in lines[1:]:  # skip header
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+        tag, name, text = parts[0], parts[1], parts[2]
+        # parts[3]=class, parts[4]=description — dropped
+        pos_str, size_str = parts[5], parts[6]
+        try:
+            x, y = (int(v.strip()) for v in pos_str.strip("()").split(","))
+            w, h = (int(v.strip()) for v in size_str.strip("()").split(","))
+        except ValueError:
+            continue
+        out.append(f"{idx}\t{tag}\t{name}\t{text}\t{x}\t{y}\t{w}\t{h}")
+        idx += 1
+    return "\n".join(out)
 
     def _postprocess_som(self, obs: Observation) -> Observation:
         """Annotate screenshot with numbered bounding boxes (Set-of-Marks).

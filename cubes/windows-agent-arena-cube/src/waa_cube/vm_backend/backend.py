@@ -618,11 +618,11 @@ class WAADockerVMBackend(VMBackend):
     cpu_cores: int = 8
     """Number of vCPUs for the Windows VM."""
 
-    screen_width: int = 1920
-    """Horizontal screen resolution."""
+    screen_width: int = 1280
+    """Horizontal screen resolution. WAA snapshots are captured at 1280×800."""
 
-    screen_height: int = 1080
-    """Vertical screen resolution."""
+    screen_height: int = 800
+    """Vertical screen resolution. WAA snapshots are captured at 1280×800."""
 
     pull_policy: str = "missing"
     """Docker image pull policy: 'missing' (default), 'always', 'never'."""
