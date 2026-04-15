@@ -8,7 +8,9 @@ Open source harness for building and evaluating AI agents using the [CUBE Standa
 
 > [!NOTE]
 > **cube-harness is in active development (alpha).** Interfaces may change. We welcome early adopters and contributors who want to shape the framework, not just use it.
-> See our [Roadmap](ROADMAP.md) and [Contributing Guide](CONTRIBUTING.md). Serious contributors can [apply here](https://forms.gle/JFiBi4ynfVLMghAH8).
+> See our [Roadmap](ROADMAP.md) and [Contributing Guide](CONTRIBUTING.md).
+>
+> **Have a benchmark to contribute?** [Fill out this short form](https://docs.google.com/forms/d/e/1FAIpQLSddMFyRXZJPpD0I2K27OEmIPUpj57w--u2NuMscrjNlkqy8rQ/viewform) — no commitment required. Want to go deeper? [Apply to join the core team](https://forms.gle/JFiBi4ynfVLMghAH8).
 
 <!-- [Published Documentation](https://the-ai-alliance.github.io/cube-harness/) -->
 

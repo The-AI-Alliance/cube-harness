@@ -43,7 +43,7 @@ class TestBrowsergymConfig:
         assert config.use_axtree is True
         assert config.use_screenshot is True
         assert config.prune_html is True
-        assert config.action_subsets == ["chat", "infeas", "bid", "nav", "tab"]
+        assert config.action_subsets == ["bid", "nav", "tab"]
 
     def test_custom_config_values(self) -> None:
         config = BrowsergymConfig(
@@ -423,37 +423,6 @@ class TestBrowsergymToolStepResults:
 
         assert "Failed" in result
 
-    def test_execute_bgym_step_captures_infeasible(self, mock_playwright_session: PlaywrightSession) -> None:
-        """Test that report_infeasible_instructions messages are captured."""
-        tool = self._create_tool_with_mock_page(mock_playwright_session)
-
-        def mock_execute(code, page, send_message_to_user, report_infeasible_instructions):
-            report_infeasible_instructions("Element not found")
-
-        with (
-            patch("cube_harness.tools.browsergym.execute_python_code", side_effect=mock_execute),
-            patch.object(tool, "_extract_bgym_obs", return_value={}),
-        ):
-            result = tool._execute_bgym_step("click(bid='xyz')")
-
-        assert "Failed (infeasible)" in result
-        assert "Element not found" in result
-
-    def test_execute_bgym_step_captures_user_messages(self, mock_playwright_session: PlaywrightSession) -> None:
-        """Test that send_message_to_user messages are captured."""
-        tool = self._create_tool_with_mock_page(mock_playwright_session)
-
-        def mock_execute(code, page, send_message_to_user, report_infeasible_instructions):
-            send_message_to_user("Task completed")
-
-        with (
-            patch("cube_harness.tools.browsergym.execute_python_code", side_effect=mock_execute),
-            patch.object(tool, "_extract_bgym_obs", return_value={}),
-        ):
-            tool._execute_bgym_step("send_msg_to_user(text='Task completed')")
-
-        assert tool._last_info["user_messages"] == ["Task completed"]
-
     def test_execute_bgym_step_updates_last_obs(self, mock_playwright_session: PlaywrightSession) -> None:
         tool = self._create_tool_with_mock_page(mock_playwright_session)
         new_obs = {"screenshot": np.zeros((10, 10, 3))}
@@ -503,20 +472,23 @@ class TestBrowsergymToolActionSet:
     """Tests for action_set property."""
 
     def test_action_set_contains_bgym_native_actions(self) -> None:
-        """Test that action_set contains bgym's native action names."""
+        """Test that default action_set contains pure browser actions only."""
         config = BrowsergymConfig()
         tool = BrowsergymTool(config)
 
         action_names = {a.name for a in tool.action_set}
 
-        # Should contain bgym native names, not old cube-specific names
+        # Default subsets (bid, nav, tab) should include browser actions
         assert "click" in action_names
         assert "fill" in action_names
         assert "hover" in action_names
         assert "scroll" in action_names
         assert "goto" in action_names
         assert "noop" in action_names
-        assert "send_msg_to_user" in action_names
+
+        # Chat/infeas actions should NOT be in default config — they belong to ChatTool
+        assert "send_msg_to_user" not in action_names
+        assert "report_infeasible" not in action_names
 
         # Old names should NOT be present
         assert "browser_click" not in action_names

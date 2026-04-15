@@ -37,7 +37,7 @@ class BrowsergymConfig(ToolConfig):
     browser: PlaywrightSessionConfig = Field(default_factory=PlaywrightSessionConfig)
 
     # Action configuration
-    action_subsets: list[str] = Field(default=["chat", "infeas", "bid", "nav", "tab"])
+    action_subsets: list[str] = Field(default=["bid", "nav", "tab"])
 
     # Observation behavior
     tags_to_mark: str = "standard_html"  # "all" or "standard_html"
@@ -56,8 +56,8 @@ class BrowsergymConfig(ToolConfig):
 class BrowsergymTool(ToolWithTelemetry, BrowserTool):
     """Browser tool using BrowserGym's action set on a Playwright Page.
 
-    Uses ``HighLevelActionSet`` for action schemas and ``execute_python_code``
-    for execution. Manages its own ``PlaywrightSession`` lifecycle.
+    Exposes bgym's native actions (click, fill, scroll, ...) as tool actions.
+    Pure browser — chat and infeasibility actions belong to ChatTool.
     """
 
     def __init__(self, config: BrowsergymConfig) -> None:
@@ -178,28 +178,22 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         """
         logger.info(f"Execute bgym step: {action_str}")
         result = "Success"
-        infeasible_messages: list[str] = []
-        user_messages: list[str] = []
+
+        def send_message_to_user(_: str) -> None:
+            assert False, "send_message_to_user should not be called"
+
+        def report_infeasible_instructions(_: str) -> None:
+            assert False, "report_infeasible_instructions should not be called"
 
         try:
             code = self._action_set.to_python_code(action_str)
             execute_python_code(
                 code=code,
                 page=self.page,
-                send_message_to_user=lambda message: user_messages.append(message),
-                report_infeasible_instructions=lambda message: infeasible_messages.append(message),
+                send_message_to_user=send_message_to_user,
+                report_infeasible_instructions=report_infeasible_instructions,
             )
-            if infeasible_messages:
-                error_msg = "; ".join(infeasible_messages)
-                self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
-                result = f"Failed (infeasible): {error_msg}"
-            else:
-                self._last_info = {
-                    "source": "action",
-                    "action": action_str,
-                    "action_error": "",
-                    "user_messages": user_messages,
-                }
+            self._last_info = {"source": "action", "action": action_str, "action_error": ""}
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
             self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
