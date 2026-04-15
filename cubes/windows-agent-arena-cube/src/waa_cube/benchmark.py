@@ -1,7 +1,8 @@
 """WAABenchmark and WAATaskConfig — CUBE benchmark for WindowsAgentArena.
 
 Entry point:
-    bench = WAABenchmark(eval_examples_dir="/path/to/evaluation_examples_windows")
+    bench = WAABenchmark()
+    bench.install()
     bench.setup()
     for task_config in bench.get_task_configs():
         task = task_config.make()
@@ -11,13 +12,15 @@ Entry point:
 
 Filter by domain after setup():
     vscode_bench = bench.subset_from_glob("extra_info.domain", "vscode")
+
+Task metadata is shipped as task_metadata.json (auto-loaded at import time).
+To regenerate: python scripts/create_task_metadata.py --force
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from collections.abc import Generator
 from pathlib import Path
 from typing import ClassVar
@@ -32,8 +35,6 @@ from waa_cube.task import WAATask
 from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 logger = logging.getLogger(__name__)
-
-WAA_EVAL_EXAMPLES_ENV = "WAA_EVAL_EXAMPLES_DIR"
 
 
 # ---------------------------------------------------------------------------
@@ -91,13 +92,10 @@ class WAABenchmark(Benchmark):
 
     Class-level attributes (required by cube.benchmark.Benchmark):
         benchmark_metadata:  ClassVar[BenchmarkMetadata]
-        task_metadata:       ClassVar[dict[str, TaskMetadata]]  (populated in _setup())
+        task_metadata:       ClassVar[dict[str, TaskMetadata]]  (auto-loaded from task_metadata.json)
         task_config_class:   type[TaskConfig] = WAATaskConfig
 
     Constructor params:
-        eval_examples_dir:    str | None  — path to evaluation_examples_windows/
-                                            Falls back to WAA_EVAL_EXAMPLES_DIR env var.
-        test_set_name:        str         — index file inside eval_examples_dir/ (default: test_all.json)
         default_tool_config:  ComputerConfig
         use_som:              bool
         vm_backend:           WAADockerVMBackend | None
@@ -122,7 +120,7 @@ class WAABenchmark(Benchmark):
         tags=["desktop", "gui", "windows", "multimodal"],
     )
 
-    # Placeholder: populated per-instance in _setup() via object.__setattr__
+    # Auto-loaded from task_metadata.json by __init_subclass__
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
 
     task_config_class: ClassVar[type[TaskConfig]] = WAATaskConfig
@@ -133,15 +131,8 @@ class WAABenchmark(Benchmark):
 
     default_tool_config: ComputerConfig = ComputerConfig()
 
-    eval_examples_dir: str | None = None
-    """Path to evaluation_examples_windows/. Falls back to WAA_EVAL_EXAMPLES_DIR env var."""
-
-    test_set_name: str = "test_all.json"
-    """Index file inside eval_examples_dir/ to load."""
-
     tasks_file: str | None = None
-    """Flat JSON task list (list of task dicts). Mutually exclusive with eval_examples_dir/test_set_name.
-    Used by the debug suite to load tasks from a bundled file without a full eval dir."""
+    """Optional flat JSON task list for debug overlay (merged on top of shipped metadata)."""
 
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks."""
@@ -205,28 +196,11 @@ class WAABenchmark(Benchmark):
         logger.info("Closing WAABenchmark — no global resources to release")
 
     # ------------------------------------------------------------------
-    # Task metadata loading
+    # Debug task loading
     # ------------------------------------------------------------------
 
-    def _get_eval_examples_dir(self) -> Path:
-        if self.eval_examples_dir:
-            return Path(self.eval_examples_dir)
-        env_val = os.environ.get(WAA_EVAL_EXAMPLES_ENV)
-        if env_val:
-            return Path(env_val)
-        raise ValueError(
-            f"eval_examples_dir is not set and {WAA_EVAL_EXAMPLES_ENV} env var is missing.\n"
-            "Pass eval_examples_dir='/path/to/evaluation_examples_windows' to WAABenchmark or\n"
-            f"set the {WAA_EVAL_EXAMPLES_ENV} environment variable."
-        )
-
     def _load_task_metadata_from_file(self, tasks_file: str) -> dict[str, TaskMetadata]:
-        """Load TaskMetadata from a flat JSON list (used by the debug suite).
-
-        The file must contain a JSON array of task dicts, each with at minimum
-        ``id``, ``instruction``, ``snapshot``, ``config``, ``evaluator``, and
-        optionally ``domain`` and ``related_apps``.
-        """
+        """Load TaskMetadata from a flat JSON list (used by the debug suite)."""
         with open(tasks_file) as f:
             tasks: list[dict] = json.load(f)
         result: dict[str, TaskMetadata] = {}
@@ -248,50 +222,4 @@ class WAABenchmark(Benchmark):
             )
             result[task_id] = metadata
         logger.info("Loaded %d task metadata entries from %s", len(result), tasks_file)
-        return result
-
-    def _load_task_metadata(self) -> dict[str, TaskMetadata]:
-        """Load TaskMetadata from evaluation_examples_windows/ directory structure.
-
-        Reads <eval_examples_dir>/test_set_name → {domain: [task_id, ...]}
-        Then reads <eval_examples_dir>/examples/<domain>/<task_id>.json per task.
-        """
-        eval_dir = self._get_eval_examples_dir()
-        test_set_file = eval_dir / self.test_set_name
-
-        if not test_set_file.exists():
-            raise FileNotFoundError(
-                f"Test set file not found: {test_set_file}\n"
-                "Ensure eval_examples_dir points to evaluation_examples_windows/."
-            )
-
-        with open(test_set_file) as f:
-            tasks_by_domain: dict[str, list[str]] = json.load(f)
-
-        result: dict[str, TaskMetadata] = {}
-        for domain_name, task_ids in tasks_by_domain.items():
-            for task_id in task_ids:
-                task_file = eval_dir / "examples" / domain_name / f"{task_id}.json"
-                if not task_file.exists():
-                    logger.warning("Task file not found: %s", task_file)
-                    continue
-                try:
-                    with open(task_file) as f:
-                        td = json.load(f)
-                    metadata = TaskMetadata(
-                        id=td.get("id", task_id),
-                        abstract_description=td.get("instruction", ""),
-                        extra_info={
-                            "domain": domain_name,
-                            "snapshot": td.get("snapshot", "init_state"),
-                            "config": td.get("config", []),
-                            "evaluator": td.get("evaluator", {}),
-                            "related_apps": td.get("related_apps", []),
-                        },
-                    )
-                    result[metadata.id] = metadata
-                except Exception as exc:
-                    logger.error("Failed to load task %s: %s", task_id, exc)
-
-        logger.info("Loaded %d task metadata entries from WAA repo", len(result))
         return result
