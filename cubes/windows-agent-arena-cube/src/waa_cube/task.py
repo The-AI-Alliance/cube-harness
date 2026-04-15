@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 
 _POST_SNAPSHOT_SLEEP = 10  # seconds to wait after QMP loadvm before taking obs
 
+# Actual VM resolution after snapshot restore.  The QEMU display adapter is
+# initialised at 1920×1080 (required for the Windows accessibility API), but the
+# snapshots were captured at 1280×800 so the guest reverts to that on restore.
+_VM_SCREEN_WIDTH = 1280
+_VM_SCREEN_HEIGHT = 800
+
 
 class WAATask(Task):
     """A single WAA desktop-automation task running inside a Windows 11 VM.
@@ -123,8 +129,8 @@ class WAATask(Task):
             chromium_port, vlc_port, _ = self._get_vm_ports()
             task_cache_dir = str(Path(self._computer.config.cache_dir) / task_data.get("id", "task"))
             Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
-            screen_width = getattr(self.vm_backend, "screen_width", 1280)
-            screen_height = getattr(self.vm_backend, "screen_height", 800)
+            screen_width = _VM_SCREEN_WIDTH
+            screen_height = _VM_SCREEN_HEIGHT
             setup_ctrl = SetupController(
                 guest=self._computer._guest,
                 chromium_port=chromium_port,

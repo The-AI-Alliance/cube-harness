@@ -618,11 +618,14 @@ class WAADockerVMBackend(VMBackend):
     cpu_cores: int = 8
     """Number of vCPUs for the Windows VM."""
 
-    screen_width: int = 1280
-    """Horizontal screen resolution. WAA snapshots are captured at 1280×800."""
+    screen_width: int = 1920
+    """QEMU display width passed as XRES. Must be 1920 — the Windows accessibility
+    API returns an empty tree when QEMU starts at the snapshot resolution (1280×800).
+    The mismatch forces a display reinit on snapshot restore that wakes the UI
+    Automation framework. The actual VM resolution after restore is 1280×800."""
 
-    screen_height: int = 800
-    """Vertical screen resolution. WAA snapshots are captured at 1280×800."""
+    screen_height: int = 1080
+    """QEMU display height passed as YRES. See screen_width note."""
 
     pull_policy: str = "missing"
     """Docker image pull policy: 'missing' (default), 'always', 'never'."""
@@ -797,8 +800,8 @@ class WAADockerVMBackend(VMBackend):
             storage_path=storage,
             ram_size=self.ram_size,
             cpu_cores=self.cpu_cores,
-            screen_width=config.screen_size[0] if config.screen_size else self.screen_width,
-            screen_height=config.screen_size[1] if config.screen_size else self.screen_height,
+            screen_width=self.screen_width,
+            screen_height=self.screen_height,
             pull_policy=self.pull_policy,
         )
         manager.start()
