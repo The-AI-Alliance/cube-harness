@@ -22,7 +22,6 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Generator
-from pathlib import Path
 from typing import ClassVar
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
