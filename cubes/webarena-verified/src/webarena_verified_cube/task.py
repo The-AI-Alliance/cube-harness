@@ -69,7 +69,7 @@ class WebArenaVerifiedTask(Task):
         }
         return obs, info
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         """Evaluate the agent's submitted response against the WebArena verified evaluators.
 
         Closes the browser context to flush the HAR file to disk, reads the network trace,
@@ -96,7 +96,7 @@ class WebArenaVerifiedTask(Task):
             "evaluators_results": [r.model_dump() for r in result.evaluators_results],
         }
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         """Return True once the agent has submitted a response via the SubmitResponseTool."""
         return self._submit_tool.get_submitted_response() is not None
 

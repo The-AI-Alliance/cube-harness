@@ -25,24 +25,25 @@ Prerequisites:
 
 Usage:
     # Genny agent, debug mode (default)
-    uv run recipes/workarena.py debug
+    uv run recipes/workarena.py --debug
 
     # React agent, debug mode
-    uv run recipes/workarena.py debug react
+    uv run recipes/workarena.py --debug --agent react
 
     # Full run with Genny (parallel with Ray)
     uv run recipes/workarena.py
 
     # Full run with React
-    uv run recipes/workarena.py react
+    uv run recipes/workarena.py --agent react
 """
 
-import sys
+import argparse
 
 from cube.tool import ToolboxConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from cube_chat_tool import ChatToolConfig
 from workarena_cube.benchmark import WorkArenaBenchmark
+from workarena_cube.tools import WorkArenaInfeasibleToolConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -71,24 +72,25 @@ AGENTS = {
 }
 
 
-def main(debug: bool, agent: str) -> None:
+def main(debug: bool, agent: str, level: int) -> None:
     agent_config = AGENTS[agent]
-    output_dir = make_experiment_output_dir(agent, "workarena", tag="l1")
+    output_dir = make_experiment_output_dir(agent, "workarena", tag=f"l{level}")
 
-    tool_config = ToolboxConfig(
-        tool_configs=[
-            BrowsergymConfig(
-                browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
-                use_screenshot=True,
-                use_axtree=True,
-                use_html=False,
-            ),
-            ChatToolConfig(),
-        ]
-    )
+    tools_configs = [
+        BrowsergymConfig(
+            browser=PlaywrightSessionConfig(headless=not debug, timeout=30000),
+            use_screenshot=True,
+            use_axtree=True,
+            use_html=False,
+        ),
+        ChatToolConfig(),
+    ]
+    if level > 1:
+        tools_configs.append(WorkArenaInfeasibleToolConfig())
+    tool_config = ToolboxConfig(tool_configs=tools_configs)
 
     # Configure WorkArena benchmark
-    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, level="l1", n_seeds_l1=1)
+    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, level=f"l{level}", n_seeds_l1=1)
 
     exp = Experiment(
         name=f"workarena_{agent}",
@@ -105,5 +107,9 @@ def main(debug: bool, agent: str) -> None:
 
 
 if __name__ == "__main__":
-    args = set(sys.argv[1:])
-    main(debug="debug" in args, agent="react" if "react" in args else "genny")
+    parser = argparse.ArgumentParser(description="Run WorkArena benchmark with cube-harness.")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode (headed browser, limited tasks)")
+    parser.add_argument("--agent", choices=AGENTS, default="genny", help="Agent to use (default: genny)")
+    parser.add_argument("--level", choices=[1, 2, 3], default=1, help="Level to run (default: 1)")
+    args = parser.parse_args()
+    main(debug=args.debug, agent=args.agent, level=args.level)

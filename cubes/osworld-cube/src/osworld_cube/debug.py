@@ -10,8 +10,7 @@ Public API
 make_debug_agent(task_id)    → DebugAgent
 get_debug_benchmark()        → OSWorldBenchmark
 
-Usage::
-
+Usage:
     # Run all debug tasks and print a JSON report
     python -m osworld_cube.debug
 """
@@ -19,18 +18,84 @@ Usage::
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
+from typing import ClassVar
+
+
+import cube
+from cube.benchmark import Benchmark
+from cube.container import ContainerBackend
+from cube.core import Action, ActionSchema, Observation
+from cube.task import TaskConfig
+from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
+from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
 
 from cube import LocalInfraConfig
-from cube.core import Action, ActionSchema, Observation
+from cube.testing import run_debug_suite
 from cube.resource import InfraConfig
-from osworld_cube.benchmark import OSWorldBenchmark
+
 from osworld_cube.computer import ComputerConfig
 from osworld_cube.infra_loader import load_runtime_infra_from_config_file
 
+
 logger = logging.getLogger(__name__)
 
-_TASKS_FILE = Path(__file__).parent / "debug_tasks.json"
+_DEBUG_TASK_METADATA_JSON = Path(__file__).parent / "debug_task_metadata.json"
+
+
+class DebugOSWorldTaskConfig(OSWorldTaskConfig):
+    def make(
+        self,
+        runtime_context: dict | None = None,
+        container_backend: ContainerBackend | None = None,
+    ) -> OSWorldTask:
+        """Instantiate OSWorldTask directly from debug_task_metadata.json.
+
+        config + evaluator are embedded in metadata.extra_info — no execution
+        cache directory is needed for debug tasks.
+        """
+        metadata = DebugOSWorldBenchmark.task_metadata[self.task_id]
+        return OSWorldTask(
+            metadata=metadata,
+            tool_config=self.tool_config or ComputerConfig(),
+            runtime_context=runtime_context,
+            container_backend=container_backend,
+            use_som=self.use_som,
+            infra=self.infra,
+        )
+
+
+class DebugOSWorldBenchmark(OSWorldBenchmark):
+    """OSWorldBenchmark scoped to the two hardcoded debug tasks.
+
+    Loads task_metadata from debug_task_metadata.json — config and evaluator are
+    embedded in extra_info, so no OSWorld repo clone or execution cache is needed.
+    """
+
+    benchmark_metadata = OSWorldBenchmark.benchmark_metadata.model_copy(
+        update={"name": "osworld-cube-debug", "num_tasks": 2, "named_subsets": {}}
+    )
+    task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]] = Benchmark.task_metadata_from_json(
+        _DEBUG_TASK_METADATA_JSON
+    )  # type: ignore[assignment]
+    task_config_class: ClassVar[type[TaskConfig]] = DebugOSWorldTaskConfig
+
+    @classmethod
+    def cache_dir(cls) -> Path:
+        """Override cache_dir() to point to a debug cube folder."""
+        return cube.get_cache_dir("osworld-debug-cube")
+
+    @classmethod
+    def install(cls) -> None:
+        """No-op: debug task execution data is embedded in debug_task_metadata.json."""
+        logger.info("DebugOSWorldBenchmark.install() — nothing to do")
+
+    @classmethod
+    def uninstall(cls) -> None:
+        """No-op: debug task execution data is embedded in debug_task_metadata.json."""
+        logger.info("DebugOSWorldBenchmark.uninstall() — nothing to do")
+
 
 # ---------------------------------------------------------------------------
 # Hardcoded action sequences per task ID
@@ -38,17 +103,11 @@ _TASKS_FILE = Path(__file__).parent / "debug_tasks.json"
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
     "simple-create-file": [
-        # Open a terminal
         Action(name="hotkey", arguments={"keys": ["ctrl", "alt", "t"]}),
-        # Wait for the terminal window to appear
         Action(name="wait", arguments={}),
-        # Type the shell command to create the file
         Action(name="typing", arguments={"text": "echo 'Hello World' > ~/Desktop/hello.txt"}),
-        # Execute the command
         Action(name="press", arguments={"key": "enter"}),
-        # Wait for the command to finish
         Action(name="wait", arguments={}),
-        # Signal task completion (triggers OSWorldTask.evaluate())
         Action(name="done", arguments={}),
     ],
     "simple-make-directory": [
@@ -61,29 +120,13 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
     ],
 }
 
-
 # ---------------------------------------------------------------------------
 # DebugAgent
 # ---------------------------------------------------------------------------
 
 
 class DebugAgent:
-    """
-    Deterministic debug agent that replays a fixed action sequence for a given task.
-
-    Interface matches the stress-test spec (stress_test_specs.md §1.2):
-        agent = make_debug_agent(task_id)
-        action = agent.get_action(obs)
-
-    The __call__ shorthand is also supported for use in the standard task loop:
-        action = agent(obs, action_set)
-
-    Args:
-        task_id: ID of the debug task to run. Must match a key in _TASK_ACTIONS.
-
-    Raises:
-        ValueError: If task_id has no registered action sequence.
-    """
+    """Deterministic debug agent that replays a fixed action sequence for a task."""
 
     def __init__(self, task_id: str) -> None:
         if task_id not in _TASK_ACTIONS:
@@ -98,11 +141,10 @@ class DebugAgent:
         )
 
     def get_action(self, obs: Observation) -> Action:
-        """Return the next predetermined action (stress-test spec interface)."""
         if self._step >= len(self._actions):
             raise StopIteration(f"[DebugAgent] task={self._task_id!r}: all {len(self._actions)} actions exhausted")
         action = self._actions[self._step]
-        logger.info(
+        logger.debug(
             "[DebugAgent] task=%r  step=%d/%d  action=%s  args=%s",
             self._task_id,
             self._step + 1,
@@ -114,13 +156,7 @@ class DebugAgent:
         return action
 
     def __call__(self, obs: Observation, action_set: list[ActionSchema]) -> Action:
-        """Callable shorthand — delegates to get_action() for task-loop compatibility."""
         return self.get_action(obs)
-
-
-# ---------------------------------------------------------------------------
-# Public helpers
-# ---------------------------------------------------------------------------
 
 
 def _get_default_infra() -> InfraConfig:
@@ -136,7 +172,8 @@ def _get_default_infra() -> InfraConfig:
 def get_debug_benchmark(
     infra: InfraConfig | None = None,
 ) -> OSWorldBenchmark:
-    """Return an OSWorldBenchmark scoped to the debug tasks.
+    """
+    Return an OSWorldBenchmark scoped to the debug tasks.
 
     Uses debug_tasks.json as the task source — no OSWorld repo clone required.
     The caller is responsible for calling install() and setup().
@@ -146,26 +183,17 @@ def get_debug_benchmark(
                Each task gets a fresh VM from the provisioned image.
     """
     resolved_infra = infra or _get_default_infra()
-    return OSWorldBenchmark(
-        tasks_file=str(_TASKS_FILE),
-        default_tool_config=ComputerConfig(),
+    return DebugOSWorldBenchmark(
         infra=resolved_infra,
     )
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
-    """Return a fresh DebugAgent for the given task_id."""
     return DebugAgent(task_id)
 
 
-# ---------------------------------------------------------------------------
-# __main__ — run all debug tasks, print JSON report
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    import sys
     import osworld_cube.debug as _mod
-    from cube.testing import run_debug_suite
 
     logging.basicConfig(
         level=logging.INFO,
@@ -174,7 +202,5 @@ if __name__ == "__main__":
     )
 
     results = run_debug_suite("osworld-cube", _mod)
-
-    # Exit non-zero if any episode failed or got reward 0
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] <= 0]
     sys.exit(1 if failed else 0)

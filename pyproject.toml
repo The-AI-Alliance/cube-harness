@@ -60,13 +60,11 @@ build-backend = "uv_build"
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
 [tool.uv.sources]
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }  # TODO: remove once 0.1.0rc5 released
+cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", rev = "fix/waa-guest-agent-methods" }
 miniwob-cube = { path = "cubes/miniwob", editable = true }
 workarena-cube = { path = "cubes/workarena", editable = true }
 waa-cube = { path = "cubes/windows-agent-arena-cube", editable = true }
-cube-standard = { path = "../cube-standard", editable = true }
-cube-computer-tool = { path = "../cube-standard/cube-tools/cube-computer-tool", editable = true }
-cube-browser-playwright = { path = "../cube-standard/cube-resources/cube-browser-playwright", editable = true }
-
 
 [tool.ruff]
 fix = true

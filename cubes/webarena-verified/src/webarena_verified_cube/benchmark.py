@@ -1,7 +1,9 @@
+import json
 import logging
 import urllib.error
 import urllib.request
-from typing import Any, ClassVar, Generator
+from pathlib import Path
+from typing import ClassVar, Generator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.task import TaskConfig, TaskMetadata
@@ -17,25 +19,7 @@ from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfi
 
 logger = logging.getLogger(__name__)
 
-
-def _load_task_metadata() -> dict[str, TaskMetadata]:
-    wav = WebArenaVerified()
-    return {
-        str(t.task_id): TaskMetadata(
-            id=str(t.task_id),
-            abstract_description=t.intent,
-            recommended_max_steps=30,
-            extra_info={
-                "sites": [s.value for s in t.sites],
-                "expected_action": t.expected_action,
-                "intent_template_id": t.intent_template_id,
-            },
-        )
-        for t in wav.get_tasks()
-    }
-
-
-_TASK_METADATA_UNLOADED: dict[str, TaskMetadata] = {}
+_TASK_METADATA_JSON = Path(__file__).parent / "task_metadata.json"
 
 
 class WebArenaVerifiedBenchmark(Benchmark):
@@ -46,12 +30,8 @@ class WebArenaVerifiedBenchmark(Benchmark):
         num_tasks=812,
         tags=["browser", "web", "ui", "webarena"],
     )
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = _TASK_METADATA_UNLOADED
+    # task_metadata: populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = WebArenaVerifiedTaskConfig
-
-    def model_post_init(self, __context: Any) -> None:
-        if type(self).task_metadata is _TASK_METADATA_UNLOADED:
-            type(self).task_metadata = _load_task_metadata()
 
     default_tool_config: ToolboxConfig = ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()])  # type: ignore
 
@@ -59,6 +39,43 @@ class WebArenaVerifiedBenchmark(Benchmark):
     sites_filter: list[WebArenaSite] | None = None
     action_filter: MainObjectiveType | None = None
     task_ids_filter: list[int] | None = None
+
+    @classmethod
+    def install(cls) -> None:
+        """Generate and cache task_metadata.json from the webarena-verified library.
+
+        No download required — data comes from the installed package.
+        Safe to call multiple times: skips generation if the file already exists.
+        """
+        if _TASK_METADATA_JSON.exists():
+            logger.info("task_metadata.json already exists, skipping generation")
+            return
+        logger.info("Generating task_metadata.json from webarena-verified library...")
+        wav = WebArenaVerified()
+        metadata = {
+            str(t.task_id): TaskMetadata(
+                id=str(t.task_id),
+                abstract_description=t.intent,
+                recommended_max_steps=30,
+                extra_info={
+                    "sites": [s.value for s in t.sites],
+                    "expected_action": t.expected_action,
+                    "intent_template_id": t.intent_template_id,
+                },
+            )
+            for t in wav.get_tasks()
+        }
+
+        _TASK_METADATA_JSON.write_text(json.dumps([tm.model_dump() for tm in metadata.values()], indent=2))
+        cls.task_metadata = metadata
+        logger.info(f"Saved {len(metadata)} tasks to {_TASK_METADATA_JSON}")
+
+    @classmethod
+    def uninstall(cls) -> None:
+        if _TASK_METADATA_JSON.exists():
+            _TASK_METADATA_JSON.unlink()
+            cls.task_metadata = {}
+            logger.info(f"Removed {_TASK_METADATA_JSON}")
 
     def _setup(self) -> None:
         """
