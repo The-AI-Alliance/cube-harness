@@ -79,13 +79,12 @@ class DebugWAABenchmark(WAABenchmark):
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
     "waa-debug-notepad": [
-        # Win+R → type notepad → Enter → done
-        Action(name="run_pyautogui", arguments={"code": "pyautogui.hotkey('win', 'r')"}),
-        Action(
-            name="run_pyautogui",
-            arguments={"code": "import time; time.sleep(1); pyautogui.typewrite('notepad', interval=0.05)"},
-        ),
-        Action(name="run_pyautogui", arguments={"code": "pyautogui.press('enter')"}),
+        # Win+R → type notepad → Enter → wait → done
+        Action(name="hotkey", arguments={"keys": ["win", "r"]}),
+        Action(name="wait", arguments={}),
+        Action(name="typing", arguments={"text": "notepad"}),
+        Action(name="press", arguments={"key": "enter"}),
+        Action(name="wait", arguments={}),
         Action(name="done", arguments={}),
     ],
     "waa-debug-infeasible": [
