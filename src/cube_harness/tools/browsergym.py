@@ -420,7 +420,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 axtree_str = flatten_axtree_to_str(
                     axtree_obj,
                     extra_properties=extra_props,
-                    with_visible=True,
                 )
                 obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
