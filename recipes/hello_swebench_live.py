@@ -55,8 +55,10 @@ def main(mode: str, model: str = "gpt-4.1-mini", subset: str = "lite") -> None:
 
     benchmark = SWEBenchLiveBenchmark(
         container_backend=backend,
-        max_tasks=max_tasks,
     ).named_subset(subset)
+    if max_tasks is not None:
+        tasks = list(benchmark.task_metadata.keys())[:max_tasks]
+        benchmark = benchmark.subset_from_list(tasks)
 
     agent_config = ReactAgentConfig(
         llm_config=LLMConfig(model_name=model),

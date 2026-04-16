@@ -50,12 +50,12 @@ def make_debug_agent(task_id: str) -> CheatAgent:
 
 def get_debug_benchmark() -> WorkArenaBenchmark:
     bench = WorkArenaBenchmark(
-        level="l1",
         n_seeds_l1=1,
         default_tool_config=WorkArenaCheatToolConfig(),
     )
-    task_ids = list(bench.task_metadata.keys())[:_DEBUG_N_TASKS]
-    return bench.subset_from_list(task_ids)  # type: ignore
+    l1_bench = bench.named_subset("l1")
+    task_ids = list(l1_bench.task_metadata.keys())[:_DEBUG_N_TASKS]
+    return l1_bench.subset_from_list(task_ids)  # type: ignore
 
 
 if __name__ == "__main__":

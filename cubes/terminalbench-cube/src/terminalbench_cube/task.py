@@ -12,15 +12,38 @@ from typing import Any
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig
+from cube.task import Task, TaskConfig, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
 logger = logging.getLogger(__name__)
 
 
+class TerminalBenchTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for Terminal-Bench tasks.
+
+    Public fields shipped in task_metadata.json (available at import time).
+    Heavy execution data (instruction, archive) lives in the per-task execution
+    cache and is loaded lazily by TerminalBenchTaskConfig.make().
+    """
+
+    difficulty: str
+    """Task difficulty level: 'easy', 'medium', or 'hard'."""
+
+    category: str
+    """Task category, e.g. 'scientific-computing', 'debugging'."""
+
+    tags: list[str]
+    """Task tags for fine-grained filtering."""
+
+    max_agent_timeout_sec: int
+    """Maximum wall-clock seconds the agent is allowed to run (from task.toml)."""
+
+
 class TerminalBenchTask(Task):
     """A single Terminal-Bench task with pytest-based validation."""
+
+    metadata: TerminalBenchTaskMetadata  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
@@ -48,8 +71,8 @@ class TerminalBenchTask(Task):
 
         return Observation.from_text(extra["instruction"]), {
             "task_id": self.metadata.id,
-            "difficulty": extra.get("difficulty", "unknown"),
-            "category": extra.get("category", ""),
+            "difficulty": self.metadata.difficulty,
+            "category": self.metadata.category,
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
@@ -119,20 +142,33 @@ class TerminalBenchTask(Task):
 
 
 class TerminalBenchTaskConfig(TaskConfig):
-    """Serializable factory that produces a TerminalBenchTask."""
+    """Serializable factory that produces a TerminalBenchTask.
+
+    Loads heavy execution data (instruction, archive) from the per-task execution
+    cache in make(), so it works correctly in Ray workers.
+    """
+
+    oracle_mode: bool = False
+    """If True, upload the gold solution to /solution in reset()."""
 
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> TerminalBenchTask:
+        if container_backend is None:
+            raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
+
         # Import here to avoid circular import (benchmark imports task)
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
 
-        if container_backend is None:
-            raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
+        metadata = TerminalBenchBenchmark.task_metadata[self.task_id]
+        exec_info = TerminalBenchBenchmark.load_task_execution_info(self.task_id)
+        exec_info["oracle_mode"] = self.oracle_mode
+        metadata = metadata.model_copy(update={"extra_info": exec_info})
+
         return TerminalBenchTask(
-            metadata=TerminalBenchBenchmark.task_metadata[self.task_id],
+            metadata=metadata,
             tool_config=self.tool_config or TerminalBenchToolConfig(),
             runtime_context=runtime_context,
             container_backend=container_backend,

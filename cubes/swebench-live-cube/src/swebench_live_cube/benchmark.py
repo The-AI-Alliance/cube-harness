@@ -3,45 +3,31 @@
 import json
 import logging
 import shutil
-from pathlib import Path
-from random import Random
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generator
 
 from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.container import ContainerConfig
-from cube.task import TaskConfig, TaskMetadata
+from cube.task import TaskConfig
 from datasets import load_dataset
 
-from swebench_live_cube.task import SWEBenchLiveTaskConfig
+from swebench_live_cube.task import SWEBenchLiveTaskConfig, SWEBenchLiveTaskMetadata
 
 logger = logging.getLogger(__name__)
 
-_DOCKER_NAMESPACE = "starryzhang"
-_IMAGE_TAG = "latest"
 _DATASET_NAME = "SWE-bench-Live/SWE-bench-Live"
 # Priority order for conflict resolution: earlier = higher priority.
 # When the same instance_id appears in multiple splits with different data,
 # the split with the highest priority wins.
 _SPLIT_PRIORITY = ["verified", "full", "test", "lite"]
-_TASK_METADATA_JSON = Path(__file__).parent / "task_metadata.json"
 
 
-def _normalize_instance_id(instance_id: str) -> str:
-    """Normalize instance_id for Docker image naming: replace __ with _1776_ and lowercase."""
-    return instance_id.replace("__", "_1776_").lower()
+def _merge_rows_by_split(
+    rows_by_split: dict[str, list[dict[str, Any]]],
+) -> dict[str, tuple[dict[str, Any], list[str]]]:
+    """Merge rows across splits by instance_id.
 
-
-def _get_docker_image(instance_id: str) -> str:
-    normalized = _normalize_instance_id(instance_id)
-    return f"{_DOCKER_NAMESPACE}/sweb.eval.x86_64.{normalized}:{_IMAGE_TAG}"
-
-
-def _build_task_metadata(rows_by_split: dict[str, list[dict[str, Any]]]) -> dict[str, TaskMetadata]:
-    """Build task_metadata from all splits, deduplicating by instance_id.
-
-    When the same instance_id appears in multiple splits with different data,
-    the split with the highest priority in _SPLIT_PRIORITY wins.
-    Each task records which splits it belongs to in extra_info["splits"].
+    Returns {iid: (winning_row, splits_present)} using the priority order from
+    _SPLIT_PRIORITY. Logs a warning for each instance_id whose data differs
+    across splits so cube developers can spot upstream inconsistencies.
     """
     # First pass: collect all rows per instance_id across splits
     all_rows: dict[str, dict[str, dict[str, Any]]] = {}  # iid -> {split: row}
@@ -52,7 +38,7 @@ def _build_task_metadata(rows_by_split: dict[str, list[dict[str, Any]]]) -> dict
 
     # Second pass: pick the highest-priority row and report conflicts
     n_conflicts = 0
-    chosen_rows: dict[str, tuple[str, dict[str, Any]]] = {}  # iid -> (winning_split, row)
+    result: dict[str, tuple[dict[str, Any], list[str]]] = {}
     for iid, split_rows in all_rows.items():
         splits_present = [s for s in _SPLIT_PRIORITY if s in split_rows]
         winning_split = splits_present[0]  # highest priority
@@ -78,46 +64,34 @@ def _build_task_metadata(rows_by_split: dict[str, list[dict[str, Any]]]) -> dict
                     + f"\n  -> Using {winning_split!r}."
                 )
 
-        chosen_rows[iid] = (winning_split, winning_row)
+        result[iid] = (winning_row, splits_present)
 
     if n_conflicts:
         logger.warning(
             f"{n_conflicts} task(s) had conflicting data across splits. Split priority used: {_SPLIT_PRIORITY}."
         )
 
-    metadata: dict[str, TaskMetadata] = {}
-    for iid, (_, t) in chosen_rows.items():
-        splits_present = [s for s in _SPLIT_PRIORITY if s in all_rows[iid]]
-        fail_to_pass = t["FAIL_TO_PASS"] if isinstance(t["FAIL_TO_PASS"], list) else []
-        pass_to_pass = t["PASS_TO_PASS"] if isinstance(t["PASS_TO_PASS"], list) else []
-        metadata[iid] = TaskMetadata(
-            id=iid,
-            abstract_description=t["problem_statement"][:200],
-            recommended_max_steps=100,
-            container_config=ContainerConfig(
-                image=_get_docker_image(iid),
-                cpu_cores=2.0,
-                ram_gb=4.0,
-                disk_gb=10.0,
-            ),
-            extra_info={
-                "problem_statement": t["problem_statement"],
-                "hints_text": t.get("hints_text", ""),
-                "include_hints": False,
-                "repo": t["repo"],
-                "base_commit": t["base_commit"],
-                "patch": t["patch"],
-                "test_patch": t["test_patch"],
-                "fail_to_pass": fail_to_pass,
-                "pass_to_pass": pass_to_pass,
-                "test_cmds": t.get("test_cmds", []),
-                "log_parser": t.get("log_parser", "pytest"),
-                "eval_timeout": 1800,
-                "oracle_mode": False,
-                "splits": splits_present,
-            },
-        )
-    return metadata
+    return result
+
+
+def _build_execution_info(row: dict[str, Any]) -> dict[str, Any]:
+    """Extract execution-only fields from a HF dataset row.
+
+    These fields are only needed when a task runs; they are never loaded
+    at import time. Stored in the per-task execution cache by install().
+    """
+    fail_to_pass = row["FAIL_TO_PASS"] if isinstance(row["FAIL_TO_PASS"], list) else []
+    pass_to_pass = row["PASS_TO_PASS"] if isinstance(row["PASS_TO_PASS"], list) else []
+    return {
+        "problem_statement": row["problem_statement"],
+        "hints_text": row.get("hints_text", ""),
+        "patch": row["patch"],
+        "test_patch": row["test_patch"],
+        "fail_to_pass": fail_to_pass,
+        "pass_to_pass": pass_to_pass,
+        "test_cmds": row.get("test_cmds", []),
+        "eval_timeout": 1800,
+    }
 
 
 class SWEBenchLiveBenchmark(Benchmark):
@@ -133,29 +107,27 @@ class SWEBenchLiveBenchmark(Benchmark):
             "\n"
             "CUBE DEVELOPER NOTES:\n"
             "---------------------\n"
-            "task_metadata.json contains all tasks from all splits (test, lite, verified, full), "
-            "deduplicated by instance_id with split priority: verified > full > test > lite. "
-            "Each task stores which splits it belongs to in extra_info['splits']."
+            "task_metadata.json is a shipped package resource containing lightweight public fields. "
+            "Heavy execution data (problem_statement, patch, test_patch, etc.) is stored in the "
+            "per-task execution cache populated by install(). "
+            "All tasks from all splits (test, lite, verified, full) are included, deduplicated by "
+            "instance_id with split priority: verified > full > test > lite. "
+            "Each task stores which splits it belongs to in the typed 'splits' field."
         ),
         tags=["swe", "github", "docker", "live"],
         num_tasks=1895,  # total unique tasks across all splits as of 2026-04-02
         # Splits overlap heavily: full(1887) ⊇ verified(499) ⊇ lite(300); test(1000) adds 8 unique tasks not in full.
         named_subsets={
-            "test": ("extra_info.splits", "*'test'*"),
-            "lite": ("extra_info.splits", "*'lite'*"),
-            "verified": ("extra_info.splits", "*'verified'*"),
-            "full": ("extra_info.splits", "*'full'*"),
+            "test": ("splits", "*'test'*"),
+            "lite": ("splits", "*'lite'*"),
+            "verified": ("splits", "*'verified'*"),
+            "full": ("splits", "*'full'*"),
         },
     )
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
+    task_metadata: ClassVar[dict[str, SWEBenchLiveTaskMetadata]]  # type:ignore - populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = SWEBenchLiveTaskConfig
 
     # User-configurable fields
-    shuffle: bool = True
-    shuffle_seed: int = 42
-    max_tasks: int | None = None
-    repo_filter: str | None = None
-    instance_ids: list[str] | None = None
     include_hints: bool = False
     oracle_mode: bool = False
 
@@ -163,88 +135,73 @@ class SWEBenchLiveBenchmark(Benchmark):
 
     @classmethod
     def install(cls) -> None:
-        """Download all SWE-bench Live splits and save task_metadata.json.
+        """Download all SWE-bench Live splits and populate the per-task execution cache.
 
-        Downloads test, lite, verified, and full splits from HuggingFace, merges
-        them by instance_id (deduplicating with priority: verified > full > test > lite),
-        and stores which splits each task belongs to in extra_info["splits"].
+        The shipped task_metadata.json is a package resource and is not modified here.
+        Downloads from HuggingFace (cached under cache_dir()/huggingface_cache/) and
+        writes one JSON file per task (problem_statement, patch, test_patch, etc.)
+        to task_execution_cache_dir().
 
-        Safe to call multiple times: skips if task_metadata.json already exists.
-        Use subset_from_glob to filter by split at runtime, e.g.:
-            bench.subset_from_glob("extra_info", '*"lite"*')
+        Safe to call multiple times: skips if the execution cache is already populated.
+        To regenerate task_metadata.json (developer use only), run:
+            scripts/generate_task_metadata.py
         """
-        if _TASK_METADATA_JSON.exists():
-            logger.info("task_metadata.json already exists, skipping installation")
+        task_execution_info_cache_dir = cls.task_execution_cache_dir()
+        if task_execution_info_cache_dir.exists() and any(task_execution_info_cache_dir.iterdir()):
+            logger.info("Execution cache already populated, skipping installation")
             return
+        task_execution_info_cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download from HuggingFace into our own cache folder (not the default ~/.cache/huggingface)
+        # load_dataset is idempotent: if the data is already cached there, no download occurs.
+        hf_cache = str(cls.cache_dir() / "huggingface_cache")
         rows_by_split: dict[str, list[dict[str, Any]]] = {}
         for split in _SPLIT_PRIORITY:
             logger.info(f"Downloading {_DATASET_NAME} split={split!r} from HuggingFace...")
-            ds = load_dataset(_DATASET_NAME, split=split)
+            ds = load_dataset(_DATASET_NAME, split=split, cache_dir=hf_cache)
             rows_by_split[split] = list(ds)  # type: ignore[arg-type]
             logger.info(f"  {len(rows_by_split[split])} tasks in split={split!r}")
-        metadata = _build_task_metadata(rows_by_split)
-        _TASK_METADATA_JSON.write_text(json.dumps([tm.model_dump() for tm in metadata.values()], indent=2))
-        cls.task_metadata = metadata
-        logger.info(f"Saved {len(metadata)} tasks to {_TASK_METADATA_JSON}")
+
+        merged = _merge_rows_by_split(rows_by_split)
+
+        # Write one execution-cache file per task
+        n = 0
+        for iid, (row, _) in merged.items():
+            exec_info = _build_execution_info(row)
+            (task_execution_info_cache_dir / f"{iid}.json").write_text(json.dumps(exec_info))
+            n += 1
+
+        logger.info(f"Saved {n} execution cache files to {task_execution_info_cache_dir}")
 
     @classmethod
     def uninstall(cls) -> None:
-        """Remove task_metadata.json and the cached HuggingFace dataset."""
-        if _TASK_METADATA_JSON.exists():
-            _TASK_METADATA_JSON.unlink()
-            cls.task_metadata = {}
-            logger.info(f"Removed {_TASK_METADATA_JSON}")
-        from datasets import config as ds_config
+        """Remove the per-task execution cache and the HuggingFace dataset cache.
 
-        cache_dir = Path(ds_config.HF_DATASETS_CACHE)
-        dataset_dir = cache_dir / _DATASET_NAME.replace("/", "___")
-        if dataset_dir.exists():
-            shutil.rmtree(dataset_dir)
-            logger.info(f"Removed dataset cache at {dataset_dir}")
+        The shipped task_metadata.json is not removed.
+        """
+        task_execution_info_cache_dir = cls.task_execution_cache_dir()
+        if task_execution_info_cache_dir.exists():
+            shutil.rmtree(task_execution_info_cache_dir)
+            logger.info(f"Removed execution cache at {task_execution_info_cache_dir}")
+
+        hf_cache = cls.cache_dir() / "huggingface_cache"
+        if hf_cache.exists():
+            shutil.rmtree(hf_cache)
+            logger.info(f"Removed HuggingFace dataset cache at {hf_cache}")
 
     def _setup(self) -> None:
-        """Apply instance-level filters and runtime config to the pre-loaded task_metadata."""
-        if "task_metadata" in self.__dict__:
-            logger.info("SWE-bench Live task_metadata already populated, skipping setup")
-            return
-
-        tasks = list(type(self).task_metadata.values())
-        tasks = self._filter_tasks(tasks)
-
-        # Apply per-instance runtime config if non-default
-        if self.include_hints or self.oracle_mode:
-            tasks = [
-                t.model_copy(
-                    update={
-                        "extra_info": {
-                            **t.extra_info,
-                            "include_hints": self.include_hints,
-                            "oracle_mode": self.oracle_mode,
-                        }
-                    }
-                )
-                for t in tasks
-            ]
-
-        metadata = {t.id: t for t in tasks}
-        object.__setattr__(self, "task_metadata", metadata)
-        type(self).task_metadata = metadata
-        logger.info(f"SWE-bench Live setup complete: {len(metadata)} tasks")
+        """No shared infrastructure needed — task containers are launched per-task in make()."""
+        logger.info(f"SWEBenchLiveBenchmark ready with {len(self.task_metadata)} tasks")
 
     def close(self) -> None:
         logger.info("SWE-bench Live benchmark closed")
 
-    # ── Private helpers ────────────────────────────────────────────
-
-    def _filter_tasks(self, tasks: list[TaskMetadata]) -> list[TaskMetadata]:
-        """Apply filtering, shuffling, and slicing to a list of TaskMetadata."""
-        if self.instance_ids:
-            id_set = set(self.instance_ids)
-            tasks = [t for t in tasks if t.id in id_set]
-        if self.repo_filter:
-            tasks = [t for t in tasks if t.extra_info.get("repo", "").lower() == self.repo_filter.lower()]
-        if self.shuffle:
-            Random(self.shuffle_seed).shuffle(tasks)
-        if self.max_tasks:
-            tasks = tasks[: self.max_tasks]
-        return tasks
+    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
+        """Yield TaskConfigs with include_hints and oracle_mode forwarded from benchmark settings."""
+        for tm in self.task_metadata.values():
+            yield SWEBenchLiveTaskConfig(
+                task_id=tm.id,
+                tool_config=self.default_tool_config,
+                include_hints=self.include_hints,
+                oracle_mode=self.oracle_mode,
+            )
