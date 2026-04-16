@@ -804,7 +804,7 @@ wheels = [
 [[package]]
 name = "cube-computer-tool"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&rev=fix%2Fwaa-guest-agent-methods#e7c1ab75476bf1f0a45a5712099b09cea164ae27" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&rev=fix%2Fwaa-guest-agent-methods#9e856c34191dc29ab15b8da9dc5364905e206b58" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
