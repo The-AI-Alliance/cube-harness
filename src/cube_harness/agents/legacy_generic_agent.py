@@ -27,7 +27,7 @@ from pydantic import Field
 
 from cube_harness.agent import Agent, AgentConfig
 from cube_harness.core import AgentOutput, LLMCall
-from cube_harness.llm import LLMConfig, Message, Prompt
+from cube_harness.llm import LLMConfig, Message, Prompt, RLCollectorConfig
 from cube_harness.utils import parse_actions
 
 logger = logging.getLogger(__name__)
@@ -880,7 +880,7 @@ class GenericAgentConfig(AgentConfig):
         max_actions: Maximum actions before auto-stopping
     """
 
-    llm_config: LLMConfig
+    llm_config: LLMConfig | RLCollectorConfig
     flags: GenericPromptFlags = Field(default_factory=GenericPromptFlags)
     max_retry: int = 4
     max_actions: int = 50
@@ -1183,6 +1183,9 @@ class GenericAgent(Agent):
                     prompt=prompt,
                     output=llm_response.message,
                     usage=llm_response.usage,
+                    logprobs=llm_response.logprobs,
+                    completion_token_ids=llm_response.completion_token_ids,
+                    finish_reason=llm_response.finish_reason,
                 )
 
                 # Extract text response for parsing think/plan/memory/criticise tags

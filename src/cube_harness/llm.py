@@ -34,12 +34,17 @@ class LLMConfig(TypedBaseModel):
     """Thin LLM wrapper around LiteLLM completion API."""
 
     model_name: str
+    api_base: str | None = None
+    api_key: str | None = None
     temperature: float = 1.0
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     tool_choice: Literal["auto", "none", "required"] = "auto"
     parallel_tool_calls: bool = False
+    logprobs: bool = False
+    top_logprobs: int | None = None
+    extra_body: dict = Field(default_factory=dict)
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
     timeout: float | None = 120.0  # seconds per attempt; None = no timeout
@@ -69,6 +74,9 @@ class LLMResponse(TypedBaseModel):
 
     message: Message
     usage: Usage
+    logprobs: list[float] | None = None
+    completion_token_ids: list[int] | None = None
+    finish_reason: str | None = None
 
 
 class LLM:
@@ -88,11 +96,28 @@ class LLM:
             "messages": prompt.messages,
             "timeout": self.config.timeout,
         }
+        if self.config.api_base is not None:
+            kwargs["api_base"] = self.config.api_base
+        if self.config.api_key is not None:
+            kwargs["api_key"] = self.config.api_key
+        if self.config.logprobs:
+            kwargs["logprobs"] = True
+        if self.config.top_logprobs is not None:
+            kwargs["top_logprobs"] = self.config.top_logprobs
+        if self.config.extra_body:
+            kwargs["extra_body"] = self.config.extra_body
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
         response = completion_with_retries(**kwargs)
         usage = self._extract_usage(response)
-        return LLMResponse(message=response.choices[0].message, usage=usage)
+        completion_logprobs = self._extract_completion_logprobs(response)
+        return LLMResponse(
+            message=response.choices[0].message,
+            usage=usage,
+            logprobs=[entry["logprob"] for entry in completion_logprobs] if completion_logprobs else None,
+            completion_token_ids=[entry["token_id"] for entry in completion_logprobs] if completion_logprobs else None,
+            finish_reason=getattr(response.choices[0], "finish_reason", None),
+        )
 
     def _extract_usage(self, response) -> Usage:
         """Extract usage info from LiteLLM response."""
@@ -141,6 +166,100 @@ class LLM:
             cost=cost,
         )
 
+    def _extract_completion_logprobs(self, response) -> list[dict[str, int | float]]:
+        """Extract completion logprobs and token IDs from an OpenAI-compatible response."""
+        result: list[dict[str, int | float]] = []
+        choice = response.choices[0]
+        logprobs = getattr(choice, "logprobs", None)
+        if logprobs is None:
+            return result
+        content = getattr(logprobs, "content", None)
+        if content is None:
+            return result
+        for entry in content:
+            token_str = getattr(entry, "token", None)
+            token_id: int | None = None
+            if isinstance(token_str, str) and token_str.startswith("token_id:"):
+                try:
+                    token_id = int(token_str.split(":", 1)[1])
+                except ValueError:
+                    token_id = None
+            logprob = getattr(entry, "logprob", None)
+            if token_id is None or not isinstance(logprob, (int, float)):
+                continue
+            result.append({"token_id": token_id, "logprob": float(logprob)})
+        return result
+
+
+class CapturedLLMCall(TypedBaseModel):
+    """Serializable LLM call payload used for RL data conversion."""
+
+    prompt_messages: list[dict] = Field(default_factory=list)
+    output_text: str = ""
+    logprobs: list[float] = Field(default_factory=list)
+    completion_token_ids: list[int] = Field(default_factory=list)
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+    finish_reason: str | None = None
+
+
+def _serialize_message(msg: dict | Message) -> dict:
+    if isinstance(msg, dict):
+        return msg
+    if hasattr(msg, "model_dump"):
+        dumped = msg.model_dump(exclude_none=True)
+        return dumped if isinstance(dumped, dict) else {"role": "assistant", "content": str(msg)}
+    return {"role": getattr(msg, "role", "assistant"), "content": getattr(msg, "content", str(msg))}
+
+
+class RLCollectorConfig(TypedBaseModel):
+    """Wrapper config that collects LLM calls for RL trajectory conversion."""
+
+    inner: LLMConfig
+    stream_path: str | None = None
+
+    @property
+    def model_name(self) -> str:
+        return self.inner.model_name
+
+    def make(self) -> "RLCollectorLLM":
+        return RLCollectorLLM(config=self)
+
+    def make_counter(self) -> Callable[..., int]:
+        return self.inner.make_counter()
+
+
+class RLCollectorLLM:
+    """Transparent wrapper around an inner LLM that buffers rollout-relevant call data."""
+
+    def __init__(self, config: RLCollectorConfig):
+        self.config = config
+        self._inner = config.inner.make()
+        self._captured_calls: list[CapturedLLMCall] = []
+
+    def __call__(self, prompt: Prompt) -> LLMResponse:
+        response = self._inner(prompt)
+        self._captured_calls.append(
+            CapturedLLMCall(
+                prompt_messages=[_serialize_message(msg) for msg in prompt.messages],
+                output_text=response.message.content or "",
+                logprobs=response.logprobs or [],
+                completion_token_ids=response.completion_token_ids or [],
+                prompt_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                finish_reason=response.finish_reason,
+            )
+        )
+        return response
+
+    def pop_captured_calls(self) -> list[CapturedLLMCall]:
+        calls = list(self._captured_calls)
+        self._captured_calls.clear()
+        return calls
+
+    def clear(self) -> None:
+        self._captured_calls.clear()
+
 
 class LLMCall(TypedBaseModel):
     """Represents a call to an LLM model."""
@@ -148,7 +267,10 @@ class LLMCall(TypedBaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)  # unique storage key
     tag: str = ""  # optional label shown as tab name in viewers (e.g. "act", "summary")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
-    llm_config: LLMConfig
+    llm_config: LLMConfig | RLCollectorConfig
     prompt: Prompt
     output: Message
     usage: Usage = Field(default_factory=Usage)
+    logprobs: list[float] | None = None
+    completion_token_ids: list[int] | None = None
+    finish_reason: str | None = None

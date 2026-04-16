@@ -7,14 +7,14 @@ from termcolor import colored
 
 from cube_harness.agent import Agent, AgentConfig
 from cube_harness.core import AgentOutput, LLMCall
-from cube_harness.llm import LLMConfig, Prompt
+from cube_harness.llm import LLMConfig, Prompt, RLCollectorConfig
 from cube_harness.utils import parse_actions
 
 logger = logging.getLogger(__name__)
 
 
 class ReactAgentConfig(AgentConfig):
-    llm_config: LLMConfig
+    llm_config: LLMConfig | RLCollectorConfig
     can_finish: bool = True
     max_actions: int = 10
     max_obs_chars: int = 100000  # truncate long observations to M chars
@@ -94,7 +94,15 @@ class ReactAgent(Agent):
         llm_output = llm_response.message
         self.history.append(llm_output)
         self._actions_cnt += 1
-        llm_call = LLMCall(llm_config=self.config.llm_config, prompt=prompt, output=llm_output, usage=usage)
+        llm_call = LLMCall(
+            llm_config=self.config.llm_config,
+            prompt=prompt,
+            output=llm_output,
+            usage=usage,
+            logprobs=llm_response.logprobs,
+            completion_token_ids=llm_response.completion_token_ids,
+            finish_reason=llm_response.finish_reason,
+        )
         return AgentOutput(actions=parse_actions(llm_output), llm_calls=[llm_call])
 
     def choose_steps_to_render(self, history: list[dict | Message]) -> list[dict | Message]:
