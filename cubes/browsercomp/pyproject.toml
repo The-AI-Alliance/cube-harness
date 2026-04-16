@@ -1,0 +1,22 @@
+[project]
+name = "browsercomp-cube"
+version = "0.1.0"
+description = "BrowseComp benchmark — web browsing information retrieval"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-standard",
+    "cube-web-tool",
+    "litellm",
+]
+
+[project.entry-points."cube.benchmarks"]
+browsercomp-cube = "browsercomp_cube.benchmark:BrowseCompBenchmark"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4
