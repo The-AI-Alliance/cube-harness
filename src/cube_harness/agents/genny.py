@@ -52,13 +52,13 @@ class Profiler:
 
 _DEFAULT_SYSTEM_PROMPT = """\
 You are an expert AI agent. Understand the goal, take targeted actions, and reason clearly about progress.
-Be concise and focused."""
+Verify that each action had the intended effect before proceeding. Be concise and focused."""
 
 _DEFAULT_REACT_PROMPT = """\
 Review the latest observation and produce the next action.
 Think step by step:
 1. What does the observation show?
-2. What was the effect of the last action?
+2. Did the last action have the intended effect? If the page state is unchanged or the action failed, do NOT repeat it — try a different element, method, or approach.
 3. What is the best next action?
 Then call the appropriate function."""
 

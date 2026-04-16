@@ -416,7 +416,12 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
-                axtree_str = flatten_axtree_to_str(axtree_obj)
+                extra_props = bgym_obs.get("extra_element_properties", {})
+                axtree_str = flatten_axtree_to_str(
+                    axtree_obj,
+                    extra_properties=extra_props,
+                    hide_bid_if_invisible=True,
+                )
                 obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
         # Screenshot
