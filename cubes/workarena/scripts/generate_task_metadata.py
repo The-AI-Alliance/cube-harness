@@ -10,9 +10,10 @@ WorkArena has no heavy execution data — all task logic is available from the
 browsergym-workarena library at runtime via the task class path.
 
 Usage:
-    python scripts/generate_task_metadata.py [--force]
+    python scripts/generate_task_metadata.py [--output PATH] [--force]
 
 Options:
+    --output    Destination file (default: task_metadata.json inside the workarena_cube package).
     --force     Overwrite task_metadata.json even if it already exists.
 """
 
@@ -21,19 +22,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
-
-# Make the package importable when executed from the cube root without venv activation.
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from browsergym.workarena import get_all_tasks_agents
 
+import workarena_cube
 from workarena_cube.task import WorkArenaTaskMetadata
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_OUTPUT = Path(__file__).parent.parent / "src" / "workarena_cube" / "task_metadata.json"
+assert workarena_cube.__file__ is not None
+_DEFAULT_OUTPUT = Path(workarena_cube.__file__).parent / "task_metadata.json"
 
 
 def _build_task_metadata() -> dict[str, WorkArenaTaskMetadata]:
@@ -61,9 +60,7 @@ def _build_task_metadata() -> dict[str, WorkArenaTaskMetadata]:
     for level in ("l2", "l3"):
         human_ids: set[str] = {
             task_class.get_task_id()
-            for task_class, _ in get_all_tasks_agents(
-                filter=level, meta_seed=0, n_seed_l1=1, is_agent_curriculum=False
-            )
+            for task_class, _ in get_all_tasks_agents(filter=level, meta_seed=0, n_seed_l1=1, is_agent_curriculum=False)
         }
         for task_class, _ in get_all_tasks_agents(filter=level, meta_seed=0, n_seed_l1=1, is_agent_curriculum=True):
             task_id = task_class.get_task_id()
@@ -119,7 +116,13 @@ if __name__ == "__main__":
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=_DEFAULT_OUTPUT,
+        help="Destination file (default: task_metadata.json inside the workarena_cube package)",
+    )
     parser.add_argument("--force", action="store_true", help="Regenerate even if file already exists")
     args = parser.parse_args()
 
-    generate_task_metadata(force=args.force)
+    generate_task_metadata(args.output, force=args.force)
