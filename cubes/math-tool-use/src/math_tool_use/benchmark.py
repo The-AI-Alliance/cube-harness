@@ -8,6 +8,18 @@ from datasets import load_dataset
 
 logger = logging.getLogger(__name__)
 
+_DATASET_NAME: str = "https://raw.githubusercontent.com/Open-Reasoner-Zero/Open-Reasoner-Zero/refs/heads/main/data/orz_math_57k_collected.json"
+
+def _process_open_reasoner(dataset, dataset_name):
+    for item in dataset:
+        # Note: Open Reasoner tasks sometimes have preamble, e.g.
+        # - Example 31 (2004 College Entrance Examination Hunan Paper)
+        # - 8.
+        # - 4. (7 points)
+        # We are currently ignoring the preamble
+        task = item["0"]["value"]
+        answer = item["1"]["ground_truth"]["value"]
+        yield {"dataset": dataset_name, "task": task, "answer": answer}
 
 class MathToolUseBenchmark(Benchmark):
     """Arithmetic tasks requiring deterministic Python tool use before final LaTeX answer submission."""
@@ -23,26 +35,17 @@ class MathToolUseBenchmark(Benchmark):
     task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = MathToolUseTaskConfig
 
-    # User-configurable fields
-    dataset_name: str = "https://raw.githubusercontent.com/Open-Reasoner-Zero/Open-Reasoner-Zero/refs/heads/main/data/orz_math_57k_collected.json"
-
-    def _setup(self) -> None:
+    @classmethod
+    def install(cls) -> None:
         """Load dataset from HuggingFace, apply filters, and populate task_metadata."""
-        # Only skip loading if this instance already has its own shadow (i.e. was
-        # already set up).  We deliberately do NOT guard on the class-level attr
-        # because that would prevent a fresh instance from loading its own task
-        # set when a previous setup already populated the ClassVar with a different set.
-        if "task_metadata" in self.__dict__:
-            logger.info("MathToolUseBenchmark task_metadata already populated, skipping setup")
-            return
 
         dataset = load_dataset(
             "json",
-            data_files=self.dataset_name,
+            data_files=_DATASET_NAME,
             split="train",
             trust_remote_code=True,
         )
-        tasks_data = [s for s in self._process_open_reasoner(dataset, "open_reasoner_zero_57k") if s is not None]
+        tasks_data = [s for s in _process_open_reasoner(dataset, "open_reasoner_zero_57k") if s is not None]
 
         metadata: dict[str, TaskMetadata] = {}
         for i, t in enumerate(tasks_data):
@@ -58,24 +61,11 @@ class MathToolUseBenchmark(Benchmark):
                 },
             )
 
-        # Populate instance-level shadow so each instance sees its own filtered view
-        # (e.g. after subset_from_list / subset_from_glob).
-        object.__setattr__(self, "task_metadata", metadata)
-        # Also update the class-level attr so TaskConfig.make() can look up tasks
-        # via the ClassVar in the same process without re-running setup().
-        type(self).task_metadata = metadata
+        cls.task_metadata = metadata
         logger.info(f"Loading Open Reasoner Zero dataset: {len(metadata)} tasks")
+
+    def _setup(self) -> None:
+        pass
 
     def close(self) -> None:
         pass
-
-    def _process_open_reasoner(self, dataset, dataset_name):
-        for item in dataset:
-            # Note: Open Reasoner tasks sometimes have preamble, e.g.
-            # - Example 31 (2004 College Entrance Examination Hunan Paper)
-            # - 8.
-            # - 4. (7 points)
-            # We are currently ignoring the preamble
-            task = item["0"]["value"]
-            answer = item["1"]["ground_truth"]["value"]
-            yield {"dataset": dataset_name, "task": task, "answer": answer}
