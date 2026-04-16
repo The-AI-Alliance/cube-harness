@@ -179,37 +179,29 @@ def check_list(result: str, rules: Dict[str, List[str]]) -> float:
     return float(all(expect_metrics) and unexpect_metric)
 
 
+# Namespace map matching the WAA Flask server's XML output.
+# The server uses uri:deskat:... namespaces for both Linux and Windows.
 _accessibility_ns_map = {
     "ubuntu": {
-        "st": "https://accessibility.ubuntu.example.org/ns/state",
-        "attr": "https://accessibility.ubuntu.example.org/ns/attributes",
-        "cp": "https://accessibility.ubuntu.example.org/ns/component",
-        "doc": "https://accessibility.ubuntu.example.org/ns/document",
-        "docattr": "https://accessibility.ubuntu.example.org/ns/document/attributes",
-        "txt": "https://accessibility.ubuntu.example.org/ns/text",
-        "val": "https://accessibility.ubuntu.example.org/ns/value",
-        "act": "https://accessibility.ubuntu.example.org/ns/action",
+        "st": "uri:deskat:state.at-spi.gnome.org",
+        "attr": "uri:deskat:attributes.at-spi.gnome.org",
+        "cp": "uri:deskat:component.at-spi.gnome.org",
+        "doc": "uri:deskat:document.at-spi.gnome.org",
+        "docattr": "uri:deskat:attributes.document.at-spi.gnome.org",
+        "txt": "uri:deskat:text.at-spi.gnome.org",
+        "val": "uri:deskat:value.at-spi.gnome.org",
+        "act": "uri:deskat:action.at-spi.gnome.org",
     },
     "windows": {
-        "st": "https://accessibility.windows.example.org/ns/state",
-        "attr": "https://accessibility.windows.example.org/ns/attributes",
-        "cp": "https://accessibility.windows.example.org/ns/component",
-        "doc": "https://accessibility.windows.example.org/ns/document",
-        "docattr": "https://accessibility.windows.example.org/ns/document/attributes",
-        "txt": "https://accessibility.windows.example.org/ns/text",
-        "val": "https://accessibility.windows.example.org/ns/value",
-        "act": "https://accessibility.windows.example.org/ns/action",
-        "class": "https://accessibility.windows.example.org/ns/class",
-    },
-    "macos": {
-        "st": "https://accessibility.macos.example.org/ns/state",
-        "attr": "https://accessibility.macos.example.org/ns/attributes",
-        "cp": "https://accessibility.macos.example.org/ns/component",
-        "doc": "https://accessibility.macos.example.org/ns/document",
-        "txt": "https://accessibility.macos.example.org/ns/text",
-        "val": "https://accessibility.macos.example.org/ns/value",
-        "act": "https://accessibility.macos.example.org/ns/action",
-        "role": "https://accessibility.macos.example.org/ns/role",
+        "st": "uri:deskat:state.at-spi.gnome.org",
+        "attr": "uri:deskat:attributes.at-spi.gnome.org",
+        "cp": "uri:deskat:component.at-spi.gnome.org",
+        "doc": "uri:deskat:document.at-spi.gnome.org",
+        "docattr": "uri:deskat:attributes.document.at-spi.gnome.org",
+        "txt": "uri:deskat:text.at-spi.gnome.org",
+        "val": "uri:deskat:value.at-spi.gnome.org",
+        "act": "uri:deskat:action.at-spi.gnome.org",
+        "win": "uri:deskat:uia.windows.microsoft.org",
     },
 }
 
