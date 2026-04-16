@@ -84,9 +84,8 @@ def main(debug: bool, agent: str, level: int) -> None:
             use_html=False,
         ),
         ChatToolConfig(),
+        WorkArenaInfeasibleToolConfig(),
     ]
-    if level > 1:
-        tools_configs.append(WorkArenaInfeasibleToolConfig())
     tool_config = ToolboxConfig(tool_configs=tools_configs)
 
     # Configure WorkArena benchmark — filter to the requested level via named_subset

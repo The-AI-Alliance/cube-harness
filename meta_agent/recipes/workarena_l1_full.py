@@ -37,6 +37,7 @@ from cube.tool import ToolboxConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from cube_chat_tool.chat_tool import ChatToolConfig
 from workarena_cube.benchmark import WorkArenaBenchmark
+from workarena_cube.tools import WorkArenaInfeasibleToolConfig
 from workarena_hints import WORKARENA_TASK_HINTS, WORKARENA_TASK_PRECISION
 
 from cube_harness import make_experiment_output_dir
@@ -79,6 +80,7 @@ def run_for_model(
                 use_html=False,
             ),
             ChatToolConfig(),
+            WorkArenaInfeasibleToolConfig(),
         ]
     )
 
