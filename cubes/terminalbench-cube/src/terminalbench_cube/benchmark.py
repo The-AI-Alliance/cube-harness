@@ -4,72 +4,37 @@ import base64
 import io
 import json
 import logging
+import shutil
 import subprocess
 import tarfile
 import tempfile
 import tomllib
+from collections.abc import Generator
 from pathlib import Path
-from random import Random
 from typing import ClassVar
 
-from cube import get_cache_dir
 from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.container import ContainerConfig
-from cube.task import TaskConfig, TaskMetadata
-from terminalbench_cube.task import TerminalBenchTaskConfig
+from cube.task import TaskConfig
+from terminalbench_cube.task import TerminalBenchTaskConfig, TerminalBenchTaskMetadata
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATASET_PATH = get_cache_dir("terminal_bench_v2")
-
 REPO_URL = "https://github.com/laude-institute/terminal-bench-2.git"
 
-_TASK_METADATA_JSON = Path(__file__).parent / "task_metadata.json"
 
+def _build_execution_info(task: dict) -> dict:
+    """Extract execution-only fields from a raw task dict.
 
-def _parse_gb(value: str | int) -> float:
-    """Parse a memory/storage string like '4G' to a float in GB."""
-    if isinstance(value, (int, float)):
-        return float(value)
-    s = str(value).upper().strip()
-    if s.endswith("GB"):
-        return float(s[:-2])
-    if s.endswith("G"):
-        return float(s[:-1])
-    if s.endswith("M"):
-        return float(s[:-1]) / 1024
-    return 4.0
-
-
-def _build_task_metadata(tasks: list[dict]) -> dict[str, TaskMetadata]:
-    """Build task_metadata from raw task dicts. archive is stored as a base64 string."""
-    metadata: dict[str, TaskMetadata] = {}
-    for t in tasks:
-        tid = t["task_id"]
-        archive = t["archive"]
-        archive_b64 = base64.b64encode(archive).decode() if isinstance(archive, bytes) else archive
-        metadata[tid] = TaskMetadata(
-            id=tid,
-            abstract_description=t["base_description"][:200],
-            recommended_max_steps=t.get("max_agent_timeout_sec", 900) // 10,
-            container_config=ContainerConfig(
-                image=t.get("docker_image", "python:3.13"),
-                cpu_cores=float(t.get("cpus", 1)),
-                ram_gb=_parse_gb(t.get("memory", "4G")),
-                disk_gb=_parse_gb(t.get("storage", "10G")),
-            ),
-            extra_info={
-                "instruction": t["base_description"],
-                "archive": archive_b64,
-                "difficulty": t.get("difficulty", "unknown"),
-                "category": t.get("category", ""),
-                "tags": t.get("tags", []),
-                "max_agent_timeout_sec": t.get("max_agent_timeout_sec", 900),
-                "max_test_timeout_sec": t.get("max_test_timeout_sec", 900),
-                "oracle_mode": False,
-            },
-        )
-    return metadata
+    These fields are only needed when a task runs; they are never loaded at
+    import time. Stored in the per-task execution cache by install().
+    """
+    archive = task["archive"]
+    archive_b64 = base64.b64encode(archive).decode() if isinstance(archive, bytes) else archive
+    return {
+        "instruction": task["base_description"],
+        "archive": archive_b64,
+        "max_test_timeout_sec": int(task.get("max_test_timeout_sec", 900)),
+    }
 
 
 class TerminalBenchBenchmark(Benchmark):
@@ -78,37 +43,67 @@ class TerminalBenchBenchmark(Benchmark):
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
         name="terminalbench-cube",
         version="0.1.0",
-        description="Real-world terminal tasks (compile, debug, deploy) with pytest-based validation",
+        description=(
+            "Real-world terminal tasks (compile, debug, deploy) with pytest-based validation.\n"
+            "\n"
+            "CUBE DEVELOPER NOTES:\n"
+            "---------------------\n"
+            "task_metadata.json is a shipped package resource containing lightweight public fields. "
+            "Heavy execution data (instruction, archive) is stored in the per-task execution cache "
+            "populated by install(). To regenerate task_metadata.json (developer use only), run: "
+            "scripts/create_task_metadata.py"
+        ),
         tags=["terminal", "swe", "docker"],
         num_tasks=89,
+        named_subsets={
+            # Difficulty levels
+            "easy": ("difficulty", "easy"),
+            "medium": ("difficulty", "medium"),
+            "hard": ("difficulty", "hard"),
+            # Categories
+            "data-processing": ("category", "data-processing"),
+            "data-querying": ("category", "data-querying"),
+            "data-science": ("category", "data-science"),
+            "debugging": ("category", "debugging"),
+            "file-operations": ("category", "file-operations"),
+            "games": ("category", "games"),
+            "machine-learning": ("category", "machine-learning"),
+            "mathematics": ("category", "mathematics"),
+            "model-training": ("category", "model-training"),
+            "optimization": ("category", "optimization"),
+            "personal-assistant": ("category", "personal-assistant"),
+            "scientific-computing": ("category", "scientific-computing"),
+            "security": ("category", "security"),
+            "software-engineering": ("category", "software-engineering"),
+            "system-administration": ("category", "system-administration"),
+            "video-processing": ("category", "video-processing"),
+        },
     )
-    # task_metadata: populated automatically at import time in Benchmark.__init_subclass__
+    task_metadata: ClassVar[dict[str, TerminalBenchTaskMetadata]]  # type: ignore - populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = TerminalBenchTaskConfig
 
     # User-configurable fields
-    shuffle: bool = True
-    shuffle_seed: int = 42
-    max_tasks: int | None = None
-    difficulty_filter: str | None = None
-    category_filter: str | None = None
-    task_ids: list[str] | None = None
     oracle_mode: bool = False
 
     # ── Benchmark lifecycle ────────────────────────────────────────
 
     @classmethod
     def install(cls) -> None:
-        """Clone terminal-bench-2 repo and save task_metadata.json.
+        """Clone terminal-bench-2 repo and populate the per-task execution cache.
 
-        Clones laude-institute/terminal-bench-2, reads each task directory,
-        and saves all task data (including base64-encoded archives) to
-        task_metadata.json next to this module.
+        Downloads the task archive and instruction for each task and writes one
+        JSON file per task into task_execution_cache_dir(). Idempotent: skips if
+        the cache directory already exists and is non-empty.
 
-        Safe to call multiple times: skips if task_metadata.json already exists.
+        The shipped task_metadata.json is a package resource and is not modified here.
+        To regenerate task_metadata.json (developer use only), run:
+            scripts/create_task_metadata.py
         """
-        if _TASK_METADATA_JSON.exists():
-            logger.info("task_metadata.json already exists, skipping installation")
+        exec_cache_dir = cls.task_execution_cache_dir()
+        if exec_cache_dir.exists() and any(exec_cache_dir.iterdir()):
+            logger.info("Execution cache already populated, skipping installation")
             return
+        exec_cache_dir.mkdir(parents=True, exist_ok=True)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_dir = Path(tmpdir) / "terminal-bench-2"
@@ -119,63 +114,46 @@ class TerminalBenchBenchmark(Benchmark):
                 timeout=300,
             )
 
-            tasks = []
+            n = 0
             for item in sorted(repo_dir.iterdir()):
                 if item.is_dir() and (item / "task.toml").exists():
                     task = cls._load_task_from_repo(item)
                     if task:
-                        tasks.append(task)
-                        logger.info(f"  Loaded: {task['task_id']} ({task['difficulty']})")
+                        exec_info = _build_execution_info(task)
+                        (exec_cache_dir / f"{task['task_id']}.json").write_text(json.dumps(exec_info))
+                        n += 1
+                        logger.info(f"  Cached: {task['task_id']}")
 
-        metadata = _build_task_metadata(tasks)
-        _TASK_METADATA_JSON.write_text(json.dumps([tm.model_dump() for tm in metadata.values()], indent=2))
-        cls.task_metadata = metadata
-        logger.info(f"Saved {len(metadata)} tasks to {_TASK_METADATA_JSON}")
+        logger.info(f"Saved {n} execution cache files to {exec_cache_dir}")
 
     @classmethod
     def uninstall(cls) -> None:
-        """Remove task_metadata.json."""
-        if _TASK_METADATA_JSON.exists():
-            _TASK_METADATA_JSON.unlink()
-            cls.task_metadata = {}
-            logger.info(f"Removed {_TASK_METADATA_JSON}")
+        """Remove the per-task execution cache.
+
+        The shipped task_metadata.json is not removed.
+        """
+        exec_cache_dir = cls.task_execution_cache_dir()
+        if exec_cache_dir.exists():
+            shutil.rmtree(exec_cache_dir)
+            logger.info(f"Removed execution cache at {exec_cache_dir}")
 
     def _setup(self) -> None:
-        """Apply instance-level filters and runtime config to the pre-loaded task_metadata."""
-        if "task_metadata" in self.__dict__:
-            logger.info("Task metadata already loaded, skipping setup")
-            return
-
-        tasks = list(type(self).task_metadata.values())
-        tasks = self._filter_tasks(tasks)
-
-        if self.oracle_mode:
-            tasks = [t.model_copy(update={"extra_info": {**t.extra_info, "oracle_mode": True}}) for t in tasks]
-
-        metadata = {t.id: t for t in tasks}
-        object.__setattr__(self, "task_metadata", metadata)
-        type(self).task_metadata = metadata
-        logger.info(f"Terminal-Bench setup complete: {len(metadata)} tasks")
+        """No shared infrastructure needed — task containers are launched per-task in make()."""
+        logger.info(f"TerminalBenchBenchmark ready with {len(self.task_metadata)} tasks")
 
     def close(self) -> None:
         logger.info("Terminal-Bench benchmark closed")
 
-    # ── Private helpers ────────────────────────────────────────────
+    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
+        """Yield TaskConfigs with oracle_mode forwarded from benchmark settings."""
+        for tm in self.task_metadata.values():
+            yield TerminalBenchTaskConfig(
+                task_id=tm.id,
+                tool_config=self.default_tool_config,
+                oracle_mode=self.oracle_mode,
+            )
 
-    def _filter_tasks(self, tasks: list[TaskMetadata]) -> list[TaskMetadata]:
-        """Apply filtering, shuffling, and slicing to a list of TaskMetadata."""
-        if self.task_ids:
-            id_set = set(self.task_ids)
-            tasks = [t for t in tasks if t.id in id_set]
-        if self.difficulty_filter:
-            tasks = [t for t in tasks if t.extra_info.get("difficulty", "").lower() == self.difficulty_filter.lower()]
-        if self.category_filter:
-            tasks = [t for t in tasks if t.extra_info.get("category", "").lower() == self.category_filter.lower()]
-        if self.shuffle:
-            Random(self.shuffle_seed).shuffle(tasks)
-        if self.max_tasks:
-            tasks = tasks[: self.max_tasks]
-        return tasks
+    # ── Private helpers ────────────────────────────────────────────
 
     @staticmethod
     def _load_task_from_repo(task_dir: Path) -> dict | None:
