@@ -8,12 +8,10 @@ Usage:
     uv run meta_agent/recipes/workarena_l1_full.py headless-off            # force headless=False
     uv run meta_agent/recipes/workarena_l1_full.py retry /path/to/exp     # retry crashed episodes
 
-Code fixes (always active):
-    - AXTree: with_clickable=True, readonly/focusable visible
-    - Action errors propagated to observation (last_action_error)
-    - send_message hidden for non-chat tasks (sort/filter/create)
-    - js_eval removed from action set
-    - Tool docstrings updated (browser_type, browser_click, submit_form)
+Toolbox (always active):
+    - BrowsergymTool: AXTree + screenshot, no HTML
+    - ChatTool: send_message for goal/chat tasks
+    - WorkArenaInfeasibleTool: report_infeasible for all tasks
 
 Hints (only with 'hints' flag):
     - Create: fill ALL fields, autocomplete workflow, submit_form
@@ -140,6 +138,6 @@ if __name__ == "__main__":
 
     selected = [k for k in MODEL_CONFIGS if k in args_set]
     if not selected:
-        selected = ["gpt-5.4"]
+        selected = ["gpt-5.4-mini"]
 
     main(debug=debug, headless=headless, models=selected, use_hints=use_hints, retry_dir=retry_dir)
