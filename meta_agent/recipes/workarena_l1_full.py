@@ -82,7 +82,7 @@ def run_for_model(
         ]
     )
 
-    benchmark = WorkArenaBenchmark(level="l1", n_seeds_l1=1, default_tool_config=tool_config)
+    benchmark = WorkArenaBenchmark(n_seeds_l1=1, default_tool_config=tool_config).named_subset("l1")
     benchmark.setup()
 
     suffix = "hints" if use_hints else "nohints"
