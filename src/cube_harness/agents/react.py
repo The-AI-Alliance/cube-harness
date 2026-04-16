@@ -43,6 +43,10 @@ Focus on:
 - Current progress toward the goal
 Provide a concise summary that preserves all information needed to continue the task."""
 
+    @property
+    def agent_name(self) -> str:
+        return f"ReactAgent-{self.llm_config.model_name}".replace("/", "_")
+
     def make(self, action_set: list[ActionSchema]) -> "ReactAgent":
         return ReactAgent(config=self, tools=action_set)
 

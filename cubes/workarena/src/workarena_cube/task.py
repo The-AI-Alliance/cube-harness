@@ -169,13 +169,13 @@ class WorkArenaTask(Task):
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter actions based on available tools."""
+        """Filter actions based on available tools and task suitability."""
+        actions = [a for a in actions if a.name != "js_eval"]
         if self._chat_tool is None:
             actions = [a for a in actions if a.name != "send_message"]
         if self._infeasible_tool is None:
             actions = [a for a in actions if a.name != "report_infeasible"]
         return actions
-
 
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""

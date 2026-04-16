@@ -221,7 +221,7 @@ class Episode:
             with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
                 start_time = time.time()
                 env_output = setup_fn()
-                agent_name = type(self.config.agent_config).__name__
+                agent_name = self.config.agent_config.agent_name
                 trajectory = Trajectory(
                     id=f"{task_id}_ep{self.config.id}",
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],

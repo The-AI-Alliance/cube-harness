@@ -112,40 +112,54 @@ WORKARENA_TASK_PRECISION: dict[str, str] = {
 
 # Sort: step-by-step filter UI interaction pattern.
 _SORT_HINT: str = (
-    "Open the filter panel, then noop() to wait for it to load. "
-    "The panel has 'Order results by' rows with a FIELD selector and a DIRECTION selector.\n\n"
-    "FIELD selector is a custom combobox (input + adjacent button). "
-    "The input element times out — click the adjacent BUTTON instead. "
-    "If it also times out, try bid+1. Never retry the same BID twice.\n\n"
-    "Steps: browser_click(button_bid) -> noop() -> browser_click(option_bid). "
+    "Open the filter panel (funnel icon), then noop() to wait for it to load.\n\n"
+    "The panel has 'Order results by' rows. Each row has:\n"
+    "  - FIELD selector: a custom combobox (input + adjacent button)\n"
+    "  - DIRECTION selector: a native <select>\n\n"
+    "To set the FIELD:\n"
+    "1. Click the BUTTON (not the input) next to the field selector\n"
+    "2. noop() to wait for the dropdown options to appear\n"
+    "3. Find the matching option in the AXTree and click it\n"
+    "4. Verify the field label updated — if not, try bid+1 for the button\n"
+    "Never retry the same BID twice.\n\n"
     "DIRECTION is a native <select>: browser_select_option(bid, 'a to z') or 'z to a'.\n\n"
-    "To add another sort field: click 'Add Sort', then repeat. "
-    "After all sort fields are set: click 'Run' to apply."
+    "To add another sort field: click 'Add Sort', then repeat.\n"
+    "When all sort fields and directions are set: click 'Run' to apply."
 )
 
 # Filter: step-by-step filter condition interaction pattern.
 _FILTER_HINT: str = (
-    "Open the filter panel, then noop() to wait for it to load. "
+    "Open the filter panel (funnel icon), then noop() to wait for it to load.\n\n"
     "Each row has: FIELD selector, OPERATOR selector, VALUE field.\n\n"
-    "FIELD and OPERATOR selectors are custom comboboxes (input + adjacent button). "
-    "The input element times out — click the adjacent BUTTON instead. "
-    "If it also times out, try bid+1. Never retry the same BID twice.\n\n"
-    "Steps: browser_click(button_bid) -> noop() -> browser_click(option_bid). "
-    "Common operators: 'is', 'is not', 'contains', 'starts with', 'is empty'. "
-    "For 'is empty': select operator only, no value needed.\n\n"
-    "VALUE field type varies:\n"
+    "FIELD and OPERATOR selectors are custom comboboxes:\n"
+    "1. Click the BUTTON (not the input) to open options\n"
+    "2. noop() to wait for the dropdown to appear\n"
+    "3. Click the correct option in the AXTree\n"
+    "If the button times out, try bid+1. Never retry the same BID twice.\n\n"
+    "Common operators: 'is', 'is not', 'contains', 'starts with', 'is empty'.\n"
+    "For 'is empty': select operator only, no value field needed.\n\n"
+    "VALUE field types:\n"
     "  - Choice/boolean: <select> -> browser_select_option()\n"
-    "  - Reference (names, groups): keyboard_type_into() for autocomplete, then noop() + click suggestion\n"
+    "  - Reference (names, users): keyboard_type_into() -> noop() -> click suggestion\n"
     "  - Plain text: browser_type()\n\n"
-    "To add conditions: click 'AND', then repeat. After all set: click 'Run'."
+    "To add conditions: click 'AND', then repeat.\n\n"
+    "After setting all conditions: click 'Run'. "
+    "The page will reload with filtered results and the filter panel will close. "
+    "Do NOT reopen the filter panel after clicking Run — the task is complete."
 )
 
 # Create: autocomplete reference field workflow.
 _CREATE_HINT: str = (
-    "For reference fields with autocomplete (e.g. Caller, Assignment group): "
-    "use keyboard_type_into(bid, text) to type character-by-character. "
-    "Then noop() to wait, find the suggestion in the AXTree, and click it. "
-    "For plain text use browser_type(). For dropdowns use browser_select_option()."
+    "For reference fields with autocomplete (e.g. Department, Caller, Manager): "
+    "complete the full sequence BEFORE moving to any other field:\n"
+    "1. keyboard_type_into(bid, text)\n"
+    "2. noop() to wait for the dropdown to appear\n"
+    "3. Find the matching suggestion in the AXTree and click it\n"
+    "4. Verify the field now shows the selected value, not blank\n\n"
+    "NEVER use fill() on reference fields — fill() bypasses autocomplete and "
+    "leaves the field unresolved, causing silent validation failure.\n"
+    "For plain text fields: browser_type(). "
+    "For <select> dropdowns: browser_select_option()."
 )
 
 WORKARENA_TASK_HINTS: dict[str, str] = {

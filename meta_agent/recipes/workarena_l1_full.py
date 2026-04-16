@@ -1,12 +1,12 @@
 """WorkArena L1 full evaluation — all tasks, 1 seed.
 
 Usage:
-    uv run recipes/workarena_l1_full.py gpt-5.4                # no hints (code fixes only)
-    uv run recipes/workarena_l1_full.py gpt-5.4 hints          # with task hints
-    uv run recipes/workarena_l1_full.py gpt-5.4-mini           # single model, no hints
-    uv run recipes/workarena_l1_full.py debug                   # sequential, 1 task
-    uv run recipes/workarena_l1_full.py headless-off            # force headless=False
-    uv run recipes/workarena_l1_full.py retry /path/to/exp     # retry crashed episodes
+    uv run meta_agent/recipes/workarena_l1_full.py gpt-5.4                # no hints (code fixes only)
+    uv run meta_agent/recipes/workarena_l1_full.py gpt-5.4 hints          # with task hints
+    uv run meta_agent/recipes/workarena_l1_full.py gpt-5.4-mini           # single model, no hints
+    uv run meta_agent/recipes/workarena_l1_full.py debug                   # sequential, 1 task
+    uv run meta_agent/recipes/workarena_l1_full.py headless-off            # force headless=False
+    uv run meta_agent/recipes/workarena_l1_full.py retry /path/to/exp     # retry crashed episodes
 
 Code fixes (always active):
     - AXTree: with_clickable=True, readonly/focusable visible
@@ -57,9 +57,7 @@ def make_agent(llm_config: LLMConfig, use_hints: bool = False) -> GennyConfig:
         llm_config=llm_config,
         max_actions=40,
         render_last_n_obs=1,
-        # Task precision is always on — it compensates for under-defined task goals.
         task_precision=WORKARENA_TASK_PRECISION,
-        # Task-specific hints are optional — they help the LLM but aren't strictly necessary.
         task_hints=WORKARENA_TASK_HINTS if use_hints else {},
     )
 
@@ -140,6 +138,6 @@ if __name__ == "__main__":
 
     selected = [k for k in MODEL_CONFIGS if k in args_set]
     if not selected:
-        selected = ["gpt-5.4"]  # default to gpt-5.4
+        selected = ["gpt-5.4"]
 
     main(debug=debug, headless=headless, models=selected, use_hints=use_hints, retry_dir=retry_dir)

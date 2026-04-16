@@ -1108,16 +1108,35 @@ def run_xray(
     # Experiment-level analysis tabs (lazy, rendered on tab select)
     # ------------------------------------------------------------------
 
-    def _render_constants_variables() -> tuple[list[list], list[list]]:
-        if not state.trajectories:
-            return [], []
-        df = inspect_results.trajectories_to_df(state.trajectories)
+    def _render_constants_variables() -> tuple[pd.DataFrame, pd.DataFrame]:
+        # Collect one (agent_name, config_dict) pair per loaded storage.
+        # Agent name is taken from the first trajectory belonging to that storage so it
+        # matches exactly what is displayed in the Agents table (including timestamp tag).
+        storage_to_agent: dict[int, str] = {}
+        for traj, storage in zip(state.trajectories, state._traj_storages):
+            sid = id(storage)
+            if sid not in storage_to_agent:
+                storage_to_agent[sid] = traj.metadata.get("agent_name", "unknown")
+
+        agents: list[tuple[str, dict]] = []
+        for storage in state._storages:
+            sid = id(storage)
+            agent_cfg_json, _ = state._storage_configs.get(sid, (None, None))
+            if not agent_cfg_json:
+                continue
+            try:
+                cfg = json.loads(agent_cfg_json)
+            except Exception:
+                continue
+            agents.append((storage_to_agent.get(sid, "unknown"), cfg))
+
+        if not agents:
+            return pd.DataFrame(columns=["parameter", "value"]), pd.DataFrame(columns=["parameter"])
+
+        df = inspect_results.agent_configs_to_df(agents)
         if df is None:
-            return [], []
-        const_df, var_df = inspect_results.format_constants_and_variables(df)
-        const_rows = const_df.values.tolist() if not const_df.empty else []
-        var_rows = var_df.values.tolist() if not var_df.empty else []
-        return const_rows, var_rows
+            return pd.DataFrame(columns=["parameter", "value"]), pd.DataFrame(columns=["parameter"])
+        return inspect_results.format_agent_comparison(df)
 
     def _render_global_report() -> list[list]:
         if not state.trajectories:
@@ -1258,7 +1277,7 @@ def run_xray(
             with gr.Tab("Constants & Variables") as cv_tab:
                 with gr.Row():
                     with gr.Column():
-                        gr.Markdown("**Constants** (same across all trajectories)")
+                        gr.Markdown("**Constants** (identical across all selected experiments)")
                         cv_const_table = gr.DataFrame(
                             headers=["parameter", "value"],
                             max_height=400,
@@ -1266,9 +1285,8 @@ def run_xray(
                             interactive=False,
                         )
                     with gr.Column():
-                        gr.Markdown("**Variables** (differ across trajectories)")
+                        gr.Markdown("**Variables** (differ between agents — one column per agent)")
                         cv_var_table = gr.DataFrame(
-                            headers=["parameter", "n_unique", "sample_values"],
                             max_height=400,
                             show_label=False,
                             interactive=False,
