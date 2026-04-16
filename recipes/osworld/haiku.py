@@ -123,6 +123,7 @@ def main(debug: bool) -> None:
         default_tool_config=tool_config,
         use_som=False,
     )
+    benchmark.install()
     benchmark.setup()
     benchmark = benchmark.named_subset("test_small")
     keep_ids = [tid for tid in benchmark.task_metadata if tid not in GDRIVE_TASK_IDS]

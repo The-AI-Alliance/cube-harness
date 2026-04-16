@@ -7,12 +7,13 @@ The evaluation may return reward=0 because task.evaluate() passes a
 FinalAgentResponse object directly to wav.evaluate_task(), which expects str/dict.
 Only errors (Python exceptions) are treated as failures.
 
-The debug suite requires a running shopping-admin server. It is started automatically
-when this script is invoked directly. A local Docker daemon must be available.
+The debug suite requires a running shopping-admin server.  When called without
+``infra=``, it is started automatically via the local Docker daemon.  When called
+with ``infra=``, the server is provisioned and launched by the infra backend.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_benchmark()              -> Benchmark
+get_debug_benchmark(infra=None)    -> Benchmark
 make_debug_agent(task_id: str)     -> DebugAgent
 
 Usage:
@@ -27,14 +28,16 @@ import sys
 
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
+from cube.resource import InfraConfig
 from cube.testing import run_debug_suite
+from cube.tool import ToolboxConfig
 from webarena_verified.api.webarena_verified import WebArenaVerified
 from webarena_verified.types.agent_response import FinalAgentResponse
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
-from cube.tool import ToolboxConfig
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
+from webarena_verified_cube.resources import WEBARENA_SHOPPING_ADMIN
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 logger = logging.getLogger(__name__)
@@ -75,11 +78,31 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(expected_response=wav_task.expected_agent_response)
 
 
-def get_debug_benchmark() -> Benchmark:
+def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
+    """Return a benchmark pre-filtered to the 2 debug tasks.
+
+    Args:
+        infra: When provided, the benchmark auto-provisions and launches the
+               Docker stack via InfraConfig.  The handle is closed when
+               benchmark.close() is called.
+               When None (default), the benchmark expects a running local Docker
+               container (started by _start_debug_server).
+    """
+    tool_config = ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()])
+    task_ids = [int(tid) for tid in _DEBUG_TASK_IDS]
+
+    if infra is not None:
+        return WebArenaVerifiedBenchmark(
+            task_ids_filter=task_ids,
+            default_tool_config=tool_config,
+            infra=infra,
+            resources=[WEBARENA_SHOPPING_ADMIN],
+        )
+
     return WebArenaVerifiedBenchmark(
         wav_config=_DEBUG_WAV_CONFIG,
-        task_ids_filter=[int(tid) for tid in _DEBUG_TASK_IDS],
-        default_tool_config=ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
+        task_ids_filter=task_ids,
+        default_tool_config=tool_config,
     )
 
 
