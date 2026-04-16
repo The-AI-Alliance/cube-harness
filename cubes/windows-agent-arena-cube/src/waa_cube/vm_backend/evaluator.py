@@ -44,6 +44,7 @@ class GuestAgentProxy:
         self.vlc_port = vlc_port
         self.server_port = server_port
         self.vm_ip = vm_ip
+        self.current_use_proxy = False  # chrome getters check this for proxy routing
 
     @property
     def vm_platform(self) -> str:
