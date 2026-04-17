@@ -1,5 +1,6 @@
 import logging
 import time
+import traceback
 from typing import Any
 
 import numpy as np
@@ -60,6 +61,11 @@ class BrowsergymConfig(ToolConfig):
     # AXTree element attributes — requires extra_element_properties from the DOM snapshot
     axtree_with_visible: bool = False  # label visible elements (vis >= 0.5) as "visible"
     axtree_with_clickable: bool = False  # label clickable elements as "clickable"
+
+    # Error reporting: when an action raises, include the full traceback in the observation
+    # or just the exception type + message. Full traceback is useful for debugging but
+    # adds noise to the agent's context.
+    action_error_full_traceback: bool = False
 
     def make(self, container: Any = None) -> "BrowsergymTool":
         return BrowsergymTool(self)
@@ -124,7 +130,14 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             if action.name in cls.__dict__
         )
         if is_custom:
-            result = method(**action.arguments)
+            try:
+                result = method(**action.arguments)
+            except Exception as e:
+                error_msg = _format_action_error(e, self.config.action_error_full_traceback)
+                logger.warning(f"Action {action.name} raised: {error_msg}")
+                obs = self.page_obs()
+                error_content = Content.from_data(error_msg, name="last_action_error", tool_call_id=action.id)
+                return Observation(contents=[error_content]) + obs
             obs = self.page_obs()
             action_obs = Observation(contents=[Content.from_data(str(result), tool_call_id=action.id)])
             return action_obs + obs
@@ -484,6 +497,18 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
 
 # === Module-level helpers ===
+
+
+def _format_action_error(exc: Exception, full_traceback: bool) -> str:
+    """Format an action exception for inclusion in an agent observation.
+
+    full_traceback=True: full traceback (useful for debugging).
+    full_traceback=False: just the exception type and message (less noise for the agent).
+    """
+    if full_traceback:
+        return traceback.format_exc().strip()
+    return f"{type(exc).__name__}: {exc}"
+
 
 # Descriptions that replace BrowserGym's upstream text.
 # Use sparingly — only when the upstream description is misleading about when to use the action.
