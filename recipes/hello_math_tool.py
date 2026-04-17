@@ -29,7 +29,7 @@ from cube_harness import make_experiment_output_dir
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially
 from cube_harness.experiment import Experiment
-from cube_harness.llm import LLMConfig, RLCollectorConfig
+from cube_harness.llm import RLCollectorConfig
 
 def main(mode: str, model: str, base_url: str) -> None:
     api_key = "EMPTY"
@@ -50,7 +50,7 @@ def main(mode: str, model: str, base_url: str) -> None:
             "3. Finalize by calling MathAnswer with the LaTeX-formatted answer (use \\\\boxed{...})."
         )
 
-    llm_config = LLMConfig(
+    llm_config = RLCollectorConfig(
         model_name=model,
         api_key=api_key,
         api_base=base_url,
@@ -60,9 +60,8 @@ def main(mode: str, model: str, base_url: str) -> None:
         top_logprobs=True,
         extra_body={"return_token_ids": True},
     )
-    rl_collector = RLCollectorConfig(inner=llm_config)
 
-    agent_config = ReactAgentConfig(llm_config=rl_collector, react_prompt=instructions)
+    agent_config = ReactAgentConfig(llm_config=llm_config, react_prompt=instructions)
     tool_config = MathToolUseToolConfig(sandbox_endpoint="http://dns-24e3447c-506e-4b21-92df-156e18db5087-sandboxfusion")
     benchmark = MathToolUseBenchmark(default_tool_config=tool_config)
     benchmark.install()

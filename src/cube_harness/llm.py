@@ -212,33 +212,24 @@ def _serialize_message(msg: dict | Message) -> dict:
     return {"role": getattr(msg, "role", "assistant"), "content": getattr(msg, "content", str(msg))}
 
 
-class RLCollectorConfig(TypedBaseModel):
+class RLCollectorConfig(LLMConfig):
     """Wrapper config that collects LLM calls for RL trajectory conversion."""
 
-    inner: LLMConfig
     stream_path: str | None = None
-
-    @property
-    def model_name(self) -> str:
-        return self.inner.model_name
 
     def make(self) -> "RLCollectorLLM":
         return RLCollectorLLM(config=self)
 
-    def make_counter(self) -> Callable[..., int]:
-        return self.inner.make_counter()
 
-
-class RLCollectorLLM:
+class RLCollectorLLM(LLM):
     """Transparent wrapper around an inner LLM that buffers rollout-relevant call data."""
 
     def __init__(self, config: RLCollectorConfig):
         self.config = config
-        self._inner = config.inner.make()
         self._captured_calls: list[CapturedLLMCall] = []
 
     def __call__(self, prompt: Prompt) -> LLMResponse:
-        response = self._inner(prompt)
+        response = super().__call__(prompt)
         self._captured_calls.append(
             CapturedLLMCall(
                 prompt_messages=[_serialize_message(msg) for msg in prompt.messages],
