@@ -22,7 +22,7 @@ from cube.tool import ToolConfig
 from cube.tools.browser import BrowserTool
 from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
-from playwright.sync_api import Error, Page
+from playwright.sync_api import Error, Frame, Page
 from pydantic import Field
 
 from cube_harness.tool import ToolWithTelemetry
@@ -249,7 +249,33 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     # === Observation extraction ===
 
-    # === Extra actions (not in BidBrowserActionSpace protocol) ===
+    # === Extra actions ===
+
+    def _get_frame_for_bid(self, bid: str) -> Page | Frame:
+        """Return the Page or Frame that contains the element with this BID.
+
+        BrowserGym encodes iframe hierarchy into BID prefixes: the leading
+        lowercase letters identify which iframe to descend into, and the
+        trailing digits identify the element inside that frame.
+        E.g. 'a182' is element 182 inside the first iframe ('a').
+        """
+        current: Page | Frame = self.page
+        i = 0
+        while i < len(bid) and not bid[i:].isnumeric():
+            i += 1
+            while i < len(bid) and bid[i].isalpha() and bid[i].isupper():
+                i += 1
+            if i > 0:
+                frame_bid = bid[:i]
+                try:
+                    frame_elem = current.get_by_test_id(frame_bid)  # type: ignore[union-attr]
+                    if frame_elem.count() > 0:
+                        current = frame_elem.frame_locator(":scope")  # type: ignore[assignment]
+                    else:
+                        break
+                except Exception:
+                    break
+        return current
 
     @tool_action
     def keyboard_type_into(self, bid: str, text: str) -> str:
@@ -363,7 +389,8 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 axtree = extract_merged_axtree(page)
                 focused_element_bid = extract_focused_element_bid(page)
                 scale_factor = getattr(page, "_bgym_scale_factor", 1.0)
-                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor)
+                need_extra = self.config.axtree_with_visible or self.config.axtree_with_clickable
+                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor) if need_extra else {}
             except (Error, MarkingError):
                 if retries_left > 0:
                     logger.warning(
