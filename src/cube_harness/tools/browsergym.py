@@ -55,6 +55,10 @@ class BrowsergymConfig(ToolConfig):
     use_screenshot: bool = True
     prune_html: bool = True
 
+    # AXTree element attributes — requires extra_element_properties from the DOM snapshot
+    axtree_with_visible: bool = False   # label visible elements (vis >= 0.5) as "visible"
+    axtree_with_clickable: bool = False  # label clickable elements as "clickable"
+
     def make(self, container: Any = None) -> "BrowsergymTool":
         return BrowsergymTool(self)
 
@@ -393,15 +397,12 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         """Convert BrowserGym observation dict to cube-harness Observation."""
         obs = Observation()
 
+        extra_properties = bgym_obs.get("extra_element_properties", {})
+
         # HTML
         if self.config.use_html and "dom_object" in bgym_obs:
             dom_obj = bgym_obs["dom_object"]
-            html_str = flatten_dom_to_str(
-                dom_obj,
-                extra_properties=bgym_obs.get("extra_element_properties", {}),
-                with_visible=False,
-                filter_visible_only=False,
-            )
+            html_str = flatten_dom_to_str(dom_obj, extra_properties=extra_properties)
             if self.config.prune_html:
                 html_str = prune_html(html_str)
             obs.contents.append(Content.from_data(html_str, name="pruned_html"))
@@ -416,10 +417,11 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
-                extra_props = bgym_obs.get("extra_element_properties", {})
                 axtree_str = flatten_axtree_to_str(
                     axtree_obj,
-                    extra_properties=extra_props,
+                    extra_properties=extra_properties,
+                    with_visible=self.config.axtree_with_visible,
+                    with_clickable=self.config.axtree_with_clickable,
                 )
                 obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
