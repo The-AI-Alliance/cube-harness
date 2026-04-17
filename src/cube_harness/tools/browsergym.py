@@ -30,8 +30,10 @@ from cube_harness.tool import ToolWithTelemetry
 try:
     from cube.tool import tool_action
 except ImportError:  # pragma: no cover — older cube versions
+
     def tool_action(fn):  # type: ignore[misc]
         return fn
+
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,7 @@ class BrowsergymConfig(ToolConfig):
     prune_html: bool = True
 
     # AXTree element attributes — requires extra_element_properties from the DOM snapshot
-    axtree_with_visible: bool = False   # label visible elements (vis >= 0.5) as "visible"
+    axtree_with_visible: bool = False  # label visible elements (vis >= 0.5) as "visible"
     axtree_with_clickable: bool = False  # label clickable elements as "clickable"
 
     def make(self, container: Any = None) -> "BrowsergymTool":
@@ -291,7 +293,11 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         except Exception as e:
             result = f"Failed: {type(e).__name__}: {e}"
         self._last_obs = self._extract_bgym_obs()
-        self._last_info = {"source": "action", "action": f"keyboard_type_into({bid!r})", "action_error": "" if result == "Success" else result}
+        self._last_info = {
+            "source": "action",
+            "action": f"keyboard_type_into({bid!r})",
+            "action_error": "" if result == "Success" else result,
+        }
         self._last_reward = 0.0
         self._last_terminated = False
         return result
@@ -344,7 +350,11 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         except Exception as e:
             result = f"Failed: {type(e).__name__}: {e}"
         self._last_obs = self._extract_bgym_obs()
-        self._last_info = {"source": "action", "action": "submit_form()", "action_error": "" if result == "Success" else result}
+        self._last_info = {
+            "source": "action",
+            "action": "submit_form()",
+            "action_error": "" if result == "Success" else result,
+        }
         self._last_reward = 0.0
         self._last_terminated = False
         return result
@@ -373,7 +383,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 target = next((f for f in self.page.frames if f.name == frame), None)
                 if target is None:
                     return f"Failed: frame {frame!r} not found"
-            raw = target.evaluate(f"() => {{ try {{ return {code}; }} catch(e) {{ return 'JS error: ' + e.message; }} }}")
+            raw = target.evaluate(
+                f"() => {{ try {{ return {code}; }} catch(e) {{ return 'JS error: ' + e.message; }} }}"
+            )
             return json.dumps(raw, default=str)
         except Exception as e:
             return f"Failed: {type(e).__name__}: {e}"
