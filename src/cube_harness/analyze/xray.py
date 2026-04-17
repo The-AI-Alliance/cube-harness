@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import gradio as gr
+import pandas as pd
 from cube.core import EnvironmentOutput
 from PIL import Image
 

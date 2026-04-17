@@ -96,7 +96,7 @@ def _get_running_elapsed_s(refs: list[ray.ObjectRef]) -> dict[ray.ObjectRef, flo
             if t.start_time_ms is not None
         }
     except Exception:
-        logger.warning("Could not reach Ray dashboard to check episode timeouts — skipping this cycle")
+        logger.debug("Could not reach Ray dashboard to check episode timeouts — skipping this cycle")
         return {}
     now_ms = time.time() * 1000
     return {ref: (now_ms - running[ref.task_id().hex()]) / 1000 for ref in refs if ref.task_id().hex() in running}
