@@ -200,12 +200,14 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             return
         for page in self.session.context.pages:
             try:
-                page.wait_for_load_state("domcontentloaded", timeout=3000)
+                page.wait_for_load_state("domcontentloaded", timeout=1500)
             except Error:
                 pass
             for frame in page.frames:
+                if frame.is_detached():
+                    continue
                 try:
-                    frame.wait_for_load_state("domcontentloaded", timeout=3000)
+                    frame.wait_for_load_state("domcontentloaded", timeout=1500)
                 except Error:
                     pass
 
