@@ -253,13 +253,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     @tool_action
     def keyboard_type_into(self, bid: str, text: str) -> str:
-        """Type text character-by-character into a BID element, firing keyboard events per character.
-
-        Use this instead of browser_type() for autocomplete fields (e.g. ServiceNow reference
-        fields like Caller, Assignment group) where fill() bypasses keyboard events and
-        autocomplete suggestions never appear. press_sequentially() fires keydown+input+keyup
-        per character, triggering autocomplete dropdowns.
-        """
+        """Type text into an element character-by-character, firing keyboard events per character. Use this for fields that show autocomplete suggestions or dynamic dropdowns as you type — fill() sets the value directly and bypasses those events. After typing, call noop() to wait for suggestions to appear, then click the desired suggestion."""
         logger.info(f"keyboard_type_into: bid={bid!r} text={text!r}")
         result = "Success"
         try:
@@ -450,6 +444,17 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
 # === Module-level helpers ===
 
+# Descriptions that replace BrowserGym's upstream text.
+# Use sparingly — only when the upstream description is misleading about when to use the action.
+_ACTION_DESCRIPTION_OVERRIDES: dict[str, str] = {
+    "fill": (
+        "Fill a form field by setting its value directly. Works for <input>, <textarea> and "
+        "[contenteditable] elements. Does NOT fire keyboard events — autocomplete suggestions "
+        "and dynamic dropdowns will not appear. Use keyboard_type_into() for fields that show "
+        "dropdown suggestions as you type."
+    ),
+}
+
 
 def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
     """Convert bgym's HighLevelActionSet to a list of ActionSchema objects."""
@@ -460,7 +465,7 @@ def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
         # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
         name = desc["name"]
-        description = desc.get("description", name)
+        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
         schemas.append(ActionSchema(name=name, description=description, parameters=params))
     return schemas
 
