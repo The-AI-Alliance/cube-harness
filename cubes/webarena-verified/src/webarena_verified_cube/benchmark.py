@@ -4,7 +4,7 @@ import urllib.request
 from collections.abc import Generator
 from typing import ClassVar
 
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, model_validator
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.resource import DockerServiceConfig, InfraConfig, ResourceHandle
 from cube.task import TaskConfig
@@ -22,9 +22,26 @@ logger = logging.getLogger(__name__)
 class WebArenaVerifiedBenchmark(Benchmark):
     """WebArena Verified — 812 verified web automation tasks across 6 platforms.
 
-    task_metadata.json is a shipped package resource containing lightweight public fields
-    (sites, expected_action, intent_template_id). No heavy execution data exists — all
-    task information is available from the webarena-verified library at runtime.
+    Exactly one of two setup modes must be used at construction time:
+
+    **Automatic** — infra provisions and starts the Docker stack, then populates
+    ``wav_config.environments`` from the live endpoints::
+
+        WebArenaVerifiedBenchmark(
+            infra=LocalInfraConfig(),
+            resources=[WEBARENA_SHOPPING_ADMIN],
+        )
+
+    **Manual** — caller is responsible for starting the server; ``wav_config``
+    must have ``environments`` populated with reachable URLs::
+
+        WebArenaVerifiedBenchmark(
+            wav_config=WebArenaVerifiedConfig(
+                environments={WebArenaSite.SHOPPING_ADMIN: EnvironmentConfig(urls=["http://..."])}
+            )
+        )
+
+    Mixing both modes (or providing neither) raises a ``ValueError`` at construction.
 
     Filtering is done in user-land via subset_from_glob() / subset_from_list():
         bench.subset_from_glob("sites", "*shopping_admin*")
@@ -43,37 +60,63 @@ class WebArenaVerifiedBenchmark(Benchmark):
         tags=["browser", "web", "ui", "webarena"],
     )
     task_metadata: ClassVar[dict[str, WebArenaVerifiedTaskMetadata]]  # type: ignore - populated automatically at import time in Benchmark.__init_subclass__
+    """
+    task_metadata.json is a shipped package resource containing lightweight public fields
+    (sites, expected_action, intent_template_id). No heavy execution data exists.
+    """
     task_config_class: ClassVar[type[TaskConfig]] = WebArenaVerifiedTaskConfig
-
+    """
+    TaskConfig subclass used for this benchmark.  Must be set for Benchmark to construct TaskConfigs.
+    """
     default_tool_config: ToolboxConfig = ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()])  # type: ignore
-
-    wav_config: WebArenaVerifiedConfig = WebArenaVerifiedConfig()
-    """WAV client configuration.  When ``infra`` is set, ``environments`` is populated
-    automatically after launch and the default is sufficient.  When ``infra=None``,
-    ``environments`` must be set manually before tasks will work (``render_url`` raises
-    if it is ``None``).
+    """
+    Default ToolboxConfig with tools for HAR-based environment observation and agent response submission.
     """
 
-    infra: InfraConfig | None = None
-    """When set, provision (if needed) + launch happens automatically in setup().
+    wav_config: WebArenaVerifiedConfig = WebArenaVerifiedConfig()
+    """WAV client configuration.
 
-    Pass the ``DockerServiceConfig`` via ``resources=[...]`` at construction time.
-    The handle's ``endpoints`` are translated to ``wav_config.environments`` using
-    ``resource.endpoint_to_site``.  If ``None``, the benchmark behaves exactly as
-    before: ``wav_config.environments`` must be populated manually.
+    *Automatic mode*: leave as default — ``environments`` is populated after launch.
+    *Manual mode*: must have ``environments`` set with reachable URLs.
+    """
+    infra: InfraConfig | None = None
+    """*Automatic mode only.* InfraConfig that provisions and launches the Docker stack.
+    Pass the site resource via ``resources=[...]`` at construction time.
     """
 
     _handle: ResourceHandle | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def _validate_setup_mode(self) -> "WebArenaVerifiedBenchmark":
+        has_environments = self.wav_config.environments is not None
+        has_infra = self.infra is not None
+        has_docker_resources = any(isinstance(r, DockerServiceConfig) for r in self.resources)
+
+        if has_environments and has_infra:
+            raise ValueError(
+                "Ambiguous setup: provide either wav_config.environments (manual mode) "
+                "or infra + resources (automatic mode) — not both."
+            )
+        if not has_environments and not has_infra:
+            raise ValueError(
+                "No setup configured. Provide either:\n"
+                "  • wav_config=WebArenaVerifiedConfig(environments={...})  — manual mode\n"
+                "  • infra=<InfraConfig> + resources=[<DockerServiceConfig>]  — automatic mode"
+            )
+        if has_infra and not has_docker_resources:
+            raise ValueError(
+                "infra= is set but no DockerServiceConfig found in resources=. "
+                "Pass resources=[WEBARENA_SHOPPING_ADMIN] (or another site config) at construction time."
+            )
+        return self
 
     def _setup(self) -> None:
         if self.infra is not None:
             self._handle = self._launch_and_configure()
             return
 
-        # Legacy path: verify manually-configured URLs are reachable.
-        if self.wav_config.environments is None:
-            return
-        for site, env_config in self.wav_config.environments.items():
+        # Manual mode: verify all configured URLs are reachable.
+        for site, env_config in self.wav_config.environments.items():  # type: ignore[union-attr]
             url = env_config.active_url
             if url is None:
                 continue
@@ -89,18 +132,13 @@ class WebArenaVerifiedBenchmark(Benchmark):
         """Provision (if needed) + launch the resource and populate self.wav_config."""
         assert self.infra is not None
         docker_resources = [r for r in self.resources if isinstance(r, DockerServiceConfig)]
-        if not docker_resources:
-            raise ValueError(
-                "infra= is set but no DockerServiceConfig found in resources=. "
-                "Pass the DockerServiceConfig as resources=[...] at construction time."
-            )
         if len(docker_resources) > 1:
             raise ValueError(
                 f"infra= only supports a single DockerServiceConfig, but {len(docker_resources)} were found: "
                 f"{[r.name for r in docker_resources]}. "
                 "Pass exactly one DockerServiceConfig in resources=."
             )
-        # Unpack the single validated item — tuple unpacking enforces the invariant at runtime.
+        # Validator guarantees at least one DockerServiceConfig is present.
         (resource,) = docker_resources
 
         if self.infra.provision_status(resource) == "needs_provisioning":
