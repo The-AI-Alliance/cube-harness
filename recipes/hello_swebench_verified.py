@@ -16,6 +16,9 @@ Usage:
     uv run recipes/hello_swebench_verified.py debug              # 2 django tasks, sequential
     uv run recipes/hello_swebench_verified.py 10 --model gpt-4.1 # 10 tasks with Ray
     uv run recipes/hello_swebench_verified.py full --model gpt-4.1
+
+The recipe in "full" mode runs all 500 tasks. Use --repo to filter by repository, e.g.:
+    uv run recipes/hello_swebench_verified.py full --model gpt-4.1 --repo django/django
 """
 
 import argparse
@@ -41,21 +44,27 @@ Start by exploring the repository structure and reading relevant files before ma
 When you are confident the fix is correct, call final_step to submit."""
 
 
-def main(mode: str, model: str = "gpt-4.1-mini") -> None:
+def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> None:
     model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "cube_harness_results" / f"swebench_verified_{mode}_{model_short}_{current_datetime}"
 
     backend = DaytonaContainerBackend()
 
-    max_tasks = {"debug": 2, "10": 10}.get(mode)
-    repo_filter = "django/django" if mode == "debug" else None
+    benchmark = SWEBenchVerifiedBenchmark(container_backend=backend)
 
-    benchmark = SWEBenchVerifiedBenchmark(
-        container_backend=backend,
-        max_tasks=max_tasks,
-        repo_filter=repo_filter,
-    )
+    # In debug mode, restrict to 2 django tasks so tests run fast locally
+    if mode == "debug":
+        benchmark = benchmark.subset_from_glob("repo", "django/django")
+        tasks = list(benchmark.task_metadata.keys())[:2]
+        benchmark = benchmark.subset_from_list(tasks)
+    elif repo is not None:
+        benchmark = benchmark.subset_from_glob("repo", repo)
+
+    max_tasks = {"10": 10}.get(mode)
+    if max_tasks is not None:
+        tasks = list(benchmark.task_metadata.keys())[:max_tasks]
+        benchmark = benchmark.subset_from_list(tasks)
 
     agent_config = ReactAgentConfig(
         llm_config=LLMConfig(model_name=model),
@@ -81,5 +90,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SWE-bench Verified experiments")
     parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "10", "full"])
     parser.add_argument("--model", default="gpt-4.1-mini")
+    parser.add_argument("--repo", default=None, help="Filter by repository, e.g. 'django/django'")
     args = parser.parse_args()
-    main(args.mode, model=args.model)
+    main(args.mode, model=args.model, repo=args.repo)

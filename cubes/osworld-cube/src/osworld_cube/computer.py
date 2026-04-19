@@ -2,22 +2,19 @@
 Computer tool re-exports for osworld-cube.
 
 The implementation has moved to cube-computer-tool (cube_computer_tool).
-This module re-exports everything for backwards compatibility and adds
-the osworld-cube cache root so ComputerConfig.cache_dir defaults sensibly.
+This module re-exports everything for backwards compatibility and sets
+ComputerConfig.cache_dir to the osworld-cube benchmark cache directory.
 """
 
-import cube
-
+from osworld_cube._paths import OSWORLD_CACHE_DIR
 from cube_computer_tool.computer import ActionSpace, Computer13, ComputerBase, PyAutoGUIComputer
 from cube_computer_tool.computer import ComputerConfig as _BaseComputerConfig
-
-_CUBE_CACHE_ROOT = cube.get_cache_dir("osworld-cube")
 
 
 class ComputerConfig(_BaseComputerConfig):
     """ComputerConfig with osworld-cube cache default."""
 
-    cache_dir: str = str(_CUBE_CACHE_ROOT / "cache")
+    cache_dir: str = str(OSWORLD_CACHE_DIR)
 
 
 __all__ = [
@@ -26,5 +23,4 @@ __all__ = [
     "ComputerBase",
     "ComputerConfig",
     "PyAutoGUIComputer",
-    "_CUBE_CACHE_ROOT",
 ]

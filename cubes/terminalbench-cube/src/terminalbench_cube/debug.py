@@ -28,7 +28,7 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
         _FINAL,
     ],
     "overfull-hbox": [
-        Action(name="bash", arguments={"command": "bash /solution/solve.sh 2>&1"}),
+        Action(name="bash", arguments={"command": "bash /solution/solve.sh 2>&1", "timeout": 300}),
         _FINAL,
     ],
 }
@@ -56,20 +56,14 @@ class DebugAgent:
 
 
 def get_debug_benchmark() -> "Benchmark":
-    """Return a TerminalBenchBenchmark scoped to the debug tasks.
-
-    The harness will call benchmark.install() and benchmark.setup() on the
-    returned instance, iterate benchmark.get_task_configs() to discover tasks,
-    and call benchmark.close() at the end to free resources.
-    """
+    """Return a TerminalBenchBenchmark scoped to the debug tasks."""
     container_backend = LocalContainerBackend()
     bench = TerminalBenchBenchmark(
         container_backend=container_backend,
-        task_ids=list(_TASK_ACTIONS),
         oracle_mode=True,
     )
-    bench.install()  # Ensure dataset is downloaded and available
-    bench.setup()  # Load dataset and populate task metadata
+    bench.install()
+    bench.setup()
     return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
 
 

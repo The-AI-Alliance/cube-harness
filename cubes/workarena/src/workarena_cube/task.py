@@ -3,125 +3,56 @@
 import importlib
 import logging
 import time
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, List, Literal, override
 
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import ActionSchema, Observation
-from cube.task import Task, TaskConfig
-from cube.tool import Toolbox, tool_action
+from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
+from cube.task import Task, TaskConfig, TaskMetadata
+from cube.tool import Toolbox
 from cube.tools.browser import BrowserTool
-from cube_browser_playwright import PlaywrightSession, PlaywrightSessionConfig, Viewport
-from cube_browser_tool import PlaywrightConfig, SyncPlaywrightTool
+from cube_browser_playwright import Viewport
 from cube_chat_tool import ChatTool
-from playwright.sync_api import Page
+from workarena_cube.tools import WorkArenaCheatTool, WorkArenaInfeasibleTool, WorkArenaBrowserTool
 from pydantic import PrivateAttr
+
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-        "browser_wait",
-        "browser_back",
-        "browser_forward",
-        "noop",
-        "workarena_cheat",
-        "send_message",
-    }
-)
 
+class WorkArenaTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for WorkArena ServiceNow tasks.
 
-@runtime_checkable
-class WorkarenaBrowserToolConfig(Protocol):
-    """
-    Protocol for browser tool configs used by WorkArenaTask — requires a `browser` attribute and a `make()` method.
-    Both BrowsergymConfig and PlaywrightConfig satisfy this protocol, so WorkArenaTask can work with either.
+    Public fields shipped in task_metadata.json (available at import time).
+    WorkArena has no heavy execution data — all task logic is available from
+    the browsergym-workarena library at runtime via task_class_path.
     """
 
-    browser: PlaywrightSessionConfig
+    level: Literal["l1", "l2", "l3"]
+    """Task level: l1 = atomic, l2 = compositional, l3 = extended compositional."""
 
-    def make(self, container: Any = None) -> "WorkArenaBrowserTool": ...
+    in_human_curriculum: bool
+    """Whether this task type is part of the human evaluation curriculum."""
 
-
-@runtime_checkable
-class WorkArenaBrowserTool(Protocol):
-    """
-    Protocol for browser tools used by WorkArena tasks — requires a Playwright `page` attribute.
-    Both BrowsergymTool and SyncPlaywrightTool satisfy this protocol, so WorkArenaTask can work with either.
-    """
-
-    config: WorkarenaBrowserToolConfig
-
-    @property
-    def page(self) -> Page: ...
-
-    def noop(self) -> Any: ...
-
-    def page_obs(self) -> Observation: ...
-
-
-class WorkArenaCheatTool(SyncPlaywrightTool):
-    """SyncPlaywrightTool with an additional workarena_cheat action — for debug use only."""
-
-    def __init__(self, config: PlaywrightConfig, session: PlaywrightSession) -> None:
-        super().__init__(config, session)
-        self._workarena_task: AbstractServiceNowTask | None = None
-
-    @tool_action
-    def workarena_cheat(self) -> str:
-        """Execute the WorkArena built-in cheat to solve the task automatically."""
-        if self._workarena_task is None:
-            return "No WorkArena task initialized — cheat unavailable."
-        self._workarena_task.cheat(self.page, [])
-        return "WorkArena cheat executed."
-
-
-class WorkArenaCheatToolConfig(PlaywrightConfig):
-    """PlaywrightConfig variant that creates a WorkArenaCheatTool."""
-
-    def make(self, container: Any = None) -> WorkArenaCheatTool:
-        session = self.browser.make()
-        return WorkArenaCheatTool(self, session)
+    task_class_path: str
+    """Dotted path to the WorkArena task class, e.g. 'browsergym.workarena.tasks.dashboard.MultiChartValueRetrievalTask'."""
 
 
 class WorkArenaTask(Task):
-    """
-    CUBE Task wrapper for WorkArena ServiceNow tasks.
+    """CUBE Task wrapper for WorkArena ServiceNow tasks."""
 
-    ---
-    Future optimization note:
-
-    Both `finished()` and `evaluate()` call `self._workarena_task.validate()`,
-    which makes a live ServiceNow API call. With `validate_per_step=True`,
-    the base `Task.step()` calls both on every step, resulting in
-    two identical round-trips per step.
-
-    Future improvement: if the above becomes a performance bottleneck, we can cache the
-    result of `validate()` keyed on `(chat_key, hash(page.content()))` where:
-    `chat_key = tuple((m["role"], m["timestamp"], m["message"]) for m in chat_messages)`.
-    Both `finished()` and `evaluate()` would call a shared `_validate()` helper
-    that returns the cached result when the key is unchanged, and refreshes it otherwise.
-    The `page.content()` hash captures SPA state changes that do not update the URL,
-    at the cost of a DOM serialization on each cache-miss check.
-    """
-
+    metadata: WorkArenaTaskMetadata  # type: ignore[assignment]
     seed: int
     wait_first_page_time: float = 10.0
     validate_per_step: bool = True
 
     _workarena_task: AbstractServiceNowTask | None = PrivateAttr(default=None)
+    _validate_cache: tuple[Any, ...] | None = PrivateAttr(default=None)
 
     @property
     def _browser_tool(self) -> WorkArenaBrowserTool:
-        """Resolve the playwright tool whether the tool is direct or inside a Toolbox."""
+        """Resolve the browser tool whether it's direct or inside a Toolbox."""
         if isinstance(self.tool, Toolbox):
             tool = self.tool.find_tool(BrowserTool)
             if tool is None:
@@ -138,17 +69,28 @@ class WorkArenaTask(Task):
     def _chat_tool(self) -> ChatTool | None:
         """Return the ChatTool if present in a Toolbox, else None."""
         if isinstance(self.tool, Toolbox):
-            return self.tool.find_tool(ChatTool)
+            return self.tool.find_tool(ChatTool)  # type: ignore
+        return None
+
+    @property
+    def _infeasible_tool(self) -> WorkArenaInfeasibleTool | None:
+        """Return the WorkArenaInfeasibleTool if present in a Toolbox, else None."""
+        if isinstance(self.tool, Toolbox):
+            tool = self.tool.find_tool(WorkArenaInfeasibleTool)
+            return tool if isinstance(tool, WorkArenaInfeasibleTool) else None
         return None
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
-        task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
+        task_class = _load_task_class(self.metadata.task_class_path)
         self._workarena_task = task_class(seed=self.seed)
+        if self._workarena_task is None:
+            raise RuntimeError("Failed to initialize WorkArena task.")
         _apply_task_runtime_preferences(self._browser_tool, self._workarena_task)
+        self.tool.reset()
+        self._validate_cache = None
         if isinstance(self._browser_tool, WorkArenaCheatTool):
             self._browser_tool._workarena_task = self._workarena_task
-        self.tool.reset()
         page = self._browser_tool.page
         goal, task_info = self._workarena_task.setup(page)
 
@@ -177,34 +119,63 @@ class WorkArenaTask(Task):
 
     @property
     def _chat_messages(self) -> list[dict]:
-        """Return the current chat message history, or empty list if no chat tool."""
-        chat = self._chat_tool
-        return chat.messages if chat is not None else []
+        """
+        Return combined chat and infeasible messages.
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
-        """Score the current task state via WorkArena's validate()."""
+        Normal path (ChatTool): a copy of session history — safe for parallel episodes,
+        always current because send_message() writes before evaluate() runs.
+
+        Cheat path (WorkArenaCheatTool, no ChatTool): the live _chat_messages_ref list.
+        cheat() appends directly to whatever list it receives, so cheat() and validate()
+        must share the same list instance.
+        """
+        messages: list[dict] = []
+        if self._chat_tool is None and isinstance(self._browser_tool, WorkArenaCheatTool):
+            messages.extend(self._browser_tool._chat_messages_ref)
+        elif (chat := self._chat_tool) is not None:
+            messages.extend(chat.messages)
+        if (infeasible := self._infeasible_tool) is not None:
+            messages.extend(infeasible.messages)
+        return messages
+
+    def _validate(self) -> tuple[float, bool, str, dict]:
+        """Call WorkArena's validate() with per-step caching.
+
+        Both evaluate() and finished() call this on every step. The cache avoids
+        duplicate ServiceNow REST calls within the same step. It is cleared after
+        the first consumer reads it, so the next step gets a fresh call.
+        """
         if self._workarena_task is None:
             raise RuntimeError("WorkArena task is not initialized. Call reset() first.")
-        page = self._browser_tool.page
-        reward, done, _user_message, task_info = self._workarena_task.validate(page, self._chat_messages)
+        if self._validate_cache is None:
+            page = self._browser_tool.page
+            self._validate_cache = self._workarena_task.validate(page, self._chat_messages)  # type: ignore : Workarena validators expect list[dict] despite the protocol specifying list[str].
+        return self._validate_cache  # type: ignore[return-value]
+
+    @override
+    def step(self, action: Action | List[Action]) -> EnvironmentOutput:
+        self._validate_cache = None
+        return super().step(action)
+
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
+        """Score the current task state via WorkArena's validate()."""
+        reward, done, _user_message, task_info = self._validate()
         return reward, {"done": done, **task_info}
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         """Check if the task is done via WorkArena's validate()."""
         if self._workarena_task is None:
             return False
-        page = self._browser_tool.page
-        _reward, done, _user_message, _task_info = self._workarena_task.validate(page, self._chat_messages)
+        _reward, done, _user_message, _task_info = self._validate()
         return done
 
     def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter to BID browser actions supported by WorkArena."""
-        supported_actions = _SUPPORTED_ACTION_NAMES
+        """Filter actions based on available tools."""
         if self._chat_tool is None:
-            supported_actions = supported_actions - {"send_message"}
-        filtered = [a for a in actions if a.name in supported_actions]
-        logger.debug(f"Filtered {len(filtered)} out of {len(actions)} actions for WorkArena task.")
-        return filtered
+            actions = [a for a in actions if a.name != "send_message"]
+        if self._infeasible_tool is None:
+            actions = [a for a in actions if a.name != "report_infeasible"]
+        return actions
 
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
@@ -226,10 +197,12 @@ class WorkArenaTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
+        # Import here to avoid circular import (benchmark imports task)
         from workarena_cube.benchmark import WorkArenaBenchmark
 
         _ = runtime_context, container_backend
         meta = WorkArenaBenchmark.task_metadata[self.task_id]
+        assert self.tool_config, f"WorkArenaTaskConfig requires a tool_config, got {self.tool_config}"
         return WorkArenaTask(
             metadata=meta,
             tool_config=self.tool_config,

@@ -16,6 +16,9 @@ Usage:
     uv run recipes/hello_swebench_live.py debug              # 2 tasks, sequential
     uv run recipes/hello_swebench_live.py 10 --model gpt-4.1 # 10 tasks with Ray
     uv run recipes/hello_swebench_live.py full --model gpt-4.1
+
+The recipe in "full" mode uses the 'lite' subset (300 tasks). Use --subset to switch, e.g.:
+    uv run recipes/hello_swebench_live.py full --model gpt-4.1 --subset verified
 """
 
 import argparse
@@ -41,7 +44,7 @@ Start by exploring the repository structure and reading relevant files before ma
 When you are confident the fix is correct, call final_step to submit."""
 
 
-def main(mode: str, model: str = "gpt-4.1-mini", split: str = "lite") -> None:
+def main(mode: str, model: str = "gpt-4.1-mini", subset: str = "lite") -> None:
     model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "cube_harness_results" / f"swebench_live_{mode}_{model_short}_{current_datetime}"
@@ -52,9 +55,10 @@ def main(mode: str, model: str = "gpt-4.1-mini", split: str = "lite") -> None:
 
     benchmark = SWEBenchLiveBenchmark(
         container_backend=backend,
-        max_tasks=max_tasks,
-        split=split,
-    )
+    ).named_subset(subset)
+    if max_tasks is not None:
+        tasks = list(benchmark.task_metadata.keys())[:max_tasks]
+        benchmark = benchmark.subset_from_list(tasks)
 
     agent_config = ReactAgentConfig(
         llm_config=LLMConfig(model_name=model),
@@ -80,6 +84,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SWE-bench Live experiments")
     parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "10", "full"])
     parser.add_argument("--model", default="gpt-4.1-mini")
-    parser.add_argument("--split", default="lite", choices=["lite", "full"])
+    parser.add_argument("--subset", default="lite", choices=["test", "lite", "verified", "full"])
     args = parser.parse_args()
-    main(args.mode, model=args.model, split=args.split)
+    main(args.mode, model=args.model, subset=args.subset)

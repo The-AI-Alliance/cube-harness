@@ -63,9 +63,9 @@ class TestCubeEpisode:
         assert final_env_step.done is True
         assert final_env_step.reward == 1.0
 
-        assert trajectory.reward_info["reward"] == 1.0
-        assert trajectory.reward_info["done"] is True
-        assert trajectory.reward_info["success"] is True
+        assert "profiling" in trajectory.reward_info
+        trajectory.reward_info.pop("profiling")  # ignore profiling info for this test
+        assert trajectory.reward_info == {"reward": 1.0, "done": True, "success": True}
 
     def test_episode_load_from_config_round_trip(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Save EpisodeConfig to disk; reload via load_episode_from_config() without benchmark arg."""

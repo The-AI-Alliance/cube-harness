@@ -19,15 +19,11 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import ClassVar, Generator
-
-from cube.benchmark import BenchmarkMetadata
 from cube.core import Action, ActionSchema, Observation
-from cube.task import TaskConfig, TaskMetadata
 from cube.testing import run_debug_suite
 
 from workarena_cube.benchmark import WorkArenaBenchmark
-from workarena_cube.task import WorkArenaCheatToolConfig, WorkArenaTaskConfig
+from workarena_cube.tools import WorkArenaCheatToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -48,24 +44,18 @@ class CheatAgent:
         return Action(name="final_step", arguments={})
 
 
-class DebugBenchmark(WorkArenaBenchmark):
-    benchmark_metadata: ClassVar[BenchmarkMetadata] = WorkArenaBenchmark.benchmark_metadata
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = WorkArenaBenchmark.task_metadata
-    task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
-
-    def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
-        yield from list(super().get_task_configs())[:_DEBUG_N_TASKS]
-
-
 def make_debug_agent(task_id: str) -> CheatAgent:
     return CheatAgent(task_id)
 
 
 def get_debug_benchmark() -> WorkArenaBenchmark:
-    return DebugBenchmark(
+    bench = WorkArenaBenchmark(
         n_seeds_l1=1,
         default_tool_config=WorkArenaCheatToolConfig(),
     )
+    l1_bench = bench.named_subset("l1")
+    task_ids = list(l1_bench.task_metadata.keys())[:_DEBUG_N_TASKS]
+    return l1_bench.subset_from_list(task_ids)  # type: ignore
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from typing import Any, overload
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig
+from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tools.browser import BrowserTool
 from pydantic import PrivateAttr
 from webarena_verified.api.webarena_verified import WebArenaVerified
@@ -18,6 +18,24 @@ from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfi
 logger = logging.getLogger(__name__)
 
 
+class WebArenaVerifiedTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for WebArena Verified tasks.
+
+    Public fields shipped in task_metadata.json (available at import time).
+    WebArena has no heavy execution data — all task information is available
+    from the webarena-verified library at runtime via the wav_task object.
+    """
+
+    sites: list[str]
+    """WebArena site names required for this task, e.g. ['shopping_admin']."""
+
+    expected_action: str
+    """Expected action type, e.g. 'RETRIEVE' or 'CLICK'."""
+
+    intent_template_id: int
+    """Intent template identifier for grouping tasks with the same underlying intent."""
+
+
 @overload
 def _render_url(config: WebArenaVerifiedConfig, url: str, sites: list) -> str: ...
 @overload
@@ -27,6 +45,7 @@ def _render_url(config: WebArenaVerifiedConfig, url: str | list[str], sites: lis
 
 
 class WebArenaVerifiedTask(Task):
+    metadata: WebArenaVerifiedTaskMetadata  # type: ignore[assignment]
     wav_task: WAVTask
     wav_config: WebArenaVerifiedConfig
 
@@ -69,7 +88,7 @@ class WebArenaVerifiedTask(Task):
         }
         return obs, info
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         """Evaluate the agent's submitted response against the WebArena verified evaluators.
 
         Closes the browser context to flush the HAR file to disk, reads the network trace,
@@ -96,13 +115,12 @@ class WebArenaVerifiedTask(Task):
             "evaluators_results": [r.model_dump() for r in result.evaluators_results],
         }
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         """Return True once the agent has submitted a response via the SubmitResponseTool."""
         return self._submit_tool.get_submitted_response() is not None
 
 
 class WebArenaVerifiedTaskConfig(TaskConfig):
-    wav_task: WAVTask
     wav_config: WebArenaVerifiedConfig
 
     def make(
@@ -111,12 +129,15 @@ class WebArenaVerifiedTaskConfig(TaskConfig):
         container_backend: ContainerBackend | None = None,
     ) -> WebArenaVerifiedTask:
         _ = runtime_context, container_backend
+        # Import here to avoid circular import (benchmark imports task)
         from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
 
+        wav = WebArenaVerified(config=self.wav_config)
+        wav_task = wav.get_task(int(self.task_id))
         metadata = WebArenaVerifiedBenchmark.task_metadata[self.task_id]
         return WebArenaVerifiedTask(
             metadata=metadata,
             tool_config=self.tool_config or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
-            wav_task=self.wav_task,
+            wav_task=wav_task,
             wav_config=self.wav_config,
         )

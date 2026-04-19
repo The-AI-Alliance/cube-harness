@@ -1,39 +1,46 @@
+"""
+Integration tests for OSWorldTask using the debug action sequences.
+
+Accepts a runtime InfraConfig via:
+    OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE=/path/to/infra.json
+
+Falls back to LocalInfraConfig() when none is provided.
+
+Config file shape:
+    {
+      "class": "package.module:InfraConfigClass",
+      "kwargs": {"key": "value"}
+    }
+
+Requires an InfraConfig pointing to a provisioned OSWorld VM image.
+Run the integration test manually via:
+    cube-resources/cube-infra-azure/test_run_debug_agent.py
+    cube-resources/cube-infra-aws/test_run_debug_agent.py
+"""
+
 import pytest
 
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
+from cube.resource import InfraConfig
+from cube.testing import run_debug_episode
 from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
-_benchmark = get_debug_benchmark(vm_backend=OSWorldQEMUVMBackend())
-_benchmark.install()
-_benchmark.setup()
-_DEBUG_TASK_CONFIGS = {tc.task_id: tc for tc in _benchmark.get_task_configs()}
+
+@pytest.fixture(scope="session")
+def debug_task_configs(infra: InfraConfig):
+    benchmark = get_debug_benchmark(infra=infra)
+    benchmark.install()
+    benchmark.setup()
+    configs = {tc.task_id: tc for tc in benchmark.get_task_configs()}
+    yield configs
+    benchmark.close()
 
 
-def run_debug_episode(task_id: str, max_steps: int = 20) -> dict:
-    """
-    Run a debug episode for an OSWorld task and return a minimal report dict.
-
-    Delegates to the generic ``cube.testing.run_debug_episode`` harness.
-    The report schema matches the stress-test MVP output (stress_test_specs.md §3.1).
-
-    Args:
-        task_id:    ID of the debug task (must be in debug_tasks.json).
-        max_steps:  Safety cap on the step loop (default 20).
-
-    Returns:
-        dict with keys: task_id, done, reward, steps, episode_time_s,
-        step_times_s, error.
-    """
-    from cube.testing import run_debug_episode as _run
-
-    task = _DEBUG_TASK_CONFIGS[task_id].make()
-    agent = make_debug_agent(task_id)
-    return _run(task, agent, max_steps=max_steps)
-
-
-@pytest.mark.parametrize("task_id", list(_DEBUG_TASK_CONFIGS))
-def test_debug_episode(task_id: str) -> None:
-    report = run_debug_episode(task_id)
-    assert report["done"], f"Episode did not complete: {report}"
-    assert report["reward"] > 0, f"Zero/negative reward: {report}"
-    assert not report["error"], f"Episode error: {report['error']}"
+@pytest.mark.integration
+def test_debug_episodes(debug_task_configs) -> None:
+    for task_id, tc in debug_task_configs.items():
+        task = tc.make()
+        agent = make_debug_agent(task_id)
+        report = run_debug_episode(task, agent, max_steps=20)
+        assert report["done"], f"Task {task_id}: episode did not complete: {report}"
+        assert report["reward"] > 0, f"Task {task_id}: zero reward: {report}"
+        assert not report["error"], f"Task {task_id}: episode error: {report['error']}"

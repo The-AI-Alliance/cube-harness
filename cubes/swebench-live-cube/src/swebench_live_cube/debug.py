@@ -55,7 +55,6 @@ def get_debug_benchmark() -> Benchmark:
     container_backend = LocalContainerBackend()
     bench = SWEBenchLiveBenchmark(
         container_backend=container_backend,
-        instance_ids=list(_TASK_ACTIONS),
         oracle_mode=True,
     )
     bench.install()
