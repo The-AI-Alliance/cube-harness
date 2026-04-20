@@ -189,9 +189,19 @@ class FileStorage:
             return self._load_trajectory(ep_dir, trajectory_id)
         return self._v1_load_trajectory(trajectory_id)
 
+    def _maybe_inject_failure_text(self, ep_dir: Path, trajectory_data: dict) -> None:
+        """Inject _failure_text into metadata if failure.txt exists and trajectory has no end_time."""
+        if trajectory_data.get("end_time") is not None:
+            return
+        failure_path = ep_dir / "failure.txt"
+        if failure_path.exists():
+            trajectory_data.setdefault("metadata", {})["_failure_text"] = failure_path.read_text()
+
     def _load_trajectory(self, ep_dir: Path, trajectory_id: str) -> Trajectory:
         with open(ep_dir / EPISODE_METADATA) as f:
             trajectory_data = json.load(f)
+
+        self._maybe_inject_failure_text(ep_dir, trajectory_data)
 
         steps: list[TrajectoryStep] = []
         steps_dir = ep_dir / STEPS_DIR
@@ -279,6 +289,9 @@ class FileStorage:
         if "metadata" not in trajectory_data:
             trajectory_data = {"id": trajectory_id, "metadata": trajectory_data}
 
+        if (ep_dir / EPISODE_METADATA).exists():
+            self._maybe_inject_failure_text(ep_dir, trajectory_data)
+
         trajectory_data["steps"] = []
         return Trajectory.model_validate(trajectory_data)
 
@@ -293,6 +306,7 @@ class FileStorage:
             try:
                 with open(ep_dir / EPISODE_METADATA) as f:
                     data = json.load(f)
+                self._maybe_inject_failure_text(ep_dir, data)
                 data["steps"] = []
                 results.append(Trajectory.model_validate(data))
             except Exception as e:
@@ -328,10 +342,11 @@ class FileStorage:
         for ep_dir in self._episode_dirs():
             traj_id = ep_dir.name
             summary_path = ep_dir / "episode_summary.jsonl"
-            if summary_path.exists():
-                result[traj_id] = summary_path.stat().st_mtime
-            else:
-                result[traj_id] = (ep_dir / EPISODE_METADATA).stat().st_mtime
+            mtime = summary_path.stat().st_mtime if summary_path.exists() else (ep_dir / EPISODE_METADATA).stat().st_mtime
+            failure_path = ep_dir / "failure.txt"
+            if failure_path.exists():
+                mtime = max(mtime, failure_path.stat().st_mtime)
+            result[traj_id] = mtime
         return result
 
     def _v1_list_ids_with_mtime(self) -> dict[str, float]:
@@ -433,6 +448,41 @@ class FileStorage:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
 
     # --- Episode configs ---
+
+    def save_failure(self, trajectory_id: str, stack_trace: str) -> None:
+        """Persist a failure stack trace for an episode that could not produce a trajectory."""
+        ep_dir = self._episode_dir(trajectory_id)
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        (ep_dir / "failure.txt").write_text(stack_trace)
+        logger.info(f"Saved failure for {trajectory_id} to {ep_dir / 'failure.txt'}")
+
+    def load_missing_trajectory_stubs(self) -> list[Trajectory]:
+        """Return stub Trajectories for episodes with a config but no trajectory data.
+
+        These represent tasks that were planned (episode_config.json saved upfront) but
+        never produced a trajectory — either because they crashed during setup or never ran.
+        The stubs have ``_missing=True`` in metadata so xray can display them distinctly.
+        A ``_failure_text`` key is also added when a failure.txt file exists.
+        """
+        existing_ids = set(self.list_trajectory_ids())
+        stubs: list[Trajectory] = []
+        for ep_dir in self._episode_config_dirs():
+            traj_id = ep_dir.name
+            if traj_id in existing_ids:
+                continue
+            config_path = ep_dir / "episode_config.json"
+            try:
+                with open(config_path) as f:
+                    cfg = json.load(f)
+                task_id = cfg.get("task_id", traj_id)
+                metadata: dict = {"task_id": task_id, "_missing": True}
+                failure_path = ep_dir / "failure.txt"
+                if failure_path.exists():
+                    metadata["_failure_text"] = failure_path.read_text()
+                stubs.append(Trajectory(id=traj_id, metadata=metadata))
+            except Exception:
+                logger.debug(f"Could not read episode config for missing stub: {ep_dir}")
+        return stubs
 
     def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
         traj_id = f"{episode_config.task_id}_ep{episode_config.id}"

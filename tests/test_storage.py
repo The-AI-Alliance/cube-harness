@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -127,7 +128,7 @@ class TestFileStorageLogs:
     def test_get_log_path(self, tmp_dir: Path) -> None:
         storage = FileStorage(tmp_dir)
         log_path = storage.get_log_path("task_a_ep3")
-        assert log_path == Path(tmp_dir) / "task_a_ep3.log"
+        assert log_path == Path(tmp_dir) / "episodes" / "task_a_ep3" / "episode.log"
 
     def test_load_logs_returns_full_file_contents(self, tmp_dir: Path) -> None:
         storage = FileStorage(tmp_dir)
@@ -1156,6 +1157,52 @@ class TestEpisodeSummaryStatus:
         lines = (ep_dir / "episode_summary.jsonl").read_text().splitlines()
         final = StepSummary.model_validate_json(lines[-1])
         assert final.status == EpisodeStatus.FAILED
+
+
+class TestFailureTextInjection:
+    def test_load_all_metadata_injects_failure_text(self, tmp_dir: Path) -> None:
+        """load_all_trajectory_metadata injects _failure_text when failure.txt exists and no end_time."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1"})
+        storage.save_trajectory(traj)
+        (storage._episode_dir("task_1_ep0") / "failure.txt").write_text("Ray actor died")
+
+        trajs = storage.load_all_trajectory_metadata()
+        t = next(t for t in trajs if t.id == "task_1_ep0")
+        assert t.metadata.get("_failure_text") == "Ray actor died"
+
+    def test_load_all_metadata_no_injection_when_complete(self, tmp_dir: Path) -> None:
+        """_failure_text is NOT injected when end_time is set (trajectory completed normally)."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1"}, end_time=1234567890.0)
+        storage.save_trajectory(traj)
+        (storage._episode_dir("task_1_ep0") / "failure.txt").write_text("stale error")
+
+        trajs = storage.load_all_trajectory_metadata()
+        t = next(t for t in trajs if t.id == "task_1_ep0")
+        assert "_failure_text" not in t.metadata
+
+    def test_load_trajectory_injects_failure_text(self, tmp_dir: Path) -> None:
+        """load_trajectory (full load) also injects _failure_text."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1"})
+        storage.save_trajectory(traj)
+        (storage._episode_dir("task_1_ep0") / "failure.txt").write_text("crash trace")
+
+        loaded = storage.load_trajectory("task_1_ep0")
+        assert loaded.metadata.get("_failure_text") == "crash trace"
+
+    def test_list_ids_with_mtime_uses_failure_txt_mtime(self, tmp_dir: Path) -> None:
+        """list_trajectory_ids_with_mtime returns failure.txt mtime when it's newer."""
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1"})
+        storage.save_trajectory(traj)
+        time.sleep(0.01)  # ensure different mtime
+        failure_path = storage._episode_dir("task_1_ep0") / "failure.txt"
+        failure_path.write_text("crash")
+
+        mtimes = storage.list_trajectory_ids_with_mtime()
+        assert mtimes["task_1_ep0"] >= failure_path.stat().st_mtime
 
 
 class TestEpisodeResultAPI:

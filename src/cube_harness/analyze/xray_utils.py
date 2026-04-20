@@ -44,22 +44,42 @@ def format_duration(seconds: float) -> str:
 
 
 def trajectory_status(traj: Trajectory) -> str:
-    """Return status string for a trajectory: 'running', 'success', 'error', or 'completed'."""
+    """Return one of five lifecycle status strings for a trajectory.
+
+    Values:
+      'queued'       — planned but not yet started (stub, no failure text)
+      'system_error' — crashed before completing: either stub with failure.txt, or
+                       real trajectory that started but has no end_time + has failure.txt
+      'running'      — in progress (real trajectory, no end_time, no failure.txt)
+      'success'      — completed with reward > 0
+      'fail'         — ran to completion, reward = 0
+
+    Step-level errors the agent recovered from are not surfaced here.
+    """
+    if traj.metadata.get("_missing"):
+        return "system_error" if traj.metadata.get("_failure_text") else "queued"
     if traj.end_time is None:
-        return "running"
+        return "system_error" if traj.metadata.get("_failure_text") else "running"
     if traj.reward_info and traj.reward_info.get("reward", 0) > 0:
         return "success"
-    for step in traj.steps:
-        if hasattr(step.output, "error") and step.output.error is not None:
-            return "error"
-    return "completed"
+    return "fail"
 
 
-_STATUS_EMOJI: dict[str, str] = {
-    "running": "⏳",
-    "success": "✅",
-    "error": "❌",
-    "completed": "⬜",
+_STATUS_HTML: dict[str, str] = {
+    "queued":       "<span title='Queued — not yet started'>🕐</span>",
+    "running":      "<span title='Running'>⏳</span>",
+    "success":      "<span title='Success'>✅</span>",
+    "fail":         "<span title='Failed — ran to completion, no reward'>⬜</span>",
+    "system_error": "<span title='System error — crashed before trajectory was written' style='color:#dc3545;font-weight:bold;font-size:14px'>✕</span>",
+}
+
+# Plain-text labels (icon + short description) for the header bar and other non-HTML contexts.
+_STATUS_LABEL: dict[str, str] = {
+    "queued":       "🕐 Queued — not yet started",
+    "running":      "⏳ Running",
+    "success":      "✅ Success",
+    "fail":         "⬜ Failed — no reward",
+    "system_error": "✕ System error — crashed",
 }
 
 
@@ -455,8 +475,18 @@ def _render_llm_call_html(llm_call: LLMCall) -> str:
         f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{config_json}</pre>"
         f"</details>\n"
     )
+    if llm_call.prompt.tools:
+        tools_json = html_lib.escape(json.dumps(llm_call.prompt.tools, indent=2))
+        n = len(llm_call.prompt.tools)
+        tools_html = (
+            f"<details><summary>🔧 <strong>tools</strong> ({n})</summary>"
+            f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{tools_json}</pre>"
+            f"</details>\n"
+        )
+    else:
+        tools_html = ""
     messages = list(llm_call.prompt.messages) + [llm_call.output]
-    blocks: list[str] = [config_html]
+    blocks: list[str] = [config_html, tools_html]
 
     for i, msg in enumerate(messages):
         msg_dict = _msg_to_dict(msg)
@@ -739,9 +769,24 @@ def get_step_logs_markdown(
 ) -> str:
     """Extract log information from a step and trajectory metadata.
 
-    Shows EnvironmentOutput.info entries (excluding 'error' and 'message') and trajectory metadata.
+    Shows failure stack trace prominently when present (_failure_text in metadata),
+    then EnvironmentOutput.info entries, then trajectory metadata.
+    For missing stubs, returns early after showing failure info.
     """
     parts = []
+
+    if traj:
+        failure_text = traj.metadata.get("_failure_text", "")
+        if failure_text:
+            parts.append(f"### ❌ System Error\n```\n{failure_text}\n```\n")
+        elif traj.metadata.get("_missing"):
+            parts.append(
+                "### ❌ Missing Trajectory\n\n"
+                "This task has no trajectory data. It may have crashed before any steps were recorded.\n"
+            )
+        # For missing stubs there are no steps, so return now
+        if traj.metadata.get("_missing"):
+            return "\n".join(parts)
 
     if isinstance(step, EnvironmentOutput) and step.info:
         log_entries = {k: v for k, v in step.info.items() if k not in ("error", "message")}
@@ -751,10 +796,37 @@ def get_step_logs_markdown(
                 parts.append(f"**{k}**: `{v}`\n")
 
     if traj and traj.metadata:
-        meta_str = json.dumps(traj.metadata, indent=2)
-        parts.append(f"\n### Trajectory Metadata\n```json\n{meta_str}\n```\n")
+        # Exclude internal keys already displayed above
+        meta = {k: v for k, v in traj.metadata.items() if k not in ("_failure_text", "_missing")}
+        if meta:
+            meta_str = json.dumps(meta, indent=2)
+            parts.append(f"\n### Trajectory Metadata\n```json\n{meta_str}\n```\n")
 
     return "\n".join(parts) if parts else "No log information available."
+
+
+def get_logs_tab_markdown(traj: Trajectory | None, log_content: str) -> str:
+    """Render the Logs tab: episode log file content, with system error banner when present."""
+    if traj is None:
+        return "No trajectory selected."
+
+    parts = []
+
+    failure_text = traj.metadata.get("_failure_text", "")
+    if failure_text:
+        parts.append(f"### ❌ System Error\n```\n{failure_text}\n```\n")
+    elif traj.metadata.get("_missing"):
+        parts.append(
+            "### ❌ Missing Trajectory\n\n"
+            "This task has no trajectory data. It may have crashed before any steps were recorded.\n"
+        )
+
+    if log_content:
+        parts.append(f"```\n{log_content}\n```")
+    else:
+        parts.append("No episode log found.")
+
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -835,6 +907,15 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
     }
 
 
+def _finished_rewards(trajectories: list[Trajectory]) -> list[float]:
+    """Return final rewards for trajectories that ran to completion (success or fail)."""
+    return [
+        compute_trajectory_stats(t)["final_reward"]
+        for t in trajectories
+        if trajectory_status(t) in ("success", "fail")
+    ]
+
+
 def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
     """Aggregate statistics across all trajectories and return as markdown."""
     if not trajectories:
@@ -856,13 +937,14 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         stats = compute_trajectory_stats(traj)
         status = trajectory_status(traj)
 
-        if status in ("success", "completed"):
+        if status in ("success", "fail"):
             finished_rewards.append(stats["final_reward"])
             finished_steps.append(stats["n_env_steps"])
-            finished_durations.append(stats["duration"])
-        elif status == "running":
+            if stats["duration"] is not None:
+                finished_durations.append(stats["duration"])
+        elif status in ("running", "queued"):
             n_running += 1
-        else:
+        else:  # "system_error"
             n_errored += 1
 
         total_prompt += stats["prompt_tokens"]
@@ -935,8 +1017,11 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     """Build one row per unique agent for the top-level agent table.
 
     Groups trajectories by metadata.get('agent_name', 'unknown').
-    Columns: agent_name, n_tasks, n_trajs, avg_reward, total_cost
+    Columns: agent_name, n_trajs, n_err, n_running, avg_reward, total_cost
 
+    n_trajs  — total trajectories for this agent.
+    n_err    — trajectories that ended with a system error (shown in red when > 0).
+    n_running — trajectories still in progress.
     total_cost shows "-" when no cost data is available (e.g. unloaded trajectory stubs).
     """
     groups: dict[str, list[Trajectory]] = {}
@@ -947,18 +1032,23 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     rows = []
     for agent_key in sorted(groups.keys()):
         agent_trajs = groups[agent_key]
-        task_ids = {t.metadata.get("task_id", "unknown") for t in agent_trajs}
         all_stats = [compute_trajectory_stats(t) for t in agent_trajs]
-        rewards = [s["final_reward"] for s in all_stats]
+        statuses = [trajectory_status(t) for t in agent_trajs]
+        finished = _finished_rewards(agent_trajs)
         total_cost = sum(float(s["cost"]) for s in all_stats)
-        avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
+        avg_reward = sum(finished) / len(finished) if finished else 0.0
         cost_str = f"${total_cost:.4f}" if total_cost > 0 else "-"
+        n_err = sum(1 for s in statuses if s == "system_error")
+        n_running = sum(1 for s in statuses if s in ("running", "queued"))
+        n_err_str = f"<span style='color:#dc3545;font-weight:bold'>{n_err}</span>" if n_err > 0 else "0"
+        n_running_str = f"<span style='color:#fd7e14'>{n_running}</span>" if n_running > 0 else "0"
 
         rows.append(
             {
                 "agent_name": agent_key,
-                "n_tasks": len(task_ids),
                 "n_trajs": len(agent_trajs),
+                "n_err": n_err_str,
+                "n_running": n_running_str,
                 "avg_reward": round(avg_reward, 3),
                 "total_cost": cost_str,
             }
@@ -969,11 +1059,12 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
 def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dict[str, Any]]:
     """Build one row per unique task for a selected agent.
 
-    Mirrors seed table columns, showing averages across all seeds under each task.
     Filters trajectories to those matching agent_key.
-    Columns: task_id, n_seeds, avg_reward, avg_steps, avg_duration, avg_tokens, avg_cost
+    Columns: status, task_id, n_seeds, n_success, avg_steps, avg_duration, avg_tokens, avg_cost
 
-    avg_duration is computed from Trajectory.start/end_time (available for metadata stubs).
+    Status priority (worst first): system_error > error > running > queued > success > fail.
+    n_success counts seeds where reward > 0.
+    avg_duration is from Trajectory.start/end_time (available for metadata stubs).
     avg_steps, avg_tokens, avg_cost show "-" when step data hasn't been loaded yet.
     """
     agent_trajs = [t for t in trajectories if t.metadata.get("agent_name", "unknown") == agent_key]
@@ -988,8 +1079,8 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
         task_trajs = groups[task_id]
         all_stats = [compute_trajectory_stats(t) for t in task_trajs]
 
-        rewards = [s["final_reward"] for s in all_stats]
-        avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
+        statuses = [trajectory_status(t) for t in task_trajs]
+        n_success = sum(1 for s in statuses if s == "success")
 
         durations = [
             t.end_time - t.start_time for t in task_trajs if t.start_time is not None and t.end_time is not None
@@ -1008,11 +1099,27 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
         avg_cost = sum(costs) / len(costs) if costs else 0.0
         avg_cost_str = f"${avg_cost:.4f}" if avg_cost > 0 else "-"
 
+        # Aggregate task status: worst-case wins
+        if any(s == "system_error" for s in statuses):
+            task_status = "system_error"
+        elif any(s == "running" for s in statuses):
+            task_status = "running"
+        elif any(s == "queued" for s in statuses):
+            task_status = "queued"
+        elif any(s == "success" for s in statuses):
+            task_status = "success"
+        else:
+            task_status = "fail"
+
+        err_style = "color:#dc3545;font-weight:bold" if task_status == "system_error" else ""
+        task_id_html = f"<span style='{err_style}'>{html_lib.escape(task_id)}</span>" if err_style else html_lib.escape(task_id)
+
         rows.append(
             {
-                "task_id": task_id,
+                "status": _STATUS_HTML[task_status],
+                "task_id": task_id_html,
                 "n_seeds": len(task_trajs),
-                "avg_reward": round(avg_reward, 3),
+                "n_success": n_success,
                 "avg_steps": avg_steps_str,
                 "avg_duration": avg_duration_str,
                 "avg_tokens": avg_tokens_str,
@@ -1030,7 +1137,7 @@ def build_seed_table(
     """Build one row per trajectory (seed) for a selected agent + task.
 
     Filters trajectories by agent_key and task_id.
-    Columns: status, traj_id, reward, n_steps, duration, tokens, cost
+    Columns: status, traj_id, n_steps, duration, tokens, cost
     """
     filtered = [
         t
@@ -1050,9 +1157,8 @@ def build_seed_table(
 
         rows.append(
             {
-                "status": _STATUS_EMOJI[status],
+                "status": _STATUS_HTML[status],
                 "traj_id": traj.id,
-                "reward": round(stats["final_reward"], 3),
                 "n_steps": n_steps,
                 "duration": duration_str,
                 "tokens": tokens_str,

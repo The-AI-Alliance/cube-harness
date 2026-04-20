@@ -465,6 +465,64 @@ class TestGetStepLogsMarkdown:
         result = xray_utils.get_step_logs_markdown(agent_step_with_llm_call, traj)
         assert "agent_a" in result
 
+    def test_shows_failure_text_for_real_trajectory(self) -> None:
+        """A real (non-missing) trajectory with _failure_text shows System Error section."""
+        traj = Trajectory(id="t1", metadata={"task_id": "task_x", "_failure_text": "Ray actor died"})
+        result = xray_utils.get_step_logs_markdown(None, traj)
+        assert "System Error" in result
+        assert "Ray actor died" in result
+
+    def test_failure_text_not_duplicated_in_metadata(self) -> None:
+        """_failure_text should not appear in the Trajectory Metadata JSON block."""
+        env_step = EnvironmentOutput(obs=Observation.from_text("ok"))
+        traj = Trajectory(id="t1", metadata={"task_id": "task_x", "_failure_text": "some trace"})
+        result = xray_utils.get_step_logs_markdown(env_step, traj)
+        # Appears once (in the System Error block), not twice in the metadata JSON
+        assert result.count("some trace") == 1
+
+
+# ---------------------------------------------------------------------------
+# TestTrajectoryStatus
+# ---------------------------------------------------------------------------
+
+
+class TestTrajectoryStatus:
+    def test_missing_no_failure_is_queued(self) -> None:
+        stub = Trajectory(id="t", metadata={"_missing": True})
+        assert xray_utils.trajectory_status(stub) == "queued"
+
+    def test_missing_with_failure_is_system_error(self) -> None:
+        stub = Trajectory(id="t", metadata={"_missing": True, "_failure_text": "Traceback..."})
+        assert xray_utils.trajectory_status(stub) == "system_error"
+
+    def test_running_no_failure_is_running(self) -> None:
+        traj = Trajectory(id="t", start_time=1.0)
+        assert xray_utils.trajectory_status(traj) == "running"
+
+    def test_running_with_failure_is_system_error(self) -> None:
+        """A real trajectory that started but has failure.txt injected is system_error."""
+        traj = Trajectory(id="t", start_time=1.0, metadata={"_failure_text": "Ray actor died"})
+        assert xray_utils.trajectory_status(traj) == "system_error"
+
+    def test_completed_with_reward_is_success(self) -> None:
+        traj = Trajectory(id="t", start_time=1.0, end_time=2.0, reward_info={"reward": 1.0})
+        assert xray_utils.trajectory_status(traj) == "success"
+
+    def test_completed_no_reward_is_fail(self) -> None:
+        traj = Trajectory(id="t", start_time=1.0, end_time=2.0, reward_info={"reward": 0.0})
+        assert xray_utils.trajectory_status(traj) == "fail"
+
+    def test_completed_no_reward_info_is_fail(self) -> None:
+        traj = Trajectory(id="t", start_time=1.0, end_time=2.0)
+        assert xray_utils.trajectory_status(traj) == "fail"
+
+    def test_failure_text_ignored_when_end_time_set(self) -> None:
+        """A completed trajectory with a stale failure.txt should not be system_error."""
+        traj = Trajectory(id="t", start_time=1.0, end_time=2.0,
+                         reward_info={"reward": 1.0},
+                         metadata={"_failure_text": "old error"})
+        assert xray_utils.trajectory_status(traj) == "success"
+
 
 # ---------------------------------------------------------------------------
 # TestComputeTrajectoryStats
@@ -519,13 +577,10 @@ class TestComputeExperimentStats:
         assert "1" in result
         assert "Finished" in result
 
-    def test_counts_failed_trajectories(self) -> None:
-        # A trajectory with end_time set and an error step is considered "error"
-        error_step = TrajectoryStep(
-            output=AgentOutput(error=StepError(error_type="RuntimeError", exception_str="boom", stack_trace=""))
-        )
-        failed_traj = Trajectory(id="failed", start_time=1.0, end_time=2.0, steps=[error_step])
-        result = xray_utils.compute_experiment_stats([failed_traj])
+    def test_counts_system_error_trajectories(self) -> None:
+        # A stub with _missing=True and _failure_text is a system_error → counted as errored
+        crashed_stub = Trajectory(id="crash", metadata={"_missing": True, "_failure_text": "Traceback: ..."})
+        result = xray_utils.compute_experiment_stats([crashed_stub])
         assert "Failed" in result
 
     def test_counts_running_trajectories(self) -> None:
@@ -570,10 +625,16 @@ class TestBuildAgentTable:
         rows = xray_utils.build_agent_table([traj])
         assert rows[0]["agent_name"] == "unknown"
 
-    def test_counts_tasks(self, multi_agent_trajectories: list[Trajectory]) -> None:
+    def test_counts_trajs(self, multi_agent_trajectories: list[Trajectory]) -> None:
         rows = xray_utils.build_agent_table(multi_agent_trajectories)
         agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
-        assert agent_a_row["n_tasks"] == 2
+        # fixture: 2 tasks × 2 seeds = 4 trajectories per agent
+        assert agent_a_row["n_trajs"] == 4
+
+    def test_error_count_zero_for_clean_trajs(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
+        assert "0" in agent_a_row["n_err"]  # "0" with no red HTML span
 
     def test_total_cost_dash_for_unloaded_stubs(self, multi_agent_trajectories: list[Trajectory]) -> None:
         """total_cost shows '-' when no cost data is available (metadata stubs have steps=[])."""
@@ -610,18 +671,19 @@ class TestBuildTaskTable:
         rows = xray_utils.build_task_table(multi_agent_trajectories, "nonexistent_agent")
         assert rows == []
 
-    def test_has_no_success_rate_column(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """success_rate was removed; only avg_reward is shown."""
+    def test_has_n_success_not_avg_reward(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """avg_reward replaced by n_success; neither success_rate nor avg_reward should be present."""
         rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
         assert len(rows) > 0
         assert "success_rate" not in rows[0]
-        assert "avg_reward" in rows[0]
+        assert "avg_reward" not in rows[0]
+        assert "n_success" in rows[0]
 
-    def test_avg_reward_value(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_reward is mean numeric reward (0.5 for 1.0 + 0.0)."""
+    def test_n_success_value(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """n_success counts seeds with reward > 0 (seed 0 has reward=1.0, seed 1 has 0.0)."""
         rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
         task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["avg_reward"] == 0.5
+        assert task_1_row["n_success"] == 1
 
     def test_avg_duration_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
         """avg_duration is present and shows a formatted string."""
@@ -676,11 +738,11 @@ class TestBuildSeedTable:
         rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_b", "task_2")
         assert len(rows) == 2
 
-    def test_includes_reward(self, multi_agent_trajectories: list[Trajectory]) -> None:
+    def test_no_reward_column(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """reward column was removed; status icon captures success/fail instead."""
         rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "task_1")
-        rewards = [r["reward"] for r in rows]
-        assert 1.0 in rewards
-        assert 0.0 in rewards
+        assert len(rows) > 0
+        assert "reward" not in rows[0]
 
     def test_returns_empty_for_unknown_combination(self, multi_agent_trajectories: list[Trajectory]) -> None:
         rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "nonexistent_task")

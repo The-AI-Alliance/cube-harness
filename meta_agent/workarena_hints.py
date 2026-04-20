@@ -122,7 +122,7 @@ _SORT_HINT: str = (
     "3. Find the matching option in the AXTree and click it\n"
     "4. Verify the field label updated — if not, try bid+1 for the button\n"
     "Never retry the same BID twice.\n\n"
-    "DIRECTION is a native <select>: browser_select_option(bid, 'a to z') or 'z to a'.\n\n"
+    "DIRECTION is a native <select>: select_option(bid=<bid>, options='a to z') or 'z to a'.\n\n"
     "To add another sort field: click 'Add Sort', then repeat.\n"
     "When all sort fields and directions are set: click 'Run' to apply."
 )
@@ -139,9 +139,9 @@ _FILTER_HINT: str = (
     "Common operators: 'is', 'is not', 'contains', 'starts with', 'is empty'.\n"
     "For 'is empty': select operator only, no value field needed.\n\n"
     "VALUE field types:\n"
-    "  - Choice/boolean: <select> -> browser_select_option()\n"
+    "  - Choice/boolean: <select> -> select_option()\n"
     "  - Reference (names, users): keyboard_type_into() -> noop() -> click suggestion\n"
-    "  - Plain text: browser_type()\n\n"
+    "  - Plain text: fill()\n\n"
     "To add conditions: click 'AND', then repeat.\n\n"
     "After setting all conditions: click 'Run'. "
     "The page will reload with filtered results and the filter panel will close. "
@@ -158,8 +158,8 @@ _CREATE_HINT: str = (
     "4. Verify the field now shows the selected value, not blank\n\n"
     "NEVER use fill() on reference fields — fill() bypasses autocomplete and "
     "leaves the field unresolved, causing silent validation failure.\n"
-    "For plain text fields: browser_type(). "
-    "For <select> dropdowns: browser_select_option()."
+    "For plain text fields: fill(). "
+    "For <select> dropdowns: select_option()."
 )
 
 WORKARENA_TASK_HINTS: dict[str, str] = {

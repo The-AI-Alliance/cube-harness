@@ -51,16 +51,6 @@ MODEL_CONFIGS: dict[str, LLMConfig] = {
 }
 
 
-def make_agent(llm_config: LLMConfig, use_hints: bool = False) -> GennyConfig:
-    return GennyConfig(
-        llm_config=llm_config,
-        max_actions=40,
-        render_last_n_obs=1,
-        task_precision=WORKARENA_TASK_PRECISION,
-        task_hints=WORKARENA_TASK_HINTS if use_hints else {},
-    )
-
-
 def run_for_model(
     model_key: str,
     llm_config: LLMConfig,
@@ -76,13 +66,17 @@ def run_for_model(
                 use_screenshot=True,
                 use_axtree=True,
                 use_html=False,
+                axtree_with_clickable=True,
+                axtree_with_visible=True,
             ),
             ChatToolConfig(),
             WorkArenaInfeasibleToolConfig(),
         ]
     )
 
-    benchmark = WorkArenaBenchmark(n_seeds_l1=1, default_tool_config=tool_config).named_subset("l1")
+    benchmark = WorkArenaBenchmark(
+        n_seeds_l1=5, default_tool_config=tool_config
+    ).named_subset("l1")
     benchmark.setup()
 
     suffix = "hints" if use_hints else "nohints"
@@ -91,14 +85,24 @@ def run_for_model(
         retry_failed = True
         resume = True
     else:
-        output_dir = make_experiment_output_dir("genny", f"workarena-l1-{suffix}-{model_key}")
+        output_dir = make_experiment_output_dir(
+            "genny", f"workarena-l1-{suffix}-{model_key}"
+        )
         retry_failed = False
         resume = False
+
+        agent_config = GennyConfig(
+            llm_config=llm_config,
+            max_actions=40,
+            render_last_n_obs=1,
+            # task_precision=WORKARENA_TASK_PRECISION,
+            task_hints=WORKARENA_TASK_HINTS if use_hints else {},
+        )
 
     exp = Experiment(
         name=f"workarena-l1-{suffix}-{model_key}",
         output_dir=output_dir,
-        agent_config=make_agent(llm_config, use_hints=use_hints),
+        agent_config=agent_config,
         benchmark=benchmark,
         max_steps=40,
         retry_failed=retry_failed,
@@ -111,7 +115,13 @@ def run_for_model(
         run_with_ray(exp, n_cpus=5)
 
 
-def main(debug: bool, headless: bool, models: list[str], use_hints: bool, retry_dir: Path | None) -> None:
+def main(
+    debug: bool,
+    headless: bool,
+    models: list[str],
+    use_hints: bool,
+    retry_dir: Path | None,
+) -> None:
     for model_key in models:
         llm_config = MODEL_CONFIGS[model_key]
         hint_label = "WITH hints" if use_hints else "NO hints (code fixes only)"
@@ -121,23 +131,38 @@ def main(debug: bool, headless: bool, models: list[str], use_hints: bool, retry_
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    args_set = set(args)
-    debug = "debug" in args_set
-    headless = not debug and "headless-off" not in args_set
-    use_hints = "hints" in args_set
+    main(
+        debug=False,
+        headless=True,
+        models=["gpt-5.4-mini"],
+        use_hints=False,
+        retry_dir=None,
+    )
 
-    retry_dir: Path | None = None
-    if "retry" in args_set:
-        retry_idx = args.index("retry")
-        if retry_idx + 1 < len(args):
-            retry_dir = Path(args[retry_idx + 1])
-        else:
-            print("ERROR: 'retry' flag requires a path argument", file=sys.stderr)
-            sys.exit(1)
+# if __name__ == "__main__":
+#     args = sys.argv[1:]
+#     args_set = set(args)
+#     debug = "debug" in args_set
+#     headless = not debug and "headless-off" not in args_set
+#     use_hints = "hints" in args_set
 
-    selected = [k for k in MODEL_CONFIGS if k in args_set]
-    if not selected:
-        selected = ["gpt-5.4-mini"]
+#     retry_dir: Path | None = None
+#     if "retry" in args_set:
+#         retry_idx = args.index("retry")
+#         if retry_idx + 1 < len(args):
+#             retry_dir = Path(args[retry_idx + 1])
+#         else:
+#             print("ERROR: 'retry' flag requires a path argument", file=sys.stderr)
+#             sys.exit(1)
 
-    main(debug=debug, headless=headless, models=selected, use_hints=use_hints, retry_dir=retry_dir)
+#     selected = [k for k in MODEL_CONFIGS if k in args_set]
+#     if not selected:
+#         selected = ["gpt-5.4-mini"]
+
+#     main(
+#         debug=debug,
+#         headless=headless,
+#         models=selected,
+#         use_hints=use_hints,
+#         retry_dir=retry_dir,
+#     )
