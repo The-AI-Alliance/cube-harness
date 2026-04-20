@@ -1,14 +1,15 @@
 import json
 
+from cube.benchmark import Benchmark as CubeBenchmark
+
 from cube_harness.agent import AgentConfig
 from cube_harness.core import TypedBaseModel
 from cube_harness.experiment import Experiment
-from cube_harness.legacy import Benchmark
-from tests.conftest import MockAgentConfig, MockToolConfig, SerializableBenchmark
+from tests.conftest import MockAgentConfig, MockCubeBenchmark
 
 
 class TestAL2BaseModel:
-    """Tests for AL2BaseModel polymorphic serialization/deserialization."""
+    """Tests for TypedBaseModel polymorphic serialization/deserialization."""
 
     def test_serialization_includes_type_field(self):
         """Test that serialization includes _type field with class path."""
@@ -46,15 +47,13 @@ class TestAL2BaseModel:
 
     def test_nested_polymorphic_deserialization(self):
         """Test that nested polymorphic models are correctly deserialized."""
-        original = SerializableBenchmark(tool_config=MockToolConfig())
+        original = MockCubeBenchmark()
         json_str = original.model_dump_json()
         data = json.loads(json_str)
 
-        restored = Benchmark.model_validate(data)
+        restored = CubeBenchmark.model_validate(data)
 
-        # Both Benchmark and its nested env_config should be correct types
-        assert type(restored) is SerializableBenchmark
-        assert type(restored.tool_config) is MockToolConfig
+        assert type(restored) is MockCubeBenchmark
 
     def test_experiment_roundtrip(self, tmp_dir):
         """Test full round-trip of Experiment with polymorphic fields."""
@@ -62,7 +61,7 @@ class TestAL2BaseModel:
             name="test_exp",
             output_dir=tmp_dir,
             agent_config=MockAgentConfig(name="test_agent"),
-            benchmark=SerializableBenchmark(tool_config=MockToolConfig()),
+            benchmark=MockCubeBenchmark(),
         )
 
         # serialize_as_any=True is needed to serialize subclass-specific fields
@@ -73,5 +72,4 @@ class TestAL2BaseModel:
         assert restored.name == "test_exp"
         assert type(restored.agent_config) is MockAgentConfig
         assert restored.agent_config.name == "test_agent"
-        assert type(restored.benchmark) is SerializableBenchmark
-        assert type(restored.benchmark.tool_config) is MockToolConfig
+        assert type(restored.benchmark) is MockCubeBenchmark
