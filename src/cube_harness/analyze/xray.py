@@ -1278,7 +1278,16 @@ def run_xray(
                 )
             with gr.Tab("Tasks") as tasks_tab:
                 task_table = gr.DataFrame(
-                    headers=["status", "task_id", "n_seeds", "n_success", "avg_steps", "avg_duration", "avg_tokens", "avg_cost"],
+                    headers=[
+                        "status",
+                        "task_id",
+                        "n_seeds",
+                        "n_success",
+                        "avg_steps",
+                        "avg_duration",
+                        "avg_tokens",
+                        "avg_cost",
+                    ],
                     datatype="html",
                     max_height=260,
                     show_label=False,

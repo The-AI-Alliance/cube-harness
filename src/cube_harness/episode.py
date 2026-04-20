@@ -193,7 +193,11 @@ class Episode:
                             trajectory.steps.append(env_step)
                             raise e
 
-                        logger.info(colored(f"Turn {turns} Env output: done={env_output.done} reward={env_output.reward}", "blue"))
+                        logger.info(
+                            colored(
+                                f"Turn {turns} Env output: done={env_output.done} reward={env_output.reward}", "blue"
+                            )
+                        )
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), env_step)

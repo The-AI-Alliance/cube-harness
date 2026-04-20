@@ -2,12 +2,11 @@
 
 import logging
 import time
+import traceback
 from uuid import uuid4
 
 import ray
 from ray.util.state.api import list_tasks
-
-import traceback
 
 from cube_harness.core import Trajectory
 from cube_harness.episode import Episode
@@ -154,7 +153,9 @@ def _poll_ray(
                         ray.cancel(ref, force=False)
                     else:
                         msg = f"Episode timed out after {elapsed:.0f}s"
-                        logger.error(f"Episode {traj_id} timed out after {elapsed:.0f}s — force killing after grace period")
+                        logger.error(
+                            f"Episode {traj_id} timed out after {elapsed:.0f}s — force killing after grace period"
+                        )
                         ray.cancel(ref, force=True)
                         results.failures[task_id] = msg
                         storage.save_failure(traj_id, msg)
