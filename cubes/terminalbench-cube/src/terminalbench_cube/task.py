@@ -9,12 +9,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import docker as docker_sdk
 from pydantic import PrivateAttr
 
-from cube.backends.local import LocalContainer
 from cube.benchmark import RuntimeContext
-from cube.container import Container, ContainerBackend
+from cube.container import ContainerBackend
 from cube.core import Observation
 from cube.resource import DockerServiceConfig, ResourceHandle
 from cube.task import Task, TaskConfig, TaskMetadata
@@ -95,13 +93,9 @@ class TerminalBenchTask(Task):
                 infra.provision(resource)
             self._resource_handle = infra.launch(resource)
 
-            # The launch_script started exactly one container; wrap it as a Container
-            # so the existing TerminalBenchTool contract (which expects `Container.exec`)
-            # works unchanged.
-            client = docker_sdk.from_env()
-            docker_container = client.containers.get(self._resource_handle._container_ids[0])
-            # remove_on_close=False — the ResourceHandle owns container lifecycle.
-            self._container = LocalContainer(docker_container, client, remove_on_close=False)
+            # Every per-task-container handle exposes ``.container`` (a cube.container.Container)
+            # for the tool layer to drive — uniform across Local/Daytona/Toolkit.
+            self._container = self._resource_handle.container
             self._tool = self.tool_config.make(container=self._container)
             return
 

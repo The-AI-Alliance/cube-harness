@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from cube.backends import LocalContainerBackend
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
+from cube.infra_local import LocalInfraConfig
+from cube.resource import InfraConfig
 
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
@@ -51,11 +52,16 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> Benchmark:
-    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks."""
-    container_backend = LocalContainerBackend()
+def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
+    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks.
+
+    Args:
+        infra: InfraConfig that provisions and launches per-task containers.
+               Defaults to ``LocalInfraConfig()``. Override to target Daytona,
+               Toolkit, etc.
+    """
     bench = SWEBenchVerifiedBenchmark(
-        container_backend=container_backend,
+        infra=infra or LocalInfraConfig(),
         oracle_mode=True,
     )
     bench.install()

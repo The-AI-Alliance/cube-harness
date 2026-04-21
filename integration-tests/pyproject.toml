@@ -5,6 +5,22 @@ description = "End-to-end integration tests for CUBE infra backends + benchmark 
 requires-python = ">=3.12"
 dependencies = ["cube-standard", "pytest>=8.0"]
 
+[tool.uv]
+# Override transitive `cube-standard` URL so that packages pulled from PyPI
+# (e.g. `cube-vm-backend` via `osworld-cube`) defer to our local path pin.
+override-dependencies = [
+    "cube-standard @ file:///${PROJECT_ROOT}/../../cube-standard",
+]
+# Each backend's dependency tree (aws/azure/daytona) pulls different transitive
+# constraints; declaring them as conflicts lets uv resolve one group at a time.
+conflicts = [
+    [
+        {group = "aws"},
+        {group = "azure"},
+        {group = "daytona"},
+    ],
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -25,11 +41,27 @@ azure = [
 ]
 local = [
     "terminalbench-cube",
+    "swebench-verified-cube",
+    "docker>=7.1.0",
+    "tenacity>=9.1.4",
+]
+daytona = [
+    "cube-infra-daytona",
+    "swebench-verified-cube",
+    "terminalbench-cube",
 ]
 
 [tool.uv.sources]
-cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }  # TODO: remove once cube-infra-aws released
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }  # TODO: remove once cube-infra-azure released
+# Local path pin for cube-standard unblocks pre-release changes to core (e.g.
+# LocalDockerServiceHandle.container).  Drop once an rc6 is published.
+cube-standard = { path = "../../cube-standard", editable = true }
+# aws/azure/daytona all come from the same local cube-standard workspace so their
+# `cube-standard` transitive dep resolves to the same URL (avoids uv conflicts).
+cube-infra-aws = { path = "../../cube-standard/cube-resources/cube-infra-aws", editable = true }
+cube-infra-azure = { path = "../../cube-standard/cube-resources/cube-infra-azure", editable = true }
+cube-infra-daytona = { path = "../../cube-standard/cube-resources/cube-infra-daytona", editable = true }
+cube-vm-backend = { path = "../../cube-standard/cube-resources/cube-vm-backend", editable = true }
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
 terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
+swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }

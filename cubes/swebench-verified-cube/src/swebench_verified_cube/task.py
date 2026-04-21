@@ -6,9 +6,12 @@ import logging
 import shlex
 from typing import Any
 
+from pydantic import PrivateAttr
+
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
+from cube.resource import DockerServiceConfig, ResourceHandle
 from cube.task import Task, TaskConfig, TaskMetadata
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
@@ -18,6 +21,18 @@ logger = logging.getLogger(__name__)
 # POSIX-compatible: use `.` instead of `source`, skip silently if conda is absent.
 # Works with both bash (Daytona/Modal/Toolkit backends) and sh/dash (LocalContainer).
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
+
+
+def _build_launch_script(container_name: str, image: str, ram_gb: float, cpu_cores: float) -> str:
+    """Return a bash snippet that `docker run`s the task image detached as a long-lived container."""
+    return (
+        f"docker run -d "
+        f"--name {container_name} "
+        f"--memory={int(ram_gb * 1024)}m "
+        f"--cpus={cpu_cores} "
+        f"{image} "
+        f"sleep infinity"
+    )
 
 
 class SWEBenchVerifiedTaskMetadata(TaskMetadata):
@@ -48,6 +63,36 @@ class SWEBenchVerifiedTask(Task):
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+
+    _resource_handle: ResourceHandle | None = PrivateAttr(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Launch the per-task container via the benchmark's infra, then build the tool.
+
+        Expects ``runtime_context["infra"]`` (see openspec ``deprecate-container-backend``).
+        Falls back to the legacy ``container_backend`` path when no infra is provided.
+        """
+        if self.runtime_context is not None and "infra" in self.runtime_context:
+            infra = self.runtime_context["infra"]
+            image = self.metadata.container_config.image  # type: ignore[union-attr]
+            ram_gb = self.metadata.container_config.ram_gb  # type: ignore[union-attr]
+            cpu_cores = self.metadata.container_config.cpu_cores  # type: ignore[union-attr]
+
+            container_name = f"swebench-verified-{self.metadata.id}-{id(self):x}"
+            resource = DockerServiceConfig(
+                name=f"swebench-verified-{self.metadata.id}",
+                scope="task",
+                docker_images=[image],
+                launch_script=_build_launch_script(container_name, image, ram_gb, cpu_cores),
+            )
+            if infra.provision_status(resource) == "needs_provisioning":
+                infra.provision(resource)
+            self._resource_handle = infra.launch(resource)
+            self._container = self._resource_handle.container
+            self._tool = self.tool_config.make(container=self._container)
+            return
+
+        super().model_post_init(__context)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -104,7 +149,12 @@ class SWEBenchVerifiedTask(Task):
 
     def close(self) -> None:
         super().close()
-        if self._container is not None:
+        if self._resource_handle is not None:
+            logger.info(f"Closing resource handle for task {self.metadata.id}")
+            self._resource_handle.close()
+            self._resource_handle = None
+            self._container = None
+        elif self._container is not None:
             logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
             self._container.stop()
             self._container = None
@@ -189,8 +239,12 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchVerifiedTask:
-        if container_backend is None:
-            raise ValueError("SWEBenchVerifiedTaskConfig.make() requires a container_backend")
+        has_infra = runtime_context is not None and "infra" in runtime_context
+        if not has_infra and container_backend is None:
+            raise ValueError(
+                "SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'] "
+                "(preferred) or a legacy container_backend."
+            )
 
         # Import here to avoid circular import (benchmark imports task)
         from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
