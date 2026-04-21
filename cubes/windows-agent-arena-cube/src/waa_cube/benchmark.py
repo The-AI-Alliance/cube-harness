@@ -24,14 +24,16 @@ import logging
 from collections.abc import Generator
 from typing import ClassVar
 
+from cube import LocalInfraConfig
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.container import ContainerBackend
+from cube.resource import InfraConfig, ResourceConfig
 from cube.task import TaskConfig, TaskMetadata
-from cube.vm import VMBackend
+from pydantic import Field
 
+from waa_cube.azure import WAA_WINDOWS_RESOURCE
 from waa_cube.computer import ComputerConfig
 from waa_cube.task import WAATask
-from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +50,11 @@ class WAATaskConfig(TaskConfig):
         task_id:     inherited from TaskConfig
         tool_config: inherited from TaskConfig
         seed:        inherited (ignored — tasks are deterministic)
-        vm_backend:  VMBackend to use (passed by WAABenchmark.get_task_configs())
         metadata:    TaskMetadata embedded at config creation time so Ray workers
                      don't need to look it up via the class variable.
     """
 
-    vm_backend: VMBackend | None = None
+    infra: InfraConfig | None = None
     metadata: TaskMetadata | None = None
 
     def make(
@@ -73,7 +74,7 @@ class WAATaskConfig(TaskConfig):
         return WAATask(
             metadata=metadata,
             tool_config=self.tool_config,
-            vm_backend=self.vm_backend,
+            infra=self.infra,
             runtime_context=runtime_context,
             container_backend=container_backend,
         )
@@ -97,7 +98,6 @@ class WAABenchmark(Benchmark):
     Constructor params:
         default_tool_config:  ComputerConfig
         use_som:              bool
-        vm_backend:           WAADockerVMBackend | None
     """
 
     # ------------------------------------------------------------------
@@ -111,7 +111,7 @@ class WAABenchmark(Benchmark):
         authors=["Rogerio Bonatti et al."],
         license="MIT",
         requirements={
-            "vm": "Windows 11 (Docker + QEMU)",
+            "vm": "Windows 11 (infra-managed VM)",
             "ram_gb": 8,
             "disk_gb": 60,
         },
@@ -136,22 +136,24 @@ class WAABenchmark(Benchmark):
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks."""
 
-    vm_backend: VMBackend | None = None
-    """VM backend used to provision the WAA Docker VM. If None, tasks will fail unless
-    a VM is attached externally via computer.attach_vm()."""
+    infra: InfraConfig | None = Field(default_factory=LocalInfraConfig)
+    """InfraConfig used to launch VMs (defaults to LocalInfraConfig)."""
+
+    resources: list[ResourceConfig] = [WAA_WINDOWS_RESOURCE]
+    """Resources required by this benchmark. Passed to infra.provision() before eval."""
 
     # ------------------------------------------------------------------
-    # get_task_configs() — inject vm_backend into each config
+    # get_task_configs() — inject infra into each config
     # ------------------------------------------------------------------
 
     def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield WAATaskConfig objects with vm_backend and metadata injected."""
+        """Yield WAATaskConfig objects with infra and metadata injected."""
         for tm in self.task_metadata.values():
             yield WAATaskConfig(
                 task_id=tm.id,
                 tool_config=self.default_tool_config,
                 seed=None,
-                vm_backend=self.vm_backend,
+                infra=self.infra,
                 metadata=tm,
             )
 
@@ -170,25 +172,23 @@ class WAABenchmark(Benchmark):
             object.__setattr__(self, "task_metadata", {**self.task_metadata, **loaded})
             type(self).task_metadata = self.task_metadata
 
-        if isinstance(self.vm_backend, WAADockerVMBackend):
-            self.vm_backend.cleanup_stale_overlays()
+        if self.infra is None:
+            raise RuntimeError("WAABenchmark requires an InfraConfig. Set infra= when constructing.")
+
+        # Ensure all declared resources are provisioned (idempotent).
+        for resource in self.resources:
+            if self.infra.provision_status(resource) == "ready":
+                logger.info("Resource %s already provisioned", resource.name)
+                continue
+            logger.info("Provisioning resource %s...", resource.name)
+            self.infra.provision(resource)
 
         self._runtime_context = {"waa": True}
         logger.info("WAABenchmark ready with %d tasks", len(self.task_metadata))
 
     def install(self) -> None:
-        """Prepare the Windows VM image if not already built.
-
-        Delegates to WAADockerVMBackend.install() when vm_backend is configured.
-        No-op if no vm_backend is set (e.g. when using an externally managed VM).
-        """
-        if self.vm_backend is None:
-            logger.info("No vm_backend set — skipping WAA image preparation")
-            return
-        if not isinstance(self.vm_backend, WAADockerVMBackend):
-            logger.info("vm_backend is not WAADockerVMBackend — skipping image preparation")
-            return
-        self.vm_backend.install()
+        """No-op for infra-based execution (resources are provisioned in setup)."""
+        logger.info("WAABenchmark.install() — nothing to do")
 
     def close(self) -> None:
         """No global resources to release — VMs are stopped per-task."""

@@ -49,6 +49,10 @@ waa-cube = "waa_cube.benchmark:WAABenchmark"
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
 
+[tool.uv.sources]
+cube-standard = { path = "../../cube-standard" }
+cube-computer-tool = { path = "../../cube-standard/cube-tools/cube-computer-tool" }
+
 [dependency-groups]
 dev = [
     "pytest>=9.0",

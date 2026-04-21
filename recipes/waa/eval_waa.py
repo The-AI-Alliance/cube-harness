@@ -20,7 +20,6 @@ import sys
 
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
-from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -86,8 +85,6 @@ def main(debug: bool) -> None:
 
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
-        vm_backend=WAADockerVMBackend(cpu_cores=8),
-        test_set_name="test_small.json",
     )
     benchmark.install()
     benchmark.setup()

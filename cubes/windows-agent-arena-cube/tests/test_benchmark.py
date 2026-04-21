@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from cube.core import Action, Observation, TextContent
+from cube.resource import ResourceHandle
 from cube.task import TaskMetadata
 from PIL import Image
 
@@ -42,17 +43,11 @@ def _make_mock_guest(screenshot: bytes | None = None, axtree: str = "<root/>") -
     return guest
 
 
-def _make_mock_vm(
-    server_port: int = 15000,
-    chromium_port: int = 19222,
-    vlc_port: int = 18080,
-) -> MagicMock:
-    vm = MagicMock()
-    vm.endpoint = f"http://localhost:{server_port}"
-    vm.server_port = server_port
-    vm.chromium_port = chromium_port
-    vm.vlc_port = vlc_port
-    return vm
+def _make_mock_handle(server_port: int = 15000) -> MagicMock:
+    handle = MagicMock(spec=ResourceHandle)
+    handle.endpoint = f"http://localhost:{server_port}"
+    handle.run_id = "test-run-id-1234"
+    return handle
 
 
 def _make_task_metadata(
@@ -71,6 +66,14 @@ def _make_task_metadata(
             "related_apps": ["vscode"],
         },
     )
+
+
+def _make_mock_infra(ready: bool = True) -> MagicMock:
+    from cube.resource import InfraConfig
+
+    infra = MagicMock(spec=InfraConfig)
+    infra.provision_status.return_value = "ready" if ready else "needs_provisioning"
+    return infra
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +115,7 @@ class TestWAATask:
         task = WAATask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
         assert task._computer is not None
         assert task._computer._vm is None
-        assert task._vm is None
+        assert task._resource_handle is None
 
     def test_os_type_is_always_windows(self) -> None:
         from waa_cube.computer import ComputerConfig
@@ -121,15 +124,15 @@ class TestWAATask:
         task = WAATask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
         assert task._os_type() == "windows"
 
-    def test_reset_with_vm_backend_launches_vm(self) -> None:
-        from cube.vm import VMBackend
+    def test_reset_with_infra_launches_vm(self) -> None:
+        from cube.resource import InfraConfig
 
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
 
-        mock_vm = _make_mock_vm()
-        mock_backend = MagicMock(spec=VMBackend)
-        mock_backend.launch.return_value = mock_vm
+        mock_handle = _make_mock_handle()
+        mock_infra = MagicMock(spec=InfraConfig)
+        mock_infra.launch.return_value = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -140,21 +143,23 @@ class TestWAATask:
             task = WAATask(
                 metadata=_make_task_metadata(),
                 tool_config=ComputerConfig(),
-                vm_backend=mock_backend,
+                infra=mock_infra,
             )
             obs, info = task.reset()
 
-        mock_backend.launch.assert_called_once()
-        assert task._vm is mock_vm
+        mock_infra.launch.assert_called_once()
+        assert task._resource_handle is mock_handle
         assert isinstance(obs, Observation)
 
     def test_reset_returns_goal_in_obs(self) -> None:
+        from cube.resource import InfraConfig
+
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
 
-        task = WAATask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        mock_infra = MagicMock(spec=InfraConfig)
+        mock_infra.launch.return_value = mock_handle
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -162,7 +167,7 @@ class TestWAATask:
             patch(PATCH_SLEEP),
         ):
             mock_ga_cls.return_value = _make_mock_guest()
-            task._computer.attach_vm(mock_vm)
+            task = WAATask(metadata=_make_task_metadata(), tool_config=ComputerConfig(), infra=mock_infra)
             obs, info = task.reset()
 
         texts = [c.data for c in obs.contents if isinstance(c, TextContent)]
@@ -175,7 +180,6 @@ class TestWAATask:
         from waa_cube.task import WAATask
 
         task = WAATask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        task._vm = _make_mock_vm()
         task._computer._guest = _make_mock_guest()
 
         with patch(PATCH_EVALUATOR) as mock_eval_cls:
@@ -208,29 +212,34 @@ class TestWAATask:
         task._computer._is_done = True
         assert task.finished(Observation()) is True
 
-    def test_close_stops_vm(self) -> None:
+    def test_close_closes_resource_handle(self) -> None:
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
 
         task = WAATask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
+        mock_handle = _make_mock_handle()
+        task._resource_handle = mock_handle
         task._computer._guest = _make_mock_guest()
 
         task.close()
-        mock_vm.stop.assert_called_once()
-        assert task._vm is None
+        mock_handle.close.assert_called_once()
+        assert task._resource_handle is None
 
     def test_step_done_triggers_evaluate(self) -> None:
+        from cube.resource import InfraConfig
+
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
+
+        mock_handle = _make_mock_handle()
+        mock_infra = MagicMock(spec=InfraConfig)
+        mock_infra.launch.return_value = mock_handle
 
         task = WAATask(
             metadata=_make_task_metadata(),
             tool_config=ComputerConfig(observe_after_action=False),
+            infra=mock_infra,
         )
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
 
         with (
             patch(PATCH_GUEST_AGENT) as mock_ga_cls,
@@ -240,15 +249,13 @@ class TestWAATask:
         ):
             mock_ga_cls.return_value = _make_mock_guest()
             mock_eval_cls.return_value.evaluate.return_value = 1.0
-            task._computer.attach_vm(mock_vm)
             task.reset()
             env_out = task.step(Action(name="done", arguments={}))
 
         assert env_out.done is True
         assert env_out.reward == 1.0
 
-    def test_restore_snapshot_called_on_reset(self) -> None:
-        """VM.restore_snapshot() is called with the task's snapshot name."""
+    def test_infra_required_for_reset(self) -> None:
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
 
@@ -256,51 +263,12 @@ class TestWAATask:
             metadata=_make_task_metadata(snapshot="vscode"),
             tool_config=ComputerConfig(),
         )
-        mock_vm = _make_mock_vm()
-        task._vm = mock_vm
-
-        with (
-            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
-            patch(PATCH_SETUP_CTRL),
-            patch(PATCH_SLEEP),
-        ):
-            mock_ga_cls.return_value = _make_mock_guest()
-            task._computer.attach_vm(mock_vm)
-            task.reset()
-
-        mock_vm.restore_snapshot.assert_called_once_with("vscode")
-
-    def test_reset_relaunches_stale_vm(self) -> None:
-        """A stale VM handle is replaced if the underlying Docker container died."""
-        from waa_cube.computer import ComputerConfig
-        from waa_cube.task import WAATask
-        from waa_cube.vm_backend.backend import WAADockerVMBackend
-
-        stale_vm = _make_mock_vm(server_port=15000)
-        stale_vm.is_alive.return_value = False
-        fresh_vm = _make_mock_vm(server_port=15001)
-
-        mock_backend = WAADockerVMBackend()
-
-        task = WAATask(
-            metadata=_make_task_metadata(snapshot="vscode"),
-            tool_config=ComputerConfig(),
-            vm_backend=mock_backend,
-        )
-        task._vm = stale_vm
-
-        with (
-            patch(PATCH_GUEST_AGENT) as mock_ga_cls,
-            patch(PATCH_SETUP_CTRL),
-            patch(PATCH_SLEEP),
-            patch.object(WAADockerVMBackend, "launch", return_value=fresh_vm) as mock_launch,
-        ):
-            mock_ga_cls.return_value = _make_mock_guest()
-            task.reset()
-
-        stale_vm.stop.assert_called_once()
-        mock_launch.assert_called_once()
-        assert task._vm is fresh_vm
+        with patch(PATCH_GUEST_AGENT):
+            try:
+                task.reset()
+                assert False, "Expected RuntimeError"
+            except RuntimeError as exc:
+                assert "requires an InfraConfig" in str(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +304,7 @@ class TestWAABenchmark:
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
 
-        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), infra=_make_mock_infra())
         bench.setup()
         assert len(bench.task_metadata) > 100
 
@@ -344,7 +312,7 @@ class TestWAABenchmark:
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
 
-        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), infra=_make_mock_infra())
         bench.setup()
 
         keep_ids = [
@@ -361,7 +329,7 @@ class TestWAABenchmark:
         from waa_cube.benchmark import WAABenchmark, WAATaskConfig
         from waa_cube.computer import ComputerConfig
 
-        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), infra=_make_mock_infra())
         bench.setup()
 
         configs = list(bench.get_task_configs())
@@ -375,7 +343,7 @@ class TestWAABenchmark:
         from waa_cube.computer import ComputerConfig
         from waa_cube.task import WAATask
 
-        bench = WAABenchmark(default_tool_config=ComputerConfig())
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), infra=_make_mock_infra())
         bench.setup()
 
         cfg = next(bench.get_task_configs())
@@ -384,20 +352,17 @@ class TestWAABenchmark:
         assert isinstance(task, WAATask)
         assert task.metadata.id == cfg.task_id
 
-    def test_vm_backend_injected_into_configs(self) -> None:
+    def test_setup_calls_provision_when_not_ready(self) -> None:
+        from cube.resource import InfraConfig
+
         from waa_cube.benchmark import WAABenchmark
         from waa_cube.computer import ComputerConfig
-        from waa_cube.vm_backend.backend import WAADockerVMBackend
 
-        mock_backend = MagicMock(spec=WAADockerVMBackend)
-        bench = WAABenchmark(
-            default_tool_config=ComputerConfig(),
-            vm_backend=mock_backend,
-        )
+        mock_infra = MagicMock(spec=InfraConfig)
+        mock_infra.provision_status.return_value = "needs_provisioning"
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), infra=mock_infra)
         bench.setup()
-
-        for cfg in bench.get_task_configs():
-            assert cfg.vm_backend is mock_backend
+        assert mock_infra.provision.call_count == len(bench.resources)
 
     def test_debug_tasks_overlay(self) -> None:
         """tasks_file overlays debug tasks onto shipped metadata."""
@@ -406,7 +371,7 @@ class TestWAABenchmark:
         from waa_cube.computer import ComputerConfig
 
         debug_file = str(Path(waa_cube.__file__).parent / "debug_tasks.json")
-        bench = WAABenchmark(default_tool_config=ComputerConfig(), tasks_file=debug_file)
+        bench = WAABenchmark(default_tool_config=ComputerConfig(), tasks_file=debug_file, infra=_make_mock_infra())
         bench.setup()
 
         debug_ids = [tid for tid in bench.task_metadata if "debug" in tid]
@@ -419,3 +384,66 @@ class TestWAABenchmark:
         from waa_cube.computer import ComputerConfig
 
         WAABenchmark(default_tool_config=ComputerConfig()).close()
+
+
+# ---------------------------------------------------------------------------
+# Azure integration
+# ---------------------------------------------------------------------------
+
+
+def test_waa_windows_resource_has_source_url() -> None:
+    from waa_cube.azure import WAA_WINDOWS_RESOURCE
+
+    assert WAA_WINDOWS_RESOURCE.name == "waa-windows-vm"
+    assert WAA_WINDOWS_RESOURCE.source_url is not None
+    assert "huggingface" in WAA_WINDOWS_RESOURCE.source_url
+
+
+def test_waabenchmark_accepts_infra_field() -> None:
+    from cube import LocalInfraConfig
+
+    from waa_cube.benchmark import WAABenchmark
+    from waa_cube.computer import ComputerConfig
+
+    bench = WAABenchmark(default_tool_config=ComputerConfig())
+    assert isinstance(bench.infra, LocalInfraConfig)
+
+
+def test_waatask_accepts_infra_field() -> None:
+    from cube.task import TaskMetadata
+
+    from waa_cube.computer import ComputerConfig
+    from waa_cube.task import WAATask
+
+    metadata = TaskMetadata(
+        id="test-task",
+        abstract_description="test",
+        extra_info={"domain": "notepad", "snapshot": "init_state", "config": [], "evaluator": {}, "related_apps": []},
+    )
+    task = WAATask(metadata=metadata, tool_config=ComputerConfig(), infra=None)
+    assert task.infra is None
+
+
+def test_infra_injected_into_task_configs() -> None:
+    from unittest.mock import MagicMock
+
+    from cube.resource import InfraConfig
+
+    from waa_cube.benchmark import WAABenchmark
+    from waa_cube.computer import ComputerConfig
+
+    mock_infra = MagicMock(spec=InfraConfig)
+    mock_infra.provision_status.return_value = "ready"
+    bench = WAABenchmark(default_tool_config=ComputerConfig(), infra=mock_infra)
+    bench.setup()
+
+    for cfg in bench.get_task_configs():
+        assert cfg.infra is mock_infra
+
+
+def test_install_is_noop() -> None:
+    from waa_cube.benchmark import WAABenchmark
+    from waa_cube.computer import ComputerConfig
+
+    bench = WAABenchmark(default_tool_config=ComputerConfig())
+    bench.install()

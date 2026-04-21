@@ -1,6 +1,6 @@
 """WAATask — CUBE task for a single WindowsAgentArena desktop-automation episode.
 
-task = WAATask(metadata=..., tool_config=ComputerConfig(...), vm_backend=WAADockerVMBackend(...))
+task = WAATask(metadata=..., tool_config=ComputerConfig(...), infra=LocalInfraConfig())
 obs, info = task.reset()
 while not done:
     action = agent(obs, task.action_set)
@@ -16,15 +16,17 @@ import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers WAATask.model_rebuild()
 from cube.core import Observation
+from cube.resource import InfraConfig, ResourceHandle
 from cube.task import Task
-from cube.vm import VM, VMBackend, VMConfig
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
 from PIL import Image
 from pydantic import PrivateAttr
 
+from waa_cube.azure import WAA_WINDOWS_RESOURCE
 from waa_cube.vm_backend.evaluator import Evaluator
 from waa_cube.vm_backend.setup_controller import SetupController
 
@@ -88,18 +90,18 @@ class WAATask(Task):
         metadata:      TaskMetadata  — extra_info keys: domain, snapshot, config,
                                        evaluator, related_apps
         tool_config:   ToolConfig    — pass ComputerConfig(...)
-        vm_backend:    VMBackend | None — WAADockerVMBackend or None
+        infra:         InfraConfig   — InfraConfig used to launch task VMs.
         validate_per_step: bool      — inherited; default False
         accept_agent_stop: bool      — inherited; default True
     """
 
-    vm_backend: VMBackend | None = None
-    """WAADockerVMBackend for VM provisioning. If None, VM must be attached externally."""
+    infra: InfraConfig | None = None
+    """InfraConfig (LocalInfraConfig, AzureInfraConfig, ...)."""
 
     use_som: bool = False
     """If True, annotate screenshot with numbered bounding boxes (Set-of-Marks)."""
 
-    _vm: VM | None = PrivateAttr(default=None)
+    _resource_handle: ResourceHandle | None = PrivateAttr(default=None)
 
     def model_post_init(self, __context: Any) -> None:
         """Create the Computer tool without a VM — VM is deferred to reset()."""
@@ -114,50 +116,30 @@ class WAATask(Task):
         return "windows"
 
     def _ensure_vm(self) -> None:
-        """Launch the VM if a vm_backend is configured and no VM is running yet."""
-        if self._vm is not None:
-            is_alive = getattr(self._vm, "is_alive", None)
-            if not callable(is_alive) or is_alive():
-                return
-            logger.warning("Existing WAA VM is no longer alive; relaunching it before reset")
-            try:
-                self._vm.stop()
-            except Exception as exc:
-                logger.warning("Failed to stop stale WAA VM cleanly: %s", exc)
-            self._vm = None
-        if self.vm_backend is None:
+        """Launch the VM via infra if not already running."""
+        if self._resource_handle is not None:
             return
-        snapshot = self.metadata.extra_info.get("snapshot", "init_state")
-        vm_config = VMConfig(snapshot_name=snapshot)
-        logger.info("Launching VM via %s", type(self.vm_backend).__name__)
-        self._vm = self.vm_backend.launch(vm_config)
-        self._computer.attach_vm(self._vm)
+        if self.infra is None:
+            raise RuntimeError("WAATask requires an InfraConfig — set infra= when constructing.")
+
+        logger.info("Launching VM via %s", type(self.infra).__name__)
+        self._resource_handle = self.infra.launch(WAA_WINDOWS_RESOURCE)
+        self._computer.attach_endpoint(self._resource_handle.endpoint)
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
-        """Return (chromium_port, vlc_port, server_port) from the live VM."""
-        vm = self._vm
-        chromium_port: int = getattr(vm, "chromium_port", 9222)
-        vlc_port: int = getattr(vm, "vlc_port", 8080)
-        server_port: int = getattr(vm, "server_port", 5000)
-        return chromium_port, vlc_port, server_port
+        """Return (chromium_port, vlc_port, server_port) from the current handle."""
+        server_port = 5000
+        if self._resource_handle is not None and self._resource_handle.endpoint:
+            server_port = urlparse(self._resource_handle.endpoint).port or 5000
+        return 9222, 8080, server_port
 
     def _setup_task(self, task_data: dict) -> Observation:
-        """Restore VM snapshot, run setup scripts, wait, return initial observation."""
+        """Run setup scripts, wait, return initial observation."""
         logger.info(
             "Setting up WAA task: %s. Instruction: %s",
             task_data.get("id", "unknown"),
             task_data.get("instruction", ""),
         )
-        if self._vm is not None:
-            snapshot = task_data.get("snapshot", "init_state")
-            self._vm.restore_snapshot(snapshot)
-
-        # Refresh port forwarders immediately after snapshot restore so that
-        # setup steps (which call the Flask server through host port mapping)
-        # have working connectivity.
-        if hasattr(self._vm, "refresh_proxies"):
-            logger.info("Refreshing port forwarders after snapshot reset")
-            self._vm.refresh_proxies()
 
         setup_steps = task_data.get("config") or []
         if setup_steps:
@@ -176,7 +158,7 @@ class WAATask(Task):
             )
             setup_ctrl.setup(setup_steps)
 
-        did_something = self._vm is not None or bool(setup_steps)
+        did_something = self._resource_handle is not None or bool(setup_steps)
         if did_something:
             logger.info("Waiting %ds for VM to stabilise...", _POST_SNAPSHOT_SLEEP)
             time.sleep(_POST_SNAPSHOT_SLEEP)
@@ -212,12 +194,12 @@ class WAATask(Task):
             return 0.0
 
     def reset(self) -> tuple[Observation, dict]:
-        """Restore the VM snapshot, run setup scripts, return the initial obs.
+        """Run setup scripts and return the initial obs.
 
         Steps:
-          1. Launch VM if not yet running (via vm_backend)
+          1. Launch VM if not yet running (via infra)
           2. Build task_data dict from metadata.extra_info
-          3. Restore VM snapshot via QMP loadvm, run setup scripts, wait
+          3. Run setup scripts, wait
           4. Post-process the observation (SoM or linearize axtree)
           5. Prepend task instruction as text observation
           6. Return (obs, info)
@@ -353,9 +335,12 @@ class WAATask(Task):
             return self._postprocess_linearize(obs)
 
     def close(self) -> None:
-        """Clean up task resources: stop tool then stop VM."""
+        """Clean up task resources: stop tool and release infra handle."""
         logger.info("Closing WAATask: %s", self.metadata.id)
         super().close()  # calls self.tool.close()
-        if self._vm is not None:
-            self._vm.stop()
-            self._vm = None
+        if self._resource_handle is not None:
+            try:
+                self._resource_handle.close()
+            except Exception as exc:
+                logger.warning("Failed to close Azure resource handle: %s", exc)
+            self._resource_handle = None
