@@ -25,11 +25,14 @@ _FINAL = Action(name="final_step", arguments={})
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
     "fix-git": [
-        Action(name="bash", arguments={"command": "cd /app/personal-site && bash /solution/solve.sh 2>&1"}),
+        Action(
+            name="bash",
+            arguments={"command": "cd /app/personal-site && bash /solution/solve.sh 2>&1", "timeout": 600},
+        ),
         _FINAL,
     ],
     "overfull-hbox": [
-        Action(name="bash", arguments={"command": "bash /solution/solve.sh 2>&1", "timeout": 300}),
+        Action(name="bash", arguments={"command": "bash /solution/solve.sh 2>&1", "timeout": 600}),
         _FINAL,
     ],
 }

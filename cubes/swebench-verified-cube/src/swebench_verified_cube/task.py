@@ -11,8 +11,9 @@ from pydantic import PrivateAttr
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.resource import DockerServiceConfig, ResourceHandle
+from cube.resource import ResourceHandle
 from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task_infra import launch_task_container
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -21,18 +22,6 @@ logger = logging.getLogger(__name__)
 # POSIX-compatible: use `.` instead of `source`, skip silently if conda is absent.
 # Works with both bash (Daytona/Modal/Toolkit backends) and sh/dash (LocalContainer).
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
-
-
-def _build_launch_script(container_name: str, image: str, ram_gb: float, cpu_cores: float) -> str:
-    """Return a bash snippet that `docker run`s the task image detached as a long-lived container."""
-    return (
-        f"docker run -d "
-        f"--name {container_name} "
-        f"--memory={int(ram_gb * 1024)}m "
-        f"--cpus={cpu_cores} "
-        f"{image} "
-        f"sleep infinity"
-    )
 
 
 class SWEBenchVerifiedTaskMetadata(TaskMetadata):
@@ -73,22 +62,14 @@ class SWEBenchVerifiedTask(Task):
         Falls back to the legacy ``container_backend`` path when no infra is provided.
         """
         if self.runtime_context is not None and "infra" in self.runtime_context:
-            infra = self.runtime_context["infra"]
-            image = self.metadata.container_config.image  # type: ignore[union-attr]
-            ram_gb = self.metadata.container_config.ram_gb  # type: ignore[union-attr]
-            cpu_cores = self.metadata.container_config.cpu_cores  # type: ignore[union-attr]
-
-            container_name = f"swebench-verified-{self.metadata.id}-{id(self):x}"
-            resource = DockerServiceConfig(
+            cc = self.metadata.container_config  # type: ignore[union-attr]
+            self._resource_handle, self._container = launch_task_container(
+                self.runtime_context,
                 name=f"swebench-verified-{self.metadata.id}",
-                scope="task",
-                docker_images=[image],
-                launch_script=_build_launch_script(container_name, image, ram_gb, cpu_cores),
+                image=cc.image,
+                ram_gb=cc.ram_gb,
+                cpu_cores=cc.cpu_cores,
             )
-            if infra.provision_status(resource) == "needs_provisioning":
-                infra.provision(resource)
-            self._resource_handle = infra.launch(resource)
-            self._container = self._resource_handle.container
             self._tool = self.tool_config.make(container=self._container)
             return
 

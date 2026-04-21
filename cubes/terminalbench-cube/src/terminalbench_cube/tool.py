@@ -1,8 +1,10 @@
 """Tool layer — bash, read_file, write_file backed by a CUBE Container."""
 
 import base64
+import io
 import logging
 import shlex
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -90,10 +92,23 @@ class TerminalBenchTool(Tool):
             self._exec(f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}")
 
     def upload_directory(self, local_dir: Path, remote_dir: str) -> None:
-        """Upload a local directory tree to the container."""
-        self._exec(f"mkdir -p {shlex.quote(remote_dir)}")
-        for item in local_dir.rglob("*"):
-            if item.is_file():
-                remote_path = f"{remote_dir}/{item.relative_to(local_dir)}"
-                self._exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}")
-                self.upload_file(item, remote_path)
+        """Upload a local directory tree to the container in a single exec.
+
+        Packs ``local_dir`` into an in-memory tar.gz and hands it to a python3
+        process inside the container that decodes and extracts it.  Using
+        ``python3`` avoids the fragility of chaining ``printf | base64 | tar``
+        through multiple shell-quoting layers (host shell → eai CLI → remote
+        ``bash -lc``) and is binary-safe regardless of the base64 payload
+        size.  Terminal-Bench images ship with python3 by convention.
+        """
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            tar.add(local_dir, arcname=".")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        script = (
+            "import base64, io, os, sys, tarfile; "
+            f"os.makedirs({remote_dir!r}, exist_ok=True); "
+            "tarfile.open(fileobj=io.BytesIO(base64.b64decode(sys.argv[1])), mode='r:gz')"
+            f".extractall({remote_dir!r}, filter='data')"
+        )
+        self._exec(f"python3 -c {shlex.quote(script)} {shlex.quote(b64)}")

@@ -9,10 +9,14 @@ import base64
 import logging
 from typing import Any
 
+from pydantic import PrivateAttr
+
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
+from cube.resource import ResourceHandle
 from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task_infra import launch_task_container
 
 from swebench_live_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -51,6 +55,24 @@ class SWEBenchLiveTask(Task):
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+
+    _resource_handle: ResourceHandle | None = PrivateAttr(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Launch the per-task container via the benchmark's infra, then build the tool."""
+        if self.runtime_context is not None and "infra" in self.runtime_context:
+            cc = self.metadata.container_config  # type: ignore[union-attr]
+            self._resource_handle, self._container = launch_task_container(
+                self.runtime_context,
+                name=f"swebench-live-{self.metadata.id}",
+                image=cc.image,
+                ram_gb=cc.ram_gb,
+                cpu_cores=cc.cpu_cores,
+            )
+            self._tool = self.tool_config.make(container=self._container)
+            return
+
+        super().model_post_init(__context)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -107,7 +129,12 @@ class SWEBenchLiveTask(Task):
 
     def close(self) -> None:
         super().close()
-        if self._container is not None:
+        if self._resource_handle is not None:
+            logger.info(f"Closing resource handle for task {self.metadata.id}")
+            self._resource_handle.close()
+            self._resource_handle = None
+            self._container = None
+        elif self._container is not None:
             logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
             self._container.stop()
             self._container = None
@@ -203,8 +230,12 @@ class SWEBenchLiveTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchLiveTask:
-        if container_backend is None:
-            raise ValueError("SWEBenchLiveTaskConfig.make() requires a container_backend")
+        has_infra = runtime_context is not None and "infra" in runtime_context
+        if not has_infra and container_backend is None:
+            raise ValueError(
+                "SWEBenchLiveTaskConfig.make() requires runtime_context['infra'] "
+                "(preferred) or a legacy container_backend."
+            )
 
         # Import here to avoid circular import (benchmark imports task)
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark

@@ -13,12 +13,16 @@ override-dependencies = [
 ]
 # Each backend's dependency tree (aws/azure/daytona) pulls different transitive
 # constraints; declaring them as conflicts lets uv resolve one group at a time.
+# aws/azure groups conflict with the local-path-pinned `cube-standard` used by
+# local/daytona/toolkit (they pull it from git via osworld-cube/webarena).  The
+# three local groups share the same local cube-standard and can coexist.
 conflicts = [
-    [
-        {group = "aws"},
-        {group = "azure"},
-        {group = "daytona"},
-    ],
+    [{group = "aws"}, {group = "local"}],
+    [{group = "aws"}, {group = "daytona"}],
+    [{group = "aws"}, {group = "toolkit"}],
+    [{group = "azure"}, {group = "local"}],
+    [{group = "azure"}, {group = "daytona"}],
+    [{group = "azure"}, {group = "toolkit"}],
 ]
 
 [build-system]
@@ -42,13 +46,21 @@ azure = [
 local = [
     "terminalbench-cube",
     "swebench-verified-cube",
+    "swebench-live-cube",
     "docker>=7.1.0",
     "tenacity>=9.1.4",
 ]
 daytona = [
     "cube-infra-daytona",
-    "swebench-verified-cube",
     "terminalbench-cube",
+    "swebench-verified-cube",
+    "swebench-live-cube",
+]
+toolkit = [
+    "cube-infra-toolkit",
+    "terminalbench-cube",
+    "swebench-verified-cube",
+    "swebench-live-cube",
 ]
 
 [tool.uv.sources]
@@ -60,8 +72,10 @@ cube-standard = { path = "../../cube-standard", editable = true }
 cube-infra-aws = { path = "../../cube-standard/cube-resources/cube-infra-aws", editable = true }
 cube-infra-azure = { path = "../../cube-standard/cube-resources/cube-infra-azure", editable = true }
 cube-infra-daytona = { path = "../../cube-standard/cube-resources/cube-infra-daytona", editable = true }
+cube-infra-toolkit = { path = "../../cube-standard/cube-resources/cube-infra-toolkit", editable = true }
 cube-vm-backend = { path = "../../cube-standard/cube-resources/cube-vm-backend", editable = true }
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
 terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
 swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }
+swebench-live-cube = { path = "../cubes/swebench-live-cube", editable = true }

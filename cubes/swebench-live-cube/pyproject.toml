@@ -4,13 +4,8 @@ version = "0.1.0"
 description = "SWE-bench Live — continuously updated, contamination-resistant GitHub issue resolution"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc4",
+    "cube-standard[docker]>=0.1.0rc5",
     "datasets",
-]
-
-[project.optional-dependencies]
-debug = [
-    "cube-standard[docker]>=0.1.0rc4",
 ]
 
 [project.entry-points."cube.benchmarks"]
@@ -27,9 +22,6 @@ include = ["src/swebench_live_cube/task_metadata.json"]
 dev = [
     "pytest>=9.0",
 ]
-
-[tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task-metadata" }
 
 [tool.ruff]
 fix = true

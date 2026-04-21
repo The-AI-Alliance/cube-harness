@@ -14,24 +14,13 @@ from pydantic import PrivateAttr
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.resource import DockerServiceConfig, ResourceHandle
+from cube.resource import ResourceHandle
 from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task_infra import launch_task_container
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
 logger = logging.getLogger(__name__)
-
-
-def _build_launch_script(container_name: str, image: str, ram_gb: float, cpu_cores: float) -> str:
-    """Build a bash script that `docker run`s the task image as a detached container."""
-    return (
-        f"docker run -d "
-        f"--name {container_name} "
-        f"--memory={int(ram_gb * 1024)}m "
-        f"--cpus={cpu_cores} "
-        f"{image} "
-        f"sleep infinity"
-    )
 
 
 class TerminalBenchTaskMetadata(TaskMetadata):
@@ -77,25 +66,14 @@ class TerminalBenchTask(Task):
         Falls back to the legacy container_backend path if no infra is provided.
         """
         if self.runtime_context is not None and "infra" in self.runtime_context:
-            infra = self.runtime_context["infra"]
-            image = self.metadata.container_config.image  # type: ignore[union-attr]
-            ram_gb = self.metadata.container_config.ram_gb  # type: ignore[union-attr]
-            cpu_cores = self.metadata.container_config.cpu_cores  # type: ignore[union-attr]
-
-            container_name = f"terminalbench-{self.metadata.id}-{id(self):x}"
-            resource = DockerServiceConfig(
+            cc = self.metadata.container_config  # type: ignore[union-attr]
+            self._resource_handle, self._container = launch_task_container(
+                self.runtime_context,
                 name=f"terminalbench-{self.metadata.id}",
-                scope="task",
-                docker_images=[image],
-                launch_script=_build_launch_script(container_name, image, ram_gb, cpu_cores),
+                image=cc.image,
+                ram_gb=cc.ram_gb,
+                cpu_cores=cc.cpu_cores,
             )
-            if infra.provision_status(resource) == "needs_provisioning":
-                infra.provision(resource)
-            self._resource_handle = infra.launch(resource)
-
-            # Every per-task-container handle exposes ``.container`` (a cube.container.Container)
-            # for the tool layer to drive — uniform across Local/Daytona/Toolkit.
-            self._container = self._resource_handle.container
             self._tool = self.tool_config.make(container=self._container)
             return
 

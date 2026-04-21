@@ -9,9 +9,11 @@ make_debug_agent(task_id)     -> DebugAgent
 from __future__ import annotations
 
 import logging
-from cube.backends import LocalContainerBackend
+
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
+from cube.infra_local import LocalInfraConfig
+from cube.resource import InfraConfig
 
 from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
@@ -50,11 +52,16 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> Benchmark:
-    """Return a SWEBenchLiveBenchmark scoped to the debug tasks."""
-    container_backend = LocalContainerBackend()
+def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
+    """Return a SWEBenchLiveBenchmark scoped to the debug tasks.
+
+    Args:
+        infra: InfraConfig that provisions and launches per-task containers.
+               Defaults to ``LocalInfraConfig()``. Override to target Daytona,
+               Toolkit, etc.
+    """
     bench = SWEBenchLiveBenchmark(
-        container_backend=container_backend,
+        infra=infra or LocalInfraConfig(),
         oracle_mode=True,
     )
     bench.install()
