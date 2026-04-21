@@ -9,14 +9,31 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import docker as docker_sdk
+from pydantic import PrivateAttr
+
+from cube.backends.local import LocalContainer
 from cube.benchmark import RuntimeContext
-from cube.container import ContainerBackend
+from cube.container import Container, ContainerBackend
 from cube.core import Observation
+from cube.resource import DockerServiceConfig, ResourceHandle
 from cube.task import Task, TaskConfig, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _build_launch_script(container_name: str, image: str, ram_gb: float, cpu_cores: float) -> str:
+    """Build a bash script that `docker run`s the task image as a detached container."""
+    return (
+        f"docker run -d "
+        f"--name {container_name} "
+        f"--memory={int(ram_gb * 1024)}m "
+        f"--cpus={cpu_cores} "
+        f"{image} "
+        f"sleep infinity"
+    )
 
 
 class TerminalBenchTaskMetadata(TaskMetadata):
@@ -47,6 +64,48 @@ class TerminalBenchTask(Task):
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+
+    # L3 resource handle owned by this task: the per-task Docker container
+    # launched in model_post_init via the benchmark's InfraConfig. Closed in
+    # close(). Not serialised (PrivateAttr).
+    _resource_handle: ResourceHandle | None = PrivateAttr(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Launch the per-task container via the benchmark's infra, then build the tool.
+
+        Expected carrier convention (see openspec change `deprecate-container-backend`):
+        ``runtime_context["infra"]`` holds an ``InfraConfig`` instance. If present,
+        we build a per-task ``DockerServiceConfig`` and hand its container to the tool.
+        Falls back to the legacy container_backend path if no infra is provided.
+        """
+        if self.runtime_context is not None and "infra" in self.runtime_context:
+            infra = self.runtime_context["infra"]
+            image = self.metadata.container_config.image  # type: ignore[union-attr]
+            ram_gb = self.metadata.container_config.ram_gb  # type: ignore[union-attr]
+            cpu_cores = self.metadata.container_config.cpu_cores  # type: ignore[union-attr]
+
+            container_name = f"terminalbench-{self.metadata.id}-{id(self):x}"
+            resource = DockerServiceConfig(
+                name=f"terminalbench-{self.metadata.id}",
+                scope="task",
+                docker_images=[image],
+                launch_script=_build_launch_script(container_name, image, ram_gb, cpu_cores),
+            )
+            if infra.provision_status(resource) == "needs_provisioning":
+                infra.provision(resource)
+            self._resource_handle = infra.launch(resource)
+
+            # The launch_script started exactly one container; wrap it as a Container
+            # so the existing TerminalBenchTool contract (which expects `Container.exec`)
+            # works unchanged.
+            client = docker_sdk.from_env()
+            docker_container = client.containers.get(self._resource_handle._container_ids[0])
+            # remove_on_close=False — the ResourceHandle owns container lifecycle.
+            self._container = LocalContainer(docker_container, client, remove_on_close=False)
+            self._tool = self.tool_config.make(container=self._container)
+            return
+
+        super().model_post_init(__context)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -120,7 +179,14 @@ class TerminalBenchTask(Task):
             self._temp_dir = None
             self._task_path = None
         super().close()
-        if self._container is not None:
+        # Tear down the per-task container via the resource handle (new path) or
+        # directly via Container.stop() (legacy path).
+        if self._resource_handle is not None:
+            logger.info(f"Closing resource handle for task {self.metadata.id}")
+            self._resource_handle.close()
+            self._resource_handle = None
+            self._container = None
+        elif self._container is not None:
             logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
             self._container.stop()
             self._container = None
@@ -156,11 +222,15 @@ class TerminalBenchTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> TerminalBenchTask:
-        if container_backend is None:
-            raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
-
         # Import here to avoid circular import (benchmark imports task)
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
+
+        has_infra = runtime_context is not None and "infra" in runtime_context
+        if not has_infra and container_backend is None:
+            raise ValueError(
+                "TerminalBenchTaskConfig.make() requires runtime_context['infra'] "
+                "(preferred) or a legacy container_backend."
+            )
 
         metadata = TerminalBenchBenchmark.task_metadata[self.task_id]
         exec_info = TerminalBenchBenchmark.load_task_execution_info(self.task_id)

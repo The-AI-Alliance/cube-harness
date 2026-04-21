@@ -3,14 +3,14 @@ name = "cube-integration-tests"
 version = "0.1.0"
 description = "End-to-end integration tests for CUBE infra backends + benchmark cubes"
 requires-python = ">=3.12"
-dependencies = ["cube-standard"]
+dependencies = ["cube-standard", "pytest>=8.0"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = []
+packages = ["cube_integration_tests"]
 
 [dependency-groups]
 aws = [
@@ -23,9 +23,13 @@ azure = [
     "osworld-cube",
     "webarena-verified-cube",
 ]
+local = [
+    "terminalbench-cube",
+]
 
 [tool.uv.sources]
 cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }  # TODO: remove once cube-infra-aws released
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }  # TODO: remove once cube-infra-azure released
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
+terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
