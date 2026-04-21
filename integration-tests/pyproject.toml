@@ -25,7 +25,6 @@ azure = [
 ]
 
 [tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }  # TODO: remove once 0.1.0rc5 released
 cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }  # TODO: remove once cube-infra-aws released
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }  # TODO: remove once cube-infra-azure released
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
