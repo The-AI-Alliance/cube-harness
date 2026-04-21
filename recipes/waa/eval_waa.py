@@ -18,6 +18,7 @@ Usage:
 
 import sys
 
+from cube import LocalInfraConfig
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 
@@ -85,6 +86,7 @@ def main(debug: bool) -> None:
 
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
+        infra=LocalInfraConfig(cpu_cores=8, ram_gb=8),
     )
     benchmark.install()
     benchmark.setup()

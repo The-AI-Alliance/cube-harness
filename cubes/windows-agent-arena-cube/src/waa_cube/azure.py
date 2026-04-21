@@ -20,5 +20,7 @@ WAA_WINDOWS_RESOURCE = VMResourceConfig(
     source_url="https://huggingface.co/datasets/kushasareen/waa-windows-image/resolve/main/data.img",
     default_ttl_seconds=60 * 60 * 2,
     min_cpu_cores=8,
-    min_ram_gb=32,
+    min_ram_gb=8,
+    uefi=True,
+    tpm=True,
 )

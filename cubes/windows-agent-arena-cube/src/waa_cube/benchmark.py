@@ -71,6 +71,8 @@ class WAATaskConfig(TaskConfig):
                 f"WAATaskConfig for task '{self.task_id}' has no tool_config. "
                 "Pass default_tool_config=ComputerConfig(...) to WAABenchmark."
             )
+        exec_info = WAABenchmark.load_task_execution_info(self.task_id)
+        metadata = metadata.model_copy(update={"extra_info": exec_info})
         return WAATask(
             metadata=metadata,
             tool_config=self.tool_config,
@@ -187,8 +189,18 @@ class WAABenchmark(Benchmark):
         logger.info("WAABenchmark ready with %d tasks", len(self.task_metadata))
 
     def install(self) -> None:
-        """No-op for infra-based execution (resources are provisioned in setup)."""
-        logger.info("WAABenchmark.install() — nothing to do")
+        """Populate per-task execution cache from shipped task_metadata.json."""
+        exec_cache_dir = self.task_execution_cache_dir()
+        exec_cache_dir.mkdir(parents=True, exist_ok=True)
+        written = 0
+        for task_id, tm in self.task_metadata.items():
+            cache_file = exec_cache_dir / f"{task_id}.json"
+            new_content = json.dumps(tm.extra_info, indent=2)
+            if cache_file.exists() and cache_file.read_text() == new_content:
+                continue
+            cache_file.write_text(new_content)
+            written += 1
+        logger.info("WAABenchmark.install() — wrote %d execution cache files to %s", written, exec_cache_dir)
 
     def close(self) -> None:
         """No global resources to release — VMs are stopped per-task."""
@@ -199,9 +211,11 @@ class WAABenchmark(Benchmark):
     # ------------------------------------------------------------------
 
     def _load_task_metadata_from_file(self, tasks_file: str) -> dict[str, TaskMetadata]:
-        """Load TaskMetadata from a flat JSON list (used by the debug suite)."""
+        """Load TaskMetadata from a flat JSON list and write exec_info cache entries (used by the debug suite)."""
         with open(tasks_file) as f:
             tasks: list[dict] = json.load(f)
+        exec_cache_dir = self.task_execution_cache_dir()
+        exec_cache_dir.mkdir(parents=True, exist_ok=True)
         result: dict[str, TaskMetadata] = {}
         for td in tasks:
             task_id = td.get("id", "")
@@ -220,5 +234,6 @@ class WAABenchmark(Benchmark):
                 },
             )
             result[task_id] = metadata
+            (exec_cache_dir / f"{task_id}.json").write_text(json.dumps(metadata.extra_info, indent=2))
         logger.info("Loaded %d task metadata entries from %s", len(result), tasks_file)
         return result
