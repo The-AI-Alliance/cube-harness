@@ -1,37 +1,31 @@
 # OpenSpec — cube-harness
 
-Machine-friendly specifications for coding agents. Each spec describes a capability:
-its contract, invariants, and constraints. Read these before modifying code in the
-corresponding layer.
+Living specifications for the cube-harness runtime layers. Read these before modifying
+code in the corresponding layer — specs define the contracts, invariants, and gotchas
+that aren't obvious from reading the source alone.
 
-## Structure
+For the full OpenSpec workflow (how to sync specs, write delta proposals, and manage
+breaking changes), see [cube-standard's openspec/README.md](https://github.com/The-AI-Alliance/cube-standard/blob/main/openspec/README.md).
 
-```
-openspec/
-├── specs/             # Living contracts, one dir per capability
-│   ├── core/          # AgentOutput, Trajectory, TrajectoryStep, ActionSpace
-│   ├── agent/         # Agent, AgentConfig
-│   ├── tool/          # ToolWithTelemetry, AsyncToolWithTelemetry (telemetry wrapper over cube.tool)
-│   ├── episode/       # Episode, EpisodeConfig, MAX_STEPS
-│   ├── experiment/    # Experiment, ExpResult, resume/retry semantics
-│   ├── storage/       # Storage Protocol, FileStorage V1/V2 layouts
-│   ├── llm/           # LLM, LLMConfig, Prompt, LLMCall, Usage
-│   ├── metrics/       # OpenTelemetry tracer, ADP export
-│   ├── analyze/       # XRay viewer (Gradio)
-│   └── mcp/           # MCP server integration
-└── changes/           # Active proposals as delta specs
-    └── archive/       # Completed changes, prefixed with date
-```
+## Layer index
 
-Specs are terse. Cross-repo: this harness consumes **cube-standard**'s contracts
-(Task, Benchmark, Tool, Resource). Always consult the cube-standard spec first when
-your change touches the base protocol.
+| Layer | Source | Spec |
+|-------|--------|------|
+| Core types (Trajectory, AgentOutput) | `src/cube_harness/core.py` | [core/spec.md](specs/core/spec.md) |
+| Agent | `src/cube_harness/agent.py` | [agent/spec.md](specs/agent/spec.md) |
+| Tool (OTel wrapper) | `src/cube_harness/tool.py` | [tool/spec.md](specs/tool/spec.md) |
+| LLM | `src/cube_harness/llm.py` | [llm/spec.md](specs/llm/spec.md) |
+| Episode | `src/cube_harness/episode.py` | [episode/spec.md](specs/episode/spec.md) |
+| Experiment + runners | `src/cube_harness/experiment.py`, `exp_runner.py` | [experiment/spec.md](specs/experiment/spec.md) |
+| Storage | `src/cube_harness/storage.py`, `summary.py` | [storage/spec.md](specs/storage/spec.md) |
+| Metrics / OTel | `src/cube_harness/metrics/` | [metrics/spec.md](specs/metrics/spec.md) |
+| XRay / Analyze | `src/cube_harness/analyze/` | [analyze/spec.md](specs/analyze/spec.md) |
+| MCP server | `src/cube_harness/mcp/` | [mcp/spec.md](specs/mcp/spec.md) |
 
-## Writing style
+Cross-repo: cube-harness consumes cube-standard's contracts (`Task`, `Benchmark`, `Tool`,
+`Resource`). When your change touches the base protocol, check cube-standard's spec first.
 
-Each spec covers:
-- **Purpose** — one sentence
-- **Public API** — types, methods, signatures
-- **Invariants** — what must always hold
-- **Contracts** — what implementers must guarantee
-- **Gotchas** — non-obvious constraints
+## Changes
+
+Active proposals live in [`changes/`](changes/).  
+Completed ones are archived in [`changes/archive/`](changes/archive/).
