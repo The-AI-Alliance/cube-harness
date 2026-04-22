@@ -3,7 +3,7 @@ from typing import Any
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig
+from cube.task import EvalInfo, Task, TaskConfig
 from math_tool_use.tool import MathToolUseTool, MathToolUseToolConfig
 import math_verify
 
@@ -62,41 +62,50 @@ class SolveMathToolUseTask(Task):
         question = ei["question"]
         return Observation.from_text(question), {"question": question, "expected": self._expected}
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, EvalInfo | dict[str, Any]]:
         assert isinstance(self.tool, MathToolUseTool)
 
         submitted = self.tool.last_answer
         if submitted is None:
-            return 0.0, {
-                "status": "no_answer",
-                "answer_status": "no_answer",
-                "expected": self._expected,
-                "python_call_count": self.tool.python_call_count,
-                "answer_call_count": self.tool.answer_call_count,
-                "python_called_before_answer": self.tool.python_called_before_answer,
-                "last_python_output": self.tool.last_python_output,
-            }
+            return 0.0, EvalInfo(
+                success=False,
+                no_answer=True,
+                no_error=True,
+                status="no_answer",
+                extra={
+                    "answer_status": "no_answer",
+                    "expected": self._expected,
+                    "python_call_count": self.tool.python_call_count,
+                    "answer_call_count": self.tool.answer_call_count,
+                    "python_called_before_answer": self.tool.python_called_before_answer,
+                    "last_python_output": self.tool.last_python_output,
+                },
+            )
 
         answer_status = _verify_answer_status(submitted, self._expected, strict=True)
         base_reward = 1.0 if answer_status == "correct" else 0.0
         shaping = _python_tool_shaping(answer_status, self.tool.python_call_count)
         reward = base_reward + shaping
 
-        return reward, {
-            "status": answer_status,
-            "answer_status": answer_status,
-            "submitted": submitted,
-            "expected": self._expected,
-            "success": answer_status == "correct",
-            "base_reward": base_reward,
-            "python_tool_shaping": shaping,
-            "python_call_count": self.tool.python_call_count,
-            "answer_call_count": self.tool.answer_call_count,
-            "python_called_before_answer": self.tool.python_called_before_answer,
-            "last_python_output": self.tool.last_python_output,
-        }
+        return reward, EvalInfo(
+            success=answer_status == "correct",
+            no_answer=answer_status == "no_answer",
+            no_error=answer_status != "unparsable",
+            status=answer_status,
+            extra={
+                "answer_status": answer_status,
+                "submitted": submitted,
+                "expected": self._expected,
+                "base_reward": base_reward,
+                "python_tool_shaping": shaping,
+                "python_call_count": self.tool.python_call_count,
+                "answer_call_count": self.tool.answer_call_count,
+                "python_called_before_answer": self.tool.python_called_before_answer,
+                "last_python_output": self.tool.last_python_output,
+            },
+        )
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         assert isinstance(self.tool, MathToolUseTool)
         return self.tool.last_answer is not None
 
@@ -120,4 +129,5 @@ class MathToolUseTaskConfig(TaskConfig):
             tool_config=tool_cfg,
             runtime_context=runtime_context,
             container_backend=container_backend,
+            accept_agent_stop=False,
         )
