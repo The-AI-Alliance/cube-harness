@@ -7,6 +7,7 @@ dependencies = [
     "cube-standard",
     "datasets>=4.8.4",
     "sandbox-fusion",
+    "math-verify[antlr4_9_3]==0.8.0",
 ]
 
 [project.entry-points."cube.benchmarks"]

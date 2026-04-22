@@ -14,14 +14,12 @@
 
 Usage:
     uv run recipes/hello_math_tool.py debug
-    uv run recipes/hello_math_tool.py full --model openai/Qwen/Qwen2.5-Math-1.5B
+    uv run recipes/hello_math_tool.py full --model openai/Qwen2.5-7B-Instruct
     uv run recipes/hello_math_tool.py full --base-url http://localhost:8000/v1
 """
 
 import argparse
-
-from cube import tool
-
+import os
 
 from math_tool_use import MathToolUseBenchmark, MathToolUseToolConfig
 
@@ -31,41 +29,56 @@ from cube_harness.exp_runner import run_sequentially
 from cube_harness.experiment import Experiment
 from cube_harness.llm import RLCollectorConfig
 
-def main(mode: str, model: str, base_url: str) -> None:
+_SYSTEM_PROMPT = """You are a math-focused AI Agent. Solve problems by combining clear symbolic reasoning
+with short, deterministic Python code.
+Keep your replies concise and direct. Prioritize clarity and avoid over-elaboration.
+Always present the final answer in LaTeX \\boxed{}.
+Do not express emotions or opinions about user questions."""
+
+_REACT_PROMPT = """Workflow:
+1. Draft a brief plan in plain text.
+2. Execute one run_python_code call to compute or verify the result.
+3. Finalize by calling MathAnswer with the LaTeX-formatted answer.
+
+Python execution policy (run_python_code):
+- Use Python strictly for pure computation to verify and validate the final answer.
+- No network, file system, OS or environment access.
+- Keep snippets minimal and self-contained; print only the final result.
+
+Validation:
+- Cross-check results (alternative derivation, invariants, higher precision) before finalizing.
+- If execution fails, propose the minimal fix and retry.
+Always verify with run_python_code before invoking MathAnswer."""
+
+
+def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_completion_tokens: int) -> None:
     api_key = "EMPTY"
-
-    # # LiteLLM reads OPENAI_API_BASE / OPENAI_API_KEY for openai/* models.
-    # os.environ["OPENAI_API_BASE"] = base_url
-    # os.environ["OPENAI_API_KEY"] = api_key
-
-    # # Keep OpenAI python client compatibility if anything else in-process uses it.
-    # os.environ["OPENAI_BASE_URL"] = base_url
-
     output_dir = make_experiment_output_dir("react", "math-tool-use", tag="vllm")
-
-    instructions = (
-            "Workflow (required):\\n"
-            "1. Draft a brief plan in plain text.\\n"
-            "2. Execute one run_python_code call to compute the result and print it.\\n"
-            "3. Finalize by calling MathAnswer with the LaTeX-formatted answer (use \\\\boxed{...})."
-        )
 
     llm_config = RLCollectorConfig(
         model_name=model,
         api_key=api_key,
         api_base=base_url,
         temperature=1.0,
-        max_completion_tokens=2048,
+        max_completion_tokens=max_completion_tokens,
         logprobs=True,
-        top_logprobs=True,
+        top_logprobs=1,
         extra_body={"return_token_ids": True},
     )
 
-    agent_config = ReactAgentConfig(llm_config=llm_config, react_prompt=instructions)
-    tool_config = MathToolUseToolConfig(sandbox_endpoint="http://dns-24e3447c-506e-4b21-92df-156e18db5087-sandboxfusion")
+    agent_config = ReactAgentConfig(
+        llm_config=llm_config,
+        system_prompt=_SYSTEM_PROMPT,
+        react_prompt=_REACT_PROMPT,
+        max_actions=3,
+        render_last_n_steps=3,
+    )
+
+    tool_config = MathToolUseToolConfig(sandbox_endpoint=sandbox_endpoint)
     benchmark = MathToolUseBenchmark(default_tool_config=tool_config)
     benchmark.install()
     benchmark.setup()
+
     if mode == "debug":
         benchmark = benchmark.subset_from_list(["q_0", "q_1"], benchmark_name_suffix="debug")
 
@@ -85,16 +98,26 @@ if __name__ == "__main__":
     parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "full"])
     parser.add_argument("--model", default="openai/Qwen2.5-7B-Instruct")
     parser.add_argument("--base-url", default="http://localhost:8000/v1")
+    parser.add_argument("--sandbox-endpoint", default="http://dns-24e3447c-506e-4b21-92df-156e18db5087-sandboxfusion:8080")
+    parser.add_argument("--max-completion-tokens", type=int, default=2048)
     args = parser.parse_args()
 
-    main(mode=args.mode, model=args.model, base_url=args.base_url)
+    main(
+        mode=args.mode,
+        model=args.model,
+        base_url=args.base_url,
+        sandbox_endpoint=args.sandbox_endpoint,
+        max_completion_tokens=args.max_completion_tokens,
+    )
 
 
+# Example vLLM launch for parity with PipelineRL config:
 # vllm serve /mnt/llmd/base_models/Qwen2.5-7B-Instruct \
 #   --host 0.0.0.0 \
 #   --port 8000 \
 #   --api-key EMPTY \
 #   --enable-auto-tool-choice \
-#   --tool-call-parser hermes \
-#   --served-model-name Qwen2.5-7B-Instruct
+#   --tool-call-parser rl_tool \
+#   --tool-parser-plugin /home/toolkit/CUBE/PipelineRL/pipelinerl/rl_tool_parser_plugin.py \
+#   --served-model-name Qwen2.5-7B-Instruct \
 #   --return-tokens-as-token-ids

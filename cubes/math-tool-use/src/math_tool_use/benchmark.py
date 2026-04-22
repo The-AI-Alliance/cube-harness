@@ -1,14 +1,18 @@
 from typing import ClassVar
 
-from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.task import TaskConfig, TaskMetadata
-from math_tool_use.task import MathToolUseTaskConfig
 import logging
 from datasets import load_dataset
 
+from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.task import TaskConfig, TaskMetadata
+from math_tool_use.task import MathToolUseTaskConfig
+
 logger = logging.getLogger(__name__)
 
-_DATASET_NAME: str = "https://raw.githubusercontent.com/Open-Reasoner-Zero/Open-Reasoner-Zero/refs/heads/main/data/orz_math_57k_collected.json"
+_DATASET_NAME: str = (
+    "https://raw.githubusercontent.com/Open-Reasoner-Zero/Open-Reasoner-Zero/refs/heads/main/data/orz_math_57k_collected.json"
+)
+
 
 def _process_open_reasoner(dataset, dataset_name):
     for item in dataset:
@@ -18,8 +22,9 @@ def _process_open_reasoner(dataset, dataset_name):
         # - 4. (7 points)
         # We are currently ignoring the preamble
         task = item["0"]["value"]
-        answer = item["1"]["ground_truth"]["value"]
+        answer = "\\boxed{" + item["1"]["ground_truth"]["value"] + "}"
         yield {"dataset": dataset_name, "task": task, "answer": answer}
+
 
 class MathToolUseBenchmark(Benchmark):
     """Arithmetic tasks requiring deterministic Python tool use before final LaTeX answer submission."""
@@ -52,16 +57,18 @@ class MathToolUseBenchmark(Benchmark):
             instance_id = f"q_{i}"
             metadata[instance_id] = TaskMetadata(
                 id=instance_id,
-                abstract_description="Solve the problem with one Python call, then submit LaTeX answer via MathAnswer",
-                recommended_max_steps=4,
-                split='train',
+                abstract_description="Solve math by tool-using with Python and submit final LaTeX answer via MathAnswer",
+                recommended_max_steps=3,
+                split="train",
                 extra_info={
                     "question": t["task"],
                     "expected": t["answer"],
+                    "dataset": t["dataset"],
                 },
             )
 
         cls.task_metadata = metadata
+        cls.benchmark_metadata = cls.benchmark_metadata.model_copy(update={"num_tasks": len(metadata)})
         logger.info(f"Loading Open Reasoner Zero dataset: {len(metadata)} tasks")
 
     def _setup(self) -> None:

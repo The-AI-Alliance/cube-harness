@@ -11,6 +11,19 @@ except ImportError:  # pragma: no cover - optional dependency at runtime
     run_code = None  # type: ignore[assignment]
 
 _INTEGER_PATTERN = re.compile(r"^-?\d+$")
+_BLOCKED_PATTERNS = [
+    re.compile(r"\bsys\.exit\b"),
+    re.compile(r"\bos\._exit\b"),
+    re.compile(r"\bos\.system\b"),
+    re.compile(r"\bsubprocess\b"),
+    re.compile(r"\bos\.popen\b"),
+    re.compile(r"\bos\.exec\w*\b"),
+    re.compile(r"\bos\.spawn\w*\b"),
+    re.compile(r"\bos\.kill\b"),
+    re.compile(r"\bshutil\.rmtree\b"),
+    re.compile(r"\bos\.remove\b"),
+    re.compile(r"\bos\.unlink\b"),
+]
 
 
 class MathToolUseToolConfig(ToolConfig):
@@ -43,24 +56,21 @@ class MathToolUseTool(Tool):
 
     @tool_action
     def run_python_code(self, code: str) -> str:
-        """Execute Python code exactly once inside SandboxFusion to compute or verify the result.
-
-        Args:
-            code: Python code to execute.
-        """
+        """Execute Python code inside SandboxFusion and return combined output."""
         self._python_call_count += 1
-        if self._python_call_count > 1:
-            return "run_python_code may only be called once."
 
         stripped = code.strip()
         if not stripped:
-            self._last_python_output = "Python error: empty code."
+            self._last_python_output = "[no output]"
             return self._last_python_output
 
+        for pattern in _BLOCKED_PATTERNS:
+            if pattern.search(stripped):
+                self._last_python_output = f"Blocked: code contains forbidden pattern '{pattern.pattern}'"
+                return self._last_python_output
+
         if RunCodeRequest is None or run_code is None:
-            self._last_python_output = (
-                "Python error: sandbox-fusion is not installed. Install with `pip install sandbox-fusion`."
-            )
+            self._last_python_output = "[execution error: sandbox-fusion is not installed]"
             return self._last_python_output
 
         try:
@@ -78,36 +88,32 @@ class MathToolUseTool(Tool):
                 kwargs["endpoint"] = self.config.sandbox_endpoint
 
             response = run_code(request, **kwargs)
-            status = self._obj_get(response, "status", "")
-            message = self._obj_get(response, "message", "")
             run_result = self._obj_get(response, "run_result", {}) or {}
-            run_status = self._obj_get(run_result, "status", "")
-            return_code = self._obj_get(run_result, "return_code", None)
-            stdout = (self._obj_get(run_result, "stdout", "") or "").strip()
-            stderr = (self._obj_get(run_result, "stderr", "") or "").strip()
+            status = str(self._obj_get(response, "status", ""))
+            message = str(self._obj_get(response, "message", "") or "")
+            stdout = (self._obj_get(run_result, "stdout", "") or "").rstrip()
+            stderr = (self._obj_get(run_result, "stderr", "") or "").rstrip()
+            is_timeout = "timeout" in status.lower() or "timeout" in message.lower()
 
+            parts: list[str] = []
             if stdout:
-                self._last_python_output = f"Python output: {stdout}"
-                return self._last_python_output
+                parts.append(stdout)
+            if stderr:
+                parts.append(f"[stderr]\\n{stderr}")
+            if is_timeout:
+                parts.append("[execution timed out]")
+            if not parts:
+                parts.append("[no output]")
 
-            if status != "Success" or run_status != "Finished" or return_code not in (0, None):
-                detail = stderr or message or "Sandbox execution failed without details."
-                self._last_python_output = f"Python error: {detail}"
-                return self._last_python_output
-
-            self._last_python_output = "Python code executed with no stdout."
+            self._last_python_output = "\n".join(parts)
             return self._last_python_output
         except Exception as exc:  # pragma: no cover - defensive for runtime tool use
-            self._last_python_output = f"Python error: {exc.__class__.__name__}: {exc}"
+            self._last_python_output = f"[execution error: {exc}]"
             return self._last_python_output
 
     @tool_action
     def MathAnswer(self, answer: str) -> str:  # noqa: N802
-        """Submit the final answer in LaTeX format (for example: ``\\boxed{42}``).
-
-        Args:
-            answer: Final LaTeX-formatted answer.
-        """
+        """Submit the final answer in LaTeX format (for example: ``\\boxed{42}``)."""
         self._answer_call_count += 1
         if self._answer_call_count > 1:
             return "MathAnswer may only be called once."
@@ -137,11 +143,6 @@ class MathToolUseTool(Tool):
         if isinstance(obj, dict):
             return obj.get(key, default)
         return getattr(obj, key, default)
-
-    @staticmethod
-    def is_latex_formatted(answer: str) -> bool:
-        text = answer.strip()
-        return ("\\boxed" in text) or ("$" in text) or ("\\" in text)
 
     @property
     def python_call_count(self) -> int:
