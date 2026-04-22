@@ -8,21 +8,6 @@ exists so we can pick up simplification work when timing allows.
 
 ## Dead / broken code
 
-### `src/cube_harness/benchmarks/` — broken imports, superseded by `cubes/`
-[src/cube_harness/benchmarks/workarena/__init__.py:3-4](src/cube_harness/benchmarks/workarena/__init__.py#L3-L4)
-
-```python
-from cube_harness.benchmarks.workarena.benchmark import WorkArenaBenchmark
-from cube_harness.benchmarks.workarena.task import WorkArenaTask
-```
-
-These files don't exist. The real WorkArena lives at
-[cubes/workarena/src/workarena_cube/](cubes/workarena/src/workarena_cube/). Same
-story for [src/cube_harness/benchmarks/miniwob/](src/cube_harness/benchmarks/miniwob/)
-vs. [cubes/miniwob/](cubes/miniwob/).
-
-**Action:** delete the entire [src/cube_harness/benchmarks/](src/cube_harness/benchmarks/) directory. Confirm no recipe imports from it (`grep -r "cube_harness.benchmarks" recipes/ cubes/`).
-
 ### `tools/computer.py` — empty stub superseded by osworld-cube
 [src/cube_harness/tools/computer.py](src/cube_harness/tools/computer.py)
 
