@@ -24,7 +24,7 @@ import os
 from math_tool_use import MathToolUseBenchmark, MathToolUseToolConfig
 
 from cube_harness import make_experiment_output_dir
-from cube_harness.agents.react import ReactAgentConfig
+from cube_harness.agents.tir import TirAgentConfig
 from cube_harness.exp_runner import run_sequentially
 from cube_harness.experiment import Experiment
 from cube_harness.llm import RLCollectorConfig
@@ -33,9 +33,9 @@ _SYSTEM_PROMPT = """You are a math-focused AI Agent. Solve problems by combining
 with short, deterministic Python code.
 Keep your replies concise and direct. Prioritize clarity and avoid over-elaboration.
 Always present the final answer in LaTeX \\boxed{}.
-Do not express emotions or opinions about user questions."""
+Do not express emotions or opinions about user questions.
 
-_REACT_PROMPT = """Workflow:
+Workflow:
 1. Draft a brief plan in plain text.
 2. Execute one run_python_code call to compute or verify the result.
 3. Finalize by calling MathAnswer with the LaTeX-formatted answer.
@@ -53,7 +53,7 @@ Always verify with run_python_code before invoking MathAnswer."""
 
 def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_completion_tokens: int) -> None:
     api_key = "EMPTY"
-    output_dir = make_experiment_output_dir("react", "math-tool-use", tag="vllm")
+    output_dir = make_experiment_output_dir("tir", "math-tool-use", tag="vllm")
 
     llm_config = RLCollectorConfig(
         model_name=model,
@@ -66,12 +66,10 @@ def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_comple
         extra_body={"return_token_ids": True},
     )
 
-    agent_config = ReactAgentConfig(
+    agent_config = TirAgentConfig(
         llm_config=llm_config,
         system_prompt=_SYSTEM_PROMPT,
-        react_prompt=_REACT_PROMPT,
         max_actions=3,
-        render_last_n_steps=3,
     )
 
     tool_config = MathToolUseToolConfig(sandbox_endpoint=sandbox_endpoint)
@@ -80,7 +78,7 @@ def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_comple
     benchmark.setup()
 
     if mode == "debug":
-        benchmark = benchmark.subset_from_list(["q_0", "q_1"], benchmark_name_suffix="debug")
+        benchmark = benchmark.subset_from_list(["q_0", "q_1", "q_2", "q_3"], benchmark_name_suffix="debug")
 
     exp = Experiment(
         name="math-tool-use",
@@ -98,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "full"])
     parser.add_argument("--model", default="openai/Qwen2.5-7B-Instruct")
     parser.add_argument("--base-url", default="http://localhost:8000/v1")
-    parser.add_argument("--sandbox-endpoint", default="http://dns-24e3447c-506e-4b21-92df-156e18db5087-sandboxfusion:8080")
+    parser.add_argument("--sandbox-endpoint", default="http://dns-24e3447c-506e-4b21-92df-156e18db5087-sandboxfusion")
     parser.add_argument("--max-completion-tokens", type=int, default=2048)
     args = parser.parse_args()
 
@@ -118,6 +116,6 @@ if __name__ == "__main__":
 #   --api-key EMPTY \
 #   --enable-auto-tool-choice \
 #   --tool-call-parser rl_tool \
-#   --tool-parser-plugin /home/toolkit/CUBE/PipelineRL/pipelinerl/rl_tool_parser_plugin.py \
+#   --tool-parser-plugin /path/to/PipelineRL/pipelinerl/rl_tool_parser_plugin.py \
 #   --served-model-name Qwen2.5-7B-Instruct \
 #   --return-tokens-as-token-ids
