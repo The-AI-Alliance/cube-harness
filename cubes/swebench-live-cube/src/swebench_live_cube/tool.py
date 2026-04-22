@@ -66,13 +66,8 @@ class SWEBenchTool(Tool):
         return encoded[: self._config.max_output_bytes].decode("utf-8", errors="ignore") + "\n[truncated]"
 
     def bash_unlimited(self, command: str, timeout: int = 120) -> str:
-        """Like bash() but without output truncation — for internal use (e.g. evaluate()).
-
-        Routes through ``container.exec_long_running`` so retries are
-        idempotent and Toolkit's background+poll path kicks in for the eai
-        hang.  Reliable backends delegate to plain exec.
-        """
-        result = self._container.exec_long_running(
+        """Like bash() but without output truncation — for internal use (e.g. evaluate())."""
+        result = self._container.exec(
             command, timeout=timeout, workdir=self._config.working_dir,
         )
         parts = []

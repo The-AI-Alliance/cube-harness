@@ -66,20 +66,8 @@ class SWEBenchTool(Tool):
         return encoded[: self._config.max_output_bytes].decode("utf-8", errors="ignore") + "\n[truncated]"
 
     def bash_unlimited(self, command: str, timeout: int = 120) -> str:
-        """Like bash() but without output truncation — for internal use (e.g. evaluate()).
-
-        Routes through ``container.exec_long_running`` so that on backends
-        with exec-primitive reliability issues (notably Toolkit, whose eai
-        CLI occasionally hangs indefinitely on response delivery), the
-        command is dispatched as a background job in the container and
-        polled via short retry-safe RPC calls.  On reliable backends
-        (Local / Daytona / Modal) ``exec_long_running`` defaults to
-        ``exec`` — no overhead.  Using this path uniformly also makes
-        retries idempotent (the kick is protected by a POSIX-atomic
-        ``mkdir`` lock), so a retry won't re-apply an already-applied
-        patch.
-        """
-        result = self._container.exec_long_running(
+        """Like bash() but without output truncation — for internal use (e.g. evaluate())."""
+        result = self._container.exec(
             command, timeout=timeout, workdir=self._config.working_dir,
         )
         parts = []

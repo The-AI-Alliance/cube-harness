@@ -3,7 +3,11 @@ name = "cube-integration-tests"
 version = "0.1.0"
 description = "End-to-end integration tests for CUBE infra backends + benchmark cubes"
 requires-python = ">=3.12"
-dependencies = ["cube-standard", "pytest>=8.0"]
+dependencies = [
+    "cube-standard",
+    "pytest>=8.0",
+    "tenacity>=9.1.4",
+]
 
 [tool.uv]
 # Override transitive `cube-standard` URL so that packages pulled from PyPI
