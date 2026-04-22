@@ -169,10 +169,7 @@ class SWEBenchVerifiedTask(Task):
 
         test_cmd = self._build_test_cmd(repo, test_directives)
         cmd = f"{CONDA_ACTIVATE} && cd /testbed && {test_cmd}"
-        # Use bash_long_running — pytest on SWE-bench can take minutes and
-        # triggers eai CLI response-delivery hangs.  Backends with reliable
-        # exec streaming (Local / Daytona / Modal) fall back to plain exec.
-        output = self.tool.bash_long_running(cmd, timeout=timeout)
+        output = self.tool.bash_unlimited(cmd, timeout=timeout)
 
         all_passed = "[exit_code:" not in output and "[error]" not in output
         return all_passed, output

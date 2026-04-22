@@ -66,14 +66,11 @@ class SWEBenchTool(Tool):
         return encoded[: self._config.max_output_bytes].decode("utf-8", errors="ignore") + "\n[truncated]"
 
     def bash_unlimited(self, command: str, timeout: int = 120) -> str:
-        """Like bash() but without output truncation — for internal use (e.g. evaluate())."""
-        return self._run_bash(command, timeout=timeout)
+        """Like bash() but without output truncation — for internal use (e.g. evaluate()).
 
-    def bash_long_running(self, command: str, timeout: int) -> str:
-        """Run a minute-scale command via the backend's long-running-safe path.
-
-        See SWEBenchTool.bash_long_running in swebench-verified-cube for rationale
-        (background+poll on Toolkit, plain exec elsewhere).
+        Routes through ``container.exec_long_running`` so retries are
+        idempotent and Toolkit's background+poll path kicks in for the eai
+        hang.  Reliable backends delegate to plain exec.
         """
         result = self._container.exec_long_running(
             command, timeout=timeout, workdir=self._config.working_dir,
