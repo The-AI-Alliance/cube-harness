@@ -6,14 +6,9 @@ import logging
 import shlex
 from typing import Any
 
-from pydantic import PrivateAttr
-
-from cube.benchmark import RuntimeContext
-from cube.container import ContainerBackend
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.resource import ResourceHandle
-from cube.task import Task, TaskConfig, TaskMetadata
-from cube.task_infra import launch_task_container
+from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -22,30 +17,6 @@ logger = logging.getLogger(__name__)
 # POSIX-compatible: use `.` instead of `source`, skip silently if conda is absent.
 # Works with both bash (Daytona/Modal/Toolkit backends) and sh/dash (LocalContainer).
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
-
-
-def _maybe_relocate_testbed(container, tool_config: SWEBenchToolConfig) -> SWEBenchToolConfig:
-    """If ``tool_config.working_dir`` is read-only, copy it to ``/tmp/testbed``
-    and return an updated ToolConfig pointing there.
-
-    Targets Toolkit/EAI-style backends that run containers as an unprivileged
-    user (uid 13011 ``toolkit``) while SWE-bench images chown /testbed to
-    root with mode 644.  Under that combo ``git apply`` fails with
-    "Permission denied".  ``cp -a`` preserves git metadata; the
-    ``safe.directory`` config line keeps git from complaining about the
-    new owner post-copy.
-    """
-    wd = tool_config.working_dir
-    probe = container.exec(f"test -w {wd} && echo W || echo R", timeout=30)
-    if "W" in probe.stdout:
-        return tool_config
-    new_wd = "/tmp/testbed"
-    logger.info("%s not writable by runtime user — copying to %s for this backend", wd, new_wd)
-    container.exec(
-        f"cp -a {wd} {new_wd} && git config --global --add safe.directory {new_wd}",
-        timeout=300,
-    )
-    return tool_config.model_copy(update={"working_dir": new_wd})
 
 
 class SWEBenchVerifiedTaskMetadata(TaskMetadata):
@@ -77,32 +48,16 @@ class SWEBenchVerifiedTask(Task):
     validate_per_step: bool = False
     accept_agent_stop: bool = True
 
-    _resource_handle: ResourceHandle | None = PrivateAttr(default=None)
-
-    def model_post_init(self, __context: Any) -> None:
-        """Launch the per-task container via the benchmark's infra, then build the tool.
-
-        Expects ``runtime_context["infra"]`` (see openspec ``deprecate-container-backend``).
-        Falls back to the legacy ``container_backend`` path when no infra is provided.
-        """
-        if self.runtime_context is not None and "infra" in self.runtime_context:
-            cc = self.metadata.container_config  # type: ignore[union-attr]
-            self._resource_handle, self._container = launch_task_container(
-                self.runtime_context,
-                name=f"swebench-verified-{self.metadata.id}",
-                image=cc.image,
-                ram_gb=cc.ram_gb,
-                cpu_cores=cc.cpu_cores,
-            )
-            # Some SWE-bench images chown /testbed to root with mode 644. When
-            # the backend runs the container as an unprivileged user (Toolkit
-            # runs as uid 13011 `toolkit`), those files aren't writable by
-            # `git apply`.  Detect this and fall back to a writable copy.
-            tool_config = _maybe_relocate_testbed(self._container, self.tool_config)
-            self._tool = tool_config.make(container=self._container)
-            return
-
-        super().model_post_init(__context)
+    def _build_tool(self) -> None:
+        new_wd = relocate_if_readonly(
+            self._container,
+            self.tool_config.working_dir,
+            "/tmp/testbed",
+            extra_setup="git config --global --add safe.directory /tmp/testbed",
+        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(
+            container=self._container
+        )
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -156,18 +111,6 @@ class SWEBenchVerifiedTask(Task):
             "fail_to_pass_output": f2p_output[:2000],
             "pass_to_pass_output": p2p_output[:2000],
         }
-
-    def close(self) -> None:
-        super().close()
-        if self._resource_handle is not None:
-            logger.info(f"Closing resource handle for task {self.metadata.id}")
-            self._resource_handle.close()
-            self._resource_handle = None
-            self._container = None
-        elif self._container is not None:
-            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
-            self._container.stop()
-            self._container = None
 
     # ── Private helpers ────────────────────────────────────────────
 

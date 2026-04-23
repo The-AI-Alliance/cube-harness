@@ -11,46 +11,13 @@ from typing import Any
 
 from pydantic import PrivateAttr
 
-from cube.benchmark import RuntimeContext
-from cube.container import ContainerBackend
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.resource import ResourceHandle
-from cube.task import Task, TaskConfig, TaskMetadata
-from cube.task_infra import launch_task_container
+from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
 logger = logging.getLogger(__name__)
-
-
-def _maybe_relocate_app(container, tool_config: TerminalBenchToolConfig) -> TerminalBenchToolConfig:
-    """If ``tool_config.working_dir`` is read-only in the container, copy it to a
-    writable path and return an updated ToolConfig.
-
-    Pattern mirrors swebench's ``_maybe_relocate_testbed``.  Should eventually
-    be promoted to a shared ``cube.container.Container`` utility.
-    """
-    wd = tool_config.working_dir
-    probe = container.exec(f"test -w {wd} && echo W || echo R", timeout=30)
-    if "W" in probe.stdout:
-        return tool_config
-    new_wd = "/tmp/app"
-    logger.info("%s not writable by runtime user — copying to %s", wd, new_wd)
-    container.exec(
-        f"cp -a {wd} {new_wd} && "
-        # Git refuses to run in dirs whose ownership differs from the caller
-        # ('dubious ownership' warning).  '*' disables the check globally —
-        # safe in this test-runner context.
-        "git config --global --add safe.directory '*' && "
-        # Toolkit runs as uid 13011 with no /etc/passwd entry, so git can't
-        # auto-detect a committer identity.  Tasks that make commits (e.g.
-        # fix-git's `git merge`) fail with exit 128 "Committer identity unknown"
-        # without this.  No-op on backends where identity is already configured.
-        "git config --global user.email 'cube-harness@example.com' && "
-        "git config --global user.name 'Cube Harness'",
-        timeout=300,
-    )
-    return tool_config.model_copy(update={"working_dir": new_wd})
 
 
 class TerminalBenchTaskMetadata(TaskMetadata):
@@ -82,49 +49,30 @@ class TerminalBenchTask(Task):
     validate_per_step: bool = False
     accept_agent_stop: bool = True
 
-    # L3 resource handle owned by this task: the per-task Docker container
-    # launched in model_post_init via the benchmark's InfraConfig. Closed in
-    # close(). Not serialised (PrivateAttr).
-    _resource_handle: ResourceHandle | None = PrivateAttr(default=None)
-
-    # Container-side paths — we always put these under /tmp so the logic works
-    # uniformly on root and non-root backends.  /tmp is universally writable
-    # (it's a tmpfs on every POSIX container, and EAI Toolkit images also have
-    # it mode 1777).  The task images still have read-only /testbed or /app
-    # dirs owned by root, which is why we sometimes relocate those — but the
-    # dirs we CREATE are always in /tmp.
+    # Container-side paths — always under /tmp so logic works uniformly on root
+    # and non-root backends (EAI Toolkit images have /tmp mode 1777).
     _solution_dir: str = PrivateAttr(default="/tmp/solution")
     _tests_dir: str = PrivateAttr(default="/tmp/tests")
     _logs_verifier_dir: str = PrivateAttr(default="/tmp/logs/verifier")
 
-    def model_post_init(self, __context: Any) -> None:
-        """Launch the per-task container via the benchmark's infra, then build the tool.
-
-        Expected carrier convention (see openspec change `deprecate-container-backend`):
-        ``runtime_context["infra"]`` holds an ``InfraConfig`` instance. If present,
-        we build a per-task ``DockerServiceConfig`` and hand its container to the tool.
-        Falls back to the legacy container_backend path if no infra is provided.
-        """
-        if self.runtime_context is not None and "infra" in self.runtime_context:
-            cc = self.metadata.container_config  # type: ignore[union-attr]
-            self._resource_handle, self._container = launch_task_container(
-                self.runtime_context,
-                name=f"terminalbench-{self.metadata.id}",
-                image=cc.image,
-                ram_gb=cc.ram_gb,
-                cpu_cores=cc.cpu_cores,
-            )
-            # Some terminal-bench images chown /app to root mode 755.  When the
-            # backend runs as an unprivileged user (EAI Toolkit: uid 13011
-            # toolkit), the agent's git operations in /app fail silently.
-            # Detect and fall back to a writable copy.  All the dirs we CREATE
-            # (solution/, tests/, logs/verifier) are already under /tmp by
-            # default — see PrivateAttr defaults on this class.
-            tool_config = _maybe_relocate_app(self._container, self.tool_config)
-            self._tool = tool_config.make(container=self._container)
-            return
-
-        super().model_post_init(__context)
+    def _build_tool(self) -> None:
+        new_wd = relocate_if_readonly(
+            self._container,
+            self.tool_config.working_dir,
+            "/tmp/app",
+            # Git refuses dirs whose ownership differs ('dubious ownership').
+            # '*' disables the check globally — safe in this test-runner context.
+            # uid 13011 (Toolkit) has no /etc/passwd entry, so git can't
+            # auto-detect committer identity without explicit config.
+            extra_setup=(
+                "git config --global --add safe.directory '*' && "
+                "git config --global user.email 'cube-harness@example.com' && "
+                "git config --global user.name 'Cube Harness'"
+            ),
+        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(
+            container=self._container
+        )
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -362,17 +310,6 @@ class TerminalBenchTask(Task):
             self._temp_dir = None
             self._task_path = None
         super().close()
-        # Tear down the per-task container via the resource handle (new path) or
-        # directly via Container.stop() (legacy path).
-        if self._resource_handle is not None:
-            logger.info(f"Closing resource handle for task {self.metadata.id}")
-            self._resource_handle.close()
-            self._resource_handle = None
-            self._container = None
-        elif self._container is not None:
-            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
-            self._container.stop()
-            self._container = None
 
     def _parse_pytest_output(self, output: str) -> dict[str, str]:
         """Parse pytest output, falling back to regex heuristics."""
