@@ -36,7 +36,21 @@ _TASK_ACTIONS: dict[str, list[Action]] = {
         _FINAL,
     ],
     "overfull-hbox": [
-        Action(name="bash", arguments={"command": "bash /tmp/solution/solve.sh 2>&1", "timeout": 600}),
+        # Prepend the apt-extracted python3 to PATH so solve.sh's `python3` call
+        # works on minimal images (e.g. bare LaTeX) that ship without python3.
+        # On images that already have python3 in PATH the prepended directory
+        # either doesn't exist (harmless) or provides a compatible python3.12.
+        Action(
+            name="bash",
+            arguments={
+                "command": (
+                    "export PATH=/tmp/python3_pkg/usr/bin:$PATH && "
+                    "export LD_LIBRARY_PATH=/tmp/python3_pkg/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && "
+                    "bash /tmp/solution/solve.sh 2>&1"
+                ),
+                "timeout": 600,
+            },
+        ),
         _FINAL,
     ],
 }

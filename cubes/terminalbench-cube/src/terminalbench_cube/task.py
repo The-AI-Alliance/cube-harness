@@ -150,6 +150,10 @@ class TerminalBenchTask(Task):
                 self._rewrite_files_locally(solution_dir, {"/app/": f"{app_dir}/"})
             self.tool.bash(f"mkdir -p {self._solution_dir}")
             self.tool.upload_directory(solution_dir, self._solution_dir)
+            # Pre-install python3 + uv so oracle solve.sh scripts work on minimal
+            # images (e.g. bare LaTeX) that ship without python3.  In non-oracle
+            # runs the agent installs its own deps; we don't add overhead there.
+            self._ensure_uv_preinstalled()
 
         return Observation.from_text(extra["instruction"]), {
             "task_id": self.metadata.id,
@@ -251,6 +255,13 @@ class TerminalBenchTask(Task):
         without it — install via apt if needed), then install ``uv`` via ``pip``
         from PyPI into ``/tmp/fakehome/.local/bin``, create the env file
         test.sh expects, and override ``HOME=/tmp/fakehome`` when running test.sh.
+
+        Non-root fallback: when running as non-root (e.g. EAI Toolkit uid 13011),
+        apt-get requires root.  Fall back to downloading the python3 packages
+        via ``apt-get download`` (works without root, writes to /tmp) and
+        extracting them with ``dpkg-deb --extract``, then use that python3 to
+        bootstrap pip (via get-pip.py with SSL verification disabled for the
+        bootstrap step only) and finally ``pip install uv``.
         """
         marker = "/tmp/fakehome/.local/bin/uv"
         probe = self.tool.bash(f"test -x {marker} && echo EXISTS || echo MISSING", timeout=15)
@@ -258,26 +269,85 @@ class TerminalBenchTask(Task):
             return
 
         # Some minimal images (e.g. bare LaTeX) ship without python3.
-        # Install it via apt before attempting pip install uv.
+        # Try root apt-get first (works on Docker/local backends).
         has_python = self.tool.bash("python3 --version 2>/dev/null && echo HAS_PYTHON || echo NO_PYTHON", timeout=15)
         if "NO_PYTHON" in has_python:
-            logger.info("python3 not found — installing via apt-get")
+            logger.info("python3 not found — trying apt-get install (root path)")
             self.tool.bash(
                 "apt-get update -qq && apt-get install -y --no-install-recommends python3 python3-pip 2>&1",
                 timeout=120,
             )
+            has_python = self.tool.bash(
+                "python3 --version 2>/dev/null && echo HAS_PYTHON || echo NO_PYTHON", timeout=15
+            )
+
+        if "NO_PYTHON" in has_python:
+            # Root apt-get failed (non-root container).  Download packages without
+            # root and extract them to /tmp/python3_pkg.
+            logger.info("root apt-get failed — trying non-root apt download + dpkg-deb extract")
+            self._install_python3_nonroot()
+            has_python = self.tool.bash(
+                "test -x /tmp/python3_pkg/usr/bin/python3.12 && echo HAS_PYTHON || echo NO_PYTHON", timeout=10
+            )
+
+        if "NO_PYTHON" in has_python:
+            logger.warning("python3 unavailable — skipping uv pre-install; test.sh will fall back to curl")
+            return
 
         logger.info("Pre-installing uv into /tmp/fakehome/.local/bin (backend-portable workaround)")
-        cmd = (
-            "export HOME=/tmp/fakehome && "
-            "mkdir -p $HOME/.local/bin && "
-            "python3 -m pip install --quiet --target /tmp/uv_pkg uv && "
-            "cp /tmp/uv_pkg/bin/uv /tmp/uv_pkg/bin/uvx $HOME/.local/bin/ && "
-            "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env"
+
+        use_extracted = "exists" in self.tool.bash(
+            "test -x /tmp/python3_pkg/usr/bin/python3.12 && echo exists || echo missing", timeout=5
         )
+
+        if use_extracted:
+            # Bootstrap pip via get-pip.py (SSL verification disabled for this
+            # one-time download from bootstrap.pypa.io; pip itself uses certifi).
+            self.tool.write_file(
+                "/tmp/_dl_pip.py",
+                "import ssl, urllib.request as R\n"
+                "ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)\n"
+                "ctx.check_hostname=False\n"
+                "ctx.verify_mode=ssl.CERT_NONE\n"
+                "open('/tmp/get-pip.py','wb').write(R.urlopen('https://bootstrap.pypa.io/get-pip.py',context=ctx).read())\n",
+            )
+            cmd = (
+                "export LD_LIBRARY_PATH=/tmp/python3_pkg/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && "
+                "export HOME=/tmp/fakehome && "
+                "mkdir -p $HOME/.local/bin && "
+                "/tmp/python3_pkg/usr/bin/python3.12 /tmp/_dl_pip.py 2>&1 && "
+                "/tmp/python3_pkg/usr/bin/python3.12 /tmp/get-pip.py --target /tmp/pip_pkg -q 2>&1 && "
+                "PYTHONPATH=/tmp/pip_pkg /tmp/python3_pkg/usr/bin/python3.12 "
+                "-m pip install --quiet --target /tmp/uv_pkg uv==0.9.5 2>&1 && "
+                "cp /tmp/uv_pkg/bin/uv /tmp/uv_pkg/bin/uvx $HOME/.local/bin/ && "
+                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env"
+            )
+        else:
+            cmd = (
+                "export HOME=/tmp/fakehome && "
+                "mkdir -p $HOME/.local/bin && "
+                "python3 -m pip install --quiet --target /tmp/uv_pkg uv && "
+                "cp /tmp/uv_pkg/bin/uv /tmp/uv_pkg/bin/uvx $HOME/.local/bin/ && "
+                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env"
+            )
+
         result = self.tool.bash(cmd, timeout=300)
         if not result or "error" in result.lower():
             logger.warning("uv pre-install may have failed; test.sh will fall back to curl: %s", result[:200])
+
+    def _install_python3_nonroot(self) -> None:
+        """Download python3.12 packages via apt and extract with dpkg-deb (no root needed)."""
+        logger.info("Downloading python3.12 packages via apt (non-root) and extracting to /tmp/python3_pkg")
+        apt_opts = "-o Dir::State::Lists=/tmp/apt/lists -o Dir::Cache::Archives=/tmp/apt/archives"
+        cmd = (
+            "mkdir -p /tmp/apt/lists/partial /tmp/apt/archives/partial /tmp/python3_pkg && "
+            f"apt-get {apt_opts} update -qq 2>/dev/null || true && "
+            f"cd /tmp && apt-get {apt_opts} download "
+            "python3.12-minimal libpython3.12-minimal libpython3.12-stdlib python3-minimal 2>&1 && "
+            "for deb in /tmp/*.deb; do dpkg-deb --extract \"$deb\" /tmp/python3_pkg/; done"
+        )
+        result = self.tool.bash(cmd, timeout=180)
+        logger.info("python3 nonroot install: %s", (result or "")[-300:])
 
     def finished(self, obs: Observation | None = None) -> bool:
         return False
