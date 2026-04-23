@@ -293,6 +293,79 @@ Priority order:
 
 If stuck: the build VM at `/home/azureuser/workspace` still has all the state,
 including the `~/.cube/images/backups/waa-windows-prepared-lsa-v9.qcow2` (the
-exact image on HF) and a working LocalInfraConfig setup. The full history of
-how each issue was diagnosed is in `/home/azureuser/.cube/handoff/HANDOFF.md`
-on that VM.
+exact image on HF) and a working LocalInfraConfig setup.
+
+---
+
+## Design journal — the journey (for future-you / the next agent)
+
+This section is the "why we ended up here" so you don't re-run the same failed
+experiments. Every listed "what didn't work" is a real thing that was tried
+and discarded — not speculation.
+
+### What the upstream WAA image actually is
+
+Empirically determined (via offline NTFS inspection + boot + in-guest probes):
+
+| Fact | Implication |
+|---|---|
+| `C:\Windows\Panther\` shows evidence of OOBE setup but image is NOT generalized | Image is a specialized clone of a running VM |
+| `Docker` user exists, in Administrators group, with **empty password** | AutoLogon registry says `AutoAdminLogon=1`, `DefaultPassword=<encrypted empty>` |
+| `WindowsArena_OnLogon` scheduled task targets `C:\oem\on-logon.ps1` (local path, NOT `\\host.lan\Data\...`) | Upstream image was pre-modified to be SMB-independent. Our `embed-waa-server.ps1` provisioner is unused. |
+| Windows Update (wuauserv / TiWorker) appears disabled or severely broken | `Add-WindowsCapability -Online` hangs indefinitely trying to reach WU. All OS-feature installs must bypass WU. |
+| VS Code installed per-user under `Docker\AppData\Local` (NOT provisioned for all users) | `sysprep /generalize` fails with `SysprepGeneralizeValidate / AppxSysprep` error `0x80073cf2`. Generalize path is a dead end without removing VS Code first. |
+| Flask guest agent starts from `C:\oem\server\main.py` via the OnLogon task | Works without any host-side SMB server. Requires someone to be logged in. |
+| Accessibility-tree endpoint (`/accessibility_tree`) hangs 5+ min on pywinauto UIA walk even on a clean 2-window desktop | In-guest bug, not container/host dependent. Orthogonal to provisioning. |
+
+### Packer build iterations (what didn't work and why)
+
+Nine attempts before the final v9 succeeded end-to-end:
+
+| # | What we added | What broke |
+|---|---|---|
+| v1 | Initial HCL with `qemuargs` for UEFI pflash + swtpm | Packer's `qemuargs` merges by *first token*, so our `-drive` entries replaced Packer's auto-added `-drive` for the main OS disk. VM booted with no disk attached. |
+| v2 | Explicit main-disk `-drive` in `qemuargs` | `Add-WindowsCapability -Online`: `Access denied`. WinRM hands admin-group users a non-elevated UAC-split token even as Docker. |
+| v3 | Packer's `elevated_user` / `elevated_password` on each `powershell` provisioner (runs via one-shot scheduled task with full admin token) | `Add-WindowsCapability -Online` hung 40+ min without completing. Windows Update is broken in this image. |
+| v4 | Switched OpenSSH install to side-loading from the GitHub Win32-OpenSSH release zip | PowerShell parser errors: `TerminatorExpectedAtEndOfString` on an innocuous `& "$dstDir\install-sshd.ps1"`. WinRM's XML encoding mangled the em-dash characters in PS comments into something the parser rejected. |
+| v5 | ASCII-cleaned every `.ps1` (em-dashes → hyphens) | Packer timed out waiting for VM shutdown. Sysprep `/shutdown` races Packer's `shutdown_command` wait — on Windows 11 it routinely takes >15 min for the final power-off after generalize completes. |
+| v6 | Sysprep `/quit` (not `/shutdown`) + wait-for-sysprep-process-to-exit loop in PS + explicit `shutdown_command = "shutdown /s /f /t 10"` + `<AutoLogon>` block in the unattend.xml we write | Sysprep **silently failed** with `0x80073cf2` (per-user VS Code blocks generalize). My PS script didn't check `$LASTEXITCODE` after sysprep.exe, so we treated it as success. |
+| v7 | Removed sysprep entirely; declared image `specialized=True`; skipped `os_profile` at launch; `os_state=Specialized` in gallery definition | Smoke test: SSH up, but guest agent on :5000 never came up. AutoLogon stayed silently broken: `AutoAdminLogon=1`, `DefaultPassword=<stale encrypted empty>`. `bootstrap_winrm.py` had earlier changed Docker's password via `Set-LocalUser` but didn't update the LSA-stored DefaultPassword. |
+| v8 | `configure-autologon.ps1` that sets Winlogon registry plaintext `DefaultPassword` | Cancelled before finishing — realized the LSA secret takes precedence over the registry plaintext. Registry-only fix wouldn't have worked. |
+| v9 | Added `Add-Type` C# shim using `advapi32!LsaOpenPolicy` + `LsaStorePrivateData` to overwrite the LSA secret as well | **Worked.** Smoke test passed: guest agent up in 638 KB screenshot, SSH up as Docker, clean end-to-end on plain QEMU. |
+
+### Alternatives explicitly considered and rejected
+
+1. **Install `samba` on the build host and serve `\\host.lan\Data`**. My initial hypothesis was that the image still needed SMB. Empirical test (`recipes/waa/eval_waa.py debug`) proved the guest agent DOES start without SMB — the upstream image was pre-modified to use `C:\oem\`. Not needed.
+2. **`embed-waa-server.ps1` provisioner to copy WAA server code into the image**. Written as a safety net. Turns out the upstream image already has this done. The provisioner exists in `packer/scripts/` but is NOT wired into `waa-windows.pkr.hcl`. Left in the repo as reference for a theoretical future image that *isn't* pre-modified.
+3. **Docker-wrapping QEMU (the upstream WAA pattern)**. Would have reintroduced `WAADockerVMBackend` inside `LocalInfraConfig`, reversing the whole InfraConfig-abstraction migration.
+4. **Option B: fix the AppX VS Code issue to enable generalize**. Would require either reinstalling VS Code system-wide or removing the per-user install. Both change the image's agent-sandbox surface — wrong shape of fix for an eval harness that wants deterministic state.
+5. **Running LSA writes through only the registry plaintext `DefaultPassword`**. Actually tried in v8 briefly — Windows checks LSA first, registry plaintext ignored when LSA secret exists. Needed P/Invoke.
+6. **Azure CustomScriptExtension to inject per-launch SSH keys instead of baking one into the image**. Cleaner for multi-user setups but adds ~60 s to every VM launch. For a single-user eval harness, baking one key at Packer time is strictly simpler. Revisit if anyone else needs to share the image.
+7. **`az login --use-device-code` on the build VM** (for pushing to GitHub / uploading to Azure directly from here). Blocked by org VPN policy — Azure sign-in portals are unreachable from the build VM. Had to hand off to the laptop. Same issue reached for granting the VM's managed identity any RBAC role — the user didn't have permissions to grant on `ui_assist`.
+
+### Tooling workarounds that might surprise you
+
+- Ubuntu mounts `/tmp` as `noexec`. Packer extracts plugin binaries into `$TMPDIR` and re-exec's them, so plugin install fails with `permission denied`. `packer/run.sh` sets `TMPDIR=$HOME/.packer-tmp` before running `packer init`.
+- `swtpm` and the writable OVMF_VARS copy can't be managed by the Packer qemu plugin. `packer/run.sh` sets those up as external state, passes paths into the HCL via `-var pflash_vars_path=... -var tpm_socket_path=...`.
+- `gh` CLI was not installed on the build VM. Push to GitHub was done via SSH remote after adding `~/.ssh/id_ed25519.pub` to the GitHub account — that same keypair is the one baked into `administrators_authorized_keys` inside the image.
+- HuggingFace upload: the default `scripts/upload_image.py` points at `The-AI-Alliance/waa-windows-image` (no write perm on kushasareen's token) with filename `data.img` (would clobber the original upstream). The uploaded file is at `kushasareen/waa-windows-image/resolve/main/waa-windows-prepared.qcow2` — this is what `source_url` points at in `WAA_WINDOWS_RESOURCE`.
+
+### Azure environment facts (from the build VM's context)
+
+- Subscription: `aeb958d3-a614-450e-94bc-88f284dc0664`
+- Resource group: `UI_ASSIST` in `westus2` (the VM itself runs in this RG, named `osworld`)
+- The VM has a system-assigned managed identity (object ID `74d56c81-1ce5-42cf-88a5-021143f612bd`) that has **zero RBAC** on the subscription or any RG. Not usable.
+- Storage account `cubeexpvhd` and a compute gallery already exist in `UI_ASSIST` — set up by whoever originally built the osworld recipe.
+- `vnet-westus2` and `osworld-nsg` are referenced by the osworld recipe defaults but were not verified in this session. **Confirm before first launch.**
+
+### What lives on the build VM that's not in the repo
+
+Only if you need to rebuild the image from scratch or recover:
+
+- `~/.cube/images/waa-windows-vm.qcow2` — bootstrap-modified base (WinRM enabled + Docker password set). Input to `make build-image`.
+- `~/.cube/images/backups/waa-windows-vm.qcow2.bak-2026-04-22` — original upstream image, before `bootstrap_winrm.py` modified it.
+- `~/.cube/images/backups/waa-windows-prepared-lsa-v9.qcow2` — **this is the exact image on HF**. sha256 `d6c5f8cc…02953e47`.
+- `~/.cube/waa-build-admin-password.txt` — Docker-user password baked into the image.
+- `~/.ssh/id_ed25519` + `.pub` — build-time SSH keypair.
+
+All of that can be regenerated by re-running `make bootstrap-winrm` and `make build-image` against a fresh download of the upstream image. The only thing that can't be easily regenerated is the admin password (the image has it baked in) — if you lose `~/.cube/waa-build-admin-password.txt`, you'd have to rebuild the image with a new password.
