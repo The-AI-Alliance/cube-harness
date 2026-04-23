@@ -146,8 +146,31 @@ def _get_parent_ctx_env() -> Context | None:
 
 
 def get_trace_env_vars() -> dict[str, str]:
+    """Return env vars to forward to Ray workers.
+
+    Includes tracing vars + LLM provider credentials so workers can call the LLM API.
+    Workers inherit the parent process env, but explicit env_vars here act as a reliable
+    fallback when the parent shell did not export them (e.g. new terminal session).
+    """
     env_vars = {}
-    for key in (RAY_ENV_TRACEPARENT, RAY_ENV_OTLP_ENDPOINT, RAY_ENV_MODEL, RAY_ENV_AGENT_NAME):
+    keys = (
+        # Tracing
+        RAY_ENV_TRACEPARENT,
+        RAY_ENV_OTLP_ENDPOINT,
+        RAY_ENV_MODEL,
+        RAY_ENV_AGENT_NAME,
+        # LLM provider credentials (LiteLLM reads these from the environment)
+        "AZURE_API_KEY",
+        "AZURE_API_BASE",
+        "AZURE_API_VERSION",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "HUGGING_FACE_HUB_TOKEN",
+        # WorkArena ServiceNow credentials
+        "SNOW_INSTANCE_URL",
+        "SNOW_ADMIN_PASSWORD",
+    )
+    for key in keys:
         if val := os.environ.get(key):
             env_vars[key] = val
     return env_vars

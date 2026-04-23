@@ -5,7 +5,7 @@ from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.core import Content, EnvironmentOutput, Observation, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
@@ -121,7 +121,8 @@ class Episode:
             return EnvironmentOutput(obs=obs, info=info)
 
         agent = self.config.agent_config.make(action_set, task_id=self.config.task_config.task_id)
-        return self._run_loop(setup_fn, step_fn, close_fn, agent)
+        extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
+        return self._run_loop(setup_fn, step_fn, close_fn, agent, extra_metadata=extra_metadata)
 
     def _run_loop(
         self,
@@ -129,6 +130,7 @@ class Episode:
         step_fn: Callable,
         close_fn: Callable,
         agent,
+        extra_metadata: dict | None = None,
     ) -> Trajectory:
         """Run loop for the agent on the task."""
         task_id = self.config.task_config.task_id
@@ -137,13 +139,14 @@ class Episode:
             with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
                 start_time = time.time()
                 env_output = setup_fn()
-                agent_name = type(self.config.agent_config).__name__
+                agent_name = self.config.agent_config.agent_name
                 trajectory = Trajectory(
                     id=f"{task_id}_ep{self.config.id}",
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
+                        **(extra_metadata or {}),
                         **env_output.info,
                     },
                     start_time=start_time,
