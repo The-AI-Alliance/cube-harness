@@ -185,6 +185,7 @@ class WAABenchmark(Benchmark):
             logger.info("Provisioning resource %s...", resource.name)
             self.infra.provision(resource)
 
+        self.install()
         self._runtime_context = {"waa": True}
         logger.info("WAABenchmark ready with %d tasks", len(self.task_metadata))
 

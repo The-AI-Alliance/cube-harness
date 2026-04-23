@@ -142,21 +142,22 @@ class WAATask(Task):
         )
 
         setup_steps = task_data.get("config") or []
-        if setup_steps:
-            chromium_port, vlc_port, _ = self._get_vm_ports()
-            task_cache_dir = str(Path(self._computer.config.cache_dir) / task_data.get("id", "task"))
-            Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
-            screen_width = _VM_SCREEN_WIDTH
-            screen_height = _VM_SCREEN_HEIGHT
-            setup_ctrl = SetupController(
-                guest=self._computer._guest,
-                chromium_port=chromium_port,
-                vlc_port=vlc_port,
-                cache_dir=task_cache_dir,
-                screen_width=screen_width,
-                screen_height=screen_height,
-            )
-            setup_ctrl.setup(setup_steps)
+        chromium_port, vlc_port, _ = self._get_vm_ports()
+        task_cache_dir = str(Path(self._computer.config.cache_dir) / task_data.get("id", "task"))
+        Path(task_cache_dir).mkdir(parents=True, exist_ok=True)
+        setup_ctrl = SetupController(
+            guest=self._computer._guest,
+            chromium_port=chromium_port,
+            vlc_port=vlc_port,
+            cache_dir=task_cache_dir,
+            screen_width=_VM_SCREEN_WIDTH,
+            screen_height=_VM_SCREEN_HEIGHT,
+        )
+        # Always wait for Flask agent connectivity before proceeding — the guest
+        # agent may need time to start on first boot of a cloud VM.
+        reachable = setup_ctrl.setup(setup_steps)
+        if not reachable:
+            logger.warning("WAA VM guest agent unreachable — observation may fail")
 
         did_something = self._resource_handle is not None or bool(setup_steps)
         if did_something:

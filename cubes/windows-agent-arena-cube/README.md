@@ -2,7 +2,7 @@
 
 [WindowsAgentArena](https://github.com/microsoft/WindowsAgentArena) benchmark ported to the [CUBE](../../) protocol.
 
-**152 tasks** across 10 domains (file explorer, VS Code, LibreOffice, VLC, Notepad, Paint, Settings, Clock, Calculator) running on a real Windows 11 VM via Docker + QEMU.
+**152 tasks** across 10 domains (file explorer, VS Code, LibreOffice, VLC, Notepad, Paint, Settings, Clock, Calculator) running on a real Windows 11 VM via CUBE InfraConfig backends.
 
 ## Prerequisites
 
@@ -21,9 +21,7 @@ The WAA container does **not** auto-download Windows for licensing reasons. You 
 
 1. Download the ISO from the [Microsoft Evaluation Center](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-11-enterprise)
    (free, requires a short registration form).
-2. Tell `waa-cube` where to find it — pick one:
-   - Set the environment variable: `export WAA_SETUP_ISO=/path/to/Win11_Eval.iso`
-   - Pass it directly: `WAADockerVMBackend(setup_iso_path="/path/to/Win11_Eval.iso")`
+2. Tell your provisioning pipeline where to find it (for example via environment variables used by your chosen infra backend).
 
 ## Installation
 
@@ -31,29 +29,18 @@ The WAA container does **not** auto-download Windows for licensing reasons. You 
 uv pip install -e .
 ```
 
-### First-time image preparation (`install()`)
+### First-time provisioning
 
-Before any task can run, the Windows VM disk image must be built. This is a
-one-time operation (~20 min) triggered automatically by `cube test waa-cube`
-or by calling `bench.install()` explicitly:
+`WAABenchmark` is infra-driven. Provisioning happens through the configured
+`InfraConfig` during `setup()` (idempotent):
 
 ```python
 from waa_cube.benchmark import WAABenchmark
-from waa_cube.vm_backend.backend import WAADockerVMBackend
 
-bench = WAABenchmark(vm_backend=WAADockerVMBackend(setup_iso_path="/path/to/Win11_Eval.iso"))
-bench.install()  # one-time: boots Windows, saves disk image, exits
-bench.setup()
+bench = WAABenchmark()
+bench.install()  # no-op
+bench.setup()    # provisions resources via infra when needed
 ```
-
-Or via environment variables:
-
-```bash
-export WAA_SETUP_ISO=/path/to/Win11_Eval.iso
-cube test waa-cube   # triggers install() automatically on first run
-```
-
-`install()` is idempotent — it skips if the disk image already exists.
 
 ## Usage
 
@@ -72,11 +59,9 @@ uv run recipes/waa/haiku.py debug
 ```python
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
-from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 bench = WAABenchmark(
     default_tool_config=ComputerConfig(),
-    vm_backend=WAADockerVMBackend(cpu_cores=8),
 )
 bench.install()
 bench.setup()
@@ -167,7 +152,7 @@ src/waa_cube/
 ├── debug_task_metadata.json # Debug task metadata (CUBE format)
 ├── task_metadata.json       # Shipped task metadata (152 tasks)
 └── vm_backend/
-    ├── backend.py           # WAADockerVMBackend, WAADockerManager, WAADockerVM
+    ├── backend.py           # Legacy local VM backend utilities
     ├── evaluator.py         # GuestAgentProxy, Evaluator
     ├── setup_controller.py  # Task setup step execution
     ├── getters/             # Per-domain state extractors (used by evaluator)
