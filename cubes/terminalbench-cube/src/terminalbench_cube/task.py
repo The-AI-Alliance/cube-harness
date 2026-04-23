@@ -144,13 +144,12 @@ class TerminalBenchTask(Task):
         # Oracle mode: upload solution for debugging/baselines
         if extra.get("oracle_mode") and (task_path / "solution").exists():
             assert isinstance(self.tool, TerminalBenchTool)
+            app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
+            solution_dir = task_path / "solution"
+            if app_dir != "/app":
+                self._rewrite_files_locally(solution_dir, {"/app/": f"{app_dir}/"})
             self.tool.bash(f"mkdir -p {self._solution_dir}")
-            self.tool.upload_directory(task_path / "solution", self._solution_dir)
-            # solve.sh can hardcode /app (the image's canonical working dir).
-            # If we relocated to /tmp/app at post_init, patch solve.sh's paths
-            # so the gold solution actually touches the writable copy.  Same
-            # pattern used on the tests dir at evaluate() time.
-            self._rewrite_app_paths(self._solution_dir)
+            self.tool.upload_directory(solution_dir, self._solution_dir)
 
         return Observation.from_text(extra["instruction"]), {
             "task_id": self.metadata.id,
@@ -167,21 +166,24 @@ class TerminalBenchTask(Task):
             tests_dir = self._task_path / "tests"
             self.tool.bash(f"mkdir -p {self._tests_dir} {self._logs_verifier_dir}")
             if tests_dir.exists():
+                # Rewrite hardcoded paths in local test files before uploading.
+                # Done in Python (not via sed) to avoid shell-quoting pitfalls
+                # (e.g. single quotes inside sed expressions) and GNU sed
+                # re-scanning surprises that produce double '/tmp/' prefixes.
+                assert isinstance(self.tool, TerminalBenchTool)
+                app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
+                path_subs: dict[str, str] = {
+                    "/logs/verifier": self._logs_verifier_dir,
+                    "/tests/": self._tests_dir + "/",
+                    "/tests ": self._tests_dir + " ",
+                    # Path("/tests") — no trailing slash, quote-boundary match
+                    '"/tests"': f'"{self._tests_dir}"',
+                    "'/tests'": f"'{self._tests_dir}'",
+                }
+                if app_dir != "/app":
+                    path_subs["/app/"] = f"{app_dir}/"
+                self._rewrite_files_locally(tests_dir, path_subs)
                 self.tool.upload_directory(tests_dir, self._tests_dir)
-                # Upstream test.sh + test_outputs.py hardcode '/tests',
-                # '/logs/verifier', and '/app'.  We upload to /tmp-prefixed
-                # paths and may have relocated /app -> /tmp/app — rewrite in
-                # place so all references line up with the actual locations
-                # the solve commands wrote to.  Covers test.sh (shell) and
-                # test_outputs.py (Python).
-                self._rewrite_app_paths(
-                    self._tests_dir,
-                    extra_subs={
-                        "/logs/verifier": self._logs_verifier_dir,
-                        "/tests/": self._tests_dir + "/",
-                        "/tests ": self._tests_dir + " ",
-                    },
-                )
                 self.tool.bash(f"chmod +x {self._tests_dir}/test.sh")
 
         # Pre-install `uv` + fake HOME so test.sh's
@@ -216,32 +218,21 @@ class TerminalBenchTask(Task):
             "output_preview": output[:1000] if output else "",
         }
 
-    def _rewrite_app_paths(self, target_dir: str, extra_subs: dict[str, str] | None = None) -> None:
-        """Rewrite hardcoded '/app' → actual working_dir in *.sh/*.py under ``target_dir``.
+    @staticmethod
+    def _rewrite_files_locally(directory: Path, subs: dict[str, str]) -> None:
+        """Apply string substitutions to *.sh and *.py files under ``directory`` in-place.
 
-        Terminal-Bench task scripts (solve.sh, test.sh, test_outputs.py) often
-        hardcode ``/app`` because that's the image's canonical working dir.
-        When we relocate to ``/tmp/app`` for unprivileged backends, those
-        hardcoded paths break silently — git fails with "no such path",
-        pytest sees unmodified files, reward=0.
+        Preferred over sed-in-container: avoids shell-quoting pitfalls (e.g. single
+        quotes inside sed expressions) and GNU sed re-scanning surprises.
         """
-        assert isinstance(self.tool, TerminalBenchTool)
-        app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
-        parts: list[str] = []
-        for k, v in (extra_subs or {}).items():
-            parts.append(f"s|{k}|{v}|g;")
-        if app_dir != "/app":
-            # ONLY rewrite '/app/' (with trailing slash) — doing a bare '/app'
-            # replacement would re-match the '/app' substring inside the already-
-            # rewritten '{app_dir}/' producing e.g. '/tmp/tmp/app/'.  All real
-            # test-file occurrences carry a trailing '/' (path prefixes).
-            parts.append(f"s|/app/|{app_dir}/|g;")
-        if not parts:
-            return
-        self.tool.bash(
-            f"find {target_dir} -type f \\( -name '*.sh' -o -name '*.py' \\) "
-            f"-exec sed -i '{''.join(parts)}' {{}} +"
-        )
+        for f in directory.rglob("*"):
+            if f.suffix in (".sh", ".py") and f.is_file():
+                text = f.read_text(errors="replace")
+                new_text = text
+                for k, v in subs.items():
+                    new_text = new_text.replace(k, v)
+                if new_text != text:
+                    f.write_text(new_text)
 
     def _ensure_uv_preinstalled(self) -> None:
         """Pre-install ``uv`` so test.sh's ``source $HOME/.local/bin/env`` works.
