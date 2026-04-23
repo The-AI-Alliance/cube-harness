@@ -56,7 +56,11 @@ class MathToolUseTool(Tool):
 
     @tool_action
     def run_python_code(self, code: str) -> str:
-        """Execute Python code inside SandboxFusion and return combined output."""
+        """Execute Python code. Print only the final result.
+
+        Args:
+            code: Python code to execute.
+        """
         self._python_call_count += 1
 
         stripped = code.strip()
@@ -113,7 +117,11 @@ class MathToolUseTool(Tool):
 
     @tool_action
     def MathAnswer(self, answer: str) -> str:  # noqa: N802
-        """Submit the final answer in LaTeX format (for example: ``\\boxed{42}``)."""
+        """Submit the final answer in LaTeX \\boxed{} format (for example: ``\\boxed{42}``).
+
+        Args:
+            answer: The final answer.
+        """
         self._answer_call_count += 1
         if self._answer_call_count > 1:
             return "MathAnswer may only be called once."
