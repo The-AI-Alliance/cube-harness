@@ -186,6 +186,8 @@ class TerminalBenchTask(Task):
                 }
                 if app_dir != "/app":
                     path_subs["/app/"] = f"{app_dir}/"
+                    path_subs['"/app"'] = f'"{app_dir}"'
+                    path_subs["'/app'"] = f"'{app_dir}'"
                 self._rewrite_files_locally(tests_dir, path_subs)
                 self.tool.upload_directory(tests_dir, self._tests_dir)
                 self.tool.bash(f"chmod +x {self._tests_dir}/test.sh")

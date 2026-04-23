@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 
 # Per-task wall-clock timeout in seconds.  Raised as a pytest failure (not a
 # hang) so the matrix keeps running.  Local Docker tasks take ~60-90s;
-# cloud tasks (Toolkit/Daytona) take up to ~5 min including job startup.
-_TASK_TIMEOUT_SECONDS = 600
+# cloud tasks (Toolkit/Daytona) take up to ~10 min including job startup,
+# sidecar bootstrap, and any nonroot python3/uv pre-install.
+_TASK_TIMEOUT_SECONDS = 900
 
 
 def run_debug_task(

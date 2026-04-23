@@ -87,7 +87,7 @@ log_cli_format = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 log_cli_date_format = "%H:%M:%S"
 # Hard ceiling per test item — the harness also enforces this in a thread
 # so the failure message is informative, but pytest-timeout is the backstop.
-timeout = 660
+timeout = 960
 markers = [
     "integration: end-to-end integration tests requiring external services",
 ]
