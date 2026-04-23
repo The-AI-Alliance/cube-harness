@@ -33,13 +33,11 @@ from collections.abc import Callable
 from types import ModuleType
 
 import pytest
-
-from cube.resource import InfraConfig
-from cube_integration_tests.debug_harness import run_debug_on
-
 import swebench_live_cube.debug as _swebench_live
 import swebench_verified_cube.debug as _swebench_verified
 import terminalbench_cube.debug as _terminalbench
+from cube.resource import InfraConfig
+from cube_integration_tests.debug_harness import run_debug_on
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 
