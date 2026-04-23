@@ -5,7 +5,7 @@ from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.core import Content, EnvironmentOutput, Observation, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
@@ -186,6 +186,7 @@ class Episode:
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
+                        **(extra_metadata or {}),
                         **env_output.info,
                         **(extra_metadata or {}),
                     },
