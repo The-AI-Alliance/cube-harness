@@ -17,7 +17,7 @@ from cube.resource import VMResourceConfig
 
 WAA_WINDOWS_RESOURCE = VMResourceConfig(
     name="waa-windows-vm",
-    source_url="https://huggingface.co/datasets/kushasareen/waa-windows-image/resolve/main/data.img",
+    source_url="https://huggingface.co/datasets/kushasareen/waa-windows-image/resolve/main/waa-windows-prepared.qcow2",
     default_ttl_seconds=60 * 60 * 2,
     min_cpu_cores=8,
     min_ram_gb=8,
