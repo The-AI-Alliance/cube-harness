@@ -54,7 +54,7 @@ class WorkArenaInfeasibleTool(Tool):
 
     @tool_action
     def report_infeasible(self, explanation: str) -> str:
-        """Report that this task is genuinely impossible to complete. Use only when the task is objectively infeasible.
+        """Report that this task is genuinely impossible to complete. Use ONLY when the task is objectively infeasible: a required ServiceNow record does not exist, the instructions are contradictory, or a needed feature or field is absent. Do NOT use when the task is difficult or you are uncertain — always attempt the task first. Calling this immediately ends the episode.
 
         Args:
             explanation: Brief explanation of why the task cannot be completed.
