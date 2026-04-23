@@ -8,7 +8,7 @@ from typing import Any, List, Literal, override
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
+from cube.core import Action, EnvironmentOutput, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import Toolbox
 from cube.tools.browser import BrowserTool
@@ -19,7 +19,6 @@ from pydantic import PrivateAttr
 
 
 logger = logging.getLogger(__name__)
-
 
 class WorkArenaTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for WorkArena ServiceNow tasks.
@@ -168,14 +167,6 @@ class WorkArenaTask(Task):
             return False
         _reward, done, _user_message, _task_info = self._validate()
         return done
-
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter actions based on available tools."""
-        if self._chat_tool is None:
-            actions = [a for a in actions if a.name != "send_message"]
-        if self._infeasible_tool is None:
-            actions = [a for a in actions if a.name != "report_infeasible"]
-        return actions
 
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
