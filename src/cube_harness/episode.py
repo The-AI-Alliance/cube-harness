@@ -155,7 +155,7 @@ class Episode:
                 )
                 summary_proc = SummaryProcessor(ep_dir)
                 summary_proc.on_step(0, trajectory.steps[0])
-                logger.info(colored(f"Start env output: {env_output}", "blue"))
+                logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
                     with tracer.step(f"turn_{turns}") as span:
@@ -193,7 +193,11 @@ class Episode:
                             trajectory.steps.append(env_step)
                             raise e
 
-                        logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
+                        logger.info(
+                            colored(
+                                f"Turn {turns} Env output: done={env_output.done} reward={env_output.reward}", "blue"
+                            )
+                        )
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), env_step)
@@ -227,7 +231,8 @@ class Episode:
             if hasattr(llm_call.output, "thinking_blocks") and llm_call.output.thinking_blocks:
                 for block in llm_call.output.thinking_blocks:
                     logger.info(colored(f"Turn {turns} LLM Thinking Block: {block}", "cyan"))
-        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
+        actions_summary = [a.name for a in agent_output.actions] if agent_output.actions else []
+        logger.info(colored(f"Turn {turns} Agent output: actions={actions_summary}", "magenta"))
 
 
 def _compute_summary_stats(traj: Trajectory) -> dict:

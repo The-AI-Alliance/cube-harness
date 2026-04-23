@@ -2,6 +2,7 @@
 
 import logging
 import time
+import traceback
 from uuid import uuid4
 
 import ray
@@ -12,6 +13,7 @@ from cube_harness.episode import Episode
 from cube_harness.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from cube_harness.experiment import Experiment, ExpResult
 from cube_harness.metrics.tracer import get_trace_env_vars, get_tracer
+from cube_harness.storage import FileStorage
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
@@ -73,9 +75,9 @@ def _run_with_ray_impl(
     exp.benchmark.setup()
     try:
         episodes = exp.get_episodes_to_run()
-        ref_to_id = {run_episode.remote(episode): episode.config.task_id for episode in episodes}
+        ref_to_episode = {run_episode.remote(episode): episode for episode in episodes}
         logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
-        results = _poll_ray(exp, ref_to_id, ray_poll_timeout, episode_timeout)
+        results = _poll_ray(exp, ref_to_episode, ray_poll_timeout, episode_timeout)
         exp.print_stats(results)
         return results
     finally:
@@ -96,7 +98,7 @@ def _get_running_elapsed_s(refs: list[ray.ObjectRef]) -> dict[ray.ObjectRef, flo
             if t.start_time_ms is not None
         }
     except Exception:
-        logger.warning("Could not reach Ray dashboard to check episode timeouts — skipping this cycle")
+        logger.debug("Could not reach Ray dashboard to check episode timeouts — skipping this cycle")
         return {}
     now_ms = time.time() * 1000
     return {ref: (now_ms - running[ref.task_id().hex()]) / 1000 for ref in refs if ref.task_id().hex() in running}
@@ -104,13 +106,14 @@ def _get_running_elapsed_s(refs: list[ray.ObjectRef]) -> dict[ray.ObjectRef, flo
 
 def _poll_ray(
     exp: Experiment,
-    ref_to_id: dict[ray.ObjectRef, str],
+    ref_to_episode: dict[ray.ObjectRef, Episode],
     ray_poll_timeout: float,
     episode_timeout: float | None,
 ) -> ExpResult:
-    results = ExpResult(tasks_num=len(ref_to_id), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
+    storage = FileStorage(exp.output_dir)
+    results = ExpResult(tasks_num=len(ref_to_episode), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     completed = 0
-    episodes_in_progress = list(ref_to_id.keys())
+    episodes_in_progress = list(ref_to_episode.keys())
     while len(episodes_in_progress) > 0:
         done, episodes_in_progress = ray.wait(
             episodes_in_progress,
@@ -121,7 +124,9 @@ def _poll_ray(
         if len(done) > 0:
             logger.info(f"{completed} episodes completed, {len(episodes_in_progress)} in progress")
         for task_ref in done:
-            task_id = ref_to_id[task_ref]
+            episode = ref_to_episode[task_ref]
+            task_id = episode.config.task_id
+            traj_id = trajectory_log_id(task_id, episode.config.id)
             try:
                 traj: Trajectory = ray.get(task_ref)
                 logger.info(
@@ -133,21 +138,27 @@ def _poll_ray(
                 )
                 results.trajectories[task_id] = traj
             except Exception as e:
-                logger.exception(f"Run failed with exception: {e}")
+                tb = traceback.format_exc()
+                logger.error(f"Episode {traj_id} failed:\n{tb}")
                 results.failures[task_id] = str(e)
+                storage.save_failure(traj_id, tb)
         if episode_timeout is not None:
             for ref, elapsed in _get_running_elapsed_s(episodes_in_progress).items():
                 if elapsed > episode_timeout:
-                    task_id = ref_to_id[ref]
+                    episode = ref_to_episode[ref]
+                    task_id = episode.config.task_id
+                    traj_id = trajectory_log_id(task_id, episode.config.id)
                     if elapsed < episode_timeout + _CANCEL_GRACE_PERIOD_S:
-                        logger.warning(f"Episode {task_id} timed out after {elapsed:.0f}s — cancelling gracefully")
+                        logger.warning(f"Episode {traj_id} timed out after {elapsed:.0f}s — cancelling gracefully")
                         ray.cancel(ref, force=False)
                     else:
+                        msg = f"Episode timed out after {elapsed:.0f}s"
                         logger.error(
-                            f"Episode {task_id} timed out after {elapsed:.0f}s — force killing after grace period"
+                            f"Episode {traj_id} timed out after {elapsed:.0f}s — force killing after grace period"
                         )
                         ray.cancel(ref, force=True)
-                        results.failures[task_id] = f"Episode timed out after {elapsed:.0f}s"
+                        results.failures[task_id] = msg
+                        storage.save_failure(traj_id, msg)
                         episodes_in_progress.remove(ref)
     return results
 
