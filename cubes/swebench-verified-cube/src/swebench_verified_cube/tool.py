@@ -68,7 +68,9 @@ class SWEBenchTool(Tool):
     def bash_unlimited(self, command: str, timeout: int = 120) -> str:
         """Like bash() but without output truncation — for internal use (e.g. evaluate())."""
         result = self._container.exec(
-            command, timeout=timeout, workdir=self._config.working_dir,
+            command,
+            timeout=timeout,
+            workdir=self._config.working_dir,
         )
         parts = []
         if result.stdout:

@@ -70,9 +70,7 @@ class TerminalBenchTask(Task):
                 "git config --global user.name 'Cube Harness'"
             ),
         )
-        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(
-            container=self._container
-        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -296,7 +294,7 @@ class TerminalBenchTask(Task):
             f"apt-get {apt_opts} update -qq 2>/dev/null || true && "
             f"cd /tmp && apt-get {apt_opts} download "
             "python3.12-minimal libpython3.12-minimal libpython3.12-stdlib python3-minimal 2>&1 && "
-            "for deb in /tmp/*.deb; do dpkg-deb --extract \"$deb\" /tmp/python3_pkg/; done"
+            'for deb in /tmp/*.deb; do dpkg-deb --extract "$deb" /tmp/python3_pkg/; done'
         )
         result = self.tool.bash(cmd, timeout=180)
         logger.info("python3 nonroot install: %s", (result or "")[-300:])

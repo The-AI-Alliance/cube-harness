@@ -81,9 +81,7 @@ _EAI_CANDIDATE_PATHS: list[str] = [
 def _toolkit_infra() -> InfraConfig:
     from cube_infra_toolkit import ToolkitInfraConfig
 
-    eai_path = shutil.which("eai") or next(
-        (p for p in _EAI_CANDIDATE_PATHS if os.path.isfile(p)), "eai"
-    )
+    eai_path = shutil.which("eai") or next((p for p in _EAI_CANDIDATE_PATHS if os.path.isfile(p)), "eai")
     return ToolkitInfraConfig(eai_path=eai_path)
 
 

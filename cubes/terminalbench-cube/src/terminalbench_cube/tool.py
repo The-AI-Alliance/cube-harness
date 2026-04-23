@@ -113,8 +113,4 @@ class TerminalBenchTool(Tool):
         self._exec(f": > {staging}")
         for i in range(0, len(b64), chunk_size):
             self._exec(f"printf %s {shlex.quote(b64[i : i + chunk_size])} >> {staging}")
-        self._exec(
-            f"mkdir -p {remote_q} && "
-            f"base64 -d < {staging} | tar -xzf - -C {remote_q} && "
-            f"rm -f {staging}"
-        )
+        self._exec(f"mkdir -p {remote_q} && base64 -d < {staging} | tar -xzf - -C {remote_q} && rm -f {staging}")

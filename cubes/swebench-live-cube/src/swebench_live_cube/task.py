@@ -58,9 +58,7 @@ class SWEBenchLiveTask(Task):
             "/tmp/testbed",
             extra_setup="git config --global --add safe.directory /tmp/testbed",
         )
-        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(
-            container=self._container
-        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()

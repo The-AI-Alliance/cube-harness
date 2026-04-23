@@ -152,7 +152,9 @@ class TerminalBenchBenchmark(Benchmark):
         # GC orphans from earlier crashed runs so stale containers don't pile up.
         self.infra.cleanup_stale()
         self._runtime_context["infra"] = self.infra
-        logger.info(f"TerminalBenchBenchmark ready with {len(self.task_metadata)} tasks (infra={self.infra.fingerprint()})")
+        logger.info(
+            f"TerminalBenchBenchmark ready with {len(self.task_metadata)} tasks (infra={self.infra.fingerprint()})"
+        )
 
     def close(self) -> None:
         logger.info("Terminal-Bench benchmark closed")
