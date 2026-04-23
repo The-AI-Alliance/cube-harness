@@ -33,6 +33,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# WAA benchmark dependencies
+waa = [
+    "waa-cube",
+]
 # XRay trajectory viewer
 analyze = [
     "gradio~=5.49",
@@ -46,7 +50,9 @@ build-backend = "uv_build"
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard"}  # TODO: remove once 0.1.0rc5 released
+cube-standard = { path = "../cube-standard" }  # TODO: revert to git source once UEFI/TPM (branch fix/waa-guest-agent-methods) is merged to main and 0.1.0rc5 released
+cube-computer-tool = { path = "../cube-standard/cube-tools/cube-computer-tool", editable = true }
+waa-cube = { path = "cubes/windows-agent-arena-cube", editable = true }
 
 [tool.ruff]
 fix = true

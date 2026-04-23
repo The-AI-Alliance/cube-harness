@@ -23,4 +23,6 @@ WAA_WINDOWS_RESOURCE = VMResourceConfig(
     min_ram_gb=8,
     uefi=True,
     tpm=True,
+    os_type="windows",
+    specialized=True,
 )

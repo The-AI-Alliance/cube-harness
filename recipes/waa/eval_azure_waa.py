@@ -1,24 +1,29 @@
-"""WAA Eval — Genny agent with GPT-5 and accessibility tree observations.
+"""WAA eval on Azure — Genny agent with GPT-5-mini and accessibility tree observations.
 
-Uses the Genny agent (explicit context management, rolling summaries) with
-the linearized accessibility tree for element coordinates, without screenshots
-or Set-of-Marks scaffolding.
+Uses AzureInfraConfig to launch fresh Windows 11 VMs per task. Mirrors eval_waa.py
+except for the infra swap, and requires that the prepared Windows image
+(OpenSSH Server + Azure VM Agent + sysprep — see waa-cube's Packer pipeline)
+has been uploaded to the source_url on WAA_WINDOWS_RESOURCE.
 
 Prerequisites:
-    Windows 11 Enterprise Evaluation ISO (see waa-cube README)
-    WAA_SETUP_ISO=/path/to/Win11_Eval.iso  (or set in cubes/windows-agent-arena-cube/.env)
+    See cube-resources/cube-infra-azure/README.md for Azure setup.
+    WAA_WINDOWS_ADMIN_PASSWORD must be set — Azure enforces 12–72 chars,
+    3 of 4 character classes.
 
 Usage:
     # Debug mode (1 task, sequential)
-    uv run recipes/waa/eval_waa.py debug
+    uv run recipes/waa/eval_azure_waa.py debug
 
-    # Eval mode (all tasks, 3 workers)
-    uv run recipes/waa/eval_waa.py
+    # Eval mode (all tasks, sequential)
+    uv run recipes/waa/eval_azure_waa.py
 """
 
+import logging
+import os
 import sys
 
-from cube import LocalInfraConfig
+from cube_infra_azure import AzureInfraConfig
+from dotenv import load_dotenv
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 
@@ -27,6 +32,31 @@ from cube_harness.agents.genny import GennyConfig
 from cube_harness.exp_runner import run_sequentially
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
+for _noisy in ("azure.core.pipeline.policies.http_logging_policy", "azure.identity", "urllib3.connectionpool"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+
+_ADMIN_PASSWORD = os.environ.get("WAA_WINDOWS_ADMIN_PASSWORD")
+if not _ADMIN_PASSWORD:
+    raise SystemExit(
+        "WAA_WINDOWS_ADMIN_PASSWORD is required for Azure Windows VMs.\n"
+        "Set it in .env (12–72 chars, 3 of {lower, upper, digit, special})."
+    )
+
+# Standard_D8s_v3: 8 vCPU, 32 GB RAM — meets WAA_WINDOWS_RESOURCE's 8-core/8-GB
+# floor and supports Trusted Launch (required for UEFI + vTPM).
+INFRA = AzureInfraConfig(
+    resource_group=os.environ.get("AZURE_RESOURCE_GROUP") or "ui_assist",
+    storage_account=os.environ.get("AZURE_STORAGE_ACCOUNT") or "cubeexpvhd",
+    vnet_name="vnet-westus2",
+    nsg_name="osworld-nsg",
+    vm_size="Standard_D8s_v3",
+    windows_admin_password=_ADMIN_PASSWORD,
+)
 
 WAA_SYSTEM_PROMPT = """\
 You are a desktop automation agent controlling a real Windows 11 computer.
@@ -66,7 +96,7 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 
 
 def main(debug: bool) -> None:
-    output_dir = make_experiment_output_dir("genny", "waa-cube")
+    output_dir = make_experiment_output_dir("genny_azure", "waa-cube")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = GennyConfig(
@@ -86,15 +116,12 @@ def main(debug: bool) -> None:
 
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
-        infra=LocalInfraConfig(cpu_cores=8, ram_gb=8),
+        infra=INFRA,
     )
     benchmark.install()
     benchmark.setup()
 
-    # Exclude chrome/msedge tasks: Chrome DevTools (CDP) setup has a timing
-    # issue — Playwright gets a 502 connecting to the CDP port before Chrome
-    # is fully ready.  Until the setup_controller adds a CDP-readiness retry,
-    # skip these domains to avoid false failures.
+    # Exclude chrome/msedge tasks — CDP setup has a timing issue (see eval_waa.py).
     keep_ids = [
         tid
         for tid, meta in benchmark.task_metadata.items()
@@ -102,30 +129,41 @@ def main(debug: bool) -> None:
     ]
     benchmark = benchmark.subset_from_list(keep_ids)
 
+    # Provision the Windows VM image into the Compute Gallery (idempotent).
+    for resource in benchmark.resources:
+        INFRA.provision(resource)
+
     exp = Experiment(
-        name="waa_genny_gpt5",
+        name="waa_genny_gpt5_azure",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
         max_steps=15,
     )
 
-    if debug:
-        print("\n" + "=" * 60)
-        print("DEBUG MODE: Running debug task sequentially")
-        print("=" * 60)
-        print(f"Output directory: {output_dir}")
-        print(f"Model: {llm_config.model_name}")
-        print("=" * 60 + "\n")
-        run_sequentially(exp, debug_limit=1)
-    else:
-        print("\n" + "=" * 60)
-        print("EVAL MODE: Running WAA tasks sequentially")
-        print("=" * 60)
-        print(f"Output directory: {output_dir}")
-        print(f"Model: {llm_config.model_name}")
-        print("=" * 60 + "\n")
-        run_sequentially(exp)
+    try:
+        if debug:
+            print("\n" + "=" * 60)
+            print("DEBUG MODE: Running 1 WAA task sequentially on Azure")
+            print("=" * 60)
+            print(f"Output directory: {output_dir}")
+            print(f"Model: {llm_config.model_name}")
+            print(f"Infra: {INFRA.fingerprint()}")
+            print("=" * 60 + "\n")
+            run_sequentially(exp, debug_limit=1)
+        else:
+            print("\n" + "=" * 60)
+            print("EVAL MODE: Running WAA tasks sequentially on Azure")
+            print("=" * 60)
+            print(f"Output directory: {output_dir}")
+            print(f"Model: {llm_config.model_name}")
+            print(f"Infra: {INFRA.fingerprint()}")
+            print("=" * 60 + "\n")
+            run_sequentially(exp)
+    finally:
+        deleted = INFRA.cleanup_orphaned_resources()
+        if deleted:
+            print(f"Cleaned up {len(deleted)} orphaned VM(s): {deleted}")
 
 
 if __name__ == "__main__":
