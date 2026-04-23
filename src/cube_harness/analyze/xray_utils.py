@@ -66,19 +66,19 @@ def trajectory_status(traj: Trajectory) -> str:
 
 
 _STATUS_HTML: dict[str, str] = {
-    "queued":       "<span title='Queued — not yet started'>🕐</span>",
-    "running":      "<span title='Running'>⏳</span>",
-    "success":      "<span title='Success'>✅</span>",
-    "fail":         "<span title='Failed — ran to completion, no reward'>⬜</span>",
+    "queued": "<span title='Queued — not yet started'>🕐</span>",
+    "running": "<span title='Running'>⏳</span>",
+    "success": "<span title='Success'>✅</span>",
+    "fail": "<span title='Failed — ran to completion, no reward'>⬜</span>",
     "system_error": "<span title='System error — crashed before trajectory was written' style='color:#dc3545;font-weight:bold;font-size:14px'>✕</span>",
 }
 
 # Plain-text labels (icon + short description) for the header bar and other non-HTML contexts.
 _STATUS_LABEL: dict[str, str] = {
-    "queued":       "🕐 Queued — not yet started",
-    "running":      "⏳ Running",
-    "success":      "✅ Success",
-    "fail":         "⬜ Failed — no reward",
+    "queued": "🕐 Queued — not yet started",
+    "running": "⏳ Running",
+    "success": "✅ Success",
+    "fail": "⬜ Failed — no reward",
     "system_error": "✕ System error — crashed",
 }
 
@@ -910,9 +910,7 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
 def _finished_rewards(trajectories: list[Trajectory]) -> list[float]:
     """Return final rewards for trajectories that ran to completion (success or fail)."""
     return [
-        compute_trajectory_stats(t)["final_reward"]
-        for t in trajectories
-        if trajectory_status(t) in ("success", "fail")
+        compute_trajectory_stats(t)["final_reward"] for t in trajectories if trajectory_status(t) in ("success", "fail")
     ]
 
 
@@ -1112,7 +1110,9 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
             task_status = "fail"
 
         err_style = "color:#dc3545;font-weight:bold" if task_status == "system_error" else ""
-        task_id_html = f"<span style='{err_style}'>{html_lib.escape(task_id)}</span>" if err_style else html_lib.escape(task_id)
+        task_id_html = (
+            f"<span style='{err_style}'>{html_lib.escape(task_id)}</span>" if err_style else html_lib.escape(task_id)
+        )
 
         rows.append(
             {

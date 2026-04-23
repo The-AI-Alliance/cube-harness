@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "WorkArena ServiceNow benchmark for cube"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "cube-standard>=0.1.0rc4",
+    "cube-standard>=0.1.0rc5",
     "browsergym-workarena",
     "termcolor",
     "cube-browser-tool>=0.2.0",
@@ -22,9 +22,6 @@ build-backend = "uv_build"
 
 [tool.uv-build]
 include = ["src/workarena_cube/task_metadata.json"]
-
-[tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard"}  # TODO: remove once 0.1.0rc5 released
 
 [tool.ruff]
 fix = true

@@ -4,13 +4,13 @@ version = "0.1.0"
 description = "Terminal-Bench 2 — real-world terminal tasks with pytest-based validation"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc4",
+    "cube-standard>=0.1.0rc5",
     "datasets",
 ]
 
 [project.optional-dependencies]
 debug = [
-    "cube-standard[docker]>=0.1.0rc4",
+    "cube-standard[docker]>=0.1.0rc5",
 ]
 
 [project.entry-points."cube.benchmarks"]
@@ -27,9 +27,6 @@ include = ["src/terminalbench_cube/task_metadata.json"]
 dev = [
     "pytest>=9.0",
 ]
-
-[tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard"}  # TODO: remove once 0.1.0rc5 released
 
 [tool.ruff]
 fix = true

@@ -518,9 +518,9 @@ class TestTrajectoryStatus:
 
     def test_failure_text_ignored_when_end_time_set(self) -> None:
         """A completed trajectory with a stale failure.txt should not be system_error."""
-        traj = Trajectory(id="t", start_time=1.0, end_time=2.0,
-                         reward_info={"reward": 1.0},
-                         metadata={"_failure_text": "old error"})
+        traj = Trajectory(
+            id="t", start_time=1.0, end_time=2.0, reward_info={"reward": 1.0}, metadata={"_failure_text": "old error"}
+        )
         assert xray_utils.trajectory_status(traj) == "success"
 
 

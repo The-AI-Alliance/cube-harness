@@ -342,7 +342,9 @@ class FileStorage:
         for ep_dir in self._episode_dirs():
             traj_id = ep_dir.name
             summary_path = ep_dir / "episode_summary.jsonl"
-            mtime = summary_path.stat().st_mtime if summary_path.exists() else (ep_dir / EPISODE_METADATA).stat().st_mtime
+            mtime = (
+                summary_path.stat().st_mtime if summary_path.exists() else (ep_dir / EPISODE_METADATA).stat().st_mtime
+            )
             failure_path = ep_dir / "failure.txt"
             if failure_path.exists():
                 mtime = max(mtime, failure_path.stat().st_mtime)
@@ -485,7 +487,7 @@ class FileStorage:
         return stubs
 
     def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
-        traj_id = f"{episode_config.task_id}_ep{episode_config.id}"
+        traj_id = f"{episode_config.task_config.task_id}_ep{episode_config.id}"
         ep_dir = self._episode_dir(traj_id)
         ep_dir.mkdir(parents=True, exist_ok=True)
         config_path = ep_dir / "episode_config.json"

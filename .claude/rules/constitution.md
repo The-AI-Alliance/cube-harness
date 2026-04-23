@@ -1,18 +1,19 @@
 # The cube-harness Constitution
 
 > **📝 To update this constitution**, use the Claude command `/update-constitution`.
-> This ensures all dependent files are updated automatically.
-> See `.claude/commands/update-constitution.md` for details.
+> This ensures all dependent files (review-rules.md) are updated automatically.
 
-**Version**: 0.1
+**Version**: 0.2 — reconciled with code on 2026-04-20
 
-**Mission**: Empower the open-source community with high-throughput data generation for training and standardized benchmark evaluation by creating a modular, scalable, and efficient agent research platform.
+**Mission**: Empower the open-source community with high-throughput data generation for training and standardized benchmark evaluation by providing a modular, scalable, and efficient agent execution platform.
 
 ---
 
 ## Preamble: The "One Team" Mindset
 
-We are scaling up to a distributed engineering effort. To prevent architectural entropy, every contributor agrees to uphold the following principles. We value **explicitness over magic**, **composition over inheritance**, and **protocols over implementations**.
+We're scaling up to a distributed engineering effort. To prevent architectural entropy, every contributor agrees to uphold the following principles. We value **explicitness over magic**, **composition over inheritance**, and **protocols over implementations**.
+
+This constitution is reviewed against actual code patterns. Anything listed here either **is** current practice or **is** actively migrating toward it — aspirational rules are flagged so you can tell the difference.
 
 ---
 
@@ -20,44 +21,49 @@ We are scaling up to a distributed engineering effort. To prevent architectural 
 
 *How we organize, communicate, and own our work.*
 
-### Explicit Ownership
+### Explicit Ownership *(aspirational — ownership map pending)*
 
-**Directive**: Every file and feature has a clear owner. We distinguish between:
+**Directive**: Every file and feature should have a clear owner. We distinguish between:
+- **Horizontal Ownership (Infrastructure)**: Core capabilities used by everyone (parallelism, protocols, tracing).
+- **Vertical Ownership (Features)**: End-to-end features (a specific benchmark + agents).
 
-- **Horizontal Ownership (Infrastructure)**: Core capabilities used by everyone (e.g., Parallelism, Protocols).
-- **Vertical Ownership (Features)**: End-to-end features (e.g., The WebAgent Benchmarks + Agents).
+**Mechanism**: Ownership table lives at the top of `ROADMAP.md` (to be populated).
 
-**Mechanism**: We'll assign ownership soon.
-
-**The Rule**: If you need to modify a component, you must consult its Owner.
+**Rule**: If you need to modify a component, consult its Owner.
 
 ### The RFC Process
 
-**Directive**: Any change that alters the Core API or affects multiple verticals requires a Request For Comments (RFC).
+**Directive**: Any change that alters the Core API or affects multiple verticals requires a written proposal before implementation.
 
-**Process**: Write a 1-page Google doc → Post to Team Channel → Tag the relevant Component Owners → Async Review → Decision.
+**Process**:
+1. Create a folder in `openspec/changes/<short-name>/`.
+2. Write `proposal.md` (rationale, scope, alternatives considered).
+3. Write `deltas.md` with ADDED / MODIFIED / REMOVED requirements against the affected spec.
+4. Optional: `design.md` for deeper design notes, `tasks.md` for implementation breakdown.
+5. Post to the team channel, tag relevant owners, async review, decision.
+6. On merge: apply deltas to `openspec/specs/`, move the folder to `openspec/changes/archive/YYYY-MM-DD-<name>/`.
+
+Cross-repo changes (cube-standard ↔ cube-harness) require a proposal in the **upstream** repo first. cube-harness is a consumer of cube-standard's contracts.
 
 ---
 
 ## Pillar II: The Principle of Explicitness
 
-*The codebase should be readable like a book. We reject "Magic" configuration and hidden states.*
+*The codebase should be readable like a book. We reject "magic" configuration and hidden state.*
 
 ### Python is the Configuration
 
-We reject complex YAML hierarchies, opaque Hydra overrides, or massive bash scripts.
+We reject complex YAML hierarchies, opaque Hydra overrides, and massive bash scripts.
 
-**Directive**: All configurations must be defined as strictly typed Python dataclasses.
+**Directive**: All configurations are defined as strictly typed Pydantic `TypedBaseModel` subclasses. Recipes (in `recipes/`) are Python files that instantiate and run experiments directly — they ARE the config files.
 
-**Tooling**: We use `tyro` for CLI generation.
-
-**The Rule**: If you can't click "Go to Definition" in your IDE to see where a parameter comes from, it is forbidden.
+**Rule**: If you can't Go-to-Definition on a parameter in your IDE, it is forbidden.
 
 ### Composition Over Inheritance
 
-We avoid deep inheritance trees where a subclass inherits 50 methods it doesn't use.
+We avoid deep inheritance trees where a subclass inherits dozens of methods it doesn't use.
 
-**Directive**: Build complex Agents/Benchmarks by nesting standard components ("Legos"), not by subclassing a "God Object."
+**Directive**: Build complex agents/benchmarks by nesting standard components, not by subclassing a "god object."
 
 **Pattern**:
 - ❌ Bad: `class MyAgent(BaseAllKnowingAgent): ...`
@@ -65,74 +71,82 @@ We avoid deep inheritance trees where a subclass inherits 50 methods it doesn't 
 
 ### No Global State
 
-**Directive**: We do not use global variables, singletons, or module-level state that cannot be reset.
+**Directive**: No global variables, singletons, or module-level state that cannot be reset. Module-level loggers are fine.
 
-**The Test**: You must be able to instantiate two different Agents with two different configurations in the same Python process without them interfering with each other.
+**Test**: Instantiate two agents with different configs in the same process — they must not interfere.
+
+**Exception (documented):** `cube_harness.metrics.tracer` configures a global OTel `TracerProvider` via `get_tracer()`. This is required by OpenTelemetry's design and is safe because the provider is idempotent.
 
 ---
 
 ## Pillar III: The "Scalable Research" Philosophy
 
-*We build for massive scale and efficiency, while maintaining a developer-friendly experience.*
+*We build for massive scale and efficiency, while keeping the developer experience friendly.*
 
 ### Local-Dev, Cloud-Scale
 
-**Directive**: The system is designed for massive parallelism (Ray/Slurm) from day one, but the Agent Logic must remain debuggable.
+**Directive**: The system is designed for massive parallelism (Ray) from day one, but agent logic must remain debuggable on a laptop.
 
 **Mechanism**:
-- **Agent Logic**: Must be testable on a single laptop process (Direct Mode).
-- **Infrastructure**: Scale-specific features (e.g., distributed samplers) may require a cluster, but we provide local mocks where feasible.
+- Agent logic is testable via `run_sequentially(exp, debug_limit=1)`.
+- Infrastructure features that require a cluster should provide local mocks when feasible (local Docker backend, in-memory tool stubs).
 
-**The Rule**: You should be able to `pdb` through an Agent's decision step on your laptop, even if you can't run the full on-policy training loop locally.
+**Rule**: You should be able to `pdb` through an agent's decision step on your laptop, even if you can't run the full distributed RL loop locally.
 
 ### The Inner Loop is Sacred (Efficiency)
 
-**Directive**: The core Agent-Environment loop must be optimized for high-throughput on-policy sampling.
+**Directive**: The core agent↔environment loop must be optimized for high-throughput sampling.
 
-**Constraint**: Avoid blocking calls or heavy serialization in the critical path. The architecture must support asynchronous execution to maximize GPU/Environment utilization.
+**Constraint**: Avoid blocking calls and heavy serialization on the critical path. Support asynchronous execution to maximize GPU and environment utilization.
 
-**Goal**: "samples per second" for training as a high priority. Features introducing overhead should be discussed.
+**Goal**: Samples per second is a first-class metric. Features introducing overhead should be discussed (file an openspec change proposal).
 
-### The "Escape Hatch" (Raw Access)
+See [`openspec/changes/core-extensions/`](../openspec/changes/core-extensions/) (streaming obs, async core) in cube-standard for active work on this front.
 
-**Directive**: Abstractions must never prevent a user from inspecting the raw underlying object when necessary.
+### The Escape Hatch (Raw Access)
 
-**Example**: A `BrowserTool` wrapper must expose the underlying Playwright `Page` object via a `.raw` or `.underlying` property for advanced researchers.
+**Directive**: Abstractions must never prevent a user from inspecting the underlying raw object when necessary.
+
+**Example**: `McpServer.raw → FastMCP` exposes the underlying MCP server instance for advanced clients (see `cube_harness/mcp/server.py`).
+
+Recipe authors and advanced users get `.raw` escape hatches wherever practical.
 
 ### Trace-First Engineering
 
-**Directive**: Telemetry is not an afterthought. The "Trace" (logs, screenshots, tool outputs, reasoning steps) is a first-class data product. Profiling methodology should be thought at the core.
+**Directive**: Telemetry is not an afterthought. Logs, screenshots, tool outputs, and reasoning steps are a first-class data product.
 
-**Standard**: We adhere to the Agent Data Protocol (ADP). All agents must emit traces in this format.
+**Standard**: We emit OpenTelemetry spans following the [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (`gen_ai.tool.*`, `gen_ai.agent.*`). See [metrics spec](../openspec/specs/metrics/spec.md).
+
+**ADP compatibility** is an ongoing goal — the current GenAI attribute surface is the stepping stone.
 
 ---
 
 ## Pillar IV: The Protocol Strategy
 
-*We define standards to play nice with the ecosystem (NeMo, LangChain, etc.).*
+*We define standards to play nice with the ecosystem (NeMo, LangChain, MCP clients).*
 
 ### Interfaces over Implementations
 
-**Directive**: Core interactions (Agent ↔ Env) are defined via Protocols (Interfaces), not concrete classes.
+**Directive**: Core interactions (Agent ↔ Env) are defined via Protocols / abstract base classes, not concrete classes.
 
-**Goal**: This allows us to swap the backend (e.g., switching from a local Docker container to a NeMo Resource Server) without changing the Agent's code.
+**Goal**: Swap backends (local Docker → Modal → Daytona) without changing agent code. See `cube.resource.InfraConfig` and `cube.container.ContainerBackend` for the pattern.
 
 ### Embrace Standards
 
-**Directive**: We do not invent new standards if a working one exists.
+**Directive**: We do not invent new standards when a working one exists.
 
-- **LLM**: We use LiteLLM abstractions.
-- **Tools**: We support the Model Context Protocol (MCP).
-- **Data**: We use ADP.
+- **LLM**: `cube_harness.llm.LLM` uses LiteLLM only. Direct `openai` / `anthropic` SDK calls are forbidden (rule PS-002).
+- **Tools**: We support MCP both as a client (consuming external MCP servers via `tools/mcp.py`) and as a server (exposing our tools via `cube_harness.mcp.McpServer`).
+- **Data**: OpenTelemetry GenAI semantic conventions; full ADP migration is an open goal.
 
-### Hermetic Reproducibility
+### Hermetic Reproducibility *(partial — see gaps below)*
 
-**Directive**: We value reproducibility.
+**Directive**: Every experiment run should capture:
+- The exact git commit hash. **Gap:** not yet automated. Add to `save_config()` when it lands.
+- The full Configuration object. **Adopted** — `experiment_config.json` dumps the full `Experiment` with `serialize_as_any=True`.
+- The Docker container ID / image hash of the environment. **Gap:** container hash capture is benchmark-specific; no standard yet.
 
-**Requirement**: Every experiment run must capture:
-- The exact git commit hash.
-- The full Configuration object (dumped as YAML/JSON).
-- The Docker container ID/hash of the environment.
+Track these gaps in `DEPRECATED.md` / `openspec/changes/` when work picks up.
 
 ---
 
@@ -142,28 +156,34 @@ We avoid deep inheritance trees where a subclass inherits 50 methods it doesn't 
 
 ### The Minimalist Imperative
 
-**Directive**: We prefer a smaller, simpler codebase over one that supports every edge case. If a feature adds significant complexity but is rarely used, reject it.
+**Directive**: Prefer a smaller, simpler codebase over one that supports every edge case. If a feature adds significant complexity but is rarely used, reject or remove it.
 
-**Action**: Refactoring to delete code is prioritized over adding non-critical features. If you can delete 100 lines by refactoring the Core, communicate with the team.
+**Action**: Refactoring to delete code is prioritized over adding non-critical features. If you can delete 100 lines by refactoring the core, raise a proposal.
 
 ### Function Atomicity
 
-**Directive**: Break long functions into logical sub-functions. A function should theoretically fit on a standard screen (approx. 50-80 lines).
+**Directive**: Break long functions into logical sub-functions. A function should fit on a standard screen (~50–80 lines).
 
-**Goal**: Self-documenting code. We prefer named helpers like `_parse_observation()` over inline comments explaining a 50-line block.
+**Goal**: Self-documenting code. Prefer named helpers like `_parse_observation()` over inline comments explaining a 50-line block.
 
 ### AI-Assisted, Human-Architected (No "Vibe Coding")
 
-**Directive**: We use AI tools to generate snippets and search for solutions, but we never blindly paste large blocks of code ("Vibe Coding").
+**Directive**: We use AI tools to generate snippets and search for solutions, but we never blindly paste large blocks of code.
 
 **Risk**: "Vibe coding" pollutes the codebase with verbose, hallucinated, or unoptimized logic.
 
-**The Rule**: You must understand and curate every line you commit. If the AI wrote it, you must refactor and tighten it before merging.
+**Rule**: You must understand and curate every line you commit. If the AI wrote it, refactor and tighten it before merging.
 
 ### The Testing Pyramid
 
-**Directive**: We prioritize high coverage with simple, fast unit tests. Extensive unit tests may slow down development refactoring.
+**Directive**: We prioritize high coverage with simple, fast unit tests. Slow integration tests go to nightly builds.
 
-**CI Rule**: The Core test suite must run fast (< 5 mins). Slow tests go to nightly builds.
+**CI Rule**: The core test suite must run in under 5 minutes.
 
-**Style**: We enforce `black` formatting and static analysis (`ruff`/`mypy`) strictly.
+**Style**: `ruff` for formatting and lint. Type hints required on all functions and tests (rule CC-001).
+
+---
+
+## Alignment with cube-standard
+
+cube-harness consumes cube-standard's contracts. Any change that would require altering a cube-standard ABC or Pydantic model must first land as a change proposal in that repo. See [cube-standard's openspec](https://github.com/The-AI-Alliance/cube-standard/tree/main/openspec).

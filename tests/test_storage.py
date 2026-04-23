@@ -380,67 +380,63 @@ class TestFileStorageRoundtrip:
 
 
 class TestFileStorageEpisodeConfig:
-    def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_tool_config):
+    def test_save_episode_config_creates_directory(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
         episode_config = EpisodeConfig(
             id=0,
-            task_id="test_task",
             agent_config=mock_agent_config,
-            tool_config=mock_tool_config,
+            task_config=mock_cube_task_config,
             exp_name="test_exp",
             output_dir=tmp_dir,
             max_steps=100,
         )
         storage.save_episode_config(episode_config)
 
-        ep_dir = Path(tmp_dir) / "episodes" / "test_task_ep0"
+        ep_dir = Path(tmp_dir) / "episodes" / f"{mock_cube_task_config.task_id}_ep0"
         assert ep_dir.exists()
 
-    def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_tool_config):
+    def test_save_episode_config_creates_file(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
         episode_config = EpisodeConfig(
             id=5,
-            task_id="my_task_123",
             agent_config=mock_agent_config,
-            tool_config=mock_tool_config,
+            task_config=mock_cube_task_config,
             exp_name="test_exp",
             output_dir=tmp_dir,
             max_steps=200,
         )
         storage.save_episode_config(episode_config)
 
-        config_path = Path(tmp_dir) / "episodes" / "my_task_123_ep5" / "episode_config.json"
+        config_path = Path(tmp_dir) / "episodes" / f"{mock_cube_task_config.task_id}_ep5" / "episode_config.json"
         assert config_path.exists()
 
-    def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_tool_config):
+    def test_load_episode_config_roundtrip(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         from cube_harness.episode import EpisodeConfig
 
         storage = FileStorage(tmp_dir)
         original_config = EpisodeConfig(
             id=42,
-            task_id="roundtrip_task",
             agent_config=mock_agent_config,
-            tool_config=mock_tool_config,
+            task_config=mock_cube_task_config,
             exp_name="roundtrip_exp",
             output_dir=tmp_dir,
             max_steps=500,
         )
         storage.save_episode_config(original_config)
 
-        config_path = Path(tmp_dir) / "episodes" / "roundtrip_task_ep42" / "episode_config.json"
+        config_path = Path(tmp_dir) / "episodes" / f"{mock_cube_task_config.task_id}_ep42" / "episode_config.json"
         loaded_config = storage.load_episode_config(config_path)
 
         assert loaded_config.id == original_config.id
-        assert loaded_config.task_id == original_config.task_id
+        assert loaded_config.task_config.task_id == original_config.task_config.task_id
         assert loaded_config.exp_name == original_config.exp_name
         assert loaded_config.max_steps == original_config.max_steps
         assert loaded_config.output_dir == original_config.output_dir
         assert loaded_config.agent_config == original_config.agent_config
-        assert loaded_config.tool_config == original_config.tool_config
 
     def test_load_episode_config_not_found(self, tmp_dir):
         storage = FileStorage(tmp_dir)
@@ -448,16 +444,16 @@ class TestFileStorageEpisodeConfig:
         with pytest.raises(FileNotFoundError):
             storage.load_episode_config(config_path)
 
-    def test_list_episode_configs(self, tmp_dir, mock_agent_config, mock_tool_config):
+    def test_list_episode_configs(self, tmp_dir, mock_agent_config):
         from cube_harness.episode import EpisodeConfig
+        from tests.conftest import MockCubeTaskConfig
 
         storage = FileStorage(tmp_dir)
         for i in range(3):
             config = EpisodeConfig(
                 id=i,
-                task_id=f"task_{i}",
                 agent_config=mock_agent_config,
-                tool_config=mock_tool_config,
+                task_config=MockCubeTaskConfig(task_id=f"task_{i}"),
                 exp_name="test_exp",
                 output_dir=tmp_dir,
                 max_steps=100,
@@ -478,15 +474,15 @@ class TestFileStorageEpisodeConfig:
         config_files = storage.list_episode_configs()
         assert config_files == []
 
-    def test_episode_config_filename_parsing(self, tmp_dir, mock_agent_config, mock_tool_config):
+    def test_episode_config_filename_parsing(self, tmp_dir, mock_agent_config):
         from cube_harness.episode import EpisodeConfig
+        from tests.conftest import MockCubeTaskConfig
 
         storage = FileStorage(tmp_dir)
         config = EpisodeConfig(
             id=10,
-            task_id="task_with_underscores_123",
             agent_config=mock_agent_config,
-            tool_config=mock_tool_config,
+            task_config=MockCubeTaskConfig(task_id="task_with_underscores_123"),
             exp_name="test_exp",
             output_dir=tmp_dir,
             max_steps=100,
@@ -498,7 +494,7 @@ class TestFileStorageEpisodeConfig:
 
         loaded = storage.load_episode_config(config_path)
         assert loaded.id == 10
-        assert loaded.task_id == "task_with_underscores_123"
+        assert loaded.task_config.task_id == "task_with_underscores_123"
 
 
 class TestFileStorageOverwrite:
