@@ -28,7 +28,7 @@ def _maybe_relocate_testbed(container, tool_config: SWEBenchToolConfig) -> SWEBe
     """
     wd = tool_config.working_dir
     probe = container.exec(f"test -w {wd} && echo W || echo R", timeout=30)
-    if "R" not in probe.stdout:
+    if "W" in probe.stdout:
         return tool_config
     new_wd = "/tmp/testbed"
     container.exec(
