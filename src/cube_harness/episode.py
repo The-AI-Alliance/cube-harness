@@ -7,13 +7,13 @@ from typing import Callable, Self
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import EnvironmentOutput, StepError, TypedBaseModel
-from cube.task import TaskConfig
+from cube.task import EvalInfo, TaskConfig
 from cube.tool import ToolConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
 
 from cube_harness.agent import AgentConfig
-from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
+from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep, TerminationReason
 from cube_harness.legacy import Benchmark as LegacyBenchmark
 from cube_harness.legacy import EnvConfig
 from cube_harness.metrics.tracer import get_tracer
@@ -96,7 +96,7 @@ class Episode:
             self.summary_proc_cls = PersistentSummaryProcessor
         else:
             self.summary_proc_cls = NoopSummaryProcessor
-            
+
         if persist_episode and isinstance(self.storage, NoopStorage):
             raise ValueError("persist_episode=True requires a real FileStorage, got NoopStorage")
 
@@ -200,6 +200,7 @@ class Episode:
             action_set = task.action_set
             step_fn = task.step
             close_fn = task.close
+            evaluate_fn = task.evaluate
 
             def setup_fn() -> EnvironmentOutput:
                 obs, info = task.reset()
@@ -216,20 +217,23 @@ class Episode:
             step_fn = env.step
             close_fn = env.close
             setup_fn = env.setup
+            evaluate_fn = env.evaluate
 
         agent = self.config.agent_config.make(action_set)
-        return self._run_loop(setup_fn, step_fn, close_fn, agent)
+        return self._run_loop(setup_fn, step_fn, close_fn, evaluate_fn, agent)
 
     def _run_loop(
         self,
         setup_fn: Callable[[], EnvironmentOutput],
         step_fn: Callable,
         close_fn: Callable,
+        evaluate_fn: Callable,
         agent,
     ) -> Trajectory:
         """Shared run loop used by both the cube path and the legacy path."""
         task_id = self.config.task_id
         tracer = get_tracer(self.config.exp_name)
+        termination_reason = None
         try:
             with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
                 start_time = time.time()
@@ -269,7 +273,8 @@ class Episode:
                             self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                             summary_proc.on_step(len(trajectory.steps), agent_step)
                             trajectory.steps.append(agent_step)
-                            raise e
+                            termination_reason = TerminationReason.AGENT_ERROR
+                            break
 
                         self.log_agent_output(turns, agent_output)
                         agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
@@ -279,6 +284,7 @@ class Episode:
 
                         if not agent_output.actions and not agent_output.error:
                             logger.info(colored("Agent returned no actions — stopping episode.", "yellow"))
+                            termination_reason = TerminationReason.NO_ACTION
                             break
 
                         env_ts = time.time()
@@ -291,7 +297,8 @@ class Episode:
                             self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                             summary_proc.on_step(len(trajectory.steps), env_step)
                             trajectory.steps.append(env_step)
-                            raise e
+                            termination_reason = TerminationReason.ENV_ERROR
+                            break
 
                         logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
@@ -301,9 +308,33 @@ class Episode:
                         span.set_attribute("done", env_output.done)
                         span.set_attribute("reward", env_output.reward)
                         turns += 1
+
+                if env_output.done:
+                    termination_reason = termination_reason or TerminationReason.ENV_DONE
+                elif turns >= self.config.max_steps:
+                    termination_reason = TerminationReason.MAX_STEPS
+                else:
+                    termination_reason = termination_reason or TerminationReason.STOPPED
+                
+                if termination_reason != TerminationReason.ENV_DONE:
+                    reward, raw_info = evaluate_fn(env_output.obs)
+                    if isinstance(raw_info, EvalInfo):
+                        info = raw_info.model_dump(exclude_none=True)
+                        extra_info = info.pop("extra", None)
+                        if isinstance(extra_info, dict):
+                            info.update(extra_info)
+                    elif isinstance(raw_info, dict):
+                        info = dict(raw_info)
+                    else:
+                        raise TypeError(
+                            f"Task.evaluate() must return dict or EvalInfo info payload, got {type(raw_info).__name__}"
+                        )
+                    env_output = EnvironmentOutput(obs=env_output.obs, reward=reward, info=info)
+
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
                 trajectory.summary_stats = _compute_summary_stats(trajectory)
+                trajectory.termination_reason = termination_reason
                 self.storage.save_trajectory(trajectory)
                 summary_proc.on_episode_complete(trajectory, self.storage)
                 logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
