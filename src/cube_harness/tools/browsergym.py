@@ -1,6 +1,5 @@
 import logging
 import time
-import traceback
 from typing import Any
 
 import numpy as np
@@ -21,7 +20,10 @@ from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prun
 from cube.core import Action, ActionSchema, Content, Observation, StepError
 from cube.tool import ToolConfig
 from cube.tools.browser import BrowserTool
-from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
+from cube_browser_playwright.playwright_session import (
+    PlaywrightSession,
+    PlaywrightSessionConfig,
+)
 from PIL import Image
 from playwright.sync_api import Error, Page
 from pydantic import Field
@@ -51,13 +53,10 @@ class BrowsergymConfig(ToolConfig):
     prune_html: bool = True
 
     # AXTree element attributes — requires extra_element_properties from the DOM snapshot
-    axtree_with_visible: bool = False  # label visible elements (vis >= 0.5) as "visible"
+    axtree_with_visible: bool = (
+        False  # label visible elements (vis >= 0.5) as "visible"
+    )
     axtree_with_clickable: bool = False  # label clickable elements as "clickable"
-
-    # Error reporting: when an action raises, include the full traceback in the observation
-    # or just the exception type + message. Full traceback is useful for debugging but
-    # adds noise to the agent's context.
-    action_error_full_traceback: bool = False
 
     def make(self, container: Any = None) -> "BrowsergymTool":
         return BrowsergymTool(self)
@@ -73,7 +72,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
     def __init__(self, config: BrowsergymConfig) -> None:
         super().__init__()
         self.config = config
-        self._action_set = HighLevelActionSet(subsets=config.action_subsets, multiaction=False)
+        self._action_set = HighLevelActionSet(
+            subsets=config.action_subsets, multiaction=False
+        )
         self._action_schemas: list[ActionSchema] | None = None
         self._session: PlaywrightSession | None = None
         self._last_obs: dict | None = None
@@ -81,7 +82,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
 
-    # === Action set: pure bgym HighLevelActionSet ===
+    # === Action set: built from bgym's HighLevelActionSet ===
 
     @property
     def action_set(self) -> list[ActionSchema]:
@@ -89,14 +90,17 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             self._action_schemas = _build_action_schemas(self._action_set)
         return self._action_schemas
 
-    # === Action execution ===
+    # === Action execution: serialise Action -> bgym string -> execute ===
 
     def _execute_action(self, action: Action) -> Observation | StepError:
         """Serialise an Action to a bgym action string, execute it, and return the observation."""
         action_str = _action_to_bgym_string(action)
         result = self._execute_bgym_step(action_str)
         obs = self.page_obs()
-        return Observation(contents=[Content.from_data(result, tool_call_id=action.id)]) + obs
+        return (
+            Observation(contents=[Content.from_data(result, tool_call_id=action.id)])
+            + obs
+        )
 
     # === BrowserTool interface ===
 
@@ -154,7 +158,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser.make()
-        self._session.playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
+        self._session.playwright.selectors.set_test_id_attribute(
+            BROWSERGYM_ID_ATTRIBUTE
+        )
 
     def _close_runtime(self) -> None:
         if self._session is not None:
@@ -243,8 +249,14 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 axtree = extract_merged_axtree(page)
                 focused_element_bid = extract_focused_element_bid(page)
                 scale_factor = getattr(page, "_bgym_scale_factor", 1.0)
-                need_extra = self.config.axtree_with_visible or self.config.axtree_with_clickable
-                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor) if need_extra else {}
+                need_extra = (
+                    self.config.axtree_with_visible or self.config.axtree_with_clickable
+                )
+                extra_properties = (
+                    extract_dom_extra_properties(dom, scale_factor=scale_factor)
+                    if need_extra
+                    else {}
+                )
             except (Error, MarkingError):
                 if retries_left > 0:
                     logger.warning(
@@ -262,7 +274,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             "axtree_object": axtree,
             "extra_element_properties": extra_properties,
             "focused_element_bid": focused_element_bid,
-            "last_action_error": (self._last_info.get("action_error", "") if self._last_info else ""),
+            "last_action_error": (
+                self._last_info.get("action_error", "") if self._last_info else ""
+            ),
         }
         if self.config.use_screenshot:
             obs["screenshot"] = extract_screenshot(page)
@@ -286,7 +300,9 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         if "focused_element_bid" in bgym_obs:
             focused_bid = bgym_obs["focused_element_bid"]
             if focused_bid:
-                obs.contents.append(Content.from_data(focused_bid, name="focused_element"))
+                obs.contents.append(
+                    Content.from_data(focused_bid, name="focused_element")
+                )
 
         # Accessibility tree
         if self.config.use_axtree and "axtree_object" in bgym_obs:
@@ -307,13 +323,17 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 obs.contents.append(Content.from_data(screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
                 screenshot_img = Image.fromarray(screenshot)
-                obs.contents.append(Content.from_data(screenshot_img, name="screenshot"))
+                obs.contents.append(
+                    Content.from_data(screenshot_img, name="screenshot")
+                )
 
         # Last action error
         if "last_action_error" in bgym_obs:
             error = bgym_obs["last_action_error"]
             if error:
-                obs.contents.append(Content.from_data(str(error), name="last_action_error"))
+                obs.contents.append(
+                    Content.from_data(str(error), name="last_action_error")
+                )
 
         # User messages from send_msg_to_user callback
         if self._last_info and self._last_info.get("user_messages"):
@@ -325,16 +345,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
 # === Module-level helpers ===
 
-
-def _format_action_error(exc: Exception, full_traceback: bool) -> str:
-    """Format an action exception for inclusion in an agent observation.
-
-    full_traceback=True: full traceback (useful for debugging).
-    full_traceback=False: just the exception type and message (less noise for the agent).
-    """
-    if full_traceback:
-        return traceback.format_exc().strip()
-    return f"{type(exc).__name__}: {exc}"
 
 
 # Descriptions that replace BrowserGym's upstream text.
@@ -355,8 +365,12 @@ def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
         # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
         name = desc["name"]
-        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
-        schemas.append(ActionSchema(name=name, description=description, parameters=params))
+        description = _ACTION_DESCRIPTION_OVERRIDES.get(
+            name, desc.get("description", name)
+        )
+        schemas.append(
+            ActionSchema(name=name, description=description, parameters=params)
+        )
     return schemas
 
 
