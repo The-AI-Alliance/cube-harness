@@ -44,6 +44,7 @@ from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
+from cube_harness.tools.web_actions import ExtendedBrowserConfig
 
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(model_name="azure/gpt-5.4-mini", temperature=1.0),
@@ -61,13 +62,15 @@ def run_for_model(
 ) -> None:
     tool_config = ToolboxConfig(
         tool_configs=[
-            BrowsergymConfig(
-                browser=PlaywrightSessionConfig(headless=headless, timeout=60000),
-                use_screenshot=True,
-                use_axtree=True,
-                use_html=False,
-                axtree_with_clickable=True,
-                axtree_with_visible=True,
+            ExtendedBrowserConfig(
+                browser=BrowsergymConfig(
+                    browser=PlaywrightSessionConfig(headless=headless, timeout=60000),
+                    use_screenshot=True,
+                    use_axtree=True,
+                    use_html=False,
+                    axtree_with_clickable=True,
+                    axtree_with_visible=True,
+                )
             ),
             ChatToolConfig(),
             WorkArenaInfeasibleToolConfig(),

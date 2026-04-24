@@ -20,6 +20,7 @@ from cube_harness.tools.browsergym import (
     _action_to_bgym_string,
     _build_action_schemas,
 )
+from cube_harness.tools.web_actions import ExtraWebActionsTool
 
 
 @pytest.fixture
@@ -654,16 +655,15 @@ class TestKeyboardTypeIntoVsFill:
         assert suggestions == 5
 
     def test_keyboard_type_into_action_fires_keydown_events(self, live_page) -> None:
-        """End-to-end: BrowsergymTool.keyboard_type_into reaches the element via get_elem_by_bid."""
+        """End-to-end: ExtraWebActionsTool.keyboard_type_into reaches the element via get_elem_by_bid."""
         live_page.set_content(_AUTOCOMPLETE_PAGE)
 
-        config = BrowsergymConfig()
-        tool = BrowsergymTool(config)
-        tool._session = MagicMock()
-        tool._session.page = live_page
+        bgym = BrowsergymTool(BrowsergymConfig())
+        bgym._session = MagicMock()
+        bgym._session.page = live_page
+        extra = ExtraWebActionsTool(bgym)
 
-        with patch.object(tool, "_extract_bgym_obs", return_value={}):
-            result = tool.keyboard_type_into(_AUTOCOMPLETE_BID, "abc")
+        result = extra.keyboard_type_into(_AUTOCOMPLETE_BID, "abc")
 
         assert result == "Success"
         keydown_count = live_page.evaluate("window.keydownCount")
