@@ -20,6 +20,7 @@ from pydantic import PrivateAttr
 
 logger = logging.getLogger(__name__)
 
+
 class WorkArenaTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for WorkArena ServiceNow tasks.
 

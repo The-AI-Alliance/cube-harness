@@ -36,21 +36,17 @@ _SORT_PRECISION: str = (
 )
 
 # Filter: goal says "filter by X" but doesn't describe the filter UI workflow.
-_FILTER_PRECISION: str = (
-    "Use the filter panel (funnel icon) to add filter conditions."
-)
+_FILTER_PRECISION: str = "Use the filter panel (funnel icon) to add filter conditions."
 
 # Chart (single/multi value): goal asks a question but doesn't specify the answer format.
 _CHART_VALUE_PRECISION: str = (
-    "Answer with ONLY the numeric value — no units, labels, or explanation. "
-    "Example: send_message('42.5')"
+    "Answer with ONLY the numeric value — no units, labels, or explanation. Example: send_message('42.5')"
 )
 
 # Chart min/max (single or multi): answer format is 'label, count', not just a number.
 # The task goal itself says "Give me both the label and the count."
 _CHART_MINMAX_PRECISION: str = (
-    "Answer with both the label and the count, comma-separated. "
-    "Example: send_message('2026-01-19, 18')"
+    "Answer with both the label and the count, comma-separated. Example: send_message('2026-01-19, 18')"
 )
 
 # Impersonation: LLMs sometimes refuse "impersonation" as a real-world privacy violation.

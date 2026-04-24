@@ -36,7 +36,7 @@ from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from cube_chat_tool.chat_tool import ChatToolConfig
 from workarena_cube.benchmark import WorkArenaBenchmark
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig
-from workarena_hints import WORKARENA_TASK_HINTS, WORKARENA_TASK_PRECISION
+from workarena_hints import WORKARENA_TASK_HINTS
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -77,9 +77,7 @@ def run_for_model(
         ]
     )
 
-    benchmark = WorkArenaBenchmark(
-        n_seeds_l1=5, default_tool_config=tool_config
-    ).named_subset("l1")
+    benchmark = WorkArenaBenchmark(n_seeds_l1=5, default_tool_config=tool_config).named_subset("l1")
     benchmark.setup()
 
     suffix = "hints" if use_hints else "nohints"
@@ -88,9 +86,7 @@ def run_for_model(
         retry_failed = True
         resume = True
     else:
-        output_dir = make_experiment_output_dir(
-            "genny", f"workarena-l1-{suffix}-{model_key}"
-        )
+        output_dir = make_experiment_output_dir("genny", f"workarena-l1-{suffix}-{model_key}")
         retry_failed = False
         resume = False
 
