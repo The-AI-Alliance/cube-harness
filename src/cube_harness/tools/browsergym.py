@@ -54,9 +54,7 @@ class BrowsergymConfig(ToolConfig):
     prune_html: bool = True
 
     # AXTree element attributes — requires extra_element_properties from the DOM snapshot
-    axtree_with_visible: bool = (
-        False  # label visible elements (vis >= 0.5) as "visible"
-    )
+    axtree_with_visible: bool = False  # label visible elements (vis >= 0.5) as "visible"
     axtree_with_clickable: bool = False  # label clickable elements as "clickable"
 
     # Error reporting: when an action raises, include the full traceback in the observation
@@ -78,9 +76,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
     def __init__(self, config: BrowsergymConfig) -> None:
         super().__init__()
         self.config = config
-        self._action_set = HighLevelActionSet(
-            subsets=config.action_subsets, multiaction=False
-        )
+        self._action_set = HighLevelActionSet(subsets=config.action_subsets, multiaction=False)
         self._action_schemas: list[ActionSchema] | None = None
         self._session: PlaywrightSession | None = None
         self._last_obs: dict | None = None
@@ -160,9 +156,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser.make()
-        self._session.playwright.selectors.set_test_id_attribute(
-            BROWSERGYM_ID_ATTRIBUTE
-        )
+        self._session.playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:
         if self._session is not None:
@@ -250,14 +244,8 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 axtree = extract_merged_axtree(page)
                 focused_element_bid = extract_focused_element_bid(page)
                 scale_factor = getattr(page, "_bgym_scale_factor", 1.0)
-                need_extra = (
-                    self.config.axtree_with_visible or self.config.axtree_with_clickable
-                )
-                extra_properties = (
-                    extract_dom_extra_properties(dom, scale_factor=scale_factor)
-                    if need_extra
-                    else {}
-                )
+                need_extra = self.config.axtree_with_visible or self.config.axtree_with_clickable
+                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor) if need_extra else {}
             except (Error, MarkingError):
                 if retries_left > 0:
                     logger.warning(
@@ -275,9 +263,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             "axtree_object": axtree,
             "extra_element_properties": extra_properties,
             "focused_element_bid": focused_element_bid,
-            "last_action_error": (
-                self._last_info.get("action_error", "") if self._last_info else ""
-            ),
+            "last_action_error": (self._last_info.get("action_error", "") if self._last_info else ""),
         }
         if self.config.use_screenshot:
             obs["screenshot"] = extract_screenshot(page)
@@ -301,9 +287,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         if "focused_element_bid" in bgym_obs:
             focused_bid = bgym_obs["focused_element_bid"]
             if focused_bid:
-                obs.contents.append(
-                    Content.from_data(focused_bid, name="focused_element")
-                )
+                obs.contents.append(Content.from_data(focused_bid, name="focused_element"))
 
         # Accessibility tree
         if self.config.use_axtree and "axtree_object" in bgym_obs:
@@ -324,17 +308,13 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 obs.contents.append(Content.from_data(screenshot, name="screenshot"))
             elif isinstance(screenshot, np.ndarray):
                 screenshot_img = Image.fromarray(screenshot)
-                obs.contents.append(
-                    Content.from_data(screenshot_img, name="screenshot")
-                )
+                obs.contents.append(Content.from_data(screenshot_img, name="screenshot"))
 
         # Last action error
         if "last_action_error" in bgym_obs:
             error = bgym_obs["last_action_error"]
             if error:
-                obs.contents.append(
-                    Content.from_data(str(error), name="last_action_error")
-                )
+                obs.contents.append(Content.from_data(str(error), name="last_action_error"))
 
         # User messages from send_msg_to_user callback
         if self._last_info and self._last_info.get("user_messages"):
@@ -376,12 +356,8 @@ def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
         # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
         name = desc["name"]
-        description = _ACTION_DESCRIPTION_OVERRIDES.get(
-            name, desc.get("description", name)
-        )
-        schemas.append(
-            ActionSchema(name=name, description=description, parameters=params)
-        )
+        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
+        schemas.append(ActionSchema(name=name, description=description, parameters=params))
     return schemas
 
 

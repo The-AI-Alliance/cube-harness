@@ -15,7 +15,7 @@ from typing import Any
 
 from browsergym.core.action.utils import get_elem_by_bid
 from cube.core import Action, Content, Observation, StepError
-from cube.tool import Tool, ToolConfig, Toolbox, tool_action
+from cube.tool import Tool, Toolbox, ToolConfig, tool_action
 from pydantic import Field
 
 from cube_harness.tools.browsergym import BrowsergymConfig, BrowsergymTool
