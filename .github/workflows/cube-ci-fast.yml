@@ -15,6 +15,25 @@ on:
     branches: [main]
 
 jobs:
+  # Expose secret availability as a job output so downstream jobs can use it in
+  # their `if:` conditions. (The `secrets` context is not allowed in job-level
+  # `if:` expressions directly — only in step-level ones.)
+  check-secrets:
+    name: Check available secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has-hf-token: ${{ steps.check.outputs.has-hf-token }}
+    steps:
+      - id: check
+        env:
+          HF_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+        run: |
+          if [ -n "$HF_TOKEN" ]; then
+            echo "has-hf-token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-hf-token=false" >> "$GITHUB_OUTPUT"
+          fi
+
   miniwob:
     name: MiniWob debug suite
     runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
@@ -45,9 +64,10 @@ jobs:
 
   workarena:
     name: WorkArena debug suite
-    runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
+    needs: check-secrets
     # Skip if HF token is not configured (e.g. external fork PRs)
-    if: ${{ secrets.HUGGING_FACE_HUB_TOKEN != '' }}
+    if: needs.check-secrets.outputs.has-hf-token == 'true'
+    runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
