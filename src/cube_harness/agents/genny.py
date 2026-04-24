@@ -324,6 +324,12 @@ class Genny(Agent):
     def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema], task_id: str | None = None):
         self.config = config
         self.task_id = task_id
+        if task_id is None and (config.task_hints or config.task_clarification):
+            logger.debug(
+                "task_id is None — %d task_hints and %d task_clarifications not applied",
+                len(config.task_hints),
+                len(config.task_clarification),
+            )
         # task_hints takes precedence over the general hint; falls back to hint if no match.
         self._task_hint: str = config.task_hints.get(task_id, config.hint) if task_id else config.hint
         # task_clarification is injected as part of the goal, not as a hint.
