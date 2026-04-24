@@ -43,13 +43,13 @@ update:
 
 lint:
 	@echo "🧹 Linting code"
-	uv run ruff check --fix .
-	uv run ruff format .
+	uvx ruff check --fix .
+	uvx ruff format .
 
 lint-check:
 	@echo "🧹 Checking lint"
-	uv run ruff check --diff .
-	uv run ruff format --diff .
+	uvx ruff check --diff .
+	uvx ruff format --diff .
 
 test: install
 	@echo "🧪 Running unit tests"
