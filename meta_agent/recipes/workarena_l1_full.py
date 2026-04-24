@@ -74,15 +74,16 @@ def run_for_model(
                     use_html=False,
                     axtree_with_clickable=True,
                     axtree_with_visible=True,
-                )
+                ),
             ),
             ChatToolConfig(),
             WorkArenaInfeasibleToolConfig(),
-        ]
+        ],
     )
 
     benchmark = WorkArenaBenchmark(
-        n_seeds_l1=5, default_tool_config=tool_config
+        n_seeds_l1=5,
+        default_tool_config=tool_config,
     ).named_subset("l1")
     benchmark.setup()
 
@@ -99,7 +100,8 @@ def run_for_model(
         resume = True
     else:
         output_dir = make_experiment_output_dir(
-            "genny", f"workarena-l1-{suffix}-{model_key}"
+            "genny",
+            f"workarena-l1-{suffix}-{model_key}",
         )
         retry_failed = False
         resume = False
