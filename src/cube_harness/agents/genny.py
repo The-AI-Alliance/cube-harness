@@ -20,6 +20,7 @@ from typing import Protocol, cast
 from cube.core import Action, ActionSchema, Observation
 from cube.task import STOP_ACTION
 from litellm import Message
+from pydantic import Field
 from termcolor import colored
 
 from cube_harness.agent import Agent, AgentConfig
@@ -282,19 +283,18 @@ class GennyConfig(AgentConfig):
 
     # Per-task hints: task_id -> hint text. Takes precedence over `hint` when a task_id match is found.
     # These are general or task-specific hints that help the LLM work better.
-    task_hints: dict[str, str] = {}
+    task_hints: dict[str, str] = Field(default_factory=dict)
 
     # Per-task clarifications: task_id -> text that clarifies the goal when the task description
     # is under-defined (e.g. expected answer format, submission method). Injected as part of
     # the goal — not as a separate hint section.
-    task_clarification: dict[str, str] = {}
+    task_clarification: dict[str, str] = Field(default_factory=dict)
 
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
 
-    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Genny":
-        task_id: str | None = kwargs.get("task_id")
+    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny":
         return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
 
 
