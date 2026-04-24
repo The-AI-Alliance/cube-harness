@@ -21,10 +21,7 @@ from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prun
 from cube.core import Action, ActionSchema, Content, Observation, StepError
 from cube.tool import ToolConfig
 from cube.tools.browser import BrowserTool
-from cube_browser_playwright.playwright_session import (
-    PlaywrightSession,
-    PlaywrightSessionConfig,
-)
+from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
 from playwright.sync_api import Error, Page
 from pydantic import Field
@@ -95,6 +92,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
     # === Action execution ===
 
     def _execute_action(self, action: Action) -> Observation | StepError:
+        """Serialise an Action to a bgym action string, execute it, and return the observation."""
         action_str = _action_to_bgym_string(action)
         result = self._execute_bgym_step(action_str)
         obs = self.page_obs()
@@ -172,6 +170,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             except Error:
                 pass
             for frame in page.frames:
+                # un necessary to wait for detached frames, and waiting on them raises a timeout error, so skip them
                 if frame.is_detached():
                     continue
                 try:
