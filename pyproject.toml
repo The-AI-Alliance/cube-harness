@@ -76,7 +76,7 @@ dev = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')",
-    "integration: end-to-end integration tests requiring external services (Docker, cloud creds)"
+    "integration: requires a live browser (headless Chromium via Playwright)"
 ]
 
 [tool.setuptools.packages.find]
