@@ -31,11 +31,19 @@ _SUBMODULES = (
 
 
 def __getattr__(name: str) -> Any:
+    import_errors: dict[str, str] = {}
     for sub in _SUBMODULES:
         try:
             mod = importlib.import_module(f".{sub}", __package__)
-        except ImportError:
+        except ImportError as exc:
+            import_errors[sub] = str(exc)
             continue
         if hasattr(mod, name):
             return getattr(mod, name)
+    if import_errors:
+        detail = "; ".join(f"{s}: {e}" for s, e in import_errors.items())
+        raise AttributeError(
+            f"module {__name__!r} has no attribute {name!r}. "
+            f"Some submodules failed to import (may be the cause): {detail}"
+        )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
