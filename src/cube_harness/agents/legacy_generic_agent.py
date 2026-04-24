@@ -27,7 +27,7 @@ from pydantic import Field
 
 from cube_harness.agent import Agent, AgentConfig
 from cube_harness.core import AgentOutput, LLMCall
-from cube_harness.llm import LLMConfig, Message, Prompt, RLCollectorConfig
+from cube_harness.llm import LLMConfig, Message, Prompt
 from cube_harness.utils import parse_actions
 
 logger = logging.getLogger(__name__)
@@ -880,7 +880,7 @@ class GenericAgentConfig(AgentConfig):
         max_actions: Maximum actions before auto-stopping
     """
 
-    llm_config: LLMConfig | RLCollectorConfig
+    llm_config: LLMConfig
     flags: GenericPromptFlags = Field(default_factory=GenericPromptFlags)
     max_retry: int = 4
     max_actions: int = 50

@@ -44,6 +44,7 @@ class LLMConfig(TypedBaseModel):
     parallel_tool_calls: bool = False
     logprobs: bool = False
     top_logprobs: int | None = None
+    training: bool = False  # whether the call is for training (vs inference); may affect caching and logging behavior
     extra_body: dict = Field(default_factory=dict)
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
@@ -190,77 +191,17 @@ class LLM:
             result.append({"token_id": token_id, "logprob": float(logprob)})
         return result
 
-
-class CapturedLLMCall(TypedBaseModel):
-    """Serializable LLM call payload used for RL data conversion."""
-
-    prompt_messages: list[dict] = Field(default_factory=list)
-    output_text: str = ""
-    logprobs: list[float] = Field(default_factory=list)
-    completion_token_ids: list[int] = Field(default_factory=list)
-    prompt_tokens: int = 0
-    output_tokens: int = 0
-    finish_reason: str | None = None
-
-
-def _serialize_message(msg: dict | Message) -> dict:
-    if isinstance(msg, dict):
-        return msg
-    if hasattr(msg, "model_dump"):
-        dumped = msg.model_dump(exclude_none=True)
-        return dumped if isinstance(dumped, dict) else {"role": "assistant", "content": str(msg)}
-    return {"role": getattr(msg, "role", "assistant"), "content": getattr(msg, "content", str(msg))}
-
-
-class RLCollectorConfig(LLMConfig):
-    """Wrapper config that collects LLM calls for RL trajectory conversion."""
-
-    stream_path: str | None = None
-
-    def make(self) -> "RLCollectorLLM":
-        return RLCollectorLLM(config=self)
-
-
-class RLCollectorLLM(LLM):
-    """Transparent wrapper around an inner LLM that buffers rollout-relevant call data."""
-
-    def __init__(self, config: RLCollectorConfig):
-        self.config = config
-        self._captured_calls: list[CapturedLLMCall] = []
-
-    def __call__(self, prompt: Prompt) -> LLMResponse:
-        response = super().__call__(prompt)
-        self._captured_calls.append(
-            CapturedLLMCall(
-                prompt_messages=[_serialize_message(msg) for msg in prompt.messages],
-                output_text=response.message.content or "",
-                logprobs=response.logprobs or [],
-                completion_token_ids=response.completion_token_ids or [],
-                prompt_tokens=response.usage.prompt_tokens,
-                output_tokens=response.usage.completion_tokens,
-                finish_reason=response.finish_reason,
-            )
-        )
-        return response
-
-    def pop_captured_calls(self) -> list[CapturedLLMCall]:
-        calls = list(self._captured_calls)
-        self._captured_calls.clear()
-        return calls
-
-    def clear(self) -> None:
-        self._captured_calls.clear()
-
-
 class LLMCall(TypedBaseModel):
     """Represents a call to an LLM model."""
 
     id: str = Field(default_factory=lambda: uuid4().hex)  # unique storage key
     tag: str = ""  # optional label shown as tab name in viewers (e.g. "act", "summary")
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
-    llm_config: LLMConfig | RLCollectorConfig
+    llm_config: LLMConfig
     prompt: Prompt
+    prompt_tokens: int = -1 # Number of tokens in the prompt; set to -1 if unknown or not applicable
     output: Message
+    output_tokens: int = -1  # Number of tokens in the output; set to -1 if unknown or not applicable
     usage: Usage = Field(default_factory=Usage)
     logprobs: list[float] | None = None
     completion_token_ids: list[int] | None = None

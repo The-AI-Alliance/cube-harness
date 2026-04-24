@@ -24,7 +24,7 @@ from termcolor import colored
 
 from cube_harness.agent import Agent, AgentConfig
 from cube_harness.core import AgentOutput
-from cube_harness.llm import LLM, LLMCall, LLMConfig, Prompt, RLCollectorConfig
+from cube_harness.llm import LLM, LLMCall, LLMConfig, Prompt
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +254,7 @@ class TextToolAdapter:
 
 class GennyConfig(AgentConfig):
     # Core
-    llm_config: LLMConfig | RLCollectorConfig
+    llm_config: LLMConfig
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
     # react_prompt: reason-then-act, used when enable_summarize=False (COT embedded in act call)
     react_prompt: str = _DEFAULT_REACT_PROMPT
@@ -269,7 +269,7 @@ class GennyConfig(AgentConfig):
     # Summarize pass
     enable_summarize: bool = False  # False = extract COT from act pass; True = separate summarize LLM call
     summarize_cot_only: bool = False  # True = concise CoT; False = verbose + Key Facts
-    summarize_llm_config: LLMConfig | RLCollectorConfig | None = None  # None = reuse llm_config
+    summarize_llm_config: LLMConfig | None = None  # None = reuse llm_config
     summarize_verbose_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
     summarize_cot_prompt: str = _DEFAULT_SUMMARIZE_COT_PROMPT
 
