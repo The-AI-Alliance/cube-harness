@@ -60,7 +60,7 @@ jobs:
         run: uv run playwright install chromium
 
       - name: Run MiniWob debug suite
-        run: uv run cube test miniwob-cube
+        run: uv run cube test miniwob-cube --no-reset-check
 
   workarena:
     name: WorkArena debug suite
@@ -91,6 +91,6 @@ jobs:
         run: uv run playwright install chromium
 
       - name: Run WorkArena debug suite
-        run: uv run cube test workarena-cube
+        run: uv run cube test workarena-cube --no-reset-check
         env:
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}

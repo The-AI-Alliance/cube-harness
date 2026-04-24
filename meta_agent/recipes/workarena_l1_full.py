@@ -77,9 +77,7 @@ def run_for_model(
         ]
     )
 
-    benchmark = WorkArenaBenchmark(
-        n_seeds_l1=5, default_tool_config=tool_config
-    ).named_subset("l1")
+    benchmark = WorkArenaBenchmark(n_seeds_l1=5, default_tool_config=tool_config).named_subset("l1")
     benchmark.setup()
 
     suffix = "hints" if use_hints else "nohints"
@@ -88,9 +86,7 @@ def run_for_model(
         retry_failed = True
         resume = True
     else:
-        output_dir = make_experiment_output_dir(
-            "genny", f"workarena-l1-{suffix}-{model_key}"
-        )
+        output_dir = make_experiment_output_dir("genny", f"workarena-l1-{suffix}-{model_key}")
         retry_failed = False
         resume = False
 
