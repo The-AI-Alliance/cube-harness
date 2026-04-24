@@ -110,11 +110,34 @@ make test               # full pytest
 make debug              # small end-to-end run
 make xray               # open the trajectory viewer
 make lint
+make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency
 uv run recipes/hello_miniwob.py   # example run
 ```
 
 Environment vars go in `.env` (loaded by pyproject). `OPENAI_API_KEY`
 is the only required one for the baseline recipes; see individual cubes for others.
+
+## Cross-repo PRs (cube-harness ↔ cube-standard)
+
+When a PR depends on an unreleased cube-standard branch, do **not** commit
+`path = "..."` local sources to any `pyproject.toml` (root or under `cubes/`).
+The pre-commit hook (`.githooks/pre-commit`) will block this — local paths break
+for anyone with a different folder structure.
+
+**Authoring a cross-repo PR:**
+
+1. Keep `pyproject.toml` pointing at PyPI (or a git ref) — do **not** commit the local path.
+2. Add `Depends-on: cube-standard/<branch-name>` anywhere in the PR description body.
+
+**Reviewing a cross-repo PR:**
+
+```bash
+make review PR=<n>
+```
+
+This checks out the PR branch, reads `Depends-on:` from the PR description, clones
+`cube-standard` into the repo root (gitignored), checks out the correct branch, and
+installs all workspace packages with `uv pip install -e cube-standard --all-packages --all-extras`.
 
 ## What lives elsewhere
 
