@@ -327,7 +327,8 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 # Use sparingly — only when the upstream description is misleading about when to use the action.
 _ACTION_DESCRIPTION_OVERRIDES: dict[str, str] = {
     "fill": (
-        "Fill a form field by setting its value directly. It does not fire keyboard events — autocomplete suggestions."
+        "Fill a form field by setting its value directly. It does not fire keyboard events, so autocomplete suggestions"
+        " will not appear. Use keyboard_type_into() instead for fields that require autocomplete."
     ),
 }
 
