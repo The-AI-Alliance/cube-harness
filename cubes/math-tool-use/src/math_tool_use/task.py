@@ -52,6 +52,9 @@ def _python_tool_shaping(answer_status: str, python_call_count: int) -> float:
 class SolveMathToolUseTask(Task):
     """Solve a math problem via Python and submit final LaTeX answer with MathAnswer."""
 
+    accept_agent_stop: bool = False  # agent should not be allowed to stop before submitting an answer
+    validate_per_step: bool = False  # only validate at the end based on submitted answer, not per step
+
     @property
     def _expected(self) -> str:
         return self.metadata.extra_info["expected"]
