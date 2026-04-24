@@ -32,7 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 from cube.tool import ToolboxConfig  # noqa: E402
-from cube_browser_playwright.playwright_session import PlaywrightSessionConfig  # noqa: E402
+from cube_browser_playwright.playwright_session import (
+    PlaywrightSessionConfig,
+)  # noqa: E402
 from cube_chat_tool.chat_tool import ChatToolConfig  # noqa: E402
 from workarena_cube.benchmark import WorkArenaBenchmark  # noqa: E402
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig  # noqa: E402
@@ -77,26 +79,28 @@ def run_for_model(
         ]
     )
 
-    benchmark = WorkArenaBenchmark(n_seeds_l1=5, default_tool_config=tool_config).named_subset("l1")
+    benchmark = WorkArenaBenchmark(
+        n_seeds_l1=5, default_tool_config=tool_config
+    ).named_subset("l1")
     benchmark.setup()
 
     suffix = "hints" if use_hints else "nohints"
+    agent_config = GennyConfig(
+        llm_config=llm_config,
+        max_actions=40,
+        render_last_n_obs=1,
+        task_hints=WORKARENA_TASK_HINTS if use_hints else {},
+    )
     if retry_dir is not None:
         output_dir = retry_dir
         retry_failed = True
         resume = True
     else:
-        output_dir = make_experiment_output_dir("genny", f"workarena-l1-{suffix}-{model_key}")
+        output_dir = make_experiment_output_dir(
+            "genny", f"workarena-l1-{suffix}-{model_key}"
+        )
         retry_failed = False
         resume = False
-
-        agent_config = GennyConfig(
-            llm_config=llm_config,
-            max_actions=40,
-            render_last_n_obs=1,
-            # task_precision=WORKARENA_TASK_PRECISION,
-            task_hints=WORKARENA_TASK_HINTS if use_hints else {},
-        )
 
     exp = Experiment(
         name=f"workarena-l1-{suffix}-{model_key}",
@@ -130,37 +134,37 @@ def main(
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    args_set = set(args)
-    debug = "debug" in args_set
-    headless = not debug and "headless-off" not in args_set
-    use_hints = "hints" in args_set
+    # args = sys.argv[1:]
+    # args_set = set(args)
+    # debug = "debug" in args_set
+    # headless = not debug and "headless-off" not in args_set
+    # use_hints = "hints" in args_set
 
-    retry_dir: Path | None = None
-    if "retry" in args_set:
-        retry_idx = args.index("retry")
-        if retry_idx + 1 < len(args):
-            retry_dir = Path(args[retry_idx + 1])
-        else:
-            print("ERROR: 'retry' flag requires a path argument", file=sys.stderr)
-            sys.exit(1)
+    # retry_dir: Path | None = None
+    # if "retry" in args_set:
+    #     retry_idx = args.index("retry")
+    #     if retry_idx + 1 < len(args):
+    #         retry_dir = Path(args[retry_idx + 1])
+    #     else:
+    #         print("ERROR: 'retry' flag requires a path argument", file=sys.stderr)
+    #         sys.exit(1)
 
-    selected = [k for k in MODEL_CONFIGS if k in args_set]
-    if not selected:
-        selected = ["gpt-5.4-mini"]
-
-    main(
-        debug=debug,
-        headless=headless,
-        models=selected,
-        use_hints=use_hints,
-        retry_dir=retry_dir,
-    )
+    # selected = [k for k in MODEL_CONFIGS if k in args_set]
+    # if not selected:
+    #     selected = ["gpt-5.4-mini"]
 
     # main(
-    #     debug=False,
-    #     headless=True,
-    #     models=["gpt-5.4-mini"],
-    #     use_hints=False,
-    #     retry_dir=None,
+    #     debug=debug,
+    #     headless=headless,
+    #     models=selected,
+    #     use_hints=use_hints,
+    #     retry_dir=retry_dir,
     # )
+
+    main(
+        debug=False,
+        headless=True,
+        models=["gpt-5.4-mini"],
+        use_hints=False,
+        retry_dir=None,
+    )
