@@ -17,8 +17,8 @@ from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.legacy import Benchmark as LegacyBenchmark
 from cube_harness.legacy import EnvConfig
 from cube_harness.metrics.tracer import get_tracer
-from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
-from cube_harness.summary import SummaryProcessor
+from cube_harness.storage import EPISODES_DIR, FileStorage, Storage, NoopStorage
+from cube_harness.summary import PersistentSummaryProcessor, NoopSummaryProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class EpisodeConfig(TypedBaseModel):
     exp_name: str
     output_dir: Path
     max_steps: int
+    persist_episode: bool = True
     # New cube path:
     task_config: TaskConfig | None = None
     # Deprecated legacy path:
@@ -53,6 +54,7 @@ class Episode:
         exp_name: str = "default",
         max_steps: int = MAX_STEPS,
         storage: Storage | None = None,
+        persist_episode: bool = True,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> None:
@@ -80,12 +82,25 @@ class Episode:
             output_dir=output_dir,
             max_steps=max_steps,
             task_config=task_config,
+            persist_episode=persist_episode,
             tool_config=env_config.tool_config if env_config is not None else None,
         )
         self._env_config = env_config  # kept for the legacy run path
         self._runtime_context = runtime_context  # passed to task_config.make()
         self._container_backend = container_backend  # passed to task_config.make()
-        self.storage = storage or FileStorage(output_dir)
+
+        if persist_episode: self.storage = storage or FileStorage(output_dir)
+        else: self.storage = NoopStorage()  # in-memory no-op storage for ephemeral episodes
+
+        if persist_episode:
+            self.summary_proc_cls = PersistentSummaryProcessor
+        else:
+            self.summary_proc_cls = NoopSummaryProcessor
+            
+        if persist_episode and isinstance(self.storage, NoopStorage):
+            raise ValueError("persist_episode=True requires a real FileStorage, got NoopStorage")
+
+        self.persist_episode = persist_episode
         self.allow_overwrite = False
 
     @classmethod
@@ -231,11 +246,14 @@ class Episode:
                     start_time=start_time,
                 )
                 self.storage.save_trajectory(trajectory, allow_overwrite=self.allow_overwrite)
-                ep_dir = self.storage._episode_dir(trajectory.id)
-                (ep_dir / "episode_config.json").write_text(
-                    self.config.model_dump_json(indent=2, serialize_as_any=True)
-                )
-                summary_proc = SummaryProcessor(ep_dir)
+                if self.persist_episode:
+                    ep_dir = self.storage._episode_dir(trajectory.id)
+                    (ep_dir / "episode_config.json").write_text(
+                        self.config.model_dump_json(indent=2, serialize_as_any=True)
+                    )
+                else:
+                    ep_dir = None  # no directory since we're not persisting
+                summary_proc = self.summary_proc_cls(ep_dir)
                 summary_proc.on_step(0, trajectory.steps[0])
                 logger.info(colored(f"Start env output: {env_output}", "blue"))
                 turns = 0
