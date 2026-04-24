@@ -48,7 +48,6 @@ Always verify with run_python_code before invoking MathAnswer."""
 
 def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_completion_tokens: int) -> None:
     api_key = "EMPTY"
-    # output_dir = make_experiment_output_dir("tir", "math-tool-use", tag="vllm")
 
     llm_config = LLMConfig(
         model_name=model,
@@ -76,16 +75,6 @@ def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_comple
 
     if mode == "debug":
         benchmark = benchmark.subset_from_list(["q_0", "q_1", "q_2", "q_3"], benchmark_name_suffix="debug")
-
-    # exp = Experiment(
-    #     name="math-tool-use",
-    #     output_dir=output_dir,
-    #     agent_config=agent_config,
-    #     benchmark=benchmark,
-    #     max_steps=3,
-    # )
-
-    # run_sequentially(exp)
 
     task_configs = list(benchmark.get_task_configs())
     episodes = [

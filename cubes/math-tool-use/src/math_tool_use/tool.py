@@ -3,14 +3,8 @@ from typing import Any
 
 from cube.container import Container
 from cube.tool import Tool, ToolConfig, tool_action
+from sandbox_fusion import RunCodeRequest, run_code
 
-try:
-    from sandbox_fusion import RunCodeRequest, run_code
-except ImportError:  # pragma: no cover - optional dependency at runtime
-    RunCodeRequest = None  # type: ignore[assignment]
-    run_code = None  # type: ignore[assignment]
-
-_INTEGER_PATTERN = re.compile(r"^-?\d+$")
 _BLOCKED_PATTERNS = [
     re.compile(r"\bsys\.exit\b"),
     re.compile(r"\bos\._exit\b"),
@@ -31,8 +25,6 @@ class MathToolUseToolConfig(ToolConfig):
     sandbox_language: str = "python"
     sandbox_compile_timeout: float = 10.0
     sandbox_run_timeout: float = 10.0
-    sandbox_client_timeout: float = 15.0
-    sandbox_max_attempts: int = 2
 
     def make(self, container: Container | None = None) -> "MathToolUseTool":
         return MathToolUseTool(config=self)
@@ -42,16 +34,14 @@ class MathToolUseTool(Tool):
     def __init__(self, config: MathToolUseToolConfig) -> None:
         self.config = config
         self._python_call_count: int = 0
-        self._answer_call_count: int = 0
-        self._python_called_before_answer: bool = True
-        self._submitted_answer: str | None = None
+        self._final_answer: str | None = None
+        self._submitted_final_answer: bool = False
         self._last_python_output: str | None = None
 
     def reset(self) -> None:
         self._python_call_count = 0
-        self._answer_call_count = 0
-        self._python_called_before_answer = True
-        self._submitted_answer = None
+        self._final_answer = None
+        self._submitted_final_answer = False
         self._last_python_output = None
 
     @tool_action
@@ -62,48 +52,38 @@ class MathToolUseTool(Tool):
             code: Python code to execute.
         """
         self._python_call_count += 1
-
-        stripped = code.strip()
-        if not stripped:
-            self._last_python_output = "[no output]"
-            return self._last_python_output
-
         for pattern in _BLOCKED_PATTERNS:
-            if pattern.search(stripped):
+            if pattern.search(code):
                 self._last_python_output = f"Blocked: code contains forbidden pattern '{pattern.pattern}'"
                 return self._last_python_output
 
-        if RunCodeRequest is None or run_code is None:
-            self._last_python_output = "[execution error: sandbox-fusion is not installed]"
-            return self._last_python_output
-
         try:
             request = RunCodeRequest(
-                code=stripped,
+                code=code,
                 language=self.config.sandbox_language,
                 compile_timeout=self.config.sandbox_compile_timeout,
                 run_timeout=self.config.sandbox_run_timeout,
             )
-            kwargs: dict[str, Any] = {
-                "max_attempts": self.config.sandbox_max_attempts,
-                "client_timeout": self.config.sandbox_client_timeout,
-            }
+            kwargs: dict[str, Any] = {}
             if self.config.sandbox_endpoint:
                 kwargs["endpoint"] = self.config.sandbox_endpoint
 
             response = run_code(request, **kwargs)
-            run_result = self._obj_get(response, "run_result", {}) or {}
-            status = str(self._obj_get(response, "status", ""))
-            message = str(self._obj_get(response, "message", "") or "")
-            stdout = (self._obj_get(run_result, "stdout", "") or "").rstrip()
-            stderr = (self._obj_get(run_result, "stderr", "") or "").rstrip()
-            is_timeout = "timeout" in status.lower() or "timeout" in message.lower()
 
-            parts: list[str] = []
+            stdout = ""
+            stderr = ""
+            if response.run_result:
+                stdout = response.run_result.stdout or ""
+                stderr = response.run_result.stderr or ""
+
+            status = response.status.value if hasattr(response.status, "value") else str(response.status)
+            is_timeout = "timeout" in status.lower() or "timeout" in (response.message or "").lower()
+
+            parts = []
             if stdout:
-                parts.append(stdout)
+                parts.append(stdout.rstrip())
             if stderr:
-                parts.append(f"[stderr]\\n{stderr}")
+                parts.append(f"[stderr]\n{stderr.rstrip()}")
             if is_timeout:
                 parts.append("[execution timed out]")
             if not parts:
@@ -122,51 +102,21 @@ class MathToolUseTool(Tool):
         Args:
             answer: The final answer.
         """
-        self._answer_call_count += 1
-        if self._answer_call_count > 1:
-            return "MathAnswer may only be called once."
-
-        if self._python_call_count == 0:
-            self._python_called_before_answer = False
-
-        self._submitted_answer = answer.strip()
-        return "Final answer submitted."
-
-    @staticmethod
-    def parse_integer_from_latex(answer: str) -> int | None:
-        text = answer.strip()
-        if text.startswith("$") and text.endswith("$") and len(text) >= 2:
-            text = text[1:-1].strip()
-
-        boxed_match = re.fullmatch(r"\\boxed\{(.+)\}", text)
-        if boxed_match:
-            text = boxed_match.group(1).strip()
-
-        if _INTEGER_PATTERN.fullmatch(text):
-            return int(text)
-        return None
-
-    @staticmethod
-    def _obj_get(obj: Any, key: str, default: Any = None) -> Any:
-        if isinstance(obj, dict):
-            return obj.get(key, default)
-        return getattr(obj, key, default)
+        self._final_answer = answer.strip()
+        self._submitted_final_answer = True
+        return f"Answer submitted: {self._final_answer}"
 
     @property
     def python_call_count(self) -> int:
         return self._python_call_count
 
     @property
-    def answer_call_count(self) -> int:
-        return self._answer_call_count
-
+    def final_answer(self) -> str | None:
+        return self._final_answer
+    
     @property
-    def python_called_before_answer(self) -> bool:
-        return self._python_called_before_answer
-
-    @property
-    def last_answer(self) -> str | None:
-        return self._submitted_answer
+    def submitted_final_answer(self) -> bool:
+        return self._submitted_final_answer
 
     @property
     def last_python_output(self) -> str | None:

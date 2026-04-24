@@ -1,16 +1,57 @@
-from typing import Any
+from typing import Any, Tuple
 
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import EvalInfo, Task, TaskConfig
+from cube.task import Task, TaskConfig
 from math_tool_use.tool import MathToolUseTool, MathToolUseToolConfig
 import math_verify
+from pydantic import BaseModel
 
-_BONUS_ON_CORRECT_WITH_PYTHON = 0.1
-_PENALTY_ON_INCORRECT_WITHOUT_PYTHON = 0.1
-_MAX_ABS_SHAPING = 0.2
+class RewardTable(BaseModel):
+    wrong_answer_not_finished: float
+    wrong_answer_finished: float
+    no_answer_not_finished: float
+    no_answer_finished: float
+    unparsable_not_finished: float
+    unparsable_finished: float
+    correct_answer_not_finished: float
+    correct_answer_finished: float
+    buffer_tokens: int = 0 # 0 means no overlong reward shaping
 
+    def get_reward_range(self) -> tuple[float, float]:
+        values = [
+            self.wrong_answer_not_finished,
+            self.wrong_answer_finished,
+            self.no_answer_not_finished,
+            self.no_answer_finished,
+            self.unparsable_not_finished,
+            self.unparsable_finished,
+            self.correct_answer_not_finished,
+            self.correct_answer_finished,
+        ]
+        return min(values), max(values)
+
+def get_reward(answer_status: str, finished: bool, reward_table: RewardTable) -> float:
+    match (answer_status, finished):
+        case ("wrong", False):
+            return reward_table.wrong_answer_not_finished
+        case ("wrong", True):
+            return reward_table.wrong_answer_finished
+        case ("no_answer", False):
+            return reward_table.no_answer_not_finished
+        case ("no_answer", True):
+            return reward_table.no_answer_finished
+        case ("unparsable", False):
+            return reward_table.unparsable_not_finished
+        case ("unparsable", True):
+            return reward_table.unparsable_finished
+        case ("correct", False):
+            return reward_table.correct_answer_not_finished
+        case ("correct", True):
+            return reward_table.correct_answer_finished
+        case _:
+            raise ValueError(f"Invalid answer_status/finished combination: {answer_status}/{finished}")
 
 def _verify_answer_status(
     prediction: str,
@@ -39,16 +80,6 @@ def _verify_answer_status(
     except Exception:
         return "unparsable"
 
-
-def _python_tool_shaping(answer_status: str, python_call_count: int) -> float:
-    shaping = 0.0
-    if answer_status == "correct" and python_call_count >= 1:
-        shaping += _BONUS_ON_CORRECT_WITH_PYTHON
-    if answer_status in ("wrong", "unparsable") and python_call_count == 0:
-        shaping -= _PENALTY_ON_INCORRECT_WITHOUT_PYTHON
-    return max(-_MAX_ABS_SHAPING, min(_MAX_ABS_SHAPING, shaping))
-
-
 class SolveMathToolUseTask(Task):
     """Solve a math problem via Python and submit final LaTeX answer with MathAnswer."""
 
@@ -65,52 +96,27 @@ class SolveMathToolUseTask(Task):
         question = ei["question"]
         return Observation.from_text(question), {"question": question, "expected": self._expected}
 
-    def evaluate(self, obs: Observation | None = None) -> tuple[float, EvalInfo | dict[str, Any]]:
-        assert isinstance(self.tool, MathToolUseTool)
-
-        submitted = self.tool.last_answer
-        if submitted is None:
-            return 0.0, EvalInfo(
-                success=False,
-                no_answer=True,
-                no_error=True,
-                status="no_answer",
-                extra={
-                    "answer_status": "no_answer",
-                    "expected": self._expected,
-                    "python_call_count": self.tool.python_call_count,
-                    "answer_call_count": self.tool.answer_call_count,
-                    "python_called_before_answer": self.tool.python_called_before_answer,
-                    "last_python_output": self.tool.last_python_output,
-                },
-            )
+    def evaluate(self, obs: Observation | None = None) -> Tuple[float, dict]:
+        if self.tool.final_answer is not None:
+            submitted = self.tool.final_answer
+        else:
+            submitted = ""
 
         answer_status = _verify_answer_status(submitted, self._expected, strict=True)
-        base_reward = 1.0 if answer_status == "correct" else 0.0
-        shaping = _python_tool_shaping(answer_status, self.tool.python_call_count)
-        reward = base_reward + shaping
+        reward_table = RewardTable(**self.metadata.extra_info['rewards'])
+        reward = get_reward(answer_status, self.finished(obs), reward_table)
 
-        return reward, EvalInfo(
-            success=answer_status == "correct",
-            no_answer=answer_status == "no_answer",
-            no_error=answer_status != "unparsable",
-            status=answer_status,
-            extra={
-                "answer_status": answer_status,
-                "submitted": submitted,
-                "expected": self._expected,
-                "base_reward": base_reward,
-                "python_tool_shaping": shaping,
-                "python_call_count": self.tool.python_call_count,
-                "answer_call_count": self.tool.answer_call_count,
-                "python_called_before_answer": self.tool.python_called_before_answer,
-                "last_python_output": self.tool.last_python_output,
+        return reward, {
+                "success": answer_status == "correct",
+                "no_answer": answer_status == "no_answer",
+                "no_error": answer_status != "unparsable",
+                "num_python_calls": self.tool.python_call_count,
+                "overflow": not self.tool.submitted_final_answer,
             },
-        )
 
     def finished(self, obs: Observation | None = None) -> bool:
         assert isinstance(self.tool, MathToolUseTool)
-        return self.tool.last_answer is not None
+        return self.tool.submitted_final_answer
 
 
 class MathToolUseTaskConfig(TaskConfig):

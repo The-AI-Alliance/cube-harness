@@ -7,7 +7,7 @@ from typing import Callable, Self
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import EnvironmentOutput, StepError, TypedBaseModel
-from cube.task import EvalInfo, TaskConfig
+from cube.task import TaskConfig
 from cube.tool import ToolConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
@@ -317,19 +317,10 @@ class Episode:
                     termination_reason = termination_reason or TerminationReason.STOPPED
                 
                 if termination_reason != TerminationReason.ENV_DONE:
-                    reward, raw_info = evaluate_fn(env_output.obs)
-                    if isinstance(raw_info, EvalInfo):
-                        info = raw_info.model_dump(exclude_none=True)
-                        extra_info = info.pop("extra", None)
-                        if isinstance(extra_info, dict):
-                            info.update(extra_info)
-                    elif isinstance(raw_info, dict):
-                        info = dict(raw_info)
-                    else:
-                        raise TypeError(
-                            f"Task.evaluate() must return dict or EvalInfo info payload, got {type(raw_info).__name__}"
-                        )
+                    env_ts = time.time()
+                    reward, info = evaluate_fn(env_output.obs)
                     env_output = EnvironmentOutput(obs=env_output.obs, reward=reward, info=info)
+                    env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
 
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}

@@ -47,6 +47,15 @@ def load_task_metadata() -> dict[str, TaskMetadata]:
                 "question": t["task"],
                 "expected": t["answer"],
                 "dataset": t["dataset"],
+                "rewards": {
+                    "correct_answer_finished": 1.0,
+                    "correct_answer_not_finished": 0,
+                    "wrong_answer_finished": 0,
+                    "wrong_answer_not_finished": 0,
+                    "no_answer_finished": 0,
+                    "no_answer_not_finished": 0,
+                    "unparsable_finished": 0,
+                    "unparsable_not_finished": 0}
             },
         )
 
