@@ -40,7 +40,7 @@ INFRA = AzureInfraConfig(
     storage_account=os.environ.get("AZURE_STORAGE_ACCOUNT") or "cubeexpvhd",
     vnet_name="vnet-westus2",
     nsg_name="osworld-nsg",
-    image_name_suffix="-aj",
+    image_name_suffix="-generalized",
 )
 
 OSWORLD_SYSTEM_PROMPT_PYAUTOGUI_AXTREE = """\
@@ -104,6 +104,7 @@ def main(debug: bool) -> None:
         use_som=False,
         infra=INFRA,
     )
+    benchmark.install()
     benchmark.setup()
     benchmark = benchmark.named_subset("test_small")
 

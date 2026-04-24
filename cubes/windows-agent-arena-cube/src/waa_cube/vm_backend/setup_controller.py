@@ -25,7 +25,7 @@ from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 20
+MAX_RETRIES = 60
 
 # HuggingFace-hosted empty history DB (same as osworld-cube)
 _HISTORY_EMPTY_DB_URL = (
@@ -88,7 +88,7 @@ class SetupController:
                 requests.get(self.http_server + "/probe", timeout=5)
                 break
             except Exception:
-                time.sleep(5)
+                time.sleep(10)
                 logger.info("Waiting for WAA VM connectivity: %d/%d", retry + 1, MAX_RETRIES)
         else:
             logger.error("WAA VM unreachable after %d retries", MAX_RETRIES)

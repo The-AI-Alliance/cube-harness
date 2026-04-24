@@ -28,7 +28,6 @@ from cube.task import TaskConfig, TaskMetadata
 from waa_cube.benchmark import WAABenchmark, WAATaskConfig
 from waa_cube.computer import ComputerConfig
 from waa_cube.task import WAATask
-from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ class DebugWAATaskConfig(WAATaskConfig):
         return WAATask(
             metadata=metadata,
             tool_config=self.tool_config or ComputerConfig(),
-            vm_backend=self.vm_backend,
+            infra=self.infra,
             runtime_context=runtime_context,
             container_backend=container_backend,
         )
@@ -69,8 +68,7 @@ class DebugWAABenchmark(WAABenchmark):
 
     def install(self) -> None:
         """No-op: debug task data is embedded in debug_task_metadata.json."""
-        if self.vm_backend is not None and isinstance(self.vm_backend, WAADockerVMBackend):
-            self.vm_backend.install()
+        logger.info("DebugWAABenchmark.install() — nothing to do")
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +133,6 @@ def get_debug_benchmark() -> DebugWAABenchmark:
     """Return a WAABenchmark scoped to the debug tasks."""
     return DebugWAABenchmark(
         default_tool_config=ComputerConfig(),
-        vm_backend=WAADockerVMBackend(cpu_cores=8),
     )
 
 

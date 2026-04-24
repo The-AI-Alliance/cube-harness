@@ -89,8 +89,8 @@ def main(debug: bool, agent: str, level: int) -> None:
         tools_configs.append(WorkArenaInfeasibleToolConfig())
     tool_config = ToolboxConfig(tool_configs=tools_configs)
 
-    # Configure WorkArena benchmark
-    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, level=f"l{level}", n_seeds_l1=1)
+    # Configure WorkArena benchmark — filter to the requested level via named_subset
+    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, n_seeds_l1=1).named_subset(f"l{level}")
 
     exp = Experiment(
         name=f"workarena_{agent}",

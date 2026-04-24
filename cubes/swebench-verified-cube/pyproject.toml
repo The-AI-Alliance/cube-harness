@@ -20,6 +20,9 @@ swebench-verified-cube = "swebench_verified_cube.benchmark:SWEBenchVerifiedBench
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
 
+[tool.uv-build]
+include = ["src/swebench_verified_cube/task_metadata.json"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0",

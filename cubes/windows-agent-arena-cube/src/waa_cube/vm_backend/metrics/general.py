@@ -179,37 +179,29 @@ def check_list(result: str, rules: Dict[str, List[str]]) -> float:
     return float(all(expect_metrics) and unexpect_metric)
 
 
+# Namespace map matching the WAA Flask server's XML output.
+# The server uses uri:deskat:... namespaces for both Linux and Windows.
 _accessibility_ns_map = {
     "ubuntu": {
-        "st": "https://accessibility.ubuntu.example.org/ns/state",
-        "attr": "https://accessibility.ubuntu.example.org/ns/attributes",
-        "cp": "https://accessibility.ubuntu.example.org/ns/component",
-        "doc": "https://accessibility.ubuntu.example.org/ns/document",
-        "docattr": "https://accessibility.ubuntu.example.org/ns/document/attributes",
-        "txt": "https://accessibility.ubuntu.example.org/ns/text",
-        "val": "https://accessibility.ubuntu.example.org/ns/value",
-        "act": "https://accessibility.ubuntu.example.org/ns/action",
+        "st": "uri:deskat:state.at-spi.gnome.org",
+        "attr": "uri:deskat:attributes.at-spi.gnome.org",
+        "cp": "uri:deskat:component.at-spi.gnome.org",
+        "doc": "uri:deskat:document.at-spi.gnome.org",
+        "docattr": "uri:deskat:attributes.document.at-spi.gnome.org",
+        "txt": "uri:deskat:text.at-spi.gnome.org",
+        "val": "uri:deskat:value.at-spi.gnome.org",
+        "act": "uri:deskat:action.at-spi.gnome.org",
     },
     "windows": {
-        "st": "https://accessibility.windows.example.org/ns/state",
-        "attr": "https://accessibility.windows.example.org/ns/attributes",
-        "cp": "https://accessibility.windows.example.org/ns/component",
-        "doc": "https://accessibility.windows.example.org/ns/document",
-        "docattr": "https://accessibility.windows.example.org/ns/document/attributes",
-        "txt": "https://accessibility.windows.example.org/ns/text",
-        "val": "https://accessibility.windows.example.org/ns/value",
-        "act": "https://accessibility.windows.example.org/ns/action",
-        "class": "https://accessibility.windows.example.org/ns/class",
-    },
-    "macos": {
-        "st": "https://accessibility.macos.example.org/ns/state",
-        "attr": "https://accessibility.macos.example.org/ns/attributes",
-        "cp": "https://accessibility.macos.example.org/ns/component",
-        "doc": "https://accessibility.macos.example.org/ns/document",
-        "txt": "https://accessibility.macos.example.org/ns/text",
-        "val": "https://accessibility.macos.example.org/ns/value",
-        "act": "https://accessibility.macos.example.org/ns/action",
-        "role": "https://accessibility.macos.example.org/ns/role",
+        "st": "uri:deskat:state.at-spi.gnome.org",
+        "attr": "uri:deskat:attributes.at-spi.gnome.org",
+        "cp": "uri:deskat:component.at-spi.gnome.org",
+        "doc": "uri:deskat:document.at-spi.gnome.org",
+        "docattr": "uri:deskat:attributes.document.at-spi.gnome.org",
+        "txt": "uri:deskat:text.at-spi.gnome.org",
+        "val": "uri:deskat:value.at-spi.gnome.org",
+        "act": "uri:deskat:action.at-spi.gnome.org",
+        "win": "uri:deskat:uia.windows.microsoft.org",
     },
 }
 
@@ -587,7 +579,7 @@ def check_line_number(file_path, line_number):
     # check if file_path exists
     if file_path is None or not os.path.isfile(file_path):
         return 0.0
-    timeRegex = "([01]\\d|2[0-3]):[0-5]\\d:([0-5]\\d|60)"
+    timeRegex = r"([01]\d|2[0-3]):[0-5]\d:[0-5]\d"
     # check if the string that matches the timeRegex in this txt file equals to line_number["expected"]
     try:
         with open(file_path, "r") as f:
@@ -615,68 +607,18 @@ def compare_terminal_and_txt(txt_file_path, terminal_output):
 
 def compare_python_pure_text(py_file_path, gold_file_path):
     if not py_file_path or not gold_file_path:
-        return 0.0
+        return 0
 
-    def _normalize(text):
-        """
-        Minimal normalization - only handle basic formatting:
-        - Skip obvious file metadata (encoding, shebang) at the beginning
-        - Normalize whitespace and indentation
-        - Remove empty lines
+    def remove_whitespace(text):
+        return "".join(text.split())
 
-        This preserves any content that shouldn't be there (like markdown)
-        so it can be detected as an error.
-        """
-        lines = text.splitlines()
-        result_lines = []
-        i = 0
-
-        # Only skip obvious metadata at the very beginning
-        while i < len(lines) and i < 3:  # Check only first 3 lines
-            stripped = lines[i].strip()
-
-            if (
-                stripped.startswith("#!")
-                or stripped.startswith("# -*- coding:")
-                or stripped.startswith("# coding:")
-                or stripped.startswith("# coding=")
-            ):
-                i += 1
-                continue
-
-            break
-
-        # Process all remaining lines with minimal filtering
-        while i < len(lines):
-            line = lines[i]
-            stripped = line.strip()
-
-            if stripped:  # Keep all non-empty lines
-                normalized = line.expandtabs(4).rstrip()
-                result_lines.append(normalized)
-
-            i += 1
-
-        return "\n".join(result_lines)
-
-    try:
-        with open(py_file_path, "r", encoding="utf-8") as file1:
-            user_content = file1.read()
-        with open(gold_file_path, "r", encoding="utf-8") as file2:
-            gold_content = file2.read()
-
-        # Apply different normalization strategies
-        user_normalized = _normalize(user_content)
-        gold_normalized = _normalize(gold_content)
-
-        if user_normalized == gold_normalized:
-            return 1.0
-        else:
-            return 0.0
-
-    except (FileNotFoundError, IOError, UnicodeDecodeError) as e:
-        logger.debug(f"compare_python_pure_text: Error reading files - {e}")
-        return 0.0
-    except Exception as e:
-        logger.debug(f"compare_python_pure_text: Unexpected error - {e}")
-        return 0.0
+    with open(py_file_path) as file1:
+        content1 = file1.read()
+    with open(gold_file_path) as file2:
+        content2 = file2.read()
+    content1_no_whitespace = remove_whitespace(content1)
+    content2_no_whitespace = remove_whitespace(content2)
+    if content1_no_whitespace == content2_no_whitespace:
+        return 1
+    else:
+        return 0

@@ -20,9 +20,9 @@ Usage:
 import sys
 from datetime import datetime
 
+from cube import LocalInfraConfig
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
-from waa_cube.vm_backend.backend import WAADockerVMBackend
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -42,11 +42,15 @@ Each step you receive:
 1. A screenshot of the current screen (1280×800)
 2. An element table listing interactive UI elements with columns:
    index, tag, name, text, x, y, w, h
+3. The active window title
+4. A list of all open windows
+5. Clipboard contents (if any)
 
 Where (x, y) is the top-left corner and (w, h) is the size of each element.
 To click the center of element at row i: center_x = x + w//2, center_y = y + h//2
 
 Prefer the element table for precise coordinates; use the screenshot for visual context.
+Use the window title and window list to track which application is in focus.
 You will see the last 3 observations in context — use this history to track progress.
 
 ## Actions
@@ -97,13 +101,13 @@ def main(debug: bool) -> None:
     tool_config = ComputerConfig(
         action_space="pyautogui",
         require_a11y_tree=True,
+        require_obs_winagent=True,
         observe_after_action=True,
     )
 
     benchmark = WAABenchmark(
         default_tool_config=tool_config,
-        vm_backend=WAADockerVMBackend(cpu_cores=8),
-        test_set_name="test_all.json",
+        infra=LocalInfraConfig(cpu_cores=8, ram_gb=8),
     )
     benchmark.install()
     benchmark.setup()

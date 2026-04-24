@@ -1,0 +1,4 @@
+# Packer build artifacts — never commit the qcow2 output
+output-waa-prepared/
+/output-*/
+*.qcow2

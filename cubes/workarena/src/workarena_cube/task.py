@@ -3,13 +3,13 @@
 import importlib
 import logging
 import time
-from typing import Any, List, override
+from typing import Any, List, Literal, override
 
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
-from cube.task import Task, TaskConfig
+from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import Toolbox
 from cube.tools.browser import BrowserTool
 from cube_browser_playwright import Viewport
@@ -21,9 +21,28 @@ from pydantic import PrivateAttr
 logger = logging.getLogger(__name__)
 
 
+class WorkArenaTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for WorkArena ServiceNow tasks.
+
+    Public fields shipped in task_metadata.json (available at import time).
+    WorkArena has no heavy execution data — all task logic is available from
+    the browsergym-workarena library at runtime via task_class_path.
+    """
+
+    level: Literal["l1", "l2", "l3"]
+    """Task level: l1 = atomic, l2 = compositional, l3 = extended compositional."""
+
+    in_human_curriculum: bool
+    """Whether this task type is part of the human evaluation curriculum."""
+
+    task_class_path: str
+    """Dotted path to the WorkArena task class, e.g. 'browsergym.workarena.tasks.dashboard.MultiChartValueRetrievalTask'."""
+
+
 class WorkArenaTask(Task):
     """CUBE Task wrapper for WorkArena ServiceNow tasks."""
 
+    metadata: WorkArenaTaskMetadata  # type: ignore[assignment]
     seed: int
     wait_first_page_time: float = 10.0
     validate_per_step: bool = True
@@ -63,7 +82,7 @@ class WorkArenaTask(Task):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         """Instantiate and set up the WorkArena task, returning the initial observation."""
-        task_class = _load_task_class(self.metadata.extra_info["task_class_path"])
+        task_class = _load_task_class(self.metadata.task_class_path)
         self._workarena_task = task_class(seed=self.seed)
         if self._workarena_task is None:
             raise RuntimeError("Failed to initialize WorkArena task.")
@@ -178,6 +197,7 @@ class WorkArenaTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
+        # Import here to avoid circular import (benchmark imports task)
         from workarena_cube.benchmark import WorkArenaBenchmark
 
         _ = runtime_context, container_backend
