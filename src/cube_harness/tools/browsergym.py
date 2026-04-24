@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 from browsergym.core.action.base import execute_python_code
 from browsergym.core.action.highlevel import HighLevelActionSet
+from browsergym.core.action.utils import get_elem_by_bid
 from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE, EXTRACT_OBS_MAX_TRIES
 from browsergym.core.observation import (
     MarkingError,
@@ -23,7 +24,7 @@ from cube.tool import ToolConfig
 from cube.tools.browser import BrowserTool
 from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
-from playwright.sync_api import Error, Frame, Page
+from playwright.sync_api import Error, Page
 from pydantic import Field
 
 from cube_harness.tool import ToolWithTelemetry
@@ -268,41 +269,13 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     # === Extra actions ===
 
-    def _get_frame_for_bid(self, bid: str) -> Page | Frame:
-        """Return the Page or Frame that contains the element with this BID.
-
-        BrowserGym encodes iframe hierarchy into BID prefixes: the leading
-        lowercase letters identify which iframe to descend into, and the
-        trailing digits identify the element inside that frame.
-        E.g. 'a182' is element 182 inside the first iframe ('a').
-        """
-        current: Page | Frame = self.page
-        i = 0
-        while i < len(bid) and not bid[i:].isnumeric():
-            i += 1
-            while i < len(bid) and bid[i].isalpha() and bid[i].isupper():
-                i += 1
-            if i > 0:
-                frame_bid = bid[:i]
-                try:
-                    frame_elem = current.get_by_test_id(frame_bid)  # type: ignore[union-attr]
-                    if frame_elem.count() > 0:
-                        current = frame_elem.frame_locator(":scope")  # type: ignore[assignment]
-                    else:
-                        break
-                except Exception:
-                    break
-        return current
-
     @tool_action
     def keyboard_type_into(self, bid: str, text: str) -> str:
         """Type text into an element character-by-character, firing keyboard events per character. Use this for fields that show autocomplete suggestions or dynamic dropdowns as you type — fill() sets the value directly and bypasses those events. After typing, call noop() to wait for suggestions to appear, then click the desired suggestion."""
         logger.info(f"keyboard_type_into: bid={bid!r} text={text!r}")
         result = "Success"
         try:
-            frame = self._get_frame_for_bid(bid)
-            locator = frame.get_by_test_id(bid)
-            locator.press_sequentially(text, delay=50)
+            get_elem_by_bid(self.page, bid).press_sequentially(text, delay=50)
         except Exception as e:
             result = f"Failed: {type(e).__name__}: {e}"
         self._last_obs = self._extract_bgym_obs()
