@@ -629,20 +629,15 @@ wheels = [
 [[package]]
 name = "cube-browser-playwright"
 version = "0.2.0"
-source = { editable = "../cube-standard/cube-resources/cube-browser-playwright" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cube-standard" },
     { name = "playwright" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "cube-standard", editable = "../cube-standard" },
-    { name = "playwright" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
+sdist = { url = "https://files.pythonhosted.org/packages/97/ea/242458b185592a2afd11f05b89c7788a6f85294e6a0395b7a3d3baa369bc/cube_browser_playwright-0.2.0.tar.gz", hash = "sha256:a8fba62c2befc3c4fd0ec19af2ea1a6ce71f179e2ef96122d018cf46a01214c7", size = 3243, upload-time = "2026-03-26T13:38:03.058Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9f/76/d9f533e709fee812ea77dab2ee4ab5e88be193f8be8effdff256d25a67c9/cube_browser_playwright-0.2.0-py3-none-any.whl", hash = "sha256:6612166e1db80d93829e7131313f685e8e4dae814564a1e1faf55b3b4e6c8f47", size = 6470, upload-time = "2026-03-26T13:38:02.061Z" },
 ]
-provides-extras = ["dev"]
 
 [[package]]
 name = "cube-harness"
@@ -688,7 +683,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
-    { name = "cube-browser-playwright", editable = "../cube-standard/cube-resources/cube-browser-playwright" },
+    { name = "cube-browser-playwright", specifier = ">=0.2.0" },
     { name = "cube-standard", editable = "../cube-standard" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },

@@ -47,7 +47,6 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 
 [tool.uv.sources]
 cube-standard = { path = "../cube-standard", editable = true }
-cube-browser-playwright = { path = "../cube-standard/cube-resources/cube-browser-playwright", editable = true }
 
 [tool.ruff]
 fix = true
