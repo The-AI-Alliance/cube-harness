@@ -13,9 +13,7 @@
 """Run math-tool-use with a self-hosted OpenAI-compatible vLLM endpoint.
 
 Usage:
-    uv run recipes/hello_math_tool.py debug
-    uv run recipes/hello_math_tool.py full --model openai/Qwen2.5-7B-Instruct
-    uv run recipes/hello_math_tool.py full --base-url http://localhost:8000/v1
+    uv run recipes/hello_math_tool_rl.py debug
 """
 
 import argparse
