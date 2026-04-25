@@ -18,16 +18,6 @@
               "--remote-debugging-port=1337"
             ]
           }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
-          }
         }
       ],
       "evaluator": {
@@ -390,23 +380,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -682,23 +684,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -1732,23 +1746,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -2214,16 +2240,6 @@
               "--remote-debugging-port=1337"
             ]
           }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
-          }
         }
       ],
       "evaluator": {
@@ -2289,16 +2305,6 @@
               "start",
               "msedge",
               "--remote-debugging-port=1337"
-            ]
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
             ]
           }
         }
@@ -3217,16 +3223,6 @@
               "--remote-debugging-port=1337"
             ]
           }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
-          }
         }
       ],
       "evaluator": {
@@ -3288,23 +3284,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -3324,13 +3332,35 @@
             }
           },
           {
+            "type": "execute",
+            "parameters": {
+              "command": "taskkill /IM chrome.exe /F",
+              "shell": "true"
+            }
+          },
+          {
+            "type": "sleep",
+            "parameters": {
+              "seconds": 2
+            }
+          },
+          {
             "type": "launch",
             "parameters": {
               "command": [
-                "google-chrome",
+                "cmd",
+                "/c",
+                "start",
+                "",
+                "/b",
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                 "--remote-debugging-port=1337",
+                "--user-data-dir=C:\\Temp\\cdp-profile",
+                "--no-first-run",
+                "--no-default-browser-check",
                 "--force-renderer-accessibility"
-              ]
+              ],
+              "shell": false
             }
           }
         ],
@@ -3666,23 +3696,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -4644,23 +4686,35 @@
           }
         },
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -4680,13 +4734,35 @@
             }
           },
           {
+            "type": "execute",
+            "parameters": {
+              "command": "taskkill /IM chrome.exe /F",
+              "shell": "true"
+            }
+          },
+          {
+            "type": "sleep",
+            "parameters": {
+              "seconds": 2
+            }
+          },
+          {
             "type": "launch",
             "parameters": {
               "command": [
-                "google-chrome",
+                "cmd",
+                "/c",
+                "start",
+                "",
+                "/b",
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                 "--remote-debugging-port=1337",
+                "--user-data-dir=C:\\Temp\\cdp-profile",
+                "--no-first-run",
+                "--no-default-browser-check",
                 "--force-renderer-accessibility"
-              ]
+              ],
+              "shell": false
             }
           }
         ],
@@ -4760,23 +4836,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -4796,13 +4884,35 @@
             }
           },
           {
+            "type": "execute",
+            "parameters": {
+              "command": "taskkill /IM chrome.exe /F",
+              "shell": "true"
+            }
+          },
+          {
+            "type": "sleep",
+            "parameters": {
+              "seconds": 2
+            }
+          },
+          {
             "type": "launch",
             "parameters": {
               "command": [
-                "google-chrome",
+                "cmd",
+                "/c",
+                "start",
+                "",
+                "/b",
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                 "--remote-debugging-port=1337",
+                "--user-data-dir=C:\\Temp\\cdp-profile",
+                "--no-first-run",
+                "--no-default-browser-check",
                 "--force-renderer-accessibility"
-              ]
+              ],
+              "shell": false
             }
           }
         ],
@@ -5617,16 +5727,6 @@
               "--remote-debugging-port=1337"
             ]
           }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
-          }
         }
       ],
       "evaluator": {
@@ -6362,23 +6462,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -6427,24 +6539,36 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility",
-              "--disable-features=LockProfileCookieDatabase"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility",
+              "--disable-features=LockProfileCookieDatabase"
+            ],
+            "shell": false
           }
         },
         {
@@ -6787,23 +6911,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -7229,6 +7365,8 @@
             "type": "launch",
             "parameters": {
               "command": [
+                "powershell",
+                "-Command",
                 "Stop-Process",
                 "-Name",
                 "vlc"
@@ -7302,6 +7440,8 @@
             "type": "launch",
             "parameters": {
               "command": [
+                "powershell",
+                "-Command",
                 "Stop-Process",
                 "-Name",
                 "vlc"
@@ -7703,23 +7843,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -7884,16 +8036,6 @@
               "--remote-debugging-port=1337"
             ]
           }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
-          }
         }
       ],
       "evaluator": {
@@ -7937,23 +8079,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -8497,7 +8651,7 @@
             "files": [
               {
                 "url": "https://raw.githubusercontent.com/rogeriobonatti/winarenafiles/main/task_files/writer/INF-bb8ccc78-479f-4a2f-a71e-d565e439436b-WOS/config/The%20Wonders%20of%20Our%20Solar%20System.docx",
-                "path": "/home/user/Downloads/The Wonders of Our Solar System.docx"
+                "path": "C:\\Users\\Docker\\Downloads\\The Wonders of Our Solar System.docx"
               }
             ]
           }
@@ -8505,7 +8659,7 @@
         {
           "type": "open",
           "parameters": {
-            "path": "/home/user/Downloads/The Wonders of Our Solar System.docx"
+            "path": "C:\\Users\\Docker\\Downloads\\The Wonders of Our Solar System.docx"
           }
         }
       ],
@@ -8830,23 +8984,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -9109,23 +9275,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -9145,13 +9323,35 @@
             }
           },
           {
+            "type": "execute",
+            "parameters": {
+              "command": "taskkill /IM chrome.exe /F",
+              "shell": "true"
+            }
+          },
+          {
+            "type": "sleep",
+            "parameters": {
+              "seconds": 2
+            }
+          },
+          {
             "type": "launch",
             "parameters": {
               "command": [
-                "google-chrome",
+                "cmd",
+                "/c",
+                "start",
+                "",
+                "/b",
+                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
                 "--remote-debugging-port=1337",
+                "--user-data-dir=C:\\Temp\\cdp-profile",
+                "--no-first-run",
+                "--no-default-browser-check",
                 "--force-renderer-accessibility"
-              ]
+              ],
+              "shell": false
             }
           }
         ],
@@ -9188,23 +9388,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {
@@ -9706,23 +9918,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         }
       ],
@@ -10051,23 +10275,35 @@
       "snapshot": "chrome",
       "config": [
         {
-          "type": "launch",
+          "type": "execute",
           "parameters": {
-            "command": [
-              "google-chrome",
-              "--remote-debugging-port=1337",
-              "--force-renderer-accessibility"
-            ]
+            "command": "taskkill /IM chrome.exe /F",
+            "shell": "true"
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 2
           }
         },
         {
           "type": "launch",
           "parameters": {
             "command": [
-              "socat",
-              "tcp-listen:9222,fork",
-              "tcp:localhost:1337"
-            ]
+              "cmd",
+              "/c",
+              "start",
+              "",
+              "/b",
+              "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+              "--remote-debugging-port=1337",
+              "--user-data-dir=C:\\Temp\\cdp-profile",
+              "--no-first-run",
+              "--no-default-browser-check",
+              "--force-renderer-accessibility"
+            ],
+            "shell": false
           }
         },
         {

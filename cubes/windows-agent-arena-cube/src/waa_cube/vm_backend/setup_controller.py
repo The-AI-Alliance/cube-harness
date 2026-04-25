@@ -157,12 +157,12 @@ class SetupController:
 
         with sync_playwright() as p:
             browser = None
-            for attempt in range(15):
+            for attempt in range(30):
                 try:
                     browser = p.chromium.connect_over_cdp(remote_debugging_url)
                     break
                 except Exception as exc:
-                    if attempt < 14:
+                    if attempt < 29:
                         logger.error("Chrome CDP connect attempt %d failed: %s", attempt + 1, exc)
                         time.sleep(5)
                     else:
@@ -185,7 +185,7 @@ class SetupController:
         remote_debugging_url = f"http://{self.guest.host}:{self.chromium_port}"
         logger.info("Connecting to Chrome @ %s", remote_debugging_url)
 
-        for attempt in range(15):
+        for attempt in range(30):
             if attempt > 0:
                 time.sleep(5)
 
@@ -193,7 +193,7 @@ class SetupController:
                 try:
                     browser = p.chromium.connect_over_cdp(remote_debugging_url)
                 except Exception as exc:
-                    if attempt < 14:
+                    if attempt < 29:
                         logger.error("Chrome CDP attempt %d failed: %s", attempt + 1, exc)
                         continue
                     raise

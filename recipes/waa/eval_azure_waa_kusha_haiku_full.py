@@ -1,28 +1,20 @@
-"""WAA eval on Azure using Kusha's pre-built Specialized Windows image.
+"""WAA full-corpus eval — Claude Haiku 4.5 on the full 152-task Windows corpus.
 
-Uses a Specialized (non-sysprepped) Windows 11 image with UEFI + TPM.
-SSH access is via VMAccessAgent injecting your local pubkey into the
-Docker user's administrators_authorized_keys at launch time.
+Companion to `eval_azure_waa_paper_repro.py` (GPT-4o-mini). Same Genny+axtree
+setup, same full corpus (no LO filter — LO tasks will evaluate to 0 until the
+image is rebuilt).
 
-Prerequisites:
-    - az login
-    - Set AZURE_RESOURCE_GROUP (defaults to "ui_assist")
-    - Set AZURE_STORAGE_ACCOUNT (defaults to "cubeexpvhd")
-
-First run will provision the gallery image from HuggingFace (~30-90 min).
-Subsequent runs skip provisioning and go straight to eval.
+The paper doesn't have a Haiku row in Table 4, so this is exploratory rather
+than a direct reproduction. Comparison points from Table 4 (OneOCR + ✓UIA):
+    GPT-4o-mini → 7.3% overall
+    GPT-4o      → 13.3% overall
 
 Usage:
-    # Debug mode (sequential)
-    uv run recipes/waa/eval_azure_waa_kusha.py debug
-
-    # Eval mode (full benchmark, parallel)
-    uv run recipes/waa/eval_azure_waa_kusha.py
+    uv run recipes/waa/eval_azure_waa_kusha_haiku_full.py
 """
 
 import logging
 import os
-import sys
 from datetime import datetime
 
 from cube_infra_azure import AzureInfraConfig
@@ -32,7 +24,7 @@ from waa_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
-from cube_harness.exp_runner import run_sequentially, run_with_ray
+from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 
@@ -51,7 +43,6 @@ INFRA = AzureInfraConfig(
     image_name_suffix="-kusha",
     source_cache_blob="sources/waa-windows-prepared.qcow2",
 )
-
 
 WAA_SYSTEM_PROMPT = """\
 You are a desktop automation agent controlling a real Windows 11 computer.
@@ -105,11 +96,11 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 """
 
 
-def main(debug: bool) -> None:
+def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_20", "waa-cube")
+    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_full", "waa-cube")
 
     llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
@@ -134,23 +125,12 @@ def main(debug: bool) -> None:
     )
     benchmark.setup()
 
-    # Exclude libreoffice (known evaluator issues) and chrome/msedge (CDP setup
-    # has a Playwright connect timing issue — see haiku.py recipe comment).
-    excluded_domains = ("libreoffice_calc", "libreoffice_writer", "chrome", "msedge")
-    keep_ids = [
-        tid
-        for tid, meta in benchmark.task_metadata.items()
-        if meta.extra_info.get("domain") not in excluded_domains
-    ]
-    if debug:
-        keep_ids = keep_ids[:1]
-    else:
-        keep_ids = keep_ids[:20]
-    benchmark = benchmark.subset_from_list(keep_ids)
-    logging.info("Filtered to %d non-libreoffice tasks for this run", len(keep_ids))
+    # Full 152-task corpus, including LibreOffice. LO tasks will fail
+    # (LO not in image yet); reported scores will exclude/include them by domain.
+    logging.info("Haiku full eval: %d tasks", len(benchmark.task_metadata))
 
     exp = Experiment(
-        name="waa_azure_kusha_haiku_20",
+        name="waa_haiku_full",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -158,12 +138,8 @@ def main(debug: bool) -> None:
     )
 
     try:
-        if debug:
-            print(f"\nDEBUG MODE — sequential, output: {output_dir}")
-            run_sequentially(exp)
-        else:
-            print(f"\nEVAL MODE — parallel, output: {output_dir}")
-            run_with_ray(exp, n_cpus=20)
+        print(f"\nHAIKU FULL EVAL — output: {output_dir}")
+        run_with_ray(exp, n_cpus=20)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:
@@ -171,5 +147,4 @@ def main(debug: bool) -> None:
 
 
 if __name__ == "__main__":
-    debug = len(sys.argv) > 1 and sys.argv[1] == "debug"
-    main(debug)
+    main()

@@ -127,11 +127,27 @@ class WAATask(Task):
         self._computer.attach_endpoint(self._resource_handle.endpoint)
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
-        """Return (chromium_port, vlc_port, server_port) from the current handle."""
+        """Return (chromium_port, vlc_port, server_port) from the current handle.
+
+        Cloud infra tunnels each VM port to a unique host freeport (recorded in
+        ``handle.endpoints["vm_port_{N}"]``), so parallel workers don't collide
+        on a fixed local port. Local infra exposes the VM ports directly so
+        the hard-coded defaults still apply.
+        """
         server_port = 5000
-        if self._resource_handle is not None and self._resource_handle.endpoint:
-            server_port = urlparse(self._resource_handle.endpoint).port or 5000
-        return 9222, 8080, server_port
+        chromium_port = 9222
+        vlc_port = 8080
+        if self._resource_handle is not None:
+            if self._resource_handle.endpoint:
+                server_port = urlparse(self._resource_handle.endpoint).port or 5000
+            endpoints = getattr(self._resource_handle, "endpoints", {}) or {}
+            chromium_url = endpoints.get("vm_port_9222")
+            if chromium_url:
+                chromium_port = urlparse(chromium_url).port or chromium_port
+            vlc_url = endpoints.get("vm_port_8080")
+            if vlc_url:
+                vlc_port = urlparse(vlc_url).port or vlc_port
+        return chromium_port, vlc_port, server_port
 
     def _setup_task(self, task_data: dict) -> Observation:
         """Run setup scripts, wait, return initial observation."""

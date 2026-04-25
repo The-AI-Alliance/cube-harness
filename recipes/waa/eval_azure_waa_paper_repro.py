@@ -1,23 +1,28 @@
-"""WAA eval on Azure using Kusha's pre-built Specialized Windows image.
+"""WAA paper-reproduction recipe.
 
-Uses a Specialized (non-sysprepped) Windows 11 image with UEFI + TPM.
-SSH access is via VMAccessAgent injecting your local pubkey into the
-Docker user's administrators_authorized_keys at launch time.
+Targets the apples-to-apples row from Table 4 of the WindowsAgentArena paper
+(arXiv 2409.08264): "OneOCR + Proprietary models, ✓ UIA" — i.e. axtree + screenshot
++ a proprietary LLM. Our Genny agent is the closest match (we feed the agent the
+UIA-derived element table + a screenshot — no Omniparser/Grounding-DINO).
 
-Prerequisites:
-    - az login
-    - Set AZURE_RESOURCE_GROUP (defaults to "ui_assist")
-    - Set AZURE_STORAGE_ACCOUNT (defaults to "cubeexpvhd")
+Paper Table 4, OneOCR + ✓UIA row:
+    GPT-4o-mini  →  7.3% overall  (Web 7.3%, Browser 20.8%, Windows-System 8.3%,
+                                   Coding 9.8%, Office/Media 0%)
+    GPT-4o       →  13.3% overall (Web 20.0%, Browser 29.2%, Windows-System 9.1%,
+                                   Coding 25.3%, Office/Media 0%)
 
-First run will provision the gallery image from HuggingFace (~30-90 min).
-Subsequent runs skip provisioning and go straight to eval.
+We filter LibreOffice (Office bucket) because our Windows image is missing LO.
+Paper's score on Office is 0% for both models, so excluding it doesn't lower the
+per-task pass rate — but we should report against the non-Office subset:
+
+    Non-LO target ≈ (overall%) × 152 / (152 − 43 LO tasks) ≈ overall × 1.39
+
+    GPT-4o-mini   → expect ~10% on the 109-task non-LO subset
+    GPT-4o        → expect ~18% on the 109-task non-LO subset
 
 Usage:
-    # Debug mode (sequential)
-    uv run recipes/waa/eval_azure_waa_kusha.py debug
-
-    # Eval mode (full benchmark, parallel)
-    uv run recipes/waa/eval_azure_waa_kusha.py
+    uv run recipes/waa/eval_azure_waa_paper_repro.py             # gpt-4o
+    WAA_MODEL=gpt-4o-mini uv run recipes/waa/eval_azure_waa_paper_repro.py
 """
 
 import logging
@@ -32,7 +37,7 @@ from waa_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
-from cube_harness.exp_runner import run_sequentially, run_with_ray
+from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 
@@ -52,6 +57,10 @@ INFRA = AzureInfraConfig(
     source_cache_blob="sources/waa-windows-prepared.qcow2",
 )
 
+# WAA_MODEL env var lets you swap between gpt-4o (paper config) and gpt-4o-mini
+# (cheaper for iteration). LiteLLM-style "azure/<deployment-name>" pattern.
+_MODEL = os.environ.get("WAA_MODEL", "gpt-4o")
+_MODEL_NAME = f"azure/{_MODEL}"
 
 WAA_SYSTEM_PROMPT = """\
 You are a desktop automation agent controlling a real Windows 11 computer.
@@ -105,13 +114,13 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 """
 
 
-def main(debug: bool) -> None:
+def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_20", "waa-cube")
+    output_dir = make_experiment_output_dir(f"genny_azure_kusha_paper_repro_{_MODEL.replace('/', '_')}", "waa-cube")
 
-    llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
+    llm_config = LLMConfig(model_name=_MODEL_NAME, temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
@@ -134,23 +143,16 @@ def main(debug: bool) -> None:
     )
     benchmark.setup()
 
-    # Exclude libreoffice (known evaluator issues) and chrome/msedge (CDP setup
-    # has a Playwright connect timing issue — see haiku.py recipe comment).
-    excluded_domains = ("libreoffice_calc", "libreoffice_writer", "chrome", "msedge")
-    keep_ids = [
-        tid
-        for tid, meta in benchmark.task_metadata.items()
-        if meta.extra_info.get("domain") not in excluded_domains
-    ]
-    if debug:
-        keep_ids = keep_ids[:1]
-    else:
-        keep_ids = keep_ids[:20]
-    benchmark = benchmark.subset_from_list(keep_ids)
-    logging.info("Filtered to %d non-libreoffice tasks for this run", len(keep_ids))
+    # Run the FULL 152-task corpus including LibreOffice. LibreOffice tasks
+    # currently fail (LO not installed in our Windows image) — they'll evaluate
+    # to 0 trivially. Reported scores will mirror the paper's where Office=0%
+    # for both GPT-4o and GPT-4o-mini, so this still gives a directly comparable
+    # overall number. Once the image is rebuilt with LO, these tasks become
+    # the new investigation surface.
+    logging.info("Paper repro: full 152-task corpus, model=%s", _MODEL_NAME)
 
     exp = Experiment(
-        name="waa_azure_kusha_haiku_20",
+        name=f"waa_paper_repro_{_MODEL.replace('/', '_')}",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -158,12 +160,8 @@ def main(debug: bool) -> None:
     )
 
     try:
-        if debug:
-            print(f"\nDEBUG MODE — sequential, output: {output_dir}")
-            run_sequentially(exp)
-        else:
-            print(f"\nEVAL MODE — parallel, output: {output_dir}")
-            run_with_ray(exp, n_cpus=20)
+        print(f"\nPAPER-REPRO EVAL — model={_MODEL_NAME}, output: {output_dir}")
+        run_with_ray(exp, n_cpus=20)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:
@@ -171,5 +169,4 @@ def main(debug: bool) -> None:
 
 
 if __name__ == "__main__":
-    debug = len(sys.argv) > 1 and sys.argv[1] == "debug"
-    main(debug)
+    main()

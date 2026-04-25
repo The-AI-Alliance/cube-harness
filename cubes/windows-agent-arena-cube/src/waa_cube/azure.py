@@ -28,4 +28,8 @@ WAA_WINDOWS_RESOURCE = VMResourceConfig(
     tpm=True,
     os_type="windows",
     specialized=True,
+    # Chrome/MSEdge tasks attach Playwright over CDP at host:9222 (forwarded
+    # via socat inside the VM to whichever port the browser was launched on).
+    # VLC tasks expose 8080. Both need their own host-side tunnel.
+    forwarded_ports=[9222, 8080],
 )

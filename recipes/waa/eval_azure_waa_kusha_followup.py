@@ -1,23 +1,13 @@
-"""WAA eval on Azure using Kusha's pre-built Specialized Windows image.
+"""WAA Azure follow-up eval — targeted test of the port-forwarding fix.
 
-Uses a Specialized (non-sysprepped) Windows 11 image with UEFI + TPM.
-SSH access is via VMAccessAgent injecting your local pubkey into the
-Docker user's administrators_authorized_keys at launch time.
+Verifies the forwarded_ports addition to VMResourceConfig + the new multi-tunnel
+loop in cube-infra-azure: chrome/msedge tasks that previously hit
+ECONNREFUSED 127.0.0.1:9222 should now connect via the host-side SSH tunnel.
 
-Prerequisites:
-    - az login
-    - Set AZURE_RESOURCE_GROUP (defaults to "ui_assist")
-    - Set AZURE_STORAGE_ACCOUNT (defaults to "cubeexpvhd")
-
-First run will provision the gallery image from HuggingFace (~30-90 min).
-Subsequent runs skip provisioning and go straight to eval.
+Task selection: first 5 chrome and first 5 msedge tasks (10 total).
 
 Usage:
-    # Debug mode (sequential)
-    uv run recipes/waa/eval_azure_waa_kusha.py debug
-
-    # Eval mode (full benchmark, parallel)
-    uv run recipes/waa/eval_azure_waa_kusha.py
+    uv run recipes/waa/eval_azure_waa_kusha_followup.py
 """
 
 import logging
@@ -32,7 +22,7 @@ from waa_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
-from cube_harness.exp_runner import run_sequentially, run_with_ray
+from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 
@@ -52,6 +42,21 @@ INFRA = AzureInfraConfig(
     source_cache_blob="sources/waa-windows-prepared.qcow2",
 )
 
+# First 5 chrome and 5 msedge tasks — exercise the port-forwarding fix.
+CHROME_IDS = [
+    "030eeff7-b492-4218-b312-701ec99ee0cc-wos",
+    "06fe7178-4491-4589-810f-2e2bc9502122-wos",
+    "121ba48f-9e17-48ce-9bc6-a4fb17a7ebba-wos",
+    "2ae9ba84-3a0d-4d4c-8338-3a1478dc5fe3-wos",
+    "35253b65-1c19-4304-8aa4-6884b8218fc0-wos",
+]
+MSEDGE_IDS = [
+    "004587f8-6028-4656-94c1-681481abbc9c-wos",
+    "049d3788-c979-4ea6-934d-3a35c4630faf-WOS",
+    "1376d5e7-deb7-471a-9ecc-c5d4e155b0c8-wos",
+    "1a1ec621-b675-4099-96a9-f702dc27afb4-wos",
+    "1c9d2c6c-ae4b-4359-9a93-9d3c42f48417-wos",
+]
 
 WAA_SYSTEM_PROMPT = """\
 You are a desktop automation agent controlling a real Windows 11 computer.
@@ -105,11 +110,11 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 """
 
 
-def main(debug: bool) -> None:
+def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_20", "waa-cube")
+    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_followup", "waa-cube")
 
     llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
@@ -134,23 +139,18 @@ def main(debug: bool) -> None:
     )
     benchmark.setup()
 
-    # Exclude libreoffice (known evaluator issues) and chrome/msedge (CDP setup
-    # has a Playwright connect timing issue — see haiku.py recipe comment).
-    excluded_domains = ("libreoffice_calc", "libreoffice_writer", "chrome", "msedge")
-    keep_ids = [
-        tid
-        for tid, meta in benchmark.task_metadata.items()
-        if meta.extra_info.get("domain") not in excluded_domains
-    ]
-    if debug:
-        keep_ids = keep_ids[:1]
-    else:
-        keep_ids = keep_ids[:20]
+    keep_ids = CHROME_IDS + MSEDGE_IDS
+    available = set(benchmark.task_metadata.keys())
+    missing = [tid for tid in keep_ids if tid not in available]
+    if missing:
+        logging.warning("Task IDs not in benchmark.task_metadata: %s", missing)
+    keep_ids = [tid for tid in keep_ids if tid in available]
     benchmark = benchmark.subset_from_list(keep_ids)
-    logging.info("Filtered to %d non-libreoffice tasks for this run", len(keep_ids))
+    logging.info("Follow-up eval: %d tasks (%d chrome, %d msedge)",
+                 len(keep_ids), len(CHROME_IDS), len(MSEDGE_IDS))
 
     exp = Experiment(
-        name="waa_azure_kusha_haiku_20",
+        name="waa_azure_kusha_haiku_followup",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -158,12 +158,8 @@ def main(debug: bool) -> None:
     )
 
     try:
-        if debug:
-            print(f"\nDEBUG MODE — sequential, output: {output_dir}")
-            run_sequentially(exp)
-        else:
-            print(f"\nEVAL MODE — parallel, output: {output_dir}")
-            run_with_ray(exp, n_cpus=20)
+        print(f"\nFOLLOW-UP EVAL — parallel, output: {output_dir}")
+        run_with_ray(exp, n_cpus=20)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:
@@ -171,5 +167,4 @@ def main(debug: bool) -> None:
 
 
 if __name__ == "__main__":
-    debug = len(sys.argv) > 1 and sys.argv[1] == "debug"
-    main(debug)
+    main()
