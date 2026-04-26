@@ -60,12 +60,10 @@ _IMPERSONATION_PRECISION: str = (
     "→ search for the user by name → click their row to activate impersonation."
 )
 
-# Create: goal lists fields but doesn't emphasize ALL must be filled, and doesn't
-# mention that submit_form() is the correct submission method.
+# Create: goal lists fields but doesn't emphasize ALL must be filled.
 _CREATE_PRECISION: str = (
     "Fill in EVERY field specified in the goal — missing any field causes failure. "
-    "When all fields are set, call submit_form() to submit. "
-    "Do NOT click the visible Submit button — it navigates away without saving."
+    "When all fields are set, click the Submit button to submit the form."
 )
 
 WORKARENA_TASK_PRECISION: dict[str, str] = {
@@ -146,7 +144,9 @@ _FILTER_HINT: str = (
 
 # Create: autocomplete reference field workflow.
 _CREATE_HINT: str = (
-    "For reference fields with autocomplete (e.g. Department, Caller, Manager): "
+    "If the goal includes a 'Number' field (e.g. 'CHG0000013', 'INC0000001'): "
+    "fill it FIRST with fill() — it is a plain text field and must be set before submitting.\n\n"
+    "For reference fields with autocomplete (e.g. Department, Caller, Manager, Configuration item): "
     "complete the full sequence BEFORE moving to any other field:\n"
     "1. keyboard_type_into(bid, text)\n"
     "2. noop() to wait for the dropdown to appear\n"
@@ -155,14 +155,57 @@ _CREATE_HINT: str = (
     "NEVER use fill() on reference fields — fill() bypasses autocomplete and "
     "leaves the field unresolved, causing silent validation failure.\n"
     "For plain text fields: fill(). "
-    "For <select> dropdowns: select_option()."
+    "For <select> dropdowns: select_option().\n\n"
+    "If a required field is not visible in the AXTree (e.g. Serial number, Asset tag): "
+    "use js_eval to query its bid, then fill it:\n"
+    "  js_eval(\"document.querySelector('[data-fieldname=\\\"serial_number\\\"] input')?.getAttribute('id')\", frame='gsft_main')\n"
+    "The result is the bid string — pass it to fill(bid=<result>, value=...).\n"
+    "Substitute the data-fieldname value as needed (e.g. 'asset_tag', 'install_status')."
+)
+
+# Hardware asset: multi-tab form (General / Financial / Disposal / Contracts / ...).
+# Agent must visit every visible tab to find all required fields, then click Submit.
+# After switching tabs, reference fields may appear blank in the AXTree — do NOT re-fill
+# them; their values are preserved. Just verify, then click Submit when all tabs are done.
+# NOTE: 'Lease contract' (lease_id) lives in the Contracts tab, NOT in General/Financial.
+_CREATE_HARDWARE_ASSET_HINT: str = (
+    _CREATE_HINT
+    + "\n\n"
+    "This form has multiple tabs (General, Financial, Disposal, Contracts, Depreciation, etc.).\n"
+    "IMPORTANT: 'Lease contract' is in the Contracts tab — it will NOT appear in General or Financial.\n\n"
+    "TAB PROTOCOL — follow exactly:\n"
+    "1. Visit General tab → fill any empty required fields → move on.\n"
+    "2. Visit Financial tab → fill any empty required fields → move on.\n"
+    "3. Visit Contracts tab → fill any empty required fields → move on.\n"
+    "4. Click Submit. Do NOT revisit tabs after your initial pass.\n\n"
+    "SKIP fields that already show the correct value from the goal — they are pre-filled. "
+    "Do NOT re-type a reference field that already shows the correct value: "
+    "re-typing clears the resolved reference and causes submission to fail.\n"
+    "Reference fields that appear EMPTY after a tab switch have their values preserved — "
+    "do NOT re-fill them.\n\n"
+    "LOOP DETECTION: If your action summary shows clicking the same tab more than twice "
+    "with no fill actions in between, you are stuck. Stop checking and click Submit immediately. "
+    "The Submit button is labeled 'Submit' and is visible at the top of the form."
+)
+
+# Change request: has a "Closure Information" tab with both Close code AND Close notes.
+# Agents tend to set Close code then leave the tab without filling Close notes.
+_CREATE_CHANGE_REQUEST_HINT: str = (
+    _CREATE_HINT
+    + "\n\n"
+    "This form has multiple tabs. The 'Closure Information' tab contains TWO fields:\n"
+    "  - Close code (a <select> dropdown)\n"
+    "  - Close notes (a plain text field)\n"
+    "IMPORTANT: After clicking the Closure Information tab, fill BOTH fields before "
+    "leaving that tab. Do NOT click any other tab after opening Closure Information "
+    "until both Close code and Close notes are filled."
 )
 
 WORKARENA_TASK_HINTS: dict[str, str] = {
     # Create (5)
     "workarena.servicenow.create-incident": _CREATE_HINT,
-    "workarena.servicenow.create-hardware-asset": _CREATE_HINT,
-    "workarena.servicenow.create-change-request": _CREATE_HINT,
+    "workarena.servicenow.create-hardware-asset": _CREATE_HARDWARE_ASSET_HINT,
+    "workarena.servicenow.create-change-request": _CREATE_CHANGE_REQUEST_HINT,
     "workarena.servicenow.create-user": _CREATE_HINT,
     "workarena.servicenow.create-problem": _CREATE_HINT,
     # Sort (6)

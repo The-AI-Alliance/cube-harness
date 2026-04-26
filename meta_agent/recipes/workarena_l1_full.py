@@ -40,7 +40,7 @@ from cube_browser_playwright.playwright_session import (  # noqa: E402
 from cube_chat_tool.chat_tool import ChatToolConfig  # noqa: E402
 from workarena_cube.benchmark import WorkArenaBenchmark  # noqa: E402
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig  # noqa: E402
-from workarena_hints import WORKARENA_TASK_HINTS  # noqa: E402
+from workarena_hints import WORKARENA_TASK_HINTS, WORKARENA_TASK_PRECISION  # noqa: E402
 
 from cube_harness import make_experiment_output_dir  # noqa: E402
 from cube_harness.agents.genny import GennyConfig  # noqa: E402
@@ -93,6 +93,7 @@ def run_for_model(
         max_actions=40,
         render_last_n_obs=1,
         task_hints=WORKARENA_TASK_HINTS if use_hints else {},
+        task_clarification=WORKARENA_TASK_PRECISION if use_hints else {},
     )
     if retry_dir is not None:
         output_dir = retry_dir
