@@ -16,7 +16,7 @@ Usage:
     agent_config = GennyConfig(
         ...
         task_hints=WORKARENA_TASK_HINTS,
-        task_precision=WORKARENA_TASK_PRECISION,
+        task_clarification=WORKARENA_TASK_PRECISION,
     )
 """
 
