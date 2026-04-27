@@ -29,13 +29,18 @@ make install
 
 ### API Keys
 
-Set your OpenAI API key:
+Create a `.env` file at the repo root with your credentials:
 
 ```bash
-export OPENAI_API_KEY=your-key-here
+# cube-harness/.env
+OPENAI_API_KEY=your-key-here
 ```
 
-Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe.
+Recipes load this file automatically before starting Ray workers, so credentials are available in all worker processes without any extra steps.
+
+Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe. Add the corresponding key to `.env` (e.g. `AZURE_API_KEY`, `ANTHROPIC_API_KEY`).
+
+**Multi-node Ray:** workers on remote machines don't inherit the head node's environment. Create `~/.env-cube` on each worker node with the credentials they need — the harness loads it automatically on worker startup.
 
 ### Run Tests
 
