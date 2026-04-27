@@ -145,16 +145,18 @@ class Experiment(TypedBaseModel):
                 return None
         return None
 
+    # TODO(#315): replace _is_trajectory_successful + _load_successful_trajectory_ids
+    # with a fast status.json check that does not require loading the full trajectory.
     def _is_trajectory_successful(self, trajectory: Trajectory) -> bool:
-        """Check if a trajectory ran without technical errors.
+        """Check if a trajectory completed successfully.
 
-        Returns False only if a step recorded a StepError (browser crash, exception, timeout).
-        Agent failures (done=False, no errors) return True — retrying those wastes quota.
+        A trajectory is successful if the last env step has done=True and no steps contain errors.
         """
-        return not any(
-            isinstance(step.output, (EnvironmentOutput, AgentOutput)) and step.output.error
-            for step in trajectory.steps
-        )
+        last_env_step = trajectory.last_env_step()
+        for step in trajectory.steps:
+            if isinstance(step.output, (EnvironmentOutput, AgentOutput)) and step.output.error:
+                return False
+        return last_env_step.done
 
     def _load_successful_trajectory_ids(self, storage: FileStorage) -> set[str]:
         successful = set()
