@@ -9,10 +9,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from cube.benchmark import RuntimeContext
-from cube.container import ContainerBackend
+from pydantic import PrivateAttr
+
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
@@ -48,6 +49,29 @@ class TerminalBenchTask(Task):
     validate_per_step: bool = False
     accept_agent_stop: bool = True
 
+    # Container-side paths — always under /tmp so logic works uniformly on root
+    # and non-root backends (EAI Toolkit images have /tmp mode 1777).
+    _solution_dir: str = PrivateAttr(default="/tmp/solution")
+    _tests_dir: str = PrivateAttr(default="/tmp/tests")
+    _logs_verifier_dir: str = PrivateAttr(default="/tmp/logs/verifier")
+
+    def _build_tool(self) -> None:
+        new_wd = relocate_if_readonly(
+            self._container,
+            self.tool_config.working_dir,
+            "/tmp/app",
+            # Git refuses dirs whose ownership differs ('dubious ownership').
+            # '*' disables the check globally — safe in this test-runner context.
+            # uid 13011 (Toolkit) has no /etc/passwd entry, so git can't
+            # auto-detect committer identity without explicit config.
+            extra_setup=(
+                "git config --global --add safe.directory '*' && "
+                "git config --global user.email 'cube-harness@example.com' && "
+                "git config --global user.name 'Cube Harness'"
+            ),
+        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
+
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
         extra = self.metadata.extra_info
@@ -66,8 +90,16 @@ class TerminalBenchTask(Task):
         # Oracle mode: upload solution for debugging/baselines
         if extra.get("oracle_mode") and (task_path / "solution").exists():
             assert isinstance(self.tool, TerminalBenchTool)
-            self.tool.bash("mkdir -p /solution")
-            self.tool.upload_directory(task_path / "solution", "/solution")
+            app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
+            solution_dir = task_path / "solution"
+            if app_dir != "/app":
+                self._rewrite_files_locally(solution_dir, {"/app/": f"{app_dir}/"})
+            self.tool.bash(f"mkdir -p {self._solution_dir}")
+            self.tool.upload_directory(solution_dir, self._solution_dir)
+            # Pre-install python3 + uv so oracle solve.sh scripts work on minimal
+            # images (e.g. bare LaTeX) that ship without python3.  In non-oracle
+            # runs the agent installs its own deps; we don't add overhead there.
+            self._ensure_uv_preinstalled()
 
         return Observation.from_text(extra["instruction"]), {
             "task_id": self.metadata.id,
@@ -82,20 +114,47 @@ class TerminalBenchTask(Task):
         # Upload test harness to the sandbox
         if self._task_path is not None:
             tests_dir = self._task_path / "tests"
-            self.tool.bash("mkdir -p /tests /logs/verifier")
+            self.tool.bash(f"mkdir -p {self._tests_dir} {self._logs_verifier_dir}")
             if tests_dir.exists():
-                self.tool.upload_directory(tests_dir, "/tests")
-                self.tool.bash("chmod +x /tests/test.sh")
+                # Rewrite hardcoded paths in local test files before uploading.
+                # Done in Python (not via sed) to avoid shell-quoting pitfalls
+                # (e.g. single quotes inside sed expressions) and GNU sed
+                # re-scanning surprises that produce double '/tmp/' prefixes.
+                assert isinstance(self.tool, TerminalBenchTool)
+                app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
+                path_subs: dict[str, str] = {
+                    "/logs/verifier": self._logs_verifier_dir,
+                    "/tests/": self._tests_dir + "/",
+                    "/tests ": self._tests_dir + " ",
+                    # Path("/tests") — no trailing slash, quote-boundary match
+                    '"/tests"': f'"{self._tests_dir}"',
+                    "'/tests'": f"'{self._tests_dir}'",
+                }
+                if app_dir != "/app":
+                    path_subs["/app/"] = f"{app_dir}/"
+                    path_subs['"/app"'] = f'"{app_dir}"'
+                    path_subs["'/app'"] = f"'{app_dir}'"
+                self._rewrite_files_locally(tests_dir, path_subs)
+                self.tool.upload_directory(tests_dir, self._tests_dir)
+                self.tool.bash(f"chmod +x {self._tests_dir}/test.sh")
 
-        # Run test.sh → pytest → writes reward to /logs/verifier/reward.txt
+        # Pre-install `uv` + fake HOME so test.sh's
+        #   curl https://astral.sh/uv/…/install.sh | sh  →  source $HOME/.local/bin/env
+        # succeeds even when astral.sh is unreachable (EAI Toolkit returns 403
+        # Forbidden on that host) and when $HOME is a read-only mount.
+        # pypi is reachable on Toolkit; pip installs uv in ~10 s.
+        self._ensure_uv_preinstalled()
+
+        # Run test.sh → pytest → writes reward.txt in the logs-verifier dir.
+        # Tool's working_dir is already set (may be /tmp/app after relocation).
         output = self.tool.bash(
-            "cd /app && bash /tests/test.sh",
+            f"export HOME=/tmp/fakehome && bash {self._tests_dir}/test.sh",
             timeout=extra.get("max_test_timeout_sec", 900),
         )
         test_results = self._parse_pytest_output(output)
 
         # Read reward written by test.sh
-        reward_output = self.tool.bash("cat /logs/verifier/reward.txt 2>/dev/null || echo 0")
+        reward_output = self.tool.bash(f"cat {self._logs_verifier_dir}/reward.txt 2>/dev/null || echo 0")
         try:
             reward = float(reward_output.strip().split()[0])
         except (ValueError, IndexError):
@@ -111,6 +170,135 @@ class TerminalBenchTask(Task):
             "output_preview": output[:1000] if output else "",
         }
 
+    @staticmethod
+    def _rewrite_files_locally(directory: Path, subs: dict[str, str]) -> None:
+        """Apply string substitutions to *.sh and *.py files under ``directory`` in-place.
+
+        Preferred over sed-in-container: avoids shell-quoting pitfalls (e.g. single
+        quotes inside sed expressions) and GNU sed re-scanning surprises.
+        """
+        for f in directory.rglob("*"):
+            if f.suffix in (".sh", ".py") and f.is_file():
+                text = f.read_text(errors="replace")
+                new_text = text
+                for k, v in subs.items():
+                    new_text = new_text.replace(k, v)
+                if new_text != text:
+                    f.write_text(new_text)
+
+    def _ensure_uv_preinstalled(self) -> None:
+        """Pre-install ``uv`` so test.sh's ``source $HOME/.local/bin/env`` works.
+
+        Terminal-Bench task test.sh files bootstrap ``uv`` via
+            curl -LsSf https://astral.sh/uv/0.9.5/install.sh | sh
+            source $HOME/.local/bin/env
+
+        On some backends (EAI Toolkit in particular), ``astral.sh`` returns HTTP
+        403 (cluster IP range rejected by Cloudflare) AND ``curl`` isn't even in
+        the image AND ``$HOME`` is read-only.  All three failures cascade: the
+        curl is rc=127, the source finds nothing, uvx is missing, pytest can't
+        run, reward=0.
+
+        Fix: ensure python3 is present (some minimal images like LaTeX ship
+        without it — install via apt if needed), then install ``uv`` via ``pip``
+        from PyPI into ``/tmp/fakehome/.local/bin``, create the env file
+        test.sh expects, and override ``HOME=/tmp/fakehome`` when running test.sh.
+
+        Non-root fallback: when running as non-root (e.g. EAI Toolkit uid 13011),
+        apt-get requires root.  Fall back to downloading the python3 packages
+        via ``apt-get download`` (works without root, writes to /tmp) and
+        extracting them with ``dpkg-deb --extract``, then use that python3 to
+        bootstrap pip (via get-pip.py with SSL verification disabled for the
+        bootstrap step only) and finally ``pip install uv``.
+        """
+        marker = "/tmp/fakehome/.local/bin/uv"
+        probe = self.tool.bash(f"test -x {marker} && echo EXISTS || echo MISSING", timeout=15)
+        if "EXISTS" in probe:
+            return
+
+        # Some minimal images (e.g. bare LaTeX) ship without python3.
+        # Try root apt-get first (works on Docker/local backends).
+        has_python = self.tool.bash("python3 --version 2>/dev/null && echo HAS_PYTHON || echo NO_PYTHON", timeout=15)
+        if "NO_PYTHON" in has_python:
+            logger.info("python3 not found — trying apt-get install (root path)")
+            self.tool.bash(
+                "apt-get update -qq && apt-get install -y --no-install-recommends python3 python3-pip 2>&1",
+                timeout=120,
+            )
+            has_python = self.tool.bash(
+                "python3 --version 2>/dev/null && echo HAS_PYTHON || echo NO_PYTHON", timeout=15
+            )
+
+        if "NO_PYTHON" in has_python:
+            # Root apt-get failed (non-root container).  Download packages without
+            # root and extract them to /tmp/python3_pkg.
+            logger.info("root apt-get failed — trying non-root apt download + dpkg-deb extract")
+            self._install_python3_nonroot()
+            has_python = self.tool.bash(
+                "test -x /tmp/python3_pkg/usr/bin/python3.12 && echo HAS_PYTHON || echo NO_PYTHON", timeout=10
+            )
+
+        if "NO_PYTHON" in has_python:
+            logger.warning("python3 unavailable — skipping uv pre-install; test.sh will fall back to curl")
+            return
+
+        logger.info("Pre-installing uv into /tmp/fakehome/.local/bin (backend-portable workaround)")
+
+        use_extracted = "exists" in self.tool.bash(
+            "test -x /tmp/python3_pkg/usr/bin/python3.12 && echo exists || echo missing", timeout=5
+        )
+
+        if use_extracted:
+            # Bootstrap pip via get-pip.py (SSL verification disabled for this
+            # one-time download from bootstrap.pypa.io; pip itself uses certifi).
+            self.tool.write_file(
+                "/tmp/_dl_pip.py",
+                "import ssl, urllib.request as R\n"
+                "ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)\n"
+                "ctx.check_hostname=False\n"
+                "ctx.verify_mode=ssl.CERT_NONE\n"
+                "open('/tmp/get-pip.py','wb').write(R.urlopen('https://bootstrap.pypa.io/get-pip.py',context=ctx).read())\n",
+            )
+            cmd = (
+                "export LD_LIBRARY_PATH=/tmp/python3_pkg/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && "
+                "export HOME=/tmp/fakehome && "
+                "mkdir -p $HOME/.local/bin && "
+                "/tmp/python3_pkg/usr/bin/python3.12 /tmp/_dl_pip.py 2>&1 && "
+                "/tmp/python3_pkg/usr/bin/python3.12 /tmp/get-pip.py --target /tmp/pip_pkg -q 2>&1 && "
+                "PYTHONPATH=/tmp/pip_pkg /tmp/python3_pkg/usr/bin/python3.12 "
+                "-m pip install --quiet --target /tmp/uv_pkg uv==0.9.5 2>&1 && "
+                "cp /tmp/uv_pkg/bin/uv /tmp/uv_pkg/bin/uvx $HOME/.local/bin/ && "
+                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env"
+            )
+        else:
+            cmd = (
+                "export HOME=/tmp/fakehome && "
+                "mkdir -p $HOME/.local/bin && "
+                # --trusted-host covers images where ca-certificates is absent (e.g. bare LaTeX)
+                "python3 -m pip install --quiet --target /tmp/uv_pkg "
+                "--trusted-host pypi.org --trusted-host files.pythonhosted.org uv && "
+                "cp /tmp/uv_pkg/bin/uv /tmp/uv_pkg/bin/uvx $HOME/.local/bin/ && "
+                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env"
+            )
+
+        result = self.tool.bash(cmd, timeout=300)
+        if not result or "error" in result.lower():
+            logger.warning("uv pre-install may have failed; test.sh will fall back to curl: %s", result[:200])
+
+    def _install_python3_nonroot(self) -> None:
+        """Download python3.12 packages via apt and extract with dpkg-deb (no root needed)."""
+        logger.info("Downloading python3.12 packages via apt (non-root) and extracting to /tmp/python3_pkg")
+        apt_opts = "-o Dir::State::Lists=/tmp/apt/lists -o Dir::Cache::Archives=/tmp/apt/archives"
+        cmd = (
+            "mkdir -p /tmp/apt/lists/partial /tmp/apt/archives/partial /tmp/python3_pkg && "
+            f"apt-get {apt_opts} update -qq 2>/dev/null || true && "
+            f"cd /tmp && apt-get {apt_opts} download "
+            "python3.12-minimal libpython3.12-minimal libpython3.12-stdlib python3-minimal 2>&1 && "
+            'for deb in /tmp/*.deb; do dpkg-deb --extract "$deb" /tmp/python3_pkg/; done'
+        )
+        result = self.tool.bash(cmd, timeout=180)
+        logger.info("python3 nonroot install: %s", (result or "")[-300:])
+
     def finished(self, obs: Observation | None = None) -> bool:
         return False
 
@@ -120,10 +308,6 @@ class TerminalBenchTask(Task):
             self._temp_dir = None
             self._task_path = None
         super().close()
-        if self._container is not None:
-            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
-            self._container.stop()
-            self._container = None
 
     def _parse_pytest_output(self, output: str) -> dict[str, str]:
         """Parse pytest output, falling back to regex heuristics."""
@@ -156,11 +340,15 @@ class TerminalBenchTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> TerminalBenchTask:
-        if container_backend is None:
-            raise ValueError("TerminalBenchTaskConfig.make() requires a container_backend")
-
         # Import here to avoid circular import (benchmark imports task)
         from terminalbench_cube.benchmark import TerminalBenchBenchmark
+
+        has_infra = runtime_context is not None and "infra" in runtime_context
+        if not has_infra and container_backend is None:
+            raise ValueError(
+                "TerminalBenchTaskConfig.make() requires runtime_context['infra'] "
+                "(preferred) or a legacy container_backend."
+            )
 
         metadata = TerminalBenchBenchmark.task_metadata[self.task_id]
         exec_info = TerminalBenchBenchmark.load_task_execution_info(self.task_id)

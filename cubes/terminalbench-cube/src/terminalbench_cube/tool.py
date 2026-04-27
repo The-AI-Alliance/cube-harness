@@ -1,8 +1,10 @@
 """Tool layer — bash, read_file, write_file backed by a CUBE Container."""
 
 import base64
+import io
 import logging
 import shlex
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -90,10 +92,25 @@ class TerminalBenchTool(Tool):
             self._exec(f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}")
 
     def upload_directory(self, local_dir: Path, remote_dir: str) -> None:
-        """Upload a local directory tree to the container."""
-        self._exec(f"mkdir -p {shlex.quote(remote_dir)}")
-        for item in local_dir.rglob("*"):
-            if item.is_file():
-                remote_path = f"{remote_dir}/{item.relative_to(local_dir)}"
-                self._exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}")
-                self.upload_file(item, remote_path)
+        """Upload a local directory tree to the container in a single exec.
+
+        Packs ``local_dir`` into an in-memory tar.gz, writes the base64 string
+        to a temp file via multi-chunk ``printf >> file`` (shell-quoting-safe
+        even through nested eai CLI → remote bash layers), then decodes and
+        extracts.  Uses only base64+tar which every POSIX task image ships —
+        no dependency on python3 in the target image.
+        """
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            tar.add(local_dir, arcname=".")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        remote_q = shlex.quote(remote_dir)
+        # Write the base64 payload in 8 KB chunks.  Single-arg printf through
+        # multiple shell layers can mangle long strings (observed with
+        # eai CLI + bash -lc); short chunks are robust.
+        chunk_size = 8192
+        staging = "/tmp/cube-upload.tar.gz.b64"
+        self._exec(f": > {staging}")
+        for i in range(0, len(b64), chunk_size):
+            self._exec(f"printf %s {shlex.quote(b64[i : i + chunk_size])} >> {staging}")
+        self._exec(f"mkdir -p {remote_q} && base64 -d < {staging} | tar -xzf - -C {remote_q} && rm -f {staging}")

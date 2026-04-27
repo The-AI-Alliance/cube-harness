@@ -5,7 +5,11 @@ import logging
 import shutil
 from typing import Any, ClassVar, Generator
 
+from pydantic import Field
+
 from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.infra_local import LocalInfraConfig
+from cube.resource import InfraConfig
 from cube.task import TaskConfig
 from datasets import load_dataset
 
@@ -130,6 +134,8 @@ class SWEBenchLiveBenchmark(Benchmark):
     # User-configurable fields
     include_hints: bool = False
     oracle_mode: bool = False
+    infra: InfraConfig = Field(default_factory=LocalInfraConfig)
+    """Infra that launches one Docker container per task.  Defaults to LocalInfraConfig."""
 
     # ── Benchmark lifecycle ────────────────────────────────────────
 
@@ -190,8 +196,12 @@ class SWEBenchLiveBenchmark(Benchmark):
             logger.info(f"Removed HuggingFace dataset cache at {hf_cache}")
 
     def _setup(self) -> None:
-        """No shared infrastructure needed — task containers are launched per-task in make()."""
-        logger.info(f"SWEBenchLiveBenchmark ready with {len(self.task_metadata)} tasks")
+        """Publish the shared InfraConfig to runtime_context; containers are launched per-task."""
+        self.infra.cleanup_stale()
+        self._runtime_context["infra"] = self.infra
+        logger.info(
+            f"SWEBenchLiveBenchmark ready with {len(self.task_metadata)} tasks (infra={self.infra.fingerprint()})"
+        )
 
     def close(self) -> None:
         logger.info("SWE-bench Live benchmark closed")
