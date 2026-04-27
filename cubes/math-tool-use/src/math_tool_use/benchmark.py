@@ -87,7 +87,7 @@ def load_task_metadata() -> dict[str, TaskMetadata]:
                 recommended_max_steps=3,
                 split="train",
                 extra_info={
-                    "dataset_name": dataset_name,
+                    "dataset": t["dataset"],
                     "question": t["task"],
                     "expected": t["answer"],
                     "dataset": t["dataset"],

@@ -74,7 +74,7 @@ def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_comple
     benchmark.setup()
 
     if mode == "debug":
-        benchmark = benchmark.subset_from_list(["q_0", "q_1", "q_2", "q_3"], benchmark_name_suffix="debug")
+        benchmark = benchmark.subset_from_list(["open_reasoner_zero_57k_0", "open_reasoner_zero_57k_1"], benchmark_name_suffix="debug")
 
     task_configs = list(benchmark.get_task_configs())
     episodes = [
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
 
 # Example vLLM launch for parity with PipelineRL config:
-# vllm serve /mnt/llmd/base_models/Qwen2.5-7B-Instruct \
+# uv run vllm serve /mnt/llmd/base_models/Qwen2.5-7B-Instruct \
 #   --host 0.0.0.0 \
 #   --port 8000 \
 #   --api-key EMPTY \
