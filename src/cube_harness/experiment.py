@@ -8,11 +8,11 @@ from typing import Self
 from uuid import uuid4
 
 from cube.benchmark import Benchmark
-from cube.core import TypedBaseModel
+from cube.core import EnvironmentOutput, TypedBaseModel
 from pydantic import Field, model_validator
 
 from cube_harness.agent import AgentConfig
-from cube_harness.core import Trajectory
+from cube_harness.core import AgentOutput, Trajectory
 from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus
@@ -228,6 +228,65 @@ class Experiment(TypedBaseModel):
             except (ValueError, AttributeError):
                 return None
         return None
+
+    # TODO(#315): replace _is_trajectory_successful + _load_successful_trajectory_ids
+    # with a fast status.json check that does not require loading the full trajectory.
+    def _is_trajectory_successful(self, trajectory: Trajectory) -> bool:
+        """Check if a trajectory completed successfully.
+
+        A trajectory is successful if the last env step has done=True and no steps contain errors.
+        """
+        last_env_step = trajectory.last_env_step()
+        for step in trajectory.steps:
+            if isinstance(step.output, (EnvironmentOutput, AgentOutput)) and step.output.error:
+                return False
+        return last_env_step.done
+
+    def _load_successful_trajectory_ids(self, storage: FileStorage) -> set[str]:
+        successful = set()
+        for trajectory_id in storage.list_trajectory_ids():
+            try:
+                trajectory = storage.load_trajectory(trajectory_id)
+                if self._is_trajectory_successful(trajectory):
+                    successful.add(trajectory_id)
+            except Exception as e:
+                logger.debug(f"Failed to load trajectory {trajectory_id}: {e}")
+        return successful
+
+    def _load_started_trajectory_ids(self) -> set[str]:
+        storage = FileStorage(self.output_dir)
+        return set(storage.list_trajectory_ids())
+
+    def _find_episodes_to_relaunch(
+        self, config_files: list[Path], filter_trajectory_ids: set[str], include: bool = True
+    ) -> list[Episode]:
+        """Find episodes to relaunch based on trajectory ID filter.
+
+        Args:
+            config_files: List of episode config file paths.
+            filter_trajectory_ids: Set of trajectory IDs to filter by.
+            include: If True, include episodes whose trajectory ID is in the set.
+                    If False, exclude episodes whose trajectory ID is in the set.
+
+        Returns:
+            List of Episode objects to relaunch.
+        """
+        episodes = []
+        for config_file in config_files:
+            trajectory_id = self._trajectory_id_from_config(config_file)
+            if trajectory_id:
+                should_include = (
+                    trajectory_id in filter_trajectory_ids if include else trajectory_id not in filter_trajectory_ids
+                )
+                if should_include:
+                    try:
+                        episode = Episode.load_episode_from_config(config_file, self.benchmark)
+                        episodes.append(episode)
+                    except Exception as e:
+                        logger.exception(f"Failed to load episode config {config_file}: {e}")
+            else:
+                logger.warning(f"Could not parse task_id from config filename: {config_file.name}")
+        return episodes
 
     def print_stats(self, results: ExpResult) -> None:
         if not results.trajectories:
