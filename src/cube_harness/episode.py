@@ -5,7 +5,7 @@ from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import Content, EnvironmentOutput, Observation, StepError, TypedBaseModel
+from cube.core import EnvironmentOutput, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
@@ -124,6 +124,8 @@ class Episode:
             return EnvironmentOutput(obs=obs, info=info)
 
         agent = self.config.agent_config.make(action_set, task_id=self.config.task_config.task_id)
+        # action_schemas is read by eval_log.AgentInfo (feat/atlas-eval-log) to populate
+        # the tool list in structured evaluation records without re-instantiating the task.
         extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
         return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, agent, extra_metadata=extra_metadata)
 
