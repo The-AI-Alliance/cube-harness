@@ -1,10 +1,14 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
+import traceback
 import time
+from pathlib import Path
 from uuid import uuid4
 
 import ray
+from dotenv import load_dotenv
+from ray.util.state.api import list_tasks
 
 from cube_harness.core import Trajectory
 from cube_harness.episode import Episode
@@ -170,6 +174,13 @@ def _run_with_ray_impl(
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
         """Ray entry point: redirect logs to the episode's log file and run the episode."""
+        # Load credentials from ~/.env-cube (cube-specific) or ~/.env (general fallback).
+        # override=False means vars already in env (inherited from parent on same-machine Ray)
+        # take precedence — this only fills in gaps for multi-node workers.
+        _home = Path.home()
+        load_dotenv(_home / ".env-cube", override=False)
+        load_dotenv(_home / ".env", override=False)
+
         traj_id = _trajectory_id(episode)
         log_file = get_log_path(output_dir, traj_id)
         with redirect_output_to_log(log_file, append=True, tee=False, log_format=LOG_FORMAT):
