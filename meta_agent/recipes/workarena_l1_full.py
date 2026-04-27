@@ -14,7 +14,7 @@ Toolbox (always active):
     - WorkArenaInfeasibleTool: report_infeasible for all tasks
 
 Hints (only with 'hints' flag):
-    - Create: fill ALL fields, autocomplete workflow, submit_form
+    - Create: fill ALL fields, autocomplete workflow, click Submit button
     - Sort/Filter: use filter UI, combobox bid+1 pattern
     - Chart: answer format (numeric-only vs label+count)
 """
