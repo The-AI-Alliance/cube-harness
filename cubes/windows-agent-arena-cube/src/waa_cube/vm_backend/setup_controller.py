@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import shutil
 import sqlite3
 import tempfile
@@ -82,6 +83,13 @@ class SetupController:
 
         Returns True if all steps completed, False if VM was unreachable.
         """
+        # Stagger setup across parallel episodes to avoid the cohort of /upload
+        # calls all hitting at the same instant — that triggers an empty-body 502
+        # on a small fraction of VMs (concurrent-pressure race in the local SSH /
+        # network layer, see runbook). Combined with the upload retry budget,
+        # 0-15s jitter spreads first-uploads enough to deterministically succeed.
+        time.sleep(random.uniform(0, 15))
+
         # Wait for VM connectivity
         for retry in range(MAX_RETRIES):
             try:
@@ -303,16 +311,32 @@ class SetupController:
                 else:
                     raise requests.RequestException(f"Failed to download {url} after 3 attempts")
 
-            form = MultipartEncoder({"file_path": path, "file_data": (os.path.basename(path), open(cache_path, "rb"))})
-            resp = requests.post(
-                self.http_server_setup_root + "/upload",
-                headers={"Content-Type": form.content_type},
-                data=form,
-                timeout=600,
-            )
-            if resp.status_code != 200:
-                raise requests.RequestException(f"Upload failed ({resp.status_code}): {resp.text}")
-            logger.info("Uploaded %s to VM at %s", os.path.basename(path), path)
+            # Retry the upload — /setup/upload returns a transient 502 (empty body,
+            # Connection: close) on ~20% of VMs during the first 5-30s after tunnel
+            # open. Likely a Windows Defender / file-system race on the first write
+            # to C:\Users\Docker\Downloads\. Settled VMs are 100% reliable. Budget
+            # 5 retries with 2/4/8/16/32s backoff = 62s total, enough to outwait it.
+            last_exc: Exception | None = None
+            for attempt in range(5):
+                form = MultipartEncoder({"file_path": path, "file_data": (os.path.basename(path), open(cache_path, "rb"))})
+                try:
+                    resp = requests.post(
+                        self.http_server_setup_root + "/upload",
+                        headers={"Content-Type": form.content_type},
+                        data=form,
+                        timeout=600,
+                    )
+                    if resp.status_code == 200:
+                        logger.info("Uploaded %s to VM at %s", os.path.basename(path), path)
+                        break
+                    last_exc = requests.RequestException(f"Upload failed ({resp.status_code}): {resp.text}")
+                    logger.warning("Upload attempt %d returned %d; retrying...", attempt + 1, resp.status_code)
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    logger.warning("Upload attempt %d failed: %s; retrying...", attempt + 1, exc)
+                time.sleep(2 ** (attempt + 1))  # 2, 4, 8, 16, 32 seconds
+            else:
+                raise last_exc or requests.RequestException("Upload failed after 5 attempts")
 
     def _execute_setup(
         self,

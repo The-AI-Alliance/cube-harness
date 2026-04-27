@@ -1,18 +1,16 @@
-"""WAA Azure follow-up eval — targeted test of the port-forwarding fix.
+"""WAA LO smoke eval — 10 LibreOffice tasks (5 calc + 5 writer) on the new
+LO-enabled image.
 
-Verifies the forwarded_ports addition to VMResourceConfig + the new multi-tunnel
-loop in cube-infra-azure: chrome/msedge tasks that previously hit
-ECONNREFUSED 127.0.0.1:9222 should now connect via the host-side SSH tunnel.
-
-Task selection: first 5 chrome and first 5 msedge tasks (10 total).
+Uses the new image_name_suffix=-kusha-lo / source_cache_blob=...-lo.qcow2 to
+keep the old -kusha image side-by-side. Image was verified good (all 8 apps
+present via PowerShell Test-Path).
 
 Usage:
-    uv run recipes/waa/eval_azure_waa_kusha_followup.py
+    uv run recipes/waa/eval_azure_waa_kusha_lo_smoke.py
 """
 
 import logging
 import os
-import sys
 from datetime import datetime
 
 from cube_infra_azure import AzureInfraConfig
@@ -42,20 +40,19 @@ INFRA = AzureInfraConfig(
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
 
-# First 5 chrome and 5 msedge tasks — exercise the port-forwarding fix.
-CHROME_IDS = [
-    "030eeff7-b492-4218-b312-701ec99ee0cc-wos",
-    "06fe7178-4491-4589-810f-2e2bc9502122-wos",
-    "121ba48f-9e17-48ce-9bc6-a4fb17a7ebba-wos",
-    "2ae9ba84-3a0d-4d4c-8338-3a1478dc5fe3-wos",
-    "35253b65-1c19-4304-8aa4-6884b8218fc0-wos",
+CALC_IDS = [
+    "01b269ae-2111-4a07-81fd-3fcd711993b0-WOS",
+    "035f41ba-6653-43ab-aa63-c86d449d62e5-WOS",
+    "04d9aeaf-7bed-4024-bedb-e10e6f00eb7f-WOS",
+    "0a2e43bf-b26c-4631-a966-af9dfa12c9e5-WOS",
+    "0acbd372-ca7a-4507-b949-70673120190f-WOS",
 ]
-MSEDGE_IDS = [
-    "004587f8-6028-4656-94c1-681481abbc9c-wos",
-    "049d3788-c979-4ea6-934d-3a35c4630faf-WOS",
-    "1376d5e7-deb7-471a-9ecc-c5d4e155b0c8-wos",
-    "1a1ec621-b675-4099-96a9-f702dc27afb4-wos",
-    "1c9d2c6c-ae4b-4359-9a93-9d3c42f48417-wos",
+WRITER_IDS = [
+    "0810415c-bde4-4443-9047-d5f70165a697-WOS",
+    "0a0faba3-5580-44df-965d-f562a99b291c-WOS",
+    "0b17a146-2934-46c7-8727-73ff6b6483e8-WOS",
+    "0e47de2a-32e0-456c-a366-8c607ef7a9d2-WOS",
+    "0e763496-b6bb-4508-a427-fad0b6c3e195-WOS",
 ]
 
 WAA_SYSTEM_PROMPT = """\
@@ -114,7 +111,7 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_followup", "waa-cube")
+    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_lo_smoke", "waa-cube")
 
     llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
@@ -139,18 +136,18 @@ def main() -> None:
     )
     benchmark.setup()
 
-    keep_ids = CHROME_IDS + MSEDGE_IDS
+    keep_ids = CALC_IDS + WRITER_IDS
     available = set(benchmark.task_metadata.keys())
     missing = [tid for tid in keep_ids if tid not in available]
     if missing:
         logging.warning("Task IDs not in benchmark.task_metadata: %s", missing)
     keep_ids = [tid for tid in keep_ids if tid in available]
     benchmark = benchmark.subset_from_list(keep_ids)
-    logging.info("Follow-up eval: %d tasks (%d chrome, %d msedge)",
-                 len(keep_ids), len(CHROME_IDS), len(MSEDGE_IDS))
+    logging.info("LO smoke eval: %d tasks (%d calc, %d writer)",
+                 len(keep_ids), len(CALC_IDS), len(WRITER_IDS))
 
     exp = Experiment(
-        name="waa_azure_kusha_haiku_followup",
+        name="waa_azure_kusha_haiku_lo_smoke",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -158,8 +155,8 @@ def main() -> None:
     )
 
     try:
-        print(f"\nFOLLOW-UP EVAL — parallel, output: {output_dir}")
-        run_with_ray(exp, n_cpus=20)
+        print(f"\nLO SMOKE EVAL — parallel, output: {output_dir}")
+        run_with_ray(exp, n_cpus=10)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:

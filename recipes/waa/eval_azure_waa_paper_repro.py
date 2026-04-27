@@ -53,8 +53,8 @@ INFRA = AzureInfraConfig(
     vnet_name="vnet-westus2",
     nsg_name="osworld-nsg",
     windows_admin_username="Docker",
-    image_name_suffix="-kusha",
-    source_cache_blob="sources/waa-windows-prepared.qcow2",
+    image_name_suffix="-kusha-lo",
+    source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
 
 # WAA_MODEL env var lets you swap between gpt-4o (paper config) and gpt-4o-mini

@@ -1,11 +1,11 @@
 """WAA full-corpus eval — Claude Haiku 4.5 on the full 152-task Windows corpus.
 
 Companion to `eval_azure_waa_paper_repro.py` (GPT-4o-mini). Same Genny+axtree
-setup, same full corpus (no LO filter — LO tasks will evaluate to 0 until the
-image is rebuilt).
+setup, same full corpus, running on the LO-enabled image (waa-windows-vm-kusha-lo).
 
 The paper doesn't have a Haiku row in Table 4, so this is exploratory rather
-than a direct reproduction. Comparison points from Table 4 (OneOCR + ✓UIA):
+than a direct reproduction. Closest comparison points from the paper Table 4
+(OneOCR + ✓UIA, no Navi grounding pipeline — closest to our setup):
     GPT-4o-mini → 7.3% overall
     GPT-4o      → 13.3% overall
 
@@ -40,8 +40,8 @@ INFRA = AzureInfraConfig(
     vnet_name="vnet-westus2",
     nsg_name="osworld-nsg",
     windows_admin_username="Docker",
-    image_name_suffix="-kusha",
-    source_cache_blob="sources/waa-windows-prepared.qcow2",
+    image_name_suffix="-kusha-lo",
+    source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
 
 WAA_SYSTEM_PROMPT = """\
@@ -125,8 +125,7 @@ def main() -> None:
     )
     benchmark.setup()
 
-    # Full 152-task corpus, including LibreOffice. LO tasks will fail
-    # (LO not in image yet); reported scores will exclude/include them by domain.
+    # Full 152-task corpus on the LO-enabled image.
     logging.info("Haiku full eval: %d tasks", len(benchmark.task_metadata))
 
     exp = Experiment(
