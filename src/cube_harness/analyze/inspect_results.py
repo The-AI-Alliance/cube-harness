@@ -305,9 +305,8 @@ def format_agent_comparison(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFram
     if not variable_keys or "agent_name" not in df.columns:
         return const_df, pd.DataFrame(columns=["parameter"])
 
-    agent_names = df["agent_name"].tolist()
     var_records = [
-        {"parameter": var, **{name: str(df.iloc[i][var]) for i, name in enumerate(agent_names)}}
+        {"parameter": var, **{row["agent_name"]: str(row[var]) for _, row in df.iterrows()}}
         for var in variable_keys
     ]
     var_df = pd.DataFrame(var_records) if var_records else pd.DataFrame(columns=["parameter"])

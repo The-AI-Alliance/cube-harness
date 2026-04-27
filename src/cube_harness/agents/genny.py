@@ -301,8 +301,7 @@ class GennyConfig(AgentConfig):
             name += f"+{self.summarize_llm_config.model_name}".replace("/", "_")
         return name
 
-    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Genny":
-        task_id: str | None = kwargs.get("task_id")
+    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny":
         return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
 
 

@@ -251,6 +251,18 @@ class TestFormatAgentComparison:
         df = agent_configs_to_df([])
         assert df is None
 
+    def test_variables_correct_when_df_rows_reversed(self) -> None:
+        # Regression: iloc-based lookup assigned values to the wrong agent when
+        # DataFrame row order differed from agent_names list order.
+        df = agent_configs_to_df([("Agent-gpt-4o", self._gpt4o_cfg), ("Agent-gpt-4o-mini", self._mini_cfg)])
+        assert df is not None
+        # Reverse the row order to simulate non-sequential indexing.
+        df = df.iloc[::-1].reset_index(drop=True)
+        _, var_df = format_agent_comparison(df)
+        row = var_df[var_df["parameter"] == "llm_config.model_name"].iloc[0]
+        assert row["Agent-gpt-4o"] == "gpt-4o"
+        assert row["Agent-gpt-4o-mini"] == "gpt-4o-mini"
+
 
 class TestLoadAndAnalyze:
     def test_returns_indexed_df(self, single_agent_trajectories):

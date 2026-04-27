@@ -148,8 +148,8 @@ class Episode:
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
-                        **(extra_metadata or {}),
                         **env_output.info,
+                        **(extra_metadata or {}),
                     },
                     start_time=start_time,
                 )
