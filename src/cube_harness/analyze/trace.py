@@ -1,16 +1,39 @@
 """ch-trace — compact per-turn episode trace viewer.
 
+Quick alternative to the full XRay viewer when you just need to scan what an agent
+did step by step without opening a browser.
+
 Usage:
     ch-trace <episode_dir>
-    ch-trace <experiment_dir>/<episode_name>
-    ch-trace episodes/workarena.servicenow.create-incident_ep0
+    ch-trace experiments/workarena-l1/workarena.servicenow.create-incident_ep0
 
-Output: one row per turn showing action, result, page title, reward, and validation message.
+Output: two lines per turn —
+    T00 fill(bid=123, value='CHG…')           [Success  ]
+         ServiceNow | Create Change Request    r=0.0
+
+Data model
+----------
+Each step is a msgpack+zstd file in <episode_dir>/steps/.  Steps alternate:
+    even index — AgentOutput   (agent chose an action)
+    odd  index — EnvironmentOutput (env executed it, returned observation)
+
+render_trace() pairs them: for each AgentOutput at index i, the observation is at i+1.
+
+The observation's contents list is heterogeneous:
+    - entries with a tool_call_id  →  the direct result string for the preceding action
+    - entries without              →  raw page state (AXTree text, screenshot bytes, …)
+
+Page title is extracted from the AXTree text via the accessibility tree root label
+"RootWebArea '<title>'", which BrowserGym includes in every AXTree observation.
+
+Episode-level outcome (final reward, done, validation message) is read from
+episode.metadata.json, written by the harness after the episode ends.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -19,11 +42,11 @@ from typing import Any
 import msgpack
 import zstandard
 from rich.console import Console
-from rich.table import Table
 from rich.text import Text
 
 
 def _decompress(path: Path) -> dict[str, Any]:
+    """Read and decompress a single step file (.msgpack.zst) into a plain dict."""
     with open(path, "rb") as f:
         data = f.read()
     dctx = zstandard.ZstdDecompressor()
@@ -78,6 +101,7 @@ def _result_from_obs(obs_output: dict[str, Any]) -> str:
 
 
 def render_trace(ep_dir: Path, console: Console) -> None:
+    """Render a compact two-line-per-turn trace for a single episode directory."""
     steps_dir = ep_dir / "steps"
     if not steps_dir.exists():
         console.print(f"[red]No steps/ directory in {ep_dir}[/red]")
@@ -95,8 +119,6 @@ def render_trace(ep_dir: Path, console: Console) -> None:
     meta_file = ep_dir / "episode.metadata.json"
     task_id = ep_dir.name
     if meta_file.exists():
-        import json
-
         meta = json.loads(meta_file.read_text())
         task_id = meta.get("task_id", task_id)
 
@@ -150,10 +172,7 @@ def render_trace(ep_dir: Path, console: Console) -> None:
         console.print(line2)
 
     # Print final reward from metadata
-    meta_file = ep_dir / "episode.metadata.json"
     if meta_file.exists():
-        import json
-
         meta = json.loads(meta_file.read_text())
         final_reward = meta.get("reward_info", {}).get("reward", "?")
         done = meta.get("reward_info", {}).get("done", "?")
@@ -163,6 +182,7 @@ def render_trace(ep_dir: Path, console: Console) -> None:
 
 
 def main() -> None:
+    """Entry point for the ch-trace CLI (registered in pyproject.toml [project.scripts])."""
     parser = argparse.ArgumentParser(
         description="ch-trace: compact per-turn episode trace viewer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
