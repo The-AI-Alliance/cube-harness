@@ -888,6 +888,7 @@ class GenericAgentConfig(AgentConfig):
     @property
     def agent_name(self) -> str:
         return f"GenericAgent-{self.llm_config.model_name}".replace("/", "_")
+
     system_prompt: str = """\
 You are an agent trying to solve a web task based on the content of the page and
 user instructions. You can interact with the page and explore, and send messages to the user.

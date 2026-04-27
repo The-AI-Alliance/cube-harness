@@ -164,7 +164,7 @@ def render_trace(ep_dir: Path, console: Console) -> None:
         line2 = Text()
         line2.append("     ", style="dim")
         line2.append(f"{page[:44]:<44}", style="dim")
-        line2.append(f"  r=", style="dim")
+        line2.append("  r=", style="dim")
         line2.append(f"{reward:.1f}", style=rew_style)
         if msg:
             line2.append(f"  {msg[:60]}", style="italic dim")
