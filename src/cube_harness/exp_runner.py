@@ -60,12 +60,11 @@ def _run_with_ray_impl(
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        # Load credentials from ~/.env-cube (cube-specific) or ~/.env (general fallback).
-        # override=False means vars already in env (inherited from parent on same-machine Ray)
-        # take precedence — this only fills in gaps for multi-node workers.
-        _home = Path.home()
-        load_dotenv(_home / ".env-cube", override=False)
-        load_dotenv(_home / ".env", override=False)
+        # For same-machine Ray: workers inherit the parent process env (set by the recipe's
+        # load_dotenv() before ray.init()), so this is a no-op.
+        # For multi-node Ray: workers need credentials on their own machine — place them in
+        # ~/.env-cube (cube-specific, avoids pulling in unintended vars from a general ~/.env).
+        load_dotenv(Path.home() / ".env-cube", override=False)
 
         trajectory_id = trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
         log_file = get_log_path(output_dir, trajectory_id)
