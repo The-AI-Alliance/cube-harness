@@ -1,3 +1,17 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "cube-harness",
+#     "osworld-cube",
+#     "cube-infra-azure",
+# ]
+#
+# [tool.uv.sources]
+# cube-harness = { path = "../..", editable = true }
+# osworld-cube = { path = "../../cubes/osworld-cube", editable = true }
+# cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-azure" }
+# ///
+
 """OSWorld eval on Azure — Genny agent with GPT-5-mini and accessibility tree observations.
 
 Uses AzureInfraConfig to launch fresh VMs per task. Mirrors the non-Azure

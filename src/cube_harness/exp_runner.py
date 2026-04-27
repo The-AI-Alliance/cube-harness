@@ -195,7 +195,7 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
             episodes = episodes[:debug_limit]
         trajectories = []
         for episode in episodes:
-            trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+            trajectory_id = trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
             log_file = get_log_path(exp.output_dir, trajectory_id)
             with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
                 trajectories.append(episode.run())
