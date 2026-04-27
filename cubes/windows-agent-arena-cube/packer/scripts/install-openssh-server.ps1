@@ -16,9 +16,16 @@ $dstDir  = 'C:\Program Files\OpenSSH'
 if (Test-Path (Join-Path $dstDir 'sshd.exe')) {
     Write-Output "OpenSSH already installed at $dstDir - skipping download."
 } else {
-    Write-Output "Downloading OpenSSH Server from GitHub..."
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $release -OutFile $zipPath -UseBasicParsing
+    # Prefer a cached zip pre-staged by the Packer file provisioner from
+    # ~/.cube/cache/ on the host. Falls back to a guest-side GitHub download —
+    # which is bandwidth-limited by QEMU's user-mode networking (~8 KB/s).
+    if (Test-Path $zipPath) {
+        Write-Output "Using pre-staged $zipPath (skipping GitHub download)."
+    } else {
+        Write-Output "Downloading OpenSSH Server from GitHub..."
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $release -OutFile $zipPath -UseBasicParsing
+    }
 
     Write-Output "Extracting to $dstDir..."
     if (Test-Path $dstDir) { Remove-Item -Recurse -Force $dstDir }

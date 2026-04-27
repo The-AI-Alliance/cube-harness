@@ -48,51 +48,76 @@ DEFAULT_BACKUPS = Path.home() / ".cube" / "images" / "backups"
 OVMF_CODE = Path("/usr/share/OVMF/OVMF_CODE_4M.ms.fd")
 OVMF_VARS = Path("/usr/share/OVMF/OVMF_VARS_4M.ms.fd")
 
-# PowerShell that enables WinRM for Packer. Permissive (basic auth, unencrypted)
-# — acceptable because (a) it runs on loopback in build VMs only, and (b)
-# sysprep /generalize at the end of the Packer build resets these before any
-# Azure launch.
+# PowerShell steps that enable WinRM for Packer. Permissive (basic auth,
+# unencrypted) — acceptable because (a) it runs on loopback in build VMs only,
+# and (b) sysprep /generalize at the end of the Packer build resets these.
 #
-# Also sets a password on the Docker user. The WAA upstream image leaves Docker
-# with an empty password (see unattend-files/dev_win11x64-enterprise-eval.xml),
-# but Windows refuses WinRM network logon for blank-password accounts unless
-# LimitBlankPasswordUse=0 is set. Setting a real password is simpler and more
-# portable; Packer then uses it as PKR_VAR_admin_password.
-_PS_TEMPLATE = r"""
+# Split into separate /execute calls because the upstream Flask /execute
+# endpoint hard-codes a 120s subprocess timeout, and Enable-PSRemoting alone
+# can take that long on Windows 11.
+_PS_SET_PASSWORD = r"""
 $ErrorActionPreference = 'Stop'
-
-Write-Output '--- setting password on Docker user ---'
 $pwd = ConvertTo-SecureString '{password}' -AsPlainText -Force
 Set-LocalUser -Name 'Docker' -Password $pwd
-
-Write-Output '--- forcing network profile to Private (required for WinRM firewall) ---'
-# Public profile blocks AllowUnencrypted and firewall-rule creation on non-
-# private profiles. Flip everything to Private for the build; sysprep resets.
-Get-NetConnectionProfile | ForEach-Object {{
-    Set-NetConnectionProfile -InterfaceIndex $_.InterfaceIndex -NetworkCategory Private
-}}
-
-Write-Output '--- enabling WinRM ---'
-Enable-PSRemoting -Force -SkipNetworkProfileCheck | Out-Null
-Set-Item WSMan:\localhost\Service\Auth\Basic $true
-Set-Item WSMan:\localhost\Service\AllowUnencrypted $true
-if (-not (Get-NetFirewallRule -Name WinRM-HTTP-In-TCP -ErrorAction SilentlyContinue)) {{
-    New-NetFirewallRule -Name WinRM-HTTP-In-TCP -DisplayName 'WinRM HTTP-In' `
-        -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 5985 | Out-Null
-}}
-
-Write-Output 'winrm-ready'
+Write-Output 'password-set'
 """.strip()
 
+# Enable-PSRemoting can take >120s on Windows 11 (the Flask /execute timeout),
+# so write a self-contained script that does the slow work *and* the finalize
+# steps, then launch it as a detached background process. The /execute call
+# returns immediately; we poll for a sentinel file to know when it finished.
+#
+# We don't bother flipping the network profile to Private (Set-NetConnectionProfile
+# hangs while NLM is still classifying the freshly-booted adapter). Instead we
+# pass -SkipNetworkProfileCheck to Enable-PSRemoting and pin the firewall rule
+# to -Profile Any so it applies regardless of the eventual classification.
+_PS_LAUNCH_WINRM_SCRIPT = r"""
+$ErrorActionPreference = 'Stop'
+$work = @'
+$ErrorActionPreference = 'Stop'
+try {
+    Enable-PSRemoting -Force -SkipNetworkProfileCheck | Out-Null
+    Set-Item WSMan:\localhost\Service\Auth\Basic $true
+    Set-Item WSMan:\localhost\Service\AllowUnencrypted $true
+    if (-not (Get-NetFirewallRule -Name WinRM-HTTP-In-TCP -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -Name WinRM-HTTP-In-TCP -DisplayName 'WinRM HTTP-In' `
+            -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 5985 -Profile Any | Out-Null
+    }
+    'winrm-ready' | Out-File -Encoding ascii C:\winrm-bootstrap.status
+} catch {
+    "winrm-failed: $($_ | Out-String)" | Out-File -Encoding ascii C:\winrm-bootstrap.status
+}
+'@
+Remove-Item C:\winrm-bootstrap.status -ErrorAction SilentlyContinue
+$work | Out-File -Encoding ascii C:\winrm-bootstrap.ps1
+# Spawn via WMI Win32_Process.Create — fully detached, no inherited handles.
+# Both Start-Process and Scheduled-Task variants either inherit Flask's stdio
+# or take >120s to register, blocking the upstream single-threaded Werkzeug.
+$wmi = ([WMICLASS]'\\.\ROOT\CIMV2:Win32_Process').Create(
+    'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:\winrm-bootstrap.ps1')
+if ($wmi.ReturnValue -ne 0) {
+    throw "Win32_Process.Create failed: ReturnValue=$($wmi.ReturnValue)"
+}
+Write-Output "winrm-launched pid=$($wmi.ProcessId)"
+""".strip()
 
-def render_enable_script(password: str) -> str:
-    """Render the WinRM-enable PowerShell with the given Docker-user password.
+# cmd.exe spawns ~10x faster than powershell — important when the guest is
+# under load from Enable-PSRemoting and PS cold-start can exceed 30s.
+_CMD_POLL_WINRM = r'if exist C:\winrm-bootstrap.status (type C:\winrm-bootstrap.status) else (echo pending)'
 
-    The password is embedded as a PowerShell single-quoted literal, so any
-    single quote in it is escaped by doubling per PS rules.
+
+def render_enable_steps(password: str) -> list[tuple[str, str]]:
+    """Return ordered (label, ps_script) pairs to apply via /execute.
+
+    The WinRM-enable step launches a detached background script and returns
+    immediately to stay under Flask's 120s subprocess timeout — the caller
+    polls separately for completion.
     """
     escaped = password.replace("'", "''")
-    return _PS_TEMPLATE.format(password=escaped)
+    return [
+        ("set-password", _PS_SET_PASSWORD.format(password=escaped)),
+        ("launch-winrm", _PS_LAUNCH_WINRM_SCRIPT),
+    ]
 
 
 def free_port(start: int = 17000, count: int = 200) -> int:
@@ -121,7 +146,7 @@ def wait_for_agent(endpoint: str, timeout: int = 600) -> None:
 
 
 def guest_execute(endpoint: str, command: str | list[str], shell: bool = False,
-                  timeout: int = 120) -> dict:
+                  timeout: int = 180) -> dict:
     """POST to /setup/execute — same contract as SetupController._setup_execute."""
     payload = json.dumps({"command": command, "shell": shell}).encode()
     req = urllib.request.Request(
@@ -130,10 +155,12 @@ def guest_execute(endpoint: str, command: str | list[str], shell: bool = False,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        body = r.read().decode(errors="replace")
-    if r.status != 200:
-        raise RuntimeError(f"guest /setup/execute → HTTP {r.status}: {body[:400]}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = r.read().decode(errors="replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        raise RuntimeError(f"guest /setup/execute → HTTP {exc.code}: {body[:800]}") from None
     try:
         return json.loads(body)
     except json.JSONDecodeError:
@@ -264,17 +291,51 @@ def main() -> int:
         wait_for_agent(endpoint, timeout=args.timeout)
 
         logger.info("guest agent ready — setting Docker password + enabling WinRM (idempotent)…")
-        ps_script = render_enable_script(args.admin_password)
-        result = guest_execute(
-            endpoint,
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
-            shell=False,
-            timeout=300,
-        )
-        output = (result.get("output") or "") + (result.get("error") or "")
-        logger.info("guest powershell output: %s", output.strip()[:800])
-        if "winrm-ready" not in output:
-            raise RuntimeError("guest did not report 'winrm-ready' — see output above")
+        sentinels = {
+            "set-password": "password-set",
+            "launch-winrm": "winrm-launched",
+        }
+        for label, ps_script in render_enable_steps(args.admin_password):
+            logger.info("running step: %s", label)
+            result = guest_execute(
+                endpoint,
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+                shell=False,
+                timeout=180,
+            )
+            output = (result.get("output") or "") + (result.get("error") or "")
+            logger.info("[%s] %s", label, output.strip()[:600])
+            if sentinels[label] not in output:
+                raise RuntimeError(f"guest step '{label}' did not report '{sentinels[label]}' — see output above")
+
+        logger.info("polling for WinRM-enable completion (sentinel C:\\winrm-bootstrap.status)…")
+        # Tolerate transient socket failures: Enable-PSRemoting briefly resets
+        # network adapters, which can drop the QEMU usermode port forward.
+        # Poll via cmd.exe (faster cold-start than powershell) and use shell=true
+        # so cmd's `if exist` syntax parses correctly.
+        deadline = time.time() + 900
+        while time.time() < deadline:
+            try:
+                poll = guest_execute(
+                    endpoint,
+                    _CMD_POLL_WINRM,
+                    shell=True,
+                    timeout=90,
+                )
+            except (TimeoutError, urllib.error.URLError, ConnectionError, OSError) as exc:
+                logger.info("poll transient error: %s", exc)
+                time.sleep(15)
+                continue
+            status = (poll.get("output") or "").strip()
+            logger.info("poll status: %r", status[:200])
+            if "winrm-ready" in status:
+                logger.info("WinRM enable complete")
+                break
+            if "winrm-failed" in status:
+                raise RuntimeError(f"guest WinRM-enable failed: {status[:600]}")
+            time.sleep(15)
+        else:
+            raise TimeoutError("guest WinRM-enable script never produced winrm-ready sentinel")
 
         logger.info("requesting clean shutdown…")
         try:

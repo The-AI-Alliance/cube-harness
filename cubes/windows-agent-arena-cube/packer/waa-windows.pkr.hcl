@@ -122,6 +122,19 @@ build {
     destination = "C:/Windows/Temp/id_rsa.pub"
   }
 
+  # Pre-stage installer artifacts from the host's ~/.cube/cache/ instead of
+  # letting the per-script `Invoke-WebRequest` calls go through QEMU's
+  # user-mode networking. WSMan upload is also slow (~5-13 KB/s measured)
+  # but it's the only way to get artifacts in. LibreOffice is intentionally
+  # excluded — it's already installed in data.img (Stage 2 setup.ps1).
+  provisioner "file" {
+    sources = [
+      pathexpand("~/.cube/cache/OpenSSH-Win64.zip"),
+      pathexpand("~/.cube/cache/WindowsAzureVmAgent.msi"),
+    ]
+    destination = "C:/Windows/Temp/"
+  }
+
   # elevated_user/password: WinRM hands out a non-elevated (UAC-split) token by
   # default even for admin-group users, which blocks Add-WindowsCapability,
   # msiexec, sysprep, etc. Packer works around this by running each script via

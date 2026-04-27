@@ -43,6 +43,31 @@ fi
 command -v swtpm  >/dev/null || { echo "swtpm not installed (apt install swtpm swtpm-tools)" >&2; exit 1; }
 command -v packer >/dev/null || { echo "packer not installed (see README.md)"                >&2; exit 1; }
 
+# Pre-stage installer artifacts on the host using the host's real bandwidth,
+# then push them into the guest via Packer's `file` provisioner. This avoids
+# guest-side `Invoke-WebRequest` over QEMU's ~8 KB/s user-mode networking,
+# which would make the 346 MB LibreOffice MSI take ~12 hrs from inside the
+# VM. Each install script tests for the cached file at C:\Windows\Temp\
+# before falling back to its original download URL.
+CACHE_DIR="${CUBE_CACHE_DIR:-$HOME/.cube/cache}"
+mkdir -p "$CACHE_DIR"
+fetch_if_missing() {
+    local name="$1" url="$2"
+    if [[ -s "$CACHE_DIR/$name" ]]; then
+        echo "[run.sh] cache hit: $CACHE_DIR/$name"
+        return
+    fi
+    echo "[run.sh] downloading $name -> $CACHE_DIR/$name"
+    curl -fSL --retry 3 -o "$CACHE_DIR/$name.tmp" "$url"
+    mv "$CACHE_DIR/$name.tmp" "$CACHE_DIR/$name"
+}
+fetch_if_missing OpenSSH-Win64.zip \
+    "https://github.com/PowerShell/Win32-OpenSSH/releases/download/v9.5.0.0p1-Beta/OpenSSH-Win64.zip"
+fetch_if_missing WindowsAzureVmAgent.msi \
+    "https://go.microsoft.com/fwlink/?LinkID=394789"
+fetch_if_missing LibreOffice_24.8.2.1_Win_x86-64.msi \
+    "https://downloadarchive.documentfoundation.org/libreoffice/old/24.8.2.1/win/x86_64/LibreOffice_24.8.2.1_Win_x86-64.msi"
+
 workdir="$(mktemp -d /tmp/waa-packer-XXXXXX)"
 pflash_vars="$workdir/OVMF_VARS.fd"
 tpm_dir="$workdir/tpm"

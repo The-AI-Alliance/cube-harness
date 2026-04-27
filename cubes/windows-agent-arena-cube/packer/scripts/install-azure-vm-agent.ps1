@@ -20,9 +20,16 @@ if (Get-Service -Name WindowsAzureGuestAgent -ErrorAction SilentlyContinue) {
 $agentUri = 'https://go.microsoft.com/fwlink/?LinkID=394789'
 $msiPath  = 'C:\Windows\Temp\WindowsAzureVmAgent.msi'
 
-Write-Host 'Downloading Azure VM Agent...'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-Invoke-WebRequest -Uri $agentUri -OutFile $msiPath -UseBasicParsing
+# Prefer a cached MSI pre-staged by the Packer file provisioner from
+# ~/.cube/cache/ on the host. Falls back to a guest-side download through
+# QEMU's bandwidth-limited user-mode networking.
+if (Test-Path $msiPath) {
+    Write-Host "Using pre-staged $msiPath (skipping Microsoft download)."
+} else {
+    Write-Host 'Downloading Azure VM Agent...'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $agentUri -OutFile $msiPath -UseBasicParsing
+}
 
 Write-Host 'Installing Azure VM Agent (silent)...'
 $proc = Start-Process -FilePath 'msiexec.exe' `
