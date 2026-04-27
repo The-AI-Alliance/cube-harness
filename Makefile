@@ -62,6 +62,10 @@ coverage:
 
 review:
 	@if [ -z "$(PR)" ]; then echo "Usage: make review PR=<number>"; exit 1; fi
+	@if ! git diff --quiet || ! git diff --cached --quiet; then \
+	    echo "❌ Working tree has uncommitted changes. Stash or commit before running make review."; \
+	    exit 1; \
+	fi
 	@echo "🔍 Checking out PR $(PR)"
 	gh pr checkout $(PR) --repo The-AI-Alliance/cube-harness
 	@DEPENDS_ON=$$(gh pr view $(PR) --repo The-AI-Alliance/cube-harness --json body --jq '.body' \
@@ -70,9 +74,14 @@ review:
 	    echo "📦 Depends-on: $$DEPENDS_ON"; \
 	    BRANCH=$$(echo "$$DEPENDS_ON" | cut -d/ -f2-); \
 	    if [ -d "cube-standard" ]; then \
-	        echo "⚠️  cube-standard/ already exists — skipping clone/checkout."; \
-	        echo "   To use branch $$BRANCH, manage it manually:"; \
-	        echo "   git -C cube-standard checkout $$BRANCH"; \
+	        CURRENT=$$(git -C cube-standard rev-parse --abbrev-ref HEAD); \
+	        if [ "$$CURRENT" != "$$BRANCH" ]; then \
+	            echo "❌ cube-standard/ already exists but is on branch '$$CURRENT' (expected '$$BRANCH')."; \
+	            echo "   Switch it manually: git -C cube-standard checkout $$BRANCH"; \
+	            echo "   Or remove cube-standard/ and re-run make review PR=$(PR)."; \
+	            exit 1; \
+	        fi; \
+	        echo "✅ cube-standard/ already on branch $$BRANCH"; \
 	    else \
 	        echo "Cloning cube-standard branch: $$BRANCH"; \
 	        git clone --branch "$$BRANCH" https://github.com/The-AI-Alliance/cube-standard.git cube-standard; \
