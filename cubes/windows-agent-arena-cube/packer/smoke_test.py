@@ -64,12 +64,20 @@ def start_swtpm(sock_dir: Path) -> subprocess.Popen:
     sock_dir.mkdir(parents=True, exist_ok=True)
     sock = sock_dir / "sock"
     p = subprocess.Popen(
-        ["swtpm", "socket",
-         "--tpmstate", f"dir={sock_dir}",
-         "--ctrl", f"type=unixio,path={sock}",
-         "--tpm2",
-         "--log", f"file={sock_dir}/swtpm.log,level=20"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        [
+            "swtpm",
+            "socket",
+            "--tpmstate",
+            f"dir={sock_dir}",
+            "--ctrl",
+            f"type=unixio,path={sock}",
+            "--tpm2",
+            "--log",
+            f"file={sock_dir}/swtpm.log,level=20",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     for _ in range(50):
         if sock.exists():
             return p
@@ -80,8 +88,7 @@ def start_swtpm(sock_dir: Path) -> subprocess.Popen:
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="[smoke] %(message)s")
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--image", type=Path, default=DEFAULT_IMG)
     ap.add_argument("--ssh-key", type=Path, default=Path.home() / ".ssh" / "id_ed25519")
     ap.add_argument("--agent-timeout", type=int, default=900)
@@ -106,9 +113,11 @@ def main() -> int:
 
     logger.info("workdir=%s", workdir)
     shutil.copy(OVMF_VARS, pflash)
-    subprocess.run(["qemu-img", "create", "-f", "qcow2",
-                    "-b", str(img), "-F", "qcow2", str(overlay)],
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["qemu-img", "create", "-f", "qcow2", "-b", str(img), "-F", "qcow2", str(overlay)],
+        check=True,
+        capture_output=True,
+    )
 
     port_agent = free_port(18000)
     port_ssh = free_port(18200)
@@ -119,25 +128,37 @@ def main() -> int:
 
         cmd = [
             "qemu-system-x86_64",
-            "-machine", "q35,smm=on",
-            "-cpu", "host",
+            "-machine",
+            "q35,smm=on",
+            "-cpu",
+            "host",
             "-enable-kvm",
-            "-m", "8G",
-            "-smp", "8",
-            "-drive", f"if=pflash,format=raw,readonly=on,file={OVMF_CODE}",
-            "-drive", f"if=pflash,format=raw,file={pflash}",
-            "-chardev", f"socket,id=chrtpm,path={tpm_dir}/sock",
-            "-tpmdev", "emulator,id=tpm0,chardev=chrtpm",
-            "-device", "tpm-tis,tpmdev=tpm0",
-            "-drive", f"file={overlay},format=qcow2,if=virtio",
-            "-netdev", f"user,id=n0,hostfwd=tcp:127.0.0.1:{port_agent}-:5000,"
-                        f"hostfwd=tcp:127.0.0.1:{port_ssh}-:22",
-            "-device", "virtio-net-pci,netdev=n0",
-            "-vga", "virtio",
-            "-display", "none",
+            "-m",
+            "8G",
+            "-smp",
+            "8",
+            "-drive",
+            f"if=pflash,format=raw,readonly=on,file={OVMF_CODE}",
+            "-drive",
+            f"if=pflash,format=raw,file={pflash}",
+            "-chardev",
+            f"socket,id=chrtpm,path={tpm_dir}/sock",
+            "-tpmdev",
+            "emulator,id=tpm0,chardev=chrtpm",
+            "-device",
+            "tpm-tis,tpmdev=tpm0",
+            "-drive",
+            f"file={overlay},format=qcow2,if=virtio",
+            "-netdev",
+            f"user,id=n0,hostfwd=tcp:127.0.0.1:{port_agent}-:5000,hostfwd=tcp:127.0.0.1:{port_ssh}-:22",
+            "-device",
+            "virtio-net-pci,netdev=n0",
+            "-vga",
+            "virtio",
+            "-display",
+            "none",
         ]
-        logger.info("starting qemu: guest:5000 → local:%d, guest:22 → local:%d",
-                    port_agent, port_ssh)
+        logger.info("starting qemu: guest:5000 → local:%d, guest:22 → local:%d", port_agent, port_ssh)
         qemu = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # Wait for the guest agent (longer timeout — first boot post-sysprep
@@ -164,15 +185,29 @@ def main() -> int:
             if tcp_reachable("127.0.0.1", port_ssh, timeout=3):
                 # Try actually SSH'ing.
                 r = subprocess.run(
-                    ["ssh", "-i", str(args.ssh_key),
-                     "-o", "IdentitiesOnly=yes",
-                     "-o", "StrictHostKeyChecking=no",
-                     "-o", "UserKnownHostsFile=/dev/null",
-                     "-o", "ConnectTimeout=5",
-                     "-o", "BatchMode=yes",
-                     "-p", str(port_ssh),
-                     "Docker@127.0.0.1", "echo SSH_OK"],
-                    capture_output=True, text=True, timeout=20)
+                    [
+                        "ssh",
+                        "-i",
+                        str(args.ssh_key),
+                        "-o",
+                        "IdentitiesOnly=yes",
+                        "-o",
+                        "StrictHostKeyChecking=no",
+                        "-o",
+                        "UserKnownHostsFile=/dev/null",
+                        "-o",
+                        "ConnectTimeout=5",
+                        "-o",
+                        "BatchMode=yes",
+                        "-p",
+                        str(port_ssh),
+                        "Docker@127.0.0.1",
+                        "echo SSH_OK",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                )
                 if "SSH_OK" in r.stdout:
                     logger.info("SSH: UP + authenticated as Docker")
                     ssh_up = True
@@ -187,12 +222,16 @@ def main() -> int:
     finally:
         if qemu and qemu.poll() is None:
             qemu.terminate()
-            try: qemu.wait(timeout=15)
-            except subprocess.TimeoutExpired: qemu.kill()
+            try:
+                qemu.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                qemu.kill()
         if swtpm and swtpm.poll() is None:
             swtpm.terminate()
-            try: swtpm.wait(timeout=5)
-            except subprocess.TimeoutExpired: swtpm.kill()
+            try:
+                swtpm.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                swtpm.kill()
         shutil.rmtree(workdir, ignore_errors=True)
 
 

@@ -7,8 +7,6 @@ Usage:
 import json
 import logging
 import os
-import sys
-from urllib.parse import urlparse
 
 import requests
 from cube_infra_azure import AzureInfraConfig
@@ -34,8 +32,7 @@ INFRA = AzureInfraConfig(
 def post_execute(base_url: str, command: list[str], shell: bool) -> dict | None:
     payload = json.dumps({"command": command, "shell": shell})
     try:
-        r = requests.post(f"{base_url}/execute", data=payload,
-                          headers={"Content-Type": "application/json"}, timeout=30)
+        r = requests.post(f"{base_url}/execute", data=payload, headers={"Content-Type": "application/json"}, timeout=30)
         if r.status_code == 200:
             return r.json()
         return {"status_code": r.status_code, "text": r.text[:500]}
@@ -62,9 +59,11 @@ def main() -> None:
         print(f"[socat -V] -> {out3}")
 
         # 4. cygwin/git-bash bin paths
-        for p in [r"C:\Program Files\Git\usr\bin\socat.exe",
-                  r"C:\cygwin64\bin\socat.exe",
-                  r"C:\msys64\usr\bin\socat.exe"]:
+        for p in [
+            r"C:\Program Files\Git\usr\bin\socat.exe",
+            r"C:\cygwin64\bin\socat.exe",
+            r"C:\msys64\usr\bin\socat.exe",
+        ]:
             o = post_execute(base, ["powershell", "-Command", f"Test-Path '{p}'"], shell=False)
             print(f"[Test-Path {p}] -> {o}")
     finally:

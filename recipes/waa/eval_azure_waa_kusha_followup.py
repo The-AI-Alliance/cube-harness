@@ -12,7 +12,6 @@ Usage:
 
 import logging
 import os
-import sys
 from datetime import datetime
 
 from cube_infra_azure import AzureInfraConfig
@@ -146,8 +145,7 @@ def main() -> None:
         logging.warning("Task IDs not in benchmark.task_metadata: %s", missing)
     keep_ids = [tid for tid in keep_ids if tid in available]
     benchmark = benchmark.subset_from_list(keep_ids)
-    logging.info("Follow-up eval: %d tasks (%d chrome, %d msedge)",
-                 len(keep_ids), len(CHROME_IDS), len(MSEDGE_IDS))
+    logging.info("Follow-up eval: %d tasks (%d chrome, %d msedge)", len(keep_ids), len(CHROME_IDS), len(MSEDGE_IDS))
 
     exp = Experiment(
         name="waa_azure_kusha_haiku_followup",

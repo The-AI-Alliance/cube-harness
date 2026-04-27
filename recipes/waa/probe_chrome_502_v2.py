@@ -107,24 +107,35 @@ def show(label: str, result: dict) -> None:
 
 def baseline(base: str) -> None:
     section("Phase A — baseline (no launch from us yet)")
-    show("A1 tasklist | findstr chrome.exe",
-         post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
-    show("A2 tasklist | findstr socat",
-         post_execute(base, ["cmd", "/c", "tasklist | findstr socat"]))
-    show("A3 tasklist | findstr caddy",
-         post_execute(base, ["cmd", "/c", "tasklist | findstr caddy"]))
-    show("A4 netstat | findstr :1337",
-         post_execute(base, ["cmd", "/c", "netstat -an | findstr :1337"]))
-    show("A5 netstat | findstr :9222",
-         post_execute(base, ["cmd", "/c", "netstat -an | findstr :9222"]))
-    show("A6 where chrome / chrome.exe",
-         post_execute(base, ["cmd", "/c", "where chrome 2>NUL & where chrome.exe 2>NUL"]))
-    show("A7 where socat",
-         post_execute(base, ["cmd", "/c", "where socat 2>NUL"]))
-    show("A8 Get-Service caddy",
-         post_execute(base, ["powershell", "-Command", "Get-Service -Name caddy* 2>$null | Format-List Name,Status,DisplayName"], shell=False))
-    show("A9 chrome.exe registry path",
-         post_execute(base, ["powershell", "-Command", r"Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty '(default)'"], shell=False))
+    show("A1 tasklist | findstr chrome.exe", post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
+    show("A2 tasklist | findstr socat", post_execute(base, ["cmd", "/c", "tasklist | findstr socat"]))
+    show("A3 tasklist | findstr caddy", post_execute(base, ["cmd", "/c", "tasklist | findstr caddy"]))
+    show("A4 netstat | findstr :1337", post_execute(base, ["cmd", "/c", "netstat -an | findstr :1337"]))
+    show("A5 netstat | findstr :9222", post_execute(base, ["cmd", "/c", "netstat -an | findstr :9222"]))
+    show(
+        "A6 where chrome / chrome.exe", post_execute(base, ["cmd", "/c", "where chrome 2>NUL & where chrome.exe 2>NUL"])
+    )
+    show("A7 where socat", post_execute(base, ["cmd", "/c", "where socat 2>NUL"]))
+    show(
+        "A8 Get-Service caddy",
+        post_execute(
+            base,
+            ["powershell", "-Command", "Get-Service -Name caddy* 2>$null | Format-List Name,Status,DisplayName"],
+            shell=False,
+        ),
+    )
+    show(
+        "A9 chrome.exe registry path",
+        post_execute(
+            base,
+            [
+                "powershell",
+                "-Command",
+                r"Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty '(default)'",
+            ],
+            shell=False,
+        ),
+    )
 
 
 def variation_b(base: str) -> None:
@@ -132,37 +143,38 @@ def variation_b(base: str) -> None:
     print(f"  launch: {post_launch(base, ['start', 'chrome', '--remote-debugging-port=1337'])}")
     print("  waiting 30s for chrome to settle...")
     time.sleep(30)
-    show("B1 tasklist chrome.exe (after launch)",
-         post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
-    show("B2 netstat :1337",
-         post_execute(base, ["cmd", "/c", "netstat -an | findstr :1337"]))
-    show("B3 netstat :9222",
-         post_execute(base, ["cmd", "/c", "netstat -an | findstr :9222"]))
-    show("B4 curl localhost:1337/json/version",
-         post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:1337/json/version"]))
-    show("B5 curl localhost:9222/json/version (Caddy/socat)",
-         post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:9222/json/version"]))
+    show("B1 tasklist chrome.exe (after launch)", post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
+    show("B2 netstat :1337", post_execute(base, ["cmd", "/c", "netstat -an | findstr :1337"]))
+    show("B3 netstat :9222", post_execute(base, ["cmd", "/c", "netstat -an | findstr :9222"]))
+    show(
+        "B4 curl localhost:1337/json/version",
+        post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:1337/json/version"]),
+    )
+    show(
+        "B5 curl localhost:9222/json/version (Caddy/socat)",
+        post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:9222/json/version"]),
+    )
 
 
 def variation_c(base: str) -> None:
     section("Phase C — kill chrome, then `chrome.exe --remote-debugging-port=1337` directly")
-    show("C1 taskkill /IM chrome.exe /F",
-         post_execute(base, ["cmd", "/c", "taskkill /IM chrome.exe /F /T"]))
+    show("C1 taskkill /IM chrome.exe /F", post_execute(base, ["cmd", "/c", "taskkill /IM chrome.exe /F /T"]))
     time.sleep(3)
-    show("C2 tasklist chrome.exe (post-kill)",
-         post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
+    show("C2 tasklist chrome.exe (post-kill)", post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
     # Use cmd /c so we can spawn chrome.exe by name (Windows resolves via App Paths registry)
     print(f"  launch: {post_launch(base, ['cmd', '/c', 'start', '', 'chrome.exe', '--remote-debugging-port=1337'])}")
     print("  waiting 30s for chrome to settle...")
     time.sleep(30)
-    show("C3 tasklist chrome.exe (after re-launch)",
-         post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
-    show("C4 netstat :1337",
-         post_execute(base, ["cmd", "/c", "netstat -an | findstr :1337"]))
-    show("C5 curl localhost:1337/json/version",
-         post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:1337/json/version"]))
-    show("C6 curl localhost:9222/json/version",
-         post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:9222/json/version"]))
+    show("C3 tasklist chrome.exe (after re-launch)", post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
+    show("C4 netstat :1337", post_execute(base, ["cmd", "/c", "netstat -an | findstr :1337"]))
+    show(
+        "C5 curl localhost:1337/json/version",
+        post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:1337/json/version"]),
+    )
+    show(
+        "C6 curl localhost:9222/json/version",
+        post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:9222/json/version"]),
+    )
 
 
 def main() -> None:

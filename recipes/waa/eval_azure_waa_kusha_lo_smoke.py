@@ -143,8 +143,7 @@ def main() -> None:
         logging.warning("Task IDs not in benchmark.task_metadata: %s", missing)
     keep_ids = [tid for tid in keep_ids if tid in available]
     benchmark = benchmark.subset_from_list(keep_ids)
-    logging.info("LO smoke eval: %d tasks (%d calc, %d writer)",
-                 len(keep_ids), len(CALC_IDS), len(WRITER_IDS))
+    logging.info("LO smoke eval: %d tasks (%d calc, %d writer)", len(keep_ids), len(CALC_IDS), len(WRITER_IDS))
 
     exp = Experiment(
         name="waa_azure_kusha_haiku_lo_smoke",

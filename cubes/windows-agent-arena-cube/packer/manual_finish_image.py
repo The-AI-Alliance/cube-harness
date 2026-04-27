@@ -58,7 +58,9 @@ def log(msg: str) -> None:
 
 
 def start_http_server(serve_dir: Path) -> tuple[socketserver.TCPServer, threading.Thread]:
-    handler = lambda *a, **kw: http.server.SimpleHTTPRequestHandler(*a, directory=str(serve_dir), **kw)
+    def handler(*a: object, **kw: object) -> http.server.SimpleHTTPRequestHandler:
+        return http.server.SimpleHTTPRequestHandler(*a, directory=str(serve_dir), **kw)
+
     httpd = socketserver.ThreadingTCPServer(("0.0.0.0", HTTP_PORT), handler)
     httpd.allow_reuse_address = True
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -85,13 +87,19 @@ def boot_qemu(workdir: Path) -> tuple[subprocess.Popen, subprocess.Popen]:
     tpm_dir = workdir / "tpm"
     tpm_dir.mkdir(parents=True, exist_ok=True)
     tpm_sock = tpm_dir / "sock"
-    swtpm = subprocess.Popen([
-        "swtpm", "socket",
-        "--tpmstate", f"dir={tpm_dir}",
-        "--ctrl", f"type=unixio,path={tpm_sock}",
-        "--tpm2",
-        "--log", f"file={tpm_dir}/swtpm.log,level=20",
-    ])
+    swtpm = subprocess.Popen(
+        [
+            "swtpm",
+            "socket",
+            "--tpmstate",
+            f"dir={tpm_dir}",
+            "--ctrl",
+            f"type=unixio,path={tpm_sock}",
+            "--tpm2",
+            "--log",
+            f"file={tpm_dir}/swtpm.log,level=20",
+        ]
+    )
     for _ in range(50):
         if tpm_sock.exists():
             break
@@ -103,21 +111,38 @@ def boot_qemu(workdir: Path) -> tuple[subprocess.Popen, subprocess.Popen]:
     ovmf_vars = workdir / "OVMF_VARS.fd"
     shutil.copy("/usr/share/OVMF/OVMF_VARS_4M.ms.fd", ovmf_vars)
 
-    qemu = subprocess.Popen([
-        "qemu-system-x86_64",
-        "-cpu", "host", "-enable-kvm",
-        "-machine", "q35,smm=on",
-        "-m", "8192", "-smp", "8",
-        "-drive", f"file={OVERLAY},format=qcow2,if=virtio,cache=writeback,discard=ignore",
-        "-drive", f"if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.ms.fd",
-        "-drive", f"if=pflash,format=raw,file={ovmf_vars}",
-        "-chardev", f"socket,id=chrtpm,path={tpm_sock}",
-        "-tpmdev", "emulator,id=tpm0,chardev=chrtpm",
-        "-device", "tpm-tis,tpmdev=tpm0",
-        "-netdev", f"user,id=u0,hostfwd=tcp:127.0.0.1:{WINRM_PORT}-:5985",
-        "-device", "virtio-net,netdev=u0",
-        "-display", "none",
-    ])
+    qemu = subprocess.Popen(
+        [
+            "qemu-system-x86_64",
+            "-cpu",
+            "host",
+            "-enable-kvm",
+            "-machine",
+            "q35,smm=on",
+            "-m",
+            "8192",
+            "-smp",
+            "8",
+            "-drive",
+            f"file={OVERLAY},format=qcow2,if=virtio,cache=writeback,discard=ignore",
+            "-drive",
+            "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.ms.fd",
+            "-drive",
+            f"if=pflash,format=raw,file={ovmf_vars}",
+            "-chardev",
+            f"socket,id=chrtpm,path={tpm_sock}",
+            "-tpmdev",
+            "emulator,id=tpm0,chardev=chrtpm",
+            "-device",
+            "tpm-tis,tpmdev=tpm0",
+            "-netdev",
+            f"user,id=u0,hostfwd=tcp:127.0.0.1:{WINRM_PORT}-:5985",
+            "-device",
+            "virtio-net,netdev=u0",
+            "-display",
+            "none",
+        ]
+    )
     return swtpm, qemu
 
 
@@ -148,7 +173,7 @@ def wait_for_winrm(timeout: int = 600) -> winrm.Session:
 def guest_curl(s: winrm.Session, name: str) -> None:
     """Download a file from host HTTP into C:\\Windows\\Temp\\<name>."""
     dst = f"C:\\Windows\\Temp\\{name}"
-    cmd = f'curl -sf --max-time 1200 -o {dst} http://10.0.2.2:{HTTP_PORT}/{name}'
+    cmd = f"curl -sf --max-time 1200 -o {dst} http://10.0.2.2:{HTTP_PORT}/{name}"
     log(f"curl-ing {name} → {dst}")
     r = s.run_cmd(cmd)
     if r.status_code != 0:
@@ -165,6 +190,7 @@ def run_elevated_script(s: winrm.Session, script_name: str) -> None:
     WinRM commands aren't blocked.
     """
     import base64
+
     label = script_name.replace(".ps1", "")
     log(f"=== {label} ===")
     src_url = f"http://10.0.2.2:{HTTP_PORT}/{script_name}"
@@ -172,10 +198,10 @@ def run_elevated_script(s: winrm.Session, script_name: str) -> None:
     out_log = f"C:\\Windows\\Temp\\{label}.out"
     done = f"C:\\Windows\\Temp\\{label}.done"
     # Pull script to disk
-    r = s.run_cmd(f'curl -sf --max-time 60 -o {local} {src_url}')
+    r = s.run_cmd(f"curl -sf --max-time 60 -o {local} {src_url}")
     if r.status_code != 0:
         raise RuntimeError(f"curl {script_name} failed: {r.std_err[:300]!r}")
-    s.run_cmd(f'del {done} 2>NUL & del {out_log} 2>NUL')
+    s.run_cmd(f"del {done} 2>NUL & del {out_log} 2>NUL")
     # Inner PS: set env vars (configure-autologon.ps1 needs ADMIN_USER/PASSWORD),
     # then run the script and write a sentinel with its exit code. Use base64
     # encoding to avoid all the cmdline escape headaches.
@@ -189,7 +215,7 @@ def run_elevated_script(s: winrm.Session, script_name: str) -> None:
         f'"OK exit=$LASTEXITCODE" | Out-File -Encoding ascii "{done}"'
     )
     encoded = base64.b64encode(inner.encode("utf-16-le")).decode()
-    spawn_cmd = f'powershell -NoProfile -NonInteractive -EncodedCommand {encoded}'
+    spawn_cmd = f"powershell -NoProfile -NonInteractive -EncodedCommand {encoded}"
     # Wrap the spawn itself in a tiny PS that calls Win32_Process.Create.
     spawn_ps = (
         f'$r = ([WMICLASS]"\\\\.\\ROOT\\CIMV2:Win32_Process").Create("{spawn_cmd}"); '
@@ -204,7 +230,7 @@ def run_elevated_script(s: winrm.Session, script_name: str) -> None:
     deadline = time.time() + 1800
     while time.time() < deadline:
         try:
-            r = s.run_cmd(f'if exist {done} (type {done}) else (echo pending)')
+            r = s.run_cmd(f"if exist {done} (type {done}) else (echo pending)")
             status = r.std_out.decode().strip()
         except Exception as exc:
             log(f"  poll transient: {exc}")
@@ -213,7 +239,7 @@ def run_elevated_script(s: winrm.Session, script_name: str) -> None:
         if status.startswith("OK"):
             log(f"  done: {status}")
             try:
-                r2 = s.run_cmd(f'type {out_log} 2>NUL')
+                r2 = s.run_cmd(f"type {out_log} 2>NUL")
                 log(f"  ---{label}.out (last 25 lines)---")
                 for line in r2.std_out.decode().splitlines()[-25:]:
                     log(f"  {line}")
@@ -231,7 +257,7 @@ def main() -> int:
     if not OVERLAY.exists():
         log(f"OVERLAY missing: {OVERLAY}")
         return 1
-    log(f"using overlay: {OVERLAY} ({OVERLAY.stat().st_size // (1024*1024)} MiB)")
+    log(f"using overlay: {OVERLAY} ({OVERLAY.stat().st_size // (1024 * 1024)} MiB)")
 
     serve_dir = stage_serve_dir()
     log(f"serving {serve_dir} on http://0.0.0.0:{HTTP_PORT}")
@@ -262,7 +288,7 @@ def main() -> int:
             log("QEMU did not exit cleanly; SIGTERM")
             qemu.terminate()
             qemu.wait(timeout=30)
-        log(f"DONE. Final image: {OVERLAY} ({OVERLAY.stat().st_size // (1024*1024)} MiB)")
+        log(f"DONE. Final image: {OVERLAY} ({OVERLAY.stat().st_size // (1024 * 1024)} MiB)")
         return 0
     finally:
         if qemu and qemu.poll() is None:

@@ -103,7 +103,7 @@ Write-Output "winrm-launched pid=$($wmi.ProcessId)"
 
 # cmd.exe spawns ~10x faster than powershell — important when the guest is
 # under load from Enable-PSRemoting and PS cold-start can exceed 30s.
-_CMD_POLL_WINRM = r'if exist C:\winrm-bootstrap.status (type C:\winrm-bootstrap.status) else (echo pending)'
+_CMD_POLL_WINRM = r"if exist C:\winrm-bootstrap.status (type C:\winrm-bootstrap.status) else (echo pending)"
 
 
 def render_enable_steps(password: str) -> list[tuple[str, str]]:
@@ -145,8 +145,7 @@ def wait_for_agent(endpoint: str, timeout: int = 600) -> None:
     raise TimeoutError(f"guest agent never ready at {endpoint} within {timeout}s")
 
 
-def guest_execute(endpoint: str, command: str | list[str], shell: bool = False,
-                  timeout: int = 180) -> dict:
+def guest_execute(endpoint: str, command: str | list[str], shell: bool = False, timeout: int = 180) -> dict:
     """POST to /setup/execute — same contract as SetupController._setup_execute."""
     payload = json.dumps({"command": command, "shell": shell}).encode()
     req = urllib.request.Request(
@@ -173,25 +172,38 @@ def backup_exists(base_image: Path) -> bool:
     return any(DEFAULT_BACKUPS.glob(f"{base_image.stem}*.bak*"))
 
 
-def start_qemu(base_image: Path, overlay: Path, local_port: int,
-               tpm_sock: Path, pflash_vars: Path) -> subprocess.Popen:
+def start_qemu(base_image: Path, overlay: Path, local_port: int, tpm_sock: Path, pflash_vars: Path) -> subprocess.Popen:
     cmd = [
         "qemu-system-x86_64",
-        "-machine", "q35,smm=on",
-        "-cpu", "host",
+        "-machine",
+        "q35,smm=on",
+        "-cpu",
+        "host",
         "-enable-kvm",
-        "-m", "8G",
-        "-smp", "8",
-        "-drive", f"if=pflash,format=raw,readonly=on,file={OVMF_CODE}",
-        "-drive", f"if=pflash,format=raw,file={pflash_vars}",
-        "-chardev", f"socket,id=chrtpm,path={tpm_sock}",
-        "-tpmdev", "emulator,id=tpm0,chardev=chrtpm",
-        "-device", "tpm-tis,tpmdev=tpm0",
-        "-drive", f"file={overlay},format=qcow2,if=virtio",
-        "-netdev", f"user,id=net0,hostfwd=tcp:127.0.0.1:{local_port}-:5000",
-        "-device", "virtio-net-pci,netdev=net0",
-        "-vga", "virtio",
-        "-display", "none",
+        "-m",
+        "8G",
+        "-smp",
+        "8",
+        "-drive",
+        f"if=pflash,format=raw,readonly=on,file={OVMF_CODE}",
+        "-drive",
+        f"if=pflash,format=raw,file={pflash_vars}",
+        "-chardev",
+        f"socket,id=chrtpm,path={tpm_sock}",
+        "-tpmdev",
+        "emulator,id=tpm0,chardev=chrtpm",
+        "-device",
+        "tpm-tis,tpmdev=tpm0",
+        "-drive",
+        f"file={overlay},format=qcow2,if=virtio",
+        "-netdev",
+        f"user,id=net0,hostfwd=tcp:127.0.0.1:{local_port}-:5000",
+        "-device",
+        "virtio-net-pci,netdev=net0",
+        "-vga",
+        "virtio",
+        "-display",
+        "none",
     ]
     logger.info("starting qemu (local:%d → guest:5000, overlay=%s)", local_port, overlay.name)
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -202,13 +214,18 @@ def start_swtpm(sock_dir: Path) -> subprocess.Popen:
     sock = sock_dir / "sock"
     proc = subprocess.Popen(
         [
-            "swtpm", "socket",
-            "--tpmstate", f"dir={sock_dir}",
-            "--ctrl", f"type=unixio,path={sock}",
+            "swtpm",
+            "socket",
+            "--tpmstate",
+            f"dir={sock_dir}",
+            "--ctrl",
+            f"type=unixio,path={sock}",
             "--tpm2",
-            "--log", f"file={sock_dir}/swtpm.log,level=20",
+            "--log",
+            f"file={sock_dir}/swtpm.log,level=20",
         ],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(50):
         if sock.exists():
@@ -221,20 +238,21 @@ def start_swtpm(sock_dir: Path) -> subprocess.Popen:
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="[bootstrap_winrm] %(message)s")
 
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--base", type=Path, default=Path(os.environ.get("BASE_IMAGE", DEFAULT_BASE)))
-    parser.add_argument("--skip-backup-check", action="store_true",
-                        help="Don't require a backup under ~/.cube/images/backups/")
-    parser.add_argument("--keep-overlay", action="store_true",
-                        help="Don't commit/delete the overlay (for debugging).")
-    parser.add_argument("--timeout", type=int, default=900,
-                        help="Seconds to wait for guest agent (default 900)")
-    parser.add_argument("--admin-password", default=os.environ.get("WAA_BUILD_ADMIN_PASSWORD"),
-                        help="Password to set on the Docker user (empty-password blocks "
-                             "WinRM). Also accepts WAA_BUILD_ADMIN_PASSWORD env var. "
-                             "This is the same value Packer later uses as "
-                             "PKR_VAR_admin_password.")
+    parser.add_argument(
+        "--skip-backup-check", action="store_true", help="Don't require a backup under ~/.cube/images/backups/"
+    )
+    parser.add_argument("--keep-overlay", action="store_true", help="Don't commit/delete the overlay (for debugging).")
+    parser.add_argument("--timeout", type=int, default=900, help="Seconds to wait for guest agent (default 900)")
+    parser.add_argument(
+        "--admin-password",
+        default=os.environ.get("WAA_BUILD_ADMIN_PASSWORD"),
+        help="Password to set on the Docker user (empty-password blocks "
+        "WinRM). Also accepts WAA_BUILD_ADMIN_PASSWORD env var. "
+        "This is the same value Packer later uses as "
+        "PKR_VAR_admin_password.",
+    )
     args = parser.parse_args()
 
     if not args.admin_password:
@@ -253,7 +271,10 @@ def main() -> int:
         logger.error(
             "no backup found under %s for %s — this script modifies the base image in place.\n"
             "  Run `cp %s ~/.cube/images/backups/%s.bak` first, or pass --skip-backup-check.",
-            DEFAULT_BACKUPS, base.name, base, base.name,
+            DEFAULT_BACKUPS,
+            base.name,
+            base,
+            base.name,
         )
         return 2
 
@@ -274,9 +295,9 @@ def main() -> int:
     logger.info("workdir: %s", workdir)
     shutil.copy(OVMF_VARS, pflash_vars)
     subprocess.run(
-        ["qemu-img", "create", "-f", "qcow2",
-         "-b", str(base), "-F", "qcow2", str(overlay)],
-        check=True, capture_output=True,
+        ["qemu-img", "create", "-f", "qcow2", "-b", str(base), "-F", "qcow2", str(overlay)],
+        check=True,
+        capture_output=True,
     )
 
     qemu: subprocess.Popen | None = None

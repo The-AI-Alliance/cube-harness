@@ -92,8 +92,7 @@ def main() -> None:
 
     try:
         # 0. Sanity — what does Windows say is on port 1337 BEFORE we launch chrome?
-        show("netstat 1337 (before chrome)",
-             post_execute(base, ["cmd", "/c", "netstat -an | findstr 1337"]))
+        show("netstat 1337 (before chrome)", post_execute(base, ["cmd", "/c", "netstat -an | findstr 1337"]))
 
         # 1. Launch chrome (same command our task config uses)
         print("\n--- launching: start chrome --remote-debugging-port=1337 ---")
@@ -104,21 +103,25 @@ def main() -> None:
             print(f"\n=== T+{delay}s after chrome launch ===")
             time.sleep(delay if delay == 5 else delay - (5 if delay == 15 else (15 if delay == 30 else 30)))
 
-            show("tasklist | findstr chrome",
-                 post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
+            show("tasklist | findstr chrome", post_execute(base, ["cmd", "/c", "tasklist | findstr chrome.exe"]))
 
-            show("netstat -an | findstr 1337",
-                 post_execute(base, ["cmd", "/c", "netstat -an | findstr 1337"]))
+            show("netstat -an | findstr 1337", post_execute(base, ["cmd", "/c", "netstat -an | findstr 1337"]))
 
-            show("netstat -an | findstr 9222 (socat target?)",
-                 post_execute(base, ["cmd", "/c", "netstat -an | findstr 9222"]))
+            show(
+                "netstat -an | findstr 9222 (socat target?)",
+                post_execute(base, ["cmd", "/c", "netstat -an | findstr 9222"]),
+            )
 
-            show("curl -i http://localhost:1337/json/version",
-                 post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:1337/json/version"]))
+            show(
+                "curl -i http://localhost:1337/json/version",
+                post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:1337/json/version"]),
+            )
 
             # Also try port 9222 (the socat-forwarded one — if socat is running)
-            show("curl -i http://localhost:9222/json/version",
-                 post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:9222/json/version"]))
+            show(
+                "curl -i http://localhost:9222/json/version",
+                post_execute(base, ["cmd", "/c", "curl -i --max-time 5 http://localhost:9222/json/version"]),
+            )
     finally:
         print("\n=== tearing down ===")
         handle.close()

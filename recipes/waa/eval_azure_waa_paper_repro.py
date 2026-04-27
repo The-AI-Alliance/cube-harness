@@ -27,7 +27,6 @@ Usage:
 
 import logging
 import os
-import sys
 from datetime import datetime
 
 from cube_infra_azure import AzureInfraConfig

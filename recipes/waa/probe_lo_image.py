@@ -44,12 +44,12 @@ INFRA = AzureInfraConfig(
 # The 8 apps WAA's setup.ps1 is supposed to install. LO is the new addition.
 APP_PATHS = {
     "LibreOffice": r"C:\Program Files\LibreOffice\program\soffice.exe",
-    "VLC":         r"C:\Program Files\VideoLAN\VLC\vlc.exe",
-    "GIMP":        r"C:\Program Files\GIMP 2\bin\gimp-2.10.exe",
-    "Chrome":      r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    "Edge":        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    "7zip":        r"C:\Program Files\7-Zip\7z.exe",
-    "Git":         r"C:\Program Files\Git\bin\git.exe",
+    "VLC": r"C:\Program Files\VideoLAN\VLC\vlc.exe",
+    "GIMP": r"C:\Program Files\GIMP 2\bin\gimp-2.10.exe",
+    "Chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    "Edge": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    "7zip": r"C:\Program Files\7-Zip\7z.exe",
+    "Git": r"C:\Program Files\Git\bin\git.exe",
     "Thunderbird": r"C:\Program Files\Mozilla Thunderbird\thunderbird.exe",
 }
 
@@ -57,8 +57,7 @@ APP_PATHS = {
 def post_execute(base: str, command: list[str], shell: bool = True) -> dict:
     payload = json.dumps({"command": command, "shell": shell})
     try:
-        r = requests.post(f"{base}/execute", data=payload,
-                          headers={"Content-Type": "application/json"}, timeout=60)
+        r = requests.post(f"{base}/execute", data=payload, headers={"Content-Type": "application/json"}, timeout=60)
         return r.json() if r.status_code == 200 else {"http_status": r.status_code, "text": r.text[:300]}
     except Exception as exc:
         return {"error": str(exc)}
@@ -134,8 +133,11 @@ Get-ChildItem 'C:\Program Files (x86)' -Force -ErrorAction SilentlyContinue | Fo
             print("\n--- LibreOffice version ---")
             r = post_execute(
                 base,
-                ["powershell", "-Command",
-                 r"(Get-WmiObject Win32_Product -Filter \"Name like 'LibreOffice%'\").Version"],
+                [
+                    "powershell",
+                    "-Command",
+                    r"(Get-WmiObject Win32_Product -Filter \"Name like 'LibreOffice%'\").Version",
+                ],
                 shell=False,
             )
             print(f"  {(r.get('output') or '').strip() or r}")

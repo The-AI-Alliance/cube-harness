@@ -111,20 +111,31 @@ def _chrome_replacement_steps(orig_cmd: list) -> list[dict]:
     """Build the kill-then-launch-with-fresh-profile sequence for chrome."""
     # Preserve any flags after the original binary (e.g. --force-renderer-accessibility)
     # except --remote-debugging-port, which we always set explicitly.
-    extras = [a for a in orig_cmd[(2 if orig_cmd[0] == "start" else 1) :]
-              if not a.startswith("--remote-debugging-port")]
+    extras = [
+        a for a in orig_cmd[(2 if orig_cmd[0] == "start" else 1) :] if not a.startswith("--remote-debugging-port")
+    ]
     return [
         {"type": "execute", "parameters": {"command": "taskkill /IM chrome.exe /F", "shell": "true"}},
         {"type": "sleep", "parameters": {"seconds": 2}},
-        {"type": "launch", "parameters": {"command": [
-            "cmd", "/c", "start", "", "/b",
-            _CHROME_EXE,
-            "--remote-debugging-port=1337",
-            f"--user-data-dir={_CDP_USER_DATA_DIR}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            *extras,
-        ], "shell": False}},
+        {
+            "type": "launch",
+            "parameters": {
+                "command": [
+                    "cmd",
+                    "/c",
+                    "start",
+                    "",
+                    "/b",
+                    _CHROME_EXE,
+                    "--remote-debugging-port=1337",
+                    f"--user-data-dir={_CDP_USER_DATA_DIR}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    *extras,
+                ],
+                "shell": False,
+            },
+        },
     ]
 
 

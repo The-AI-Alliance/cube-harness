@@ -318,7 +318,9 @@ class SetupController:
             # 5 retries with 2/4/8/16/32s backoff = 62s total, enough to outwait it.
             last_exc: Exception | None = None
             for attempt in range(5):
-                form = MultipartEncoder({"file_path": path, "file_data": (os.path.basename(path), open(cache_path, "rb"))})
+                form = MultipartEncoder(
+                    {"file_path": path, "file_data": (os.path.basename(path), open(cache_path, "rb"))}
+                )
                 try:
                     resp = requests.post(
                         self.http_server_setup_root + "/upload",

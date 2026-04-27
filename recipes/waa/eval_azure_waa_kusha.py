@@ -138,9 +138,7 @@ def main(debug: bool) -> None:
     # has a Playwright connect timing issue — see haiku.py recipe comment).
     excluded_domains = ("libreoffice_calc", "libreoffice_writer", "chrome", "msedge")
     keep_ids = [
-        tid
-        for tid, meta in benchmark.task_metadata.items()
-        if meta.extra_info.get("domain") not in excluded_domains
+        tid for tid, meta in benchmark.task_metadata.items() if meta.extra_info.get("domain") not in excluded_domains
     ]
     if debug:
         keep_ids = keep_ids[:1]
