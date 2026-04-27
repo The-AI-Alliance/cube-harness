@@ -141,10 +141,7 @@ def _obs_section_header(n: int | None) -> str:
 
 def _format_action_list(actions: "list[Action]") -> str:
     """Format a list of actions as a compact text string."""
-    parts = [
-        f"{a.name}({', '.join(f'{k}={v!r}' for k, v in a.arguments.items())})"
-        for a in actions
-    ]
+    parts = [f"{a.name}({', '.join(f'{k}={v!r}' for k, v in a.arguments.items())})" for a in actions]
     return ", ".join(parts) if parts else "no action"
 
 
@@ -245,9 +242,7 @@ class TextToolAdapter:
         for raw in re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL):
             try:
                 data = json.loads(raw.strip())
-                actions.append(
-                    Action(name=data["name"], arguments=data.get("arguments", {}))
-                )
+                actions.append(Action(name=data["name"], arguments=data.get("arguments", {})))
             except (json.JSONDecodeError, KeyError) as e:
                 logger.warning(f"Failed to parse tool_call: {raw!r} — {e}")
         return actions
@@ -273,9 +268,7 @@ class GennyConfig(AgentConfig):
     tools_as_text: bool = False
 
     # Summarize pass
-    enable_summarize: bool = (
-        False  # False = extract COT from act pass; True = separate summarize LLM call
-    )
+    enable_summarize: bool = False  # False = extract COT from act pass; True = separate summarize LLM call
     summarize_cot_only: bool = False  # True = concise CoT; False = verbose + Key Facts
     summarize_llm_config: LLMConfig | None = None  # None = reuse llm_config
     summarize_verbose_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
@@ -304,10 +297,7 @@ class GennyConfig(AgentConfig):
     @property
     def agent_name(self) -> str:
         name = f"Genny-{self.llm_config.model_name}".replace("/", "_")
-        if (
-            self.summarize_llm_config
-            and self.summarize_llm_config.model_name != self.llm_config.model_name
-        ):
+        if self.summarize_llm_config and self.summarize_llm_config.model_name != self.llm_config.model_name:
             name += f"+{self.summarize_llm_config.model_name}".replace("/", "_")
         return name
 
@@ -335,9 +325,7 @@ class Genny(Agent):
     """
 
     name: str = "genny"
-    description: str = (
-        "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
-    )
+    description: str = "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
     input_content_types: list[str] = [
         "image/png",
         "image/jpeg",
@@ -361,13 +349,9 @@ class Genny(Agent):
                 len(config.task_clarification),
             )
         # task_hints takes precedence over the general hint; falls back to hint if no match.
-        self._task_hint: str = (
-            config.task_hints.get(task_id, config.hint) if task_id else config.hint
-        )
+        self._task_hint: str = config.task_hints.get(task_id, config.hint) if task_id else config.hint
         # task_clarification is injected as part of the goal, not as a hint.
-        self._task_clarification: str = (
-            config.task_clarification.get(task_id, "") if task_id else ""
-        )
+        self._task_clarification: str = config.task_clarification.get(task_id, "") if task_id else ""
         self.llm: LLM = config.llm_config.make()
         # Summarize LLM uses the same config as the act LLM (including tool_choice) so the
         # full request — messages, tools, and parameters — is identical between the two passes
@@ -377,21 +361,14 @@ class Genny(Agent):
         self.summarize_llm: LLM = self._summarize_llm_config.make()
         self.token_counter = config.llm_config.make_counter()
         self.action_schemas: list[ActionSchema] = action_schemas
-        self.tool_adapter: ToolAdapter = (
-            TextToolAdapter() if config.tools_as_text else NativeToolAdapter()
-        )
+        self.tool_adapter: ToolAdapter = TextToolAdapter() if config.tools_as_text else NativeToolAdapter()
         self.goal: list[dict] = []
         self.summaries: list[str] = []
-        self.history: list[list[dict | Message]] = (
-            []
-        )  # groups: one per obs or asst turn
+        self.history: list[list[dict | Message]] = []  # groups: one per obs or asst turn
         self._actions_cnt: int = 0
 
     def step(self, obs: Observation) -> AgentOutput:
-        if (
-            self.config.max_actions is not None
-            and self._actions_cnt >= self.config.max_actions
-        ):
+        if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
             logger.info("Max actions reached, issuing STOP action.")
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
@@ -426,9 +403,7 @@ class Genny(Agent):
                 self.summaries.append(step_summary)
 
         # act first so the primary tab is always "act"; summary follows when present.
-        llm_calls: list[LLMCall] = [act_call] + (
-            [sum_call] if sum_call is not None else []
-        )
+        llm_calls: list[LLMCall] = [act_call] + ([sum_call] if sum_call is not None else [])
         asst_group: list[dict | Message] = [response]
         self.history.append(asst_group)
         self._actions_cnt += 1
@@ -457,9 +432,7 @@ class Genny(Agent):
         else:
             self.history.append(obs_messages)
 
-    def _build_base_prompt(
-        self, exclude_last_summary: bool = False
-    ) -> list[dict | Message]:
+    def _build_base_prompt(self, exclude_last_summary: bool = False) -> list[dict | Message]:
         """Build the shared prompt prefix used by both _summarize_past and _choose_context.
 
         Both passes extend this prefix with their specific final instruction, ensuring the
@@ -470,9 +443,7 @@ class Genny(Agent):
         collapsed block so it can be placed after the obs (used by _choose_context when
         enable_summarize=True).
         """
-        messages: list[dict | Message] = [
-            {"role": "system", "content": self.config.system_prompt}
-        ]
+        messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.goal)
         if self._task_clarification:
             messages.append(
@@ -483,17 +454,9 @@ class Genny(Agent):
             )
             messages.append({"role": "assistant", "content": "Understood."})
         if self._task_hint:
-            messages.append(
-                {"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"}
-            )
-            messages.append(
-                {"role": "assistant", "content": "Understood, I'll keep this in mind."}
-            )
-        past_summaries = (
-            self.summaries[:-1]
-            if (exclude_last_summary and self.summaries)
-            else list(self.summaries)
-        )
+            messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
+            messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
+        past_summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else list(self.summaries)
         if past_summaries:
             messages.append(
                 {
@@ -521,15 +484,11 @@ class Genny(Agent):
         The summarize LLM has tool_choice="none" so it responds with text, not tool calls.
         """
         user_prompt = (
-            self.config.summarize_cot_prompt
-            if self.config.summarize_cot_only
-            else self.config.summarize_verbose_prompt
+            self.config.summarize_cot_prompt if self.config.summarize_cot_only else self.config.summarize_verbose_prompt
         )
         messages = self._build_base_prompt()
         messages.append({"role": "user", "content": user_prompt})
-        api_tools, api_messages = self.tool_adapter.encode(
-            self.action_schemas, messages
-        )
+        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
         llm_call = LLMCall(
@@ -544,13 +503,9 @@ class Genny(Agent):
     def _act(self) -> tuple[Message, LLMCall]:
         """Build context, encode tools, call act LLM, return (response_message, llm_call)."""
         messages = self._choose_context()
-        api_tools, api_messages = self.tool_adapter.encode(
-            self.action_schemas, messages
-        )
+        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
-        logger.info(
-            f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}"
-        )
+        logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}")
         try:
             response = self.llm(prompt)
         except Exception as e:
@@ -579,16 +534,10 @@ class Genny(Agent):
         When enable_summarize=False, all summaries (COT extracted from prior act passes)
         go into the collapsed block; react_prompt instructs the LLM to reason inline.
         """
-        messages = self._build_base_prompt(
-            exclude_last_summary=self.config.enable_summarize
-        )
+        messages = self._build_base_prompt(exclude_last_summary=self.config.enable_summarize)
         if self.config.enable_summarize and self.summaries:
             messages.append({"role": "assistant", "content": self.summaries[-1]})
-        final_prompt = (
-            self.config.act_prompt
-            if self.config.enable_summarize
-            else self.config.react_prompt
-        )
+        final_prompt = self.config.act_prompt if self.config.enable_summarize else self.config.react_prompt
         messages.append({"role": "user", "content": final_prompt})
         return messages
 
@@ -607,20 +556,14 @@ class Genny(Agent):
         obs_groups = [
             g
             for g in self.history
-            if g
-            and (g[0].role if isinstance(g[0], Message) else g[0].get("role", ""))
-            != "assistant"
+            if g and (g[0].role if isinstance(g[0], Message) else g[0].get("role", "")) != "assistant"
         ]
         selected = obs_groups[-n:] if n < len(obs_groups) else obs_groups
         result: list[dict | Message] = []
         for group in selected:
             # Drop leading tool-role messages (their paired tool_calls are in dropped asst groups)
             start = next(
-                (
-                    i
-                    for i, m in enumerate(group)
-                    if not (isinstance(m, dict) and m.get("role") == "tool")
-                ),
+                (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")),
                 len(group),
             )
             result.extend(group[start:])
