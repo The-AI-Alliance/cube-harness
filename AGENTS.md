@@ -127,7 +127,7 @@ for anyone with a different folder structure.
 **Authoring a cross-repo PR:**
 
 1. Keep `pyproject.toml` pointing at PyPI (or a git ref) — do **not** commit the local path.
-2. Add `Depends-on: cube-standard/<branch-name>` anywhere in the PR description body.
+2. Add a line starting with `Depends-on: cube-standard/<branch-name>` to the PR description body. The line must start at column 0 (no leading whitespace, not inside a list or quote block).
 
 **Reviewing a cross-repo PR:**
 
