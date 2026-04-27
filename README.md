@@ -36,9 +36,7 @@ Create `~/.env-cube` with your credentials:
 OPENAI_API_KEY=your-key-here
 ```
 
-Recipes load `~/.env-cube` before starting Ray workers, so credentials are available in all worker processes. Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe and add the corresponding key (e.g. `AZURE_API_KEY`, `ANTHROPIC_API_KEY`).
-
-**Multi-node Ray:** create `~/.env-cube` on each worker node — the harness loads it automatically on worker startup.
+Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe and add the corresponding key (e.g. `AZURE_API_KEY`, `ANTHROPIC_API_KEY`). On multi-node Ray, create `~/.env-cube` on each worker node too.
 
 ### Run Tests
 
