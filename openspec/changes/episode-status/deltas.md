@@ -12,7 +12,7 @@ Applies to: `openspec/specs/episode/spec.md`, `openspec/specs/experiment/spec.md
 ```python
 @dataclass
 class EpisodeStatus:
-    status: Literal["RUNNING", "COMPLETED", "FAILED", "CANCELLED"]
+    status: Literal["RUNNING", "COMPLETED", "FAILED", "CANCELLED", "STALE"]
     task_id: str
     episode_id: int
     started_at: float
@@ -52,8 +52,8 @@ of the retry decision path.
 | `resume` | `retry_failed` | Episodes returned |
 |----------|----------------|-------------------|
 | False    | False          | All episodes from scratch |
-| True     | False          | Episodes with no `status.json` or `status != COMPLETED` with `status == RUNNING` and stale heartbeat — i.e. unstarted |
-| False    | True           | Episodes with `status IN (FAILED, CANCELLED)` or stale RUNNING, AND `retry_count < max_retries` |
+| True     | False          | Episodes with no `status.json` or `status == STALE` — i.e. unstarted or abandoned |
+| False    | True           | Episodes with `status IN (FAILED, CANCELLED, STALE)` or missing `status.json`, AND `retry_count < max_retries` |
 | True     | True           | Unstarted ∪ failed/cancelled |
 
 ### ADDED — `max_retries: int = 3` field on `Experiment`
@@ -94,3 +94,11 @@ def read_episode_status(self, trajectory_id: str) -> EpisodeStatus | None
 After `ray.cancel(ref, force=True)`, write `status=CANCELLED` for that episode via
 `storage.write_episode_status()`. Increment `retry_count` by reading the current
 status first.
+
+After `ray.shutdown()`, sweep all episode directories. For any episode still in
+`RUNNING` state, check `last_heartbeat_at`:
+- Fresh (within threshold) → leave as `RUNNING` (sequential edge case or overlap window)
+- Stale or missing → write `status=STALE`; these will be retried on the next run
+
+This sweep is the only reliable way to detect dead workers: the driver is the last
+process alive after the Ray cluster shuts down.

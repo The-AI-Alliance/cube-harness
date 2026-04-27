@@ -35,6 +35,18 @@ for retry decisions. The trajectory is data; `status.json` is control.
 | `COMPLETED` | `episode._run_loop` in finally | Loop ran to natural end (done or max_steps); reward is irrelevant |
 | `FAILED` | `episode._run_loop` in finally | Unhandled exception propagated out of the run loop |
 | `CANCELLED` | `exp_runner` after `ray.cancel(force=True)` | Explicitly timed out by the harness |
+| `STALE` | `exp_runner` after `ray.shutdown()` | Worker was killed externally and will never write a terminal status |
+
+**Core invariant:** `RUNNING` with a fresh heartbeat means the episode is actively
+executing — do not retry. `RUNNING` with a stale heartbeat means the worker is dead
+and the episode will never finish. The exp_runner driver (which outlives all workers)
+sweeps for stale `RUNNING` episodes after `ray.shutdown()` and writes `STALE`, making
+them eligible for retry on the next run.
+
+`STALE` vs `FAILED`: `FAILED` means the worker lived long enough to catch an exception
+and write terminal status. `STALE` means it was killed before that could happen. Both
+are retried, but the distinction helps with diagnosis: many `STALE` = infrastructure
+problem (OOM, cluster failure); many `FAILED` = application bug.
 
 ### `status.json` schema
 
@@ -63,21 +75,24 @@ Fields:
 ### Heartbeat
 
 A background thread in `_run_loop` writes `last_heartbeat_at` to `status.json` every
-30 seconds while the episode is running. On recovery:
+30 seconds while the episode is running. After `ray.shutdown()`, the exp_runner driver
+sweeps all episode directories and for any episode still in `RUNNING` state:
 
-- `status == RUNNING` and `now - last_heartbeat_at < threshold` (e.g. 2 minutes) → truly running, do not retry
-- `status == RUNNING` and `last_heartbeat_at` is stale or missing → dead worker, treat as FAILED for retry purposes
+- `now - last_heartbeat_at < threshold` (e.g. 2 minutes) → truly still running (sequential mode or overlap window) — leave as `RUNNING`
+- `last_heartbeat_at` is stale or missing → worker is dead, episode will never finish → write `STALE`
 
 This works for both local (sequential) and distributed (Ray) runs without requiring
 access to the Ray dashboard or any external state.
 
 ### Retry logic
 
-An episode is eligible for retry if:
+An episode is eligible for retry if `retry_count < max_retries` (proposed default: 3) and:
 1. `status.json` does not exist (worker died before writing `RUNNING`)
-2. `status == RUNNING` and heartbeat is stale
+2. `status == STALE` (driver confirmed the worker is dead)
 3. `status == FAILED` or `status == CANCELLED`
-4. `retry_count < max_retries` (proposed default: 3)
+
+An episode is **never** retried if `status == RUNNING` with a fresh heartbeat —
+it is currently executing.
 
 An episode is considered done (do not retry) if:
 - `status == COMPLETED`
