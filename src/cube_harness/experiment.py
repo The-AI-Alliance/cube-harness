@@ -145,8 +145,7 @@ class Experiment(TypedBaseModel):
                 return None
         return None
 
-    # TODO(#315): replace _is_trajectory_successful + _load_successful_trajectory_ids
-    # with a fast status.json check that does not require loading the full trajectory.
+    # TODO needs more robust and faster handling of status. See #315
     def _is_trajectory_successful(self, trajectory: Trajectory) -> bool:
         """Check if a trajectory completed successfully.
 
