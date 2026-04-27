@@ -146,24 +146,8 @@ def _get_parent_ctx_env() -> Context | None:
 
 
 def get_trace_env_vars() -> dict[str, str]:
-    """Return tracing env vars to forward to Ray workers via runtime_env.
-
-    Only forwards the small set of tracing-specific vars that the harness sets
-    programmatically (TRACEPARENT, OTLP endpoint, model/agent name). These are
-    not typically present in .env files so they must be propagated explicitly.
-
-    Credentials (LLM API keys, benchmark-specific secrets) are NOT forwarded here.
-    Workers load them from ~/.env-cube or ~/.env on their own machine, which keeps
-    credential management out of core and works for both local and multi-node Ray.
-    """
     env_vars = {}
-    keys = (
-        RAY_ENV_TRACEPARENT,
-        RAY_ENV_OTLP_ENDPOINT,
-        RAY_ENV_MODEL,
-        RAY_ENV_AGENT_NAME,
-    )
-    for key in keys:
+    for key in (RAY_ENV_TRACEPARENT, RAY_ENV_OTLP_ENDPOINT, RAY_ENV_MODEL, RAY_ENV_AGENT_NAME):
         if val := os.environ.get(key):
             env_vars[key] = val
     return env_vars
