@@ -145,6 +145,7 @@ class Experiment(TypedBaseModel):
                 return None
         return None
 
+    # TODO needs more robust and faster handling of status. See #315
     def _is_trajectory_successful(self, trajectory: Trajectory) -> bool:
         """Check if a trajectory completed successfully.
 

@@ -169,8 +169,7 @@ _CREATE_HINT: str = (
 # them; their values are preserved. Just verify, then click Submit when all tabs are done.
 # NOTE: 'Lease contract' (lease_id) lives in the Contracts tab, NOT in General/Financial.
 _CREATE_HARDWARE_ASSET_HINT: str = (
-    _CREATE_HINT
-    + "\n\n"
+    _CREATE_HINT + "\n\n"
     "This form has multiple tabs (General, Financial, Disposal, Contracts, Depreciation, etc.).\n"
     "IMPORTANT: 'Lease contract' is in the Contracts tab — it will NOT appear in General or Financial.\n\n"
     "TAB PROTOCOL — follow exactly:\n"
@@ -191,8 +190,7 @@ _CREATE_HARDWARE_ASSET_HINT: str = (
 # Change request: has a "Closure Information" tab with both Close code AND Close notes.
 # Agents tend to set Close code then leave the tab without filling Close notes.
 _CREATE_CHANGE_REQUEST_HINT: str = (
-    _CREATE_HINT
-    + "\n\n"
+    _CREATE_HINT + "\n\n"
     "This form has multiple tabs. The 'Closure Information' tab contains TWO fields:\n"
     "  - Close code (a <select> dropdown)\n"
     "  - Close notes (a plain text field)\n"
