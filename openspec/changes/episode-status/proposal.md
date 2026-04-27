@@ -1,204 +1,254 @@
 # RFC: Episode Status File
 
+**Version:** 0.2 — updated after design review 2026-04-27
+
 ## Problem
 
 The current resume/retry logic in `experiment.py` determines whether an episode needs
 re-running by loading and scanning its full trajectory for `StepError` entries. This
 has three failure modes:
 
-**1. Stale RUNNING with no heartbeat.**
+**1. Silent crash — dead workers leave no terminal signal.**
 If a Ray worker is killed (OOM, `ray.cancel(force=True)`, machine failure), no terminal
 status is ever written. The trajectory may be partial or missing. The current code
 catches the load failure silently and drops the episode — it neither retries nor counts
 it as done.
 
 **2. False positive on recovered errors.**
-A `StepError` recorded mid-episode (e.g. a tool error that the harness caught and
-turned into an error observation, then continued) causes `_is_trajectory_successful`
-to return `False`, triggering a retry even though the episode completed normally.
+A `StepError` recorded mid-episode (a tool error that the harness caught and turned into
+an error observation, then continued) causes `_is_trajectory_successful` to return
+`False`, triggering a retry even though the episode completed normally.
 
 **3. Status requires reading the payload.**
-To check whether an episode is done, the entire trajectory must be deserialized.
-At scale (thousands of episodes per experiment) this is expensive and fragile — a
-single corrupt step file breaks the check for that episode.
+To check whether an episode is done, the entire trajectory must be deserialized. At
+scale (thousands of episodes per experiment) this is expensive and fragile — a single
+corrupt step file breaks the check for that episode.
+
+**4. Concurrent runner collision.**
+If two callers invoke `run_with_ray` on the same output directory simultaneously (e.g.,
+a stalled run and a resume attempt), both see the same unstarted episodes and submit
+them to Ray twice. There is no mechanism to detect or prevent this.
 
 ## Proposed solution
 
 Write a small `status.json` file in each episode directory. Status is the ground truth
 for retry decisions. The trajectory is data; `status.json` is control.
 
+---
+
 ### Episode statuses
 
 | Status | Written by | Meaning |
 |---|---|---|
-| `RUNNING` | `episode._run_loop` at start | Episode has started; worker is alive |
-| `COMPLETED` | `episode._run_loop` in finally | Loop ran to natural end (done or max_steps); reward is irrelevant |
-| `FAILED` | `episode._run_loop` in finally | Unhandled exception propagated out of the run loop |
+| `RUNNING` | driver (pre-claim) then worker | Episode is queued or actively executing; skip during resume/retry |
+| `COMPLETED` | worker in `finally` | Loop ran to natural end (done or max_steps) |
+| `FAILED` | worker in `finally` | Unhandled exception propagated out of the run loop |
 | `CANCELLED` | `exp_runner` after `ray.cancel(force=True)` | Explicitly timed out by the harness |
-| `STALE` | `exp_runner` after `ray.shutdown()` | Worker was killed externally and will never write a terminal status |
+| `STALE` | STALE sweep | Worker was killed; heartbeat went cold; episode will never finish |
 
-**Core invariant:** `RUNNING` with a fresh heartbeat means the episode is actively
-executing — do not retry. `RUNNING` with a stale heartbeat means the worker is dead
-and the episode will never finish. The exp_runner driver (which outlives all workers)
-sweeps for stale `RUNNING` episodes after `ray.shutdown()` and writes `STALE`, making
-them eligible for retry on the next run.
+**Core invariant:** `RUNNING` with a fresh heartbeat = skip (episode is alive or queued).
+`RUNNING` with a stale heartbeat = dead worker. `COMPLETED` = done, never retry.
+Everything else (`FAILED`, `STALE`, `CANCELLED`) = eligible for retry if
+`retry_count < max_retries`.
 
-`STALE` vs `FAILED`: `FAILED` means the worker lived long enough to catch an exception
-and write terminal status. `STALE` means it was killed before that could happen. Both
-are retried, but the distinction helps with diagnosis: many `STALE` = infrastructure
-problem (OOM, cluster failure); many `FAILED` = application bug.
+`STALE` vs `FAILED`: `FAILED` means the worker lived long enough to catch an exception.
+`STALE` means it was killed silently. Both are retried, but the distinction aids
+diagnosis: many `STALE` = infrastructure problem (OOM, cluster failure); many `FAILED`
+= application bug.
+
+---
 
 ### `status.json` schema
 
 ```json
 {
-  "status": "COMPLETED",
+  "status": "FAILED",
   "task_id": "workarena.servicenow.create-incident",
   "episode_id": 3,
   "started_at": 1745000000.0,
-  "ended_at": 1745000120.0,
-  "last_heartbeat_at": 1745000118.0,
-  "reward": 1.0,
+  "ended_at": 1745000042.0,
+  "last_heartbeat_at": 1745000040.0,
+  "reward": null,
   "had_step_errors": true,
-  "retry_count": 0
+  "error_type": "ConnectionError",
+  "error_message": "Environment container failed to start on port 8080",
+  "retry_count": 1
 }
 ```
 
-Fields:
-- `status` — one of the four values above
-- `started_at` / `ended_at` — wall-clock timestamps (None if not reached)
-- `last_heartbeat_at` — updated by a background thread every N seconds while RUNNING
-- `reward` — final reward (None until COMPLETED)
-- `had_step_errors` — True if any step recorded a StepError; informational only, does not affect retry
-- `retry_count` — how many times this episode has been retried; capped at `max_retries` to prevent infinite loops
+**Fields:**
+- `status` — one of the five values above
+- `started_at` — set by the driver on pre-claim (see below); overwritten by worker at actual start
+- `ended_at` — wall-clock timestamp; `None` until a terminal status is written
+- `last_heartbeat_at` — updated by the worker's background thread every 30 s while `RUNNING`; `None` if the worker never started
+- `reward` — final reward; `None` until `COMPLETED`
+- `had_step_errors` — `True` if any step recorded a `StepError`; informational only, does not affect retry
+- `error_type` / `error_message` — exception class name and message for the failure; `None` on success. Enables fast diagnosis without opening log files.
+- `retry_count` — how many times this specific episode has been retried; capped at `max_retries`
 
-### Heartbeat
+---
 
-A background thread in `_run_loop` writes `last_heartbeat_at` to `status.json` every
-30 seconds while the episode is running. After `ray.shutdown()`, the exp_runner driver
-sweeps all episode directories and for any episode still in `RUNNING` state:
+### Pre-claim: preventing concurrent runner collision
 
-- `now - last_heartbeat_at < threshold` (e.g. 2 minutes) → truly still running (sequential mode or overlap window) — leave as `RUNNING`
-- `last_heartbeat_at` is stale or missing → worker is dead, episode will never finish → write `STALE`
+Before submitting episodes to Ray, the driver writes `RUNNING` for every episode it
+is about to launch. This "pre-claim" step converts all targeted episodes from
+"unstarted" (no `status.json`) to `RUNNING` before any other process can see them.
 
-This works for both local (sequential) and distributed (Ray) runs without requiring
-access to the Ray dashboard or any external state.
+A second runner calling `get_episodes_to_run(resume=True)` or
+`get_episodes_to_run(retry_failed=True)` will see `RUNNING` episodes with a fresh
+`started_at` and skip them — no collision.
+
+When the Ray worker actually picks up the episode, `_run_loop` overwrites the pre-claim
+with a new `RUNNING` entry (same `retry_count`, updated `started_at`) and starts the
+heartbeat thread.
+
+Pre-claim only applies to `run_with_ray`. The sequential runner (`run_sequentially`)
+has no concurrency to protect against; the worker writes `RUNNING` directly.
+
+---
+
+### Heartbeat: distinguishing alive workers from dead ones
+
+A background thread in the worker's `_run_loop` writes `last_heartbeat_at` to
+`status.json` every **30 seconds** while the episode is executing.
+
+**STALE sweep** is the complementary mechanism on the driver side. It scans all episode
+directories for `RUNNING` entries with a stale `last_heartbeat_at` and rewrites them
+as `STALE`. It is called:
+
+1. **Before every `get_episodes_to_run()` call with `resume=True` or `retry_failed=True`** — cleans up orphaned `RUNNING` from a previous run that crashed without calling `ray.shutdown()`.
+2. **After `ray.shutdown()`** — handles the normal case where workers are killed at experiment completion.
+
+Staleness threshold: `now - (last_heartbeat_at or started_at) > 2 * HEARTBEAT_INTERVAL`
+(default: `2 * 30s = 60s`). If `last_heartbeat_at` is `None` (worker never started),
+the threshold is applied to `started_at` instead. Because the driver pre-claims with
+`started_at = now`, a freshly claimed but not-yet-started episode is always within the
+threshold, so a concurrent STALE sweep will never incorrectly evict it.
+
+Note: episode timeout (`episode_timeout` in `run_with_ray`, default 3600 s) handles
+hung episodes. The heartbeat mechanism handles OOM / external kills that bypass the
+timeout path.
+
+---
 
 ### Retry logic
 
-An episode is eligible for retry if `retry_count < max_retries` (proposed default: 3) and:
-1. `status.json` does not exist (worker died before writing `RUNNING`)
-2. `status == STALE` (driver confirmed the worker is dead)
-3. `status == FAILED` or `status == CANCELLED`
+An episode is **eligible for retry** if `retry_count < max_retries` (default: **3**) and any of:
+1. `status.json` is missing (worker died before the driver could pre-claim, or before the worker could write `RUNNING`)
+2. `status == STALE`
+3. `status == FAILED`
+4. `status == CANCELLED`
 
-An episode is **never** retried if `status == RUNNING` with a fresh heartbeat —
-it is currently executing.
+An episode is **skipped** (treated as currently executing) if:
+- `status == RUNNING` with `(last_heartbeat_at or started_at)` within the staleness threshold
 
-An episode is considered done (do not retry) if:
+An episode is **done** (never retry) if:
 - `status == COMPLETED`
 
-Note: `COMPLETED` with `reward == 0` is a legitimate agent failure, not a technical
-failure. Retrying it wastes quota.
+`COMPLETED` with `reward == 0` is a legitimate agent failure, not a technical failure.
+Retrying it wastes quota.
 
-### Changes to `Storage`
+---
 
-Two new methods on `FileStorage` (and `Storage` Protocol):
+### `Experiment.get_episodes_to_run()` — new flag semantics
 
+| `resume` | `retry_failed` | Episodes returned |
+|---|---|---|
+| False | False | All episodes from scratch |
+| True | False | Episodes with missing `status.json` (never started) |
+| False | True | Episodes with `status IN (FAILED, STALE, CANCELLED)` **or** missing `status.json`, with `retry_count < max_retries` |
+| True | True | Union: all missing **+** all retriable failures |
+
+A new field on `Experiment`:
 ```python
-def write_episode_status(self, trajectory_id: str, status: EpisodeStatus) -> None
-    # Atomic write: write to .tmp then rename
-
-def read_episode_status(self, trajectory_id: str) -> EpisodeStatus | None
-    # Returns None if file does not exist
+max_retries: int = 3
 ```
 
-`EpisodeStatus` is a small dataclass (not a full Pydantic model — it must be writable
-before the trajectory object exists).
+Replaces the trajectory-scan path:
+- `_is_trajectory_successful` → **deleted**
+- `_load_successful_trajectory_ids` → **deleted**
+- `_load_started_trajectory_ids` → **replaced** by `_read_episode_status_map`
+- `_find_episodes_to_relaunch` → **absorbed** into `get_episodes_to_run`
 
-Atomic write (write-then-rename) ensures a reader never sees a partial file.
-
-### Migration: `Experiment.get_episodes_to_run()`
-
-Current code path (to be replaced):
-
-```
-_load_started_trajectory_ids()        # scans episodes/ dir for existing trajectories
-_load_successful_trajectory_ids()     # loads every trajectory and scans steps for StepError
-_find_episodes_to_relaunch()          # filters config files by trajectory ID sets
-```
-
-Replacement:
-
-```
-_load_episode_statuses()              # reads status.json from each episode dir — one small file each
-get_episodes_to_run()                 # filters directly on status: retry if FAILED/STALE/CANCELLED/missing
-```
-
-`_is_trajectory_successful` and `_load_successful_trajectory_ids` are deleted.
-`_load_started_trajectory_ids` is replaced by `_load_episode_statuses`.
-`_find_episodes_to_relaunch` logic is absorbed into `get_episodes_to_run`.
-
-The `resume` / `retry_failed` flags on `Experiment` map to status as follows:
-
-| Flag | Episodes returned |
-|---|---|
-| neither | All episodes created from scratch |
-| `resume=True` | Episodes with no `status.json` (never started) |
-| `retry_failed=True` | Episodes with `status IN (FAILED, STALE, CANCELLED)` and `retry_count < max_retries` |
-| both | Union of the above |
-
-`allow_overwrite = True` is set on retried episodes, same as today.
+---
 
 ### Automatic retry loop in `exp_runner`
 
-Today the caller must explicitly set `retry_failed=True` and re-run to pick up
-failures. The launcher should support an automatic retry loop so a single invocation
-can recover from transient failures without human intervention:
+Both `run_with_ray` and `run_sequentially` gain a `max_retry_rounds` parameter
+(default: **3**). After each round, the runner checks for retriable episodes. If any
+exist and `rounds_done < max_retry_rounds`, it runs them with `retry_failed=True`.
+The loop stops when no retriable episodes remain or the round budget is exhausted.
 
 ```python
 def run_with_ray(
     exp: Experiment,
-    ...
-    max_retry_rounds: int = 1,   # NEW: how many post-run retry sweeps to attempt
+    ...,
+    max_retry_rounds: int = 3,
 ) -> ExpResult:
 ```
 
-After the main Ray run completes, the runner checks for `FAILED`/`STALE`/`CANCELLED`
-episodes with `retry_count < max_retries`. If any exist and `retry_rounds < max_retry_rounds`,
-it marks the experiment `retry_failed=True` and runs again — reusing the same output
-directory. This loop repeats until no retriable episodes remain or `max_retry_rounds`
-is exhausted. The final `ExpResult` aggregates all rounds.
+The final `ExpResult` aggregates trajectories and failures across all rounds.
 
-`run_sequentially` gets the same `max_retry_rounds` parameter for consistency.
+Existing recipes that call `run_with_ray(exp)` get automatic retry out of the box
+(`max_retry_rounds=3`). Pass `max_retry_rounds=0` to opt out.
 
-### Changes to `exp_runner`
+---
 
-After `ray.cancel(force=True)`, write `status=CANCELLED` for that episode.
+### Storage changes
 
-After `ray.shutdown()`, sweep all episode directories: any `RUNNING` episode with a
-stale heartbeat is written as `STALE`.
+Two new methods on `Storage` Protocol and `FileStorage`:
+
+```python
+def write_episode_status(self, trajectory_id: str, status: EpisodeStatus) -> None
+    # Atomic: write to .tmp then os.replace()
+
+def read_episode_status(self, trajectory_id: str) -> EpisodeStatus | None
+    # Returns None if status.json does not exist
+```
+
+`EpisodeStatus` is a plain Python `@dataclass` (not Pydantic) defined in a new
+`cube_harness/episode_status.py` module. Both `episode.py` and `storage.py` import
+from it; this avoids the circular-import problem that would arise if it lived in
+`episode.py`.
+
+---
+
+### Error logging
+
+The full stack trace is always written to the episode's log file (existing behaviour
+via `redirect_output_to_log`). `error_type` and `error_message` in `status.json`
+provide the first line of diagnosis without opening logs. No other changes to logging.
+
+---
 
 ## Alternatives considered
 
-**Ray dashboard query.** Store the Ray job ID and query the dashboard to check if it
-is still running. Rejected: couples status check to Ray infrastructure, does not work
-for sequential runs, requires network access.
+**Ray dashboard query.** Rejected: couples status to Ray infrastructure, broken for
+sequential runs.
 
-**PID file.** Store the worker PID and check if the process is alive. Rejected: PIDs
-are recycled; unreliable on multi-node clusters.
+**PID file.** Rejected: PIDs are recycled; unreliable across multi-node clusters.
 
-**Trajectory existence as sentinel.** Current approach — treat any trajectory as done.
-Rejected: requires full deserialization, drops silently-failed episodes.
+**Trajectory existence as sentinel.** Current approach. Rejected: requires full
+deserialization; silently drops crashed episodes.
+
+**Experiment-level lock file.** Would prevent concurrent runners at the experiment
+level but gives no per-episode visibility. Replaced by the pre-claim mechanism, which
+is more surgical: episodes claimed by an active run are individually locked.
 
 ## Scope
 
-Touches: `episode.py`, `experiment.py`, `exp_runner.py`, `storage.py`, `storage` spec,
-`episode` spec, `experiment` spec.
+Touches: `episode.py`, `episode_status.py` (new), `experiment.py`, `exp_runner.py`,
+`storage.py` — and their specs.
 
-Does not change: trajectory format, `Trajectory` model, existing step files, XRay viewer.
+Does **not** change: trajectory format, `Trajectory` model, existing step files,
+XRay viewer.
 
-## Open questions
+## Open questions (resolved)
 
-1. What should `max_retries` default to? Proposed: 3.
-2. Heartbeat interval: 30s? Staleness threshold: 2 minutes?
-3. Should `CANCELLED` be retried by default, or only on explicit opt-in?
+| # | Question | Decision |
+|---|---|---|
+| 1 | `max_retries` default? | **3** |
+| 2 | `max_retry_rounds` default? | **3** |
+| 3 | Heartbeat interval / staleness threshold? | **30 s / 60 s** |
+| 4 | Should `CANCELLED` be retried? | **Yes** — treated same as `FAILED` |
+| 5 | Should missing `status.json` be retried by `retry_failed=True`? | **Yes** |
