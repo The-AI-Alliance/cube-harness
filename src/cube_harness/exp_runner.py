@@ -3,11 +3,9 @@
 import logging
 import time
 import traceback
-from pathlib import Path
 from uuid import uuid4
 
 import ray
-from dotenv import load_dotenv
 from ray.util.state.api import list_tasks
 
 from cube_harness.core import Trajectory
@@ -60,12 +58,6 @@ def _run_with_ray_impl(
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        # For same-machine Ray: workers inherit the parent process env (set by the recipe's
-        # load_dotenv() before ray.init()), so this is a no-op.
-        # For multi-node Ray: workers need credentials on their own machine — place them in
-        # ~/.env-cube (cube-specific, avoids pulling in unintended vars from a general ~/.env).
-        load_dotenv(Path.home() / ".env-cube", override=False)
-
         trajectory_id = trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
         log_file = get_log_path(output_dir, trajectory_id)
         with redirect_output_to_log(log_file, append=True, tee=False, log_format=LOG_FORMAT):

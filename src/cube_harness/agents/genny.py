@@ -326,20 +326,10 @@ class Genny(Agent):
 
     name: str = "genny"
     description: str = "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
-    input_content_types: list[str] = [
-        "image/png",
-        "image/jpeg",
-        "text/plain",
-        "application/json",
-    ]
+    input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
     output_content_types: list[str] = ["application/json"]
 
-    def __init__(
-        self,
-        config: GennyConfig,
-        action_schemas: list[ActionSchema],
-        task_id: str | None = None,
-    ):
+    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema], task_id: str | None = None):
         self.config = config
         self.task_id = task_id
         if task_id is None and (config.task_hints or config.task_clarification):
@@ -417,10 +407,7 @@ class Genny(Agent):
     def _obs_to_messages(self, obs: Observation) -> list[dict | Message]:
         messages = cast(list[dict | Message], obs.to_llm_messages())
         if self.config.max_obs_chars is not None:
-            messages = cast(
-                list[dict | Message],
-                [_truncate_message(m, self.config.max_obs_chars) for m in messages],
-            )
+            messages = cast(list[dict | Message], [_truncate_message(m, self.config.max_obs_chars) for m in messages])
         return messages
 
     def _ingest_obs(self, obs_messages: list[dict | Message]) -> None:
@@ -446,32 +433,17 @@ class Genny(Agent):
         messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.goal)
         if self._task_clarification:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": f"## Additional task details\n\n{self._task_clarification}",
-                }
-            )
+            messages.append({"role": "user", "content": f"## Additional task details\n\n{self._task_clarification}"})
             messages.append({"role": "assistant", "content": "Understood."})
         if self._task_hint:
             messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
             messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
         past_summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else list(self.summaries)
         if past_summaries:
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": _format_summaries_block(past_summaries),
-                }
-            )
+            messages.append({"role": "assistant", "content": _format_summaries_block(past_summaries)})
         windowed = self._windowed_history()
         if windowed:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": _obs_section_header(self.config.render_last_n_obs),
-                }
-            )
+            messages.append({"role": "user", "content": _obs_section_header(self.config.render_last_n_obs)})
             messages.extend(windowed)
         return messages
 
@@ -516,11 +488,7 @@ class Genny(Agent):
             f"completion: {response.usage.completion_tokens}, cost: ${response.usage.cost:.4f}"
         )
         llm_call = LLMCall(
-            tag="act",
-            llm_config=self.config.llm_config,
-            prompt=prompt,
-            output=response.message,
-            usage=response.usage,
+            tag="act", llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
         )
         return response.message, llm_call
 
@@ -563,8 +531,7 @@ class Genny(Agent):
         for group in selected:
             # Drop leading tool-role messages (their paired tool_calls are in dropped asst groups)
             start = next(
-                (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")),
-                len(group),
+                (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")), len(group)
             )
             result.extend(group[start:])
         return result

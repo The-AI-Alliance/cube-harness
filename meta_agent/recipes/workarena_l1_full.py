@@ -27,8 +27,11 @@ from dotenv import load_dotenv
 # meta_agent/ is not a Python package — add it to sys.path so we can import workarena_hints.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Load credentials from ~/.env-cube before ray.init() so Ray workers inherit them.
-load_dotenv(Path.home() / ".env-cube")
+# Load .env so credentials are available even when the shell didn't source ~/.zshrc.
+# Ray workers inherit the parent process env, so this must run before ray.init().
+# Falls back to ~/.env for developers who keep credentials in a global env file.
+_project_env = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
 from cube.tool import ToolboxConfig  # noqa: E402
 from cube_browser_playwright.playwright_session import (  # noqa: E402

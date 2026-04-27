@@ -29,14 +29,13 @@ make install
 
 ### API Keys
 
-Create `~/.env-cube` with your credentials:
+Set your OpenAI API key:
 
 ```bash
-# ~/.env-cube
-OPENAI_API_KEY=your-key-here
+export OPENAI_API_KEY=your-key-here
 ```
 
-Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe and add the corresponding key (e.g. `AZURE_API_KEY`, `ANTHROPIC_API_KEY`). On multi-node Ray, create `~/.env-cube` on each worker node too.
+Any [LiteLLM-supported provider](https://docs.litellm.ai/docs/providers) works — just change `model_name` in the recipe.
 
 ### Run Tests
 
