@@ -92,14 +92,22 @@ class SWEBenchTool(Tool):
         return "\n".join(parts) if parts else "(no output)"
 
     @tool_action
-    def read_file(self, path: str) -> str:
+    def read_file(self, path: str, line_start: int | None = None, line_end: int | None = None) -> str:
         """Read the contents of a file in the sandbox.
 
         Args:
             path: Path to the file. Relative paths resolve against /testbed
                 (e.g. 'django/core/validators.py'). Absolute paths also work.
+            line_start: First line to return (1-indexed, inclusive). Omit to read from the start.
+            line_end: Last line to return (1-indexed, inclusive). Omit to read to the end.
         """
-        result = self._exec(f"cat {shlex.quote(path)}")
+        if line_start is not None or line_end is not None:
+            start = max(1, line_start or 1)
+            end = line_end or ""
+            cmd = f"sed -n '{start},{end}p' {shlex.quote(path)}"
+        else:
+            cmd = f"cat {shlex.quote(path)}"
+        result = self._exec(cmd)
         if result.exit_code != 0:
             return f"Error reading {path}: {result.stderr or result.stdout}"
         return result.stdout

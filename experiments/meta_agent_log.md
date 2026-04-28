@@ -116,7 +116,8 @@ in `react.py` matches.
 `max_actions=30` on the `ReactAgentConfig` to match `max_steps`, with a
 comment so the next reader doesn't strip it.
 
-**Result**: pending re-run.
+**Result**: Confirmed in run 3 — episode reached turn 12 (up from 10). Agent called `final_step` at
+turn 11 with reward 0.0. The budget fix works; agent stopped from logic error, not from the cap.
 
 **Follow-up candidates** (out of scope for this branch, but worth noting):
 - `ReactAgentConfig.max_actions` default of 10 is too low for any
@@ -126,3 +127,56 @@ comment so the next reader doesn't strip it.
 - The harness should warn (or refuse to start) when
   `agent.max_actions < experiment.max_steps`, since the smaller value is
   almost always a misconfiguration.
+
+## Iteration 4 — 2026-04-28 — evaluate() output truncated at 2000 chars hides test failures
+
+**Tasks**: `django__django-10097` (run #3)
+
+**What we observed**: The `fail_to_pass_output` in the episode metadata was exactly 2000 characters,
+cutting off in the middle of Django's test runner startup output (DB creation logs). The actual
+test failures (FAIL / ERROR lines) appeared after 2000 chars and were invisible.
+
+**Hypothesis**: `task.py:evaluate()` truncates `f2p_output[:2000]` before storing. Django's
+runtests.py emits lengthy DB-setup preamble before printing test results, so 2000 chars is
+always too short to see any test outcome.
+
+**Intervention**: None needed — the truncation is directly visible at the cut-off character.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/task.py`):
+Increase truncation from 2000 → 20000 chars for both `fail_to_pass_output` and `pass_to_pass_output`.
+
+**Result**: Confirmed diagnostic — the agent's regex for django__django-10097 allowed `:` in the
+password part (`[^\s@/]*`) but the gold patch requires `[^\s:@/]*`. Without seeing the truncated
+output we could not verify which specific test case failed. With 20000-char limit the next run
+will show the exact FAIL/ERROR lines.
+
+**Follow-up candidate**: store full eval output to a sidecar file and only store a summary in
+the info dict — avoids the size vs. visibility tradeoff entirely.
+
+## Iteration 5 — 2026-04-28 — `read_file()` crashes on `line_start`/`line_end` kwargs
+
+**Tasks**: `django__django-10554` (run #3, ep1)
+
+**What the agent saw**: At turn 17 the agent emitted
+`read_file(path="django/db/models/sql/query.py", line_start=640, line_end=1040)`.
+`SWEBenchTool.read_file()` only accepts `path`, so `execute_action()` caught a `TypeError` and
+returned `StepError`. `task.step()` treats `StepError` as `done=True`, terminating the episode
+with `had_step_errors: True` and `reward=0.0`.
+
+**Hypothesis**: The LLM is trained on Claude's own `read_file` tool (which accepts
+`line_start`/`line_end` for windowed reading). Our implementation only accepted `path`, so any
+attempt to read a file range caused an immediate fatal error.
+
+**Intervention**: None needed — the TypeError is unambiguous in the episode log.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/tool.py`):
+Add `line_start: int | None` and `line_end: int | None` parameters to `read_file`. When provided,
+use `sed -n '{start},{end}p'` instead of `cat`. Both parameters are optional (defaults to full file).
+
+**Result**: pending re-run.
+
+**Blast radius**: `read_file` schema changes (new optional params), which is backwards-compatible.
+Agents that don't pass line ranges are unaffected.
+
+**Minor fix also committed**: `import re` moved from inside `_normalize_django_directive()` to
+module-level (EX-001 violation).

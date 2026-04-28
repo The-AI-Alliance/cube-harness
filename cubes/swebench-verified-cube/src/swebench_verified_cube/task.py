@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import re
 import shlex
 from typing import Any
 
@@ -106,8 +107,8 @@ class SWEBenchVerifiedTask(Task):
             "resolved": resolved,
             "fail_to_pass_passed": f2p_passed,
             "pass_to_pass_passed": p2p_passed,
-            "fail_to_pass_output": f2p_output[:2000],
-            "pass_to_pass_output": p2p_output[:2000],
+            "fail_to_pass_output": f2p_output[:20000],
+            "pass_to_pass_output": p2p_output[:20000],
         }
 
     # ── Private helpers ────────────────────────────────────────────
@@ -156,8 +157,6 @@ class SWEBenchVerifiedTask(Task):
         Django's runtests.py expects:
             "module.path.ClassName.test_method"
         """
-        import re
-
         m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive.strip())
         if m:
             method, class_path = m.group(1), m.group(2)
