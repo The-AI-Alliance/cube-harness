@@ -181,7 +181,7 @@ def _run_with_ray_impl(
             dashboard_host="0.0.0.0",
             include_dashboard=True,
             log_to_driver=True,
-            runtime_env={"working_dir": None, "env_vars": get_trace_env_vars()},
+            runtime_env={"env_vars": get_trace_env_vars()},
         )  # TODO: Ray breaks signal handling, we cannot react to Ctrl+C here, still cannot find a workaround
 
     exp.benchmark.setup()

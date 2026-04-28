@@ -119,7 +119,7 @@ def main(
         run_sequentially(exp)
     else:
         n_cpus = min(max_tasks or 500, 10)
-        run_with_ray(exp, n_cpus=n_cpus, episode_timeout=1800.0)
+        run_with_ray(exp, n_cpus=n_cpus, step_timeout_s=1800.0)
 
 
 if __name__ == "__main__":
