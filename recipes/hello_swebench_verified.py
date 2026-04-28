@@ -3,11 +3,14 @@
 # dependencies = [
 #     "cube-harness",
 #     "swebench-verified-cube",
+#     "cube-infra-daytona",
+#     "python-dotenv",
 # ]
 #
 # [tool.uv.sources]
 # cube-harness = { path = "..", editable = true }
 # swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }
+# cube-infra-daytona = { path = "/Users/alexandre.lacoste/dev/cube/cube-standard/cube-resources/cube-infra-daytona", editable = true }
 # ///
 
 """Run swebench-verified-cube with AgentLab2.
@@ -19,6 +22,11 @@ Usage:
 
 The recipe in "full" mode runs all 500 tasks. Use --repo to filter by repository, e.g.:
     uv run recipes/hello_swebench_verified.py full --model gpt-4.1 --repo django/django
+
+Prerequisites:
+    - DAYTONA_API_KEY in env (or ~/.env-cube)
+    - Sibling checkout of cube-standard at ../../cube-standard for the
+      cube-infra-daytona editable dep above
 """
 
 import argparse
@@ -26,8 +34,13 @@ import logging
 import time
 from pathlib import Path
 
-from cube.backends.daytona import DaytonaContainerBackend
+from cube_infra_daytona import DaytonaInfraConfig
+from dotenv import load_dotenv
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+
+# Credentials: prefer ~/.env-cube (per PR #314), fall back to ~/.env when keys live there.
+load_dotenv(Path.home() / ".env-cube")
+load_dotenv(Path.home() / ".env", override=False)
 
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
@@ -49,9 +62,9 @@ def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> Non
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "cube_harness_results" / f"swebench_verified_{mode}_{model_short}_{current_datetime}"
 
-    backend = DaytonaContainerBackend()
+    infra = DaytonaInfraConfig()
 
-    benchmark = SWEBenchVerifiedBenchmark(container_backend=backend)
+    benchmark = SWEBenchVerifiedBenchmark(infra=infra)
 
     # In debug mode, restrict to 2 django tasks so tests run fast locally
     if mode == "debug":
