@@ -131,11 +131,18 @@ class EpisodeResult:
         meta = self.metadata()
         stats = meta.summary_stats or {}
         known_fields = EpisodeRecord.model_fields
+        fields: dict[str, Any] = {k: v for k, v in stats.items() if k in known_fields}
+        # summary_stats uses "cost" but EpisodeRecord expects "cost_usd"
+        if "cost" in stats and "cost_usd" not in fields:
+            fields["cost_usd"] = stats["cost"]
+        fields.update(meta.metadata)
+        # reward lives in reward_info, not summary_stats (which uses "final_reward")
+        if "reward" in meta.reward_info:
+            fields["reward"] = meta.reward_info["reward"]
         return EpisodeRecord(
             trajectory_id=self.trajectory_id(),
             status=self.status(),
-            **{k: v for k, v in stats.items() if k in known_fields},
-            **meta.metadata,
+            **fields,
         )
 
 
