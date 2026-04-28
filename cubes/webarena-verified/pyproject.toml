@@ -20,6 +20,10 @@ build-backend = "uv_build"
 [tool.uv-build]
 include = ["src/webarena_verified_cube/task_metadata.json"]
 
+[tool.uv.sources]
+# TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "main" }
+
 [tool.ruff]
 fix = true
 line-length = 120

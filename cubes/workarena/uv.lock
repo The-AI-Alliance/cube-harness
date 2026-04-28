@@ -274,8 +274,8 @@ wheels = [
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc5"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard#a5947a02c00e68e9ccd258f2cd8cfba07ad2dd17" }
+version = "0.1.0rc7"
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=main#9982b279dd780bdae95b0f8cbcf2a7f3fab79d0e" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -1116,7 +1116,7 @@ requires-dist = [
     { name = "cube-browser-playwright", specifier = ">=0.2.0" },
     { name = "cube-browser-tool", specifier = ">=0.2.0" },
     { name = "cube-chat-tool", specifier = ">=0.1.0" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=main" },
     { name = "playwright", specifier = "==1.44" },
     { name = "termcolor" },
 ]
