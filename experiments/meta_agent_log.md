@@ -395,4 +395,44 @@ patch exits 1 (warning fires), but the function remains in the file and tests pa
 didn't touch tests) are unaffected. Edge case (agent added exactly the same content) now fails to
 "apply" but correctly leaves content in place → tests pass → reward=1.0.
 
-**Result**: Pending verification.
+**Result**: Pending verification (flask-5014 still running in broad eval).
+
+## Iteration 15 — 2026-04-28 — p2p truncated test IDs + Django PYTHONIOENCODING
+
+**Tasks**: `matplotlib__matplotlib-13989`, `matplotlib__matplotlib-14623`, `django__django-10880`
+
+**What the agent saw**: Broad 23-task eval revealed two new eval-infrastructure failure patterns:
+
+1. **matplotlib × 2** (`matplotlib-13989`, `matplotlib-14623`): `fail_to_pass_passed=True` but
+   `pass_to_pass_passed=False`. Both had `f2p` tests passing (agent fixed the code correctly) but
+   pytest exited 4 on `pass_to_pass` — "no tests collected". Inspecting the p2p list in SWE-bench
+   data revealed truncated parametrised test IDs like
+   `'lib/matplotlib/tests/test_axes.py::test_stem[png-w/'` — the closing `]` is missing, so pytest
+   can never match them. This is a SWE-bench data artefact, not an agent failure.
+
+2. **django-10880**: Agent ran the runtests.py command which exited with
+   `UnicodeEncodeError: 'ascii' codec can't encode character '…' in position …`.
+   Django's test runner emits `…` (U+2026 HORIZONTAL ELLIPSIS) in test output; Daytona containers
+   default to an ASCII locale. The evaluation framework's sentinel line was never emitted and the
+   command returned `False`.
+
+**Hypothesis**:
+- For matplotlib: `_run_tests` with `strict=True` (default) treated pytest exit 4 as a failure.
+  Changing to `strict=False` for pass_to_pass makes exit 4 a pass.
+- For Django: prepending `PYTHONIOENCODING=utf-8` to the runtests.py command forces UTF-8 output
+  regardless of container locale.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/task.py`):
+- `_run_tests` gains `strict: bool = True` parameter. When `strict=False`, exit code 4 → `(True, output)`.
+- `evaluate()` calls `_run_tests(..., strict=False)` for the pass_to_pass run.
+- `_build_test_cmd` Django branch: `f"PYTHONIOENCODING=utf-8 ./tests/runtests.py --verbosity 2 {tests}"`
+
+**Blast radius**: Small. `strict=False` only applies to pass_to_pass; fail_to_pass remains strict.
+Django PYTHONIOENCODING is a no-op on UTF-8 locales; harmless elsewhere.
+
+**Result** (expected — run in progress):
+- matplotlib-13989: r=0.0 → r=1.0 (f2p was already passing, p2p exit-4 no longer penalised)
+- matplotlib-14623: r=0.0 → r=1.0 (same)
+- django-10880: r=0.0 → r=1.0 (pending — new run uses old code; verification run needed)
+
+**Control set**: requests-1142 ✓, flask-5014 pending.
