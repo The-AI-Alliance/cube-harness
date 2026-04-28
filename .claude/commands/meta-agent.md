@@ -87,14 +87,21 @@ Empty list = all 125 tasks. List all IDs: `MiniWobBenchmark.task_metadata.keys()
 
 ## Reading Traces
 
-**Fast overview:**
+**Step 1 — compact CLI overview** (start here):
+```bash
+ch-trace <episode_dir>
+# e.g. ch-trace ~/cube_harness_results/.../episodes/workarena.servicenow.create-incident_ep0
+```
+Two lines per turn: action + result on line 1, page title + reward on line 2. Fast way to see what the agent did without opening a browser.
+
+**Step 2 — experiment-level summary:**
 ```python
 from cube_harness.results import ExperimentResult
 for record in ExperimentResult("/path/to/output_dir").get_records():
     print(record.task_id, record.reward, record.n_turns, record.cost_usd)
 ```
 
-**What the agent actually saw** — the most important diagnostic. Read the full LLM prompt from the stored `act` step:
+**Step 3 — what the agent actually saw** — the most important diagnostic. Read the full LLM prompt from the stored `act` step:
 ```python
 from pathlib import Path
 from cube_harness.results import EpisodeResult
@@ -182,5 +189,6 @@ Append one entry per iteration when committing the fix PR:
 | Genny | `src/cube_harness/agents/genny.py` |
 | Results API | `src/cube_harness/results.py` |
 | Results root | `~/cube_harness_results/` |
-| XRay | `make xray` |
+| Trace CLI | `ch-trace <episode_dir>` (compact per-turn viewer) |
+| XRay | `make xray` (visual, screenshots) |
 | Tests / Lint | `make test` / `make lint` |

@@ -54,10 +54,10 @@ class WorkArenaInfeasibleTool(Tool):
 
     @tool_action
     def report_infeasible(self, explanation: str) -> str:
-        """Report that the task instructions are infeasible.
+        """Report that this task is genuinely impossible to complete. Use only when the task is objectively infeasible.
 
         Args:
-            explanation: Explanation of why the task cannot be completed.
+            explanation: Brief explanation of why the task cannot be completed.
         """
         self._messages.append({"role": "infeasible", "content": explanation})
         return "Reported task as infeasible."

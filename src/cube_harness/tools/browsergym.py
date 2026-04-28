@@ -20,7 +20,10 @@ from browsergym.utils.obs import flatten_axtree_to_str, flatten_dom_to_str, prun
 from cube.core import Action, ActionSchema, Content, Observation, StepError
 from cube.tool import ToolConfig
 from cube.tools.browser import BrowserTool
-from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
+from cube_browser_playwright.playwright_session import (
+    PlaywrightSession,
+    PlaywrightSessionConfig,
+)
 from PIL import Image
 from playwright.sync_api import Error, Page
 from pydantic import Field
@@ -48,6 +51,10 @@ class BrowsergymConfig(ToolConfig):
     use_axtree: bool = True
     use_screenshot: bool = True
     prune_html: bool = True
+
+    # AXTree element attributes — requires extra_element_properties from the DOM snapshot
+    axtree_with_visible: bool = False  # label visible elements (vis >= 0.5) as "visible"
+    axtree_with_clickable: bool = False  # label clickable elements as "clickable"
 
     def make(self, container: Any = None) -> "BrowsergymTool":
         return BrowsergymTool(self)
@@ -86,8 +93,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         action_str = _action_to_bgym_string(action)
         result = self._execute_bgym_step(action_str)
         obs = self.page_obs()
-        action_obs = Observation(contents=[Content.from_data(result, tool_call_id=action.id)])
-        return action_obs + obs
+        return Observation(contents=[Content.from_data(result, tool_call_id=action.id)]) + obs
 
     # === BrowserTool interface ===
 
@@ -157,12 +163,15 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             return
         for page in self.session.context.pages:
             try:
-                page.wait_for_load_state("domcontentloaded", timeout=3000)
+                page.wait_for_load_state("domcontentloaded", timeout=1500)
             except Error:
                 pass
             for frame in page.frames:
+                # un necessary to wait for detached frames, and waiting on them raises a timeout error, so skip them
+                if frame.is_detached():
+                    continue
                 try:
-                    frame.wait_for_load_state("domcontentloaded", timeout=3000)
+                    frame.wait_for_load_state("domcontentloaded", timeout=1500)
                 except Error:
                     pass
 
@@ -193,10 +202,18 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
                 send_message_to_user=send_message_to_user,
                 report_infeasible_instructions=report_infeasible_instructions,
             )
-            self._last_info = {"source": "action", "action": action_str, "action_error": ""}
+            self._last_info = {
+                "source": "action",
+                "action": action_str,
+                "action_error": "",
+            }
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
-            self._last_info = {"source": "action", "action": action_str, "action_error": error_msg}
+            self._last_info = {
+                "source": "action",
+                "action": action_str,
+                "action_error": error_msg,
+            }
             result = f"Failed: {error_msg}"
 
         self._last_obs = self._extract_bgym_obs()
@@ -214,12 +231,17 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
         for retries_left in reversed(range(EXTRACT_OBS_MAX_TRIES)):
             try:
-                _pre_extract(page, tags_to_mark=self.config.tags_to_mark, lenient=(retries_left == 0))
+                _pre_extract(
+                    page,
+                    tags_to_mark=self.config.tags_to_mark,
+                    lenient=(retries_left == 0),
+                )
                 dom = extract_dom_snapshot(page)
                 axtree = extract_merged_axtree(page)
                 focused_element_bid = extract_focused_element_bid(page)
                 scale_factor = getattr(page, "_bgym_scale_factor", 1.0)
-                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor)
+                need_extra = self.config.axtree_with_visible or self.config.axtree_with_clickable
+                extra_properties = extract_dom_extra_properties(dom, scale_factor=scale_factor) if need_extra else {}
             except (Error, MarkingError):
                 if retries_left > 0:
                     logger.warning(
@@ -237,7 +259,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
             "axtree_object": axtree,
             "extra_element_properties": extra_properties,
             "focused_element_bid": focused_element_bid,
-            "last_action_error": self._last_info.get("action_error", "") if self._last_info else "",
+            "last_action_error": (self._last_info.get("action_error", "") if self._last_info else ""),
         }
         if self.config.use_screenshot:
             obs["screenshot"] = extract_screenshot(page)
@@ -247,15 +269,12 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         """Convert BrowserGym observation dict to cube-harness Observation."""
         obs = Observation()
 
+        extra_properties = bgym_obs.get("extra_element_properties", {})
+
         # HTML
         if self.config.use_html and "dom_object" in bgym_obs:
             dom_obj = bgym_obs["dom_object"]
-            html_str = flatten_dom_to_str(
-                dom_obj,
-                extra_properties=bgym_obs.get("extra_element_properties", {}),
-                with_visible=False,
-                filter_visible_only=False,
-            )
+            html_str = flatten_dom_to_str(dom_obj, extra_properties=extra_properties)
             if self.config.prune_html:
                 html_str = prune_html(html_str)
             obs.contents.append(Content.from_data(html_str, name="pruned_html"))
@@ -270,7 +289,12 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         if self.config.use_axtree and "axtree_object" in bgym_obs:
             axtree_obj = bgym_obs["axtree_object"]
             if axtree_obj:
-                axtree_str = flatten_axtree_to_str(axtree_obj)
+                axtree_str = flatten_axtree_to_str(
+                    axtree_obj,
+                    extra_properties=extra_properties,
+                    with_visible=self.config.axtree_with_visible,
+                    with_clickable=self.config.axtree_with_clickable,
+                )
                 obs.contents.append(Content.from_data(axtree_str, name="axtree_txt"))
 
         # Screenshot
@@ -299,6 +323,16 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 # === Module-level helpers ===
 
 
+# Descriptions that replace BrowserGym's upstream text.
+# Use sparingly — only when the upstream description is misleading about when to use the action.
+_ACTION_DESCRIPTION_OVERRIDES: dict[str, str] = {
+    "fill": (
+        "Fill a form field by setting its value directly. It does not fire keyboard events, so autocomplete suggestions"
+        " will not appear. Use keyboard_type_into() instead for fields that require autocomplete."
+    ),
+}
+
+
 def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
     """Convert bgym's HighLevelActionSet to a list of ActionSchema objects."""
     tool_descs = action_set.to_tool_description(api="openai")
@@ -308,7 +342,7 @@ def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
         # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
         name = desc["name"]
-        description = desc.get("description", name)
+        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
         schemas.append(ActionSchema(name=name, description=description, parameters=params))
     return schemas
 

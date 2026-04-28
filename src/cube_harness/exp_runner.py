@@ -58,7 +58,7 @@ def _run_with_ray_impl(
 
     @ray.remote
     def run_episode(episode: Episode) -> Trajectory:
-        trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+        trajectory_id = trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
         log_file = get_log_path(output_dir, trajectory_id)
         with redirect_output_to_log(log_file, append=True, tee=False, log_format=LOG_FORMAT):
             return episode.run()
@@ -125,7 +125,7 @@ def _poll_ray(
             logger.info(f"{completed} episodes completed, {len(episodes_in_progress)} in progress")
         for task_ref in done:
             episode = ref_to_episode[task_ref]
-            task_id = episode.config.task_id
+            task_id = episode.config.task_config.task_id
             traj_id = trajectory_log_id(task_id, episode.config.id)
             try:
                 traj: Trajectory = ray.get(task_ref)
@@ -146,7 +146,7 @@ def _poll_ray(
             for ref, elapsed in _get_running_elapsed_s(episodes_in_progress).items():
                 if elapsed > episode_timeout:
                     episode = ref_to_episode[ref]
-                    task_id = episode.config.task_id
+                    task_id = episode.config.task_config.task_id
                     traj_id = trajectory_log_id(task_id, episode.config.id)
                     if elapsed < episode_timeout + _CANCEL_GRACE_PERIOD_S:
                         logger.warning(f"Episode {traj_id} timed out after {elapsed:.0f}s — cancelling gracefully")
@@ -195,7 +195,7 @@ def _run_sequentially_impl(exp: Experiment, debug_limit: int | None) -> ExpResul
             episodes = episodes[:debug_limit]
         trajectories = []
         for episode in episodes:
-            trajectory_id = trajectory_log_id(episode.config.task_id, episode.config.id)
+            trajectory_id = trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
             log_file = get_log_path(exp.output_dir, trajectory_id)
             with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
                 trajectories.append(episode.run())
