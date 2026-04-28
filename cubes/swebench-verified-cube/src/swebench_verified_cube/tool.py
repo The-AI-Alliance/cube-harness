@@ -67,6 +67,9 @@ class SWEBenchTool(Tool):
                 Default 120s. Use larger values (600-1800) for test suites.
                 NOT milliseconds.
         """
+        # Guard against millisecond-scale values (LLM training artefact: 120000ms → 120s)
+        if timeout > 7200:
+            timeout = 120
         output = self._run_bash(command, timeout=timeout)
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:
