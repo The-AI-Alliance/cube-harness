@@ -251,3 +251,61 @@ converts the agent's intended 120000ms → 120s without any visible error.
 **Follow-up**: The description says "Use larger values (600-1800)" — perhaps 120000ms → 120s is
 not what the agent wants for tests. Monitor whether agents use large timeouts for test commands
 and whether the cap causes premature timeouts.
+
+## Iteration 9 — 2026-04-28 — Switch debug tasks from Django to requests + flask
+
+**Tasks**: django__django-10097, django__django-10554 (outgoing); psf__requests-1142, pallets__flask-5014 (incoming)
+
+**What we observed**:
+- django__django-10097: `fail_to_pass` contains 438 tests total; only 17 are URLValidator-related.
+  The other 421 are pre-existing auth test failures unrelated to the patch. Any correct fix gets
+  reward=0.0 because the 421 tests will always fail in this eval environment. No diagnostic value.
+- django__django-10554: 2 clean fail_to_pass tests, but the bug is a deep compiler internals fix
+  in `compiler.py:get_order_by()`. Agent explored the right file (step 19-23) then regressed to
+  patching `query.py` for 20 more turns and never applied the correct fix. Out of reach for debug tasks.
+
+**Hypothesis**: Debug task selection matters as much as pipeline quality. Tasks with noisy
+`fail_to_pass` sets produce false-negatives on correct fixes. Tasks requiring deep compiler
+knowledge exceed what small-scale debugging can diagnose.
+
+**Fix** (`recipes/hello_swebench_verified.py`):
+- Replace `DEBUG_TASKS` (was first 2 django tasks) with:
+  - `psf__requests-1142`: 1 f2p, 5 p2p — "GET always sends Content-Length" — don't set
+    Content-Length for GET/HEAD. Simple, isolated, clean signal.
+  - `pallets__flask-5014`: 1 f2p, 59 p2p — "Empty Blueprint name should raise ValueError".
+    One-line constructor guard. Both use plain pytest (no Django DB setup preamble).
+- Add `--tasks` CLI argument for ad-hoc task overrides.
+- Default model bumped to `azure/gpt-5.4`.
+
+**Result**: Run 5 — `pallets__flask-5014` solved in 6 turns, reward=1.0 (first successful reward).
+`psf__requests-1142` — reward=0.0 (new failure mode discovered, see Iter 10).
+
+**Blast radius**: Recipe-only. No library code changed.
+
+## Iteration 10 — 2026-04-28 — Agent returns no-action response instead of calling final_step
+
+**Tasks**: `psf__requests-1142` (run 5)
+
+**What the agent saw**: At turn 11 the agent's pytest run showed "4 passed, 23 deselected, 1 warning in 0.04s"
+— the fix was correct. But instead of calling `final_step`, the agent returned a plain text response with
+no tool calls. `episode.py:213` detects this, logs "Agent returned no actions — stopping episode." and
+`break`s out of the loop, using the last `env_output` (done=False, reward=0.0) as the final reward.
+evaluate() is never called.
+
+**Hypothesis**: The system prompt said "call final_step to submit" but didn't prohibit returning a text
+response. The LLM generated a natural-language completion summary instead of a tool call.
+
+**Intervention**: None needed — "Agent returned no actions" is unambiguous in the log. The step 022
+obs confirmed tests passed.
+
+**Fix** (`recipes/hello_swebench_verified.py` — `SWE_SYSTEM_PROMPT`):
+Add "IMPORTANT: You MUST call the `final_step` tool to submit — do NOT just write a text response.
+Every turn must end with a tool call."
+
+**Follow-up candidate** (cube-harness framework): `episode.py:213` silently discards work when the
+agent returns no actions. When `task.accept_agent_stop=True`, the framework should call evaluate()
+rather than using the stale 0.0 reward. This would correctly surface reward=1.0 when the agent's
+fix was right but it forgot to call `final_step`.
+
+**Result**: Run 6 — `psf__requests-1142` reward=1.0 in 10 turns (agent correctly called final_step).
+Combined run 6 result: **2/2 tasks solved** (first 100% solve rate across all runs).
