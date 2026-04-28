@@ -107,8 +107,8 @@ class SWEBenchVerifiedTask(Task):
             "resolved": resolved,
             "fail_to_pass_passed": f2p_passed,
             "pass_to_pass_passed": p2p_passed,
-            "fail_to_pass_output": f2p_output[:20000],
-            "pass_to_pass_output": p2p_output[:20000],
+            "fail_to_pass_output": f2p_output[-20000:],
+            "pass_to_pass_output": p2p_output[-20000:],
         }
 
     # ── Private helpers ────────────────────────────────────────────
@@ -136,17 +136,40 @@ class SWEBenchVerifiedTask(Task):
         return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
 
     def _run_tests(self, repo: str, test_directives: list[str], timeout: int = 1800) -> tuple[bool, str]:
-        """Run test directives and return (all_passed, output)."""
+        """Run test directives and return (all_passed, output).
+
+        Only the last 200 lines of output are retained — the setup preamble
+        (DB creation, parallel-worker cloning) can be tens of thousands of
+        characters; the useful signal is always in the tail.
+        """
         assert isinstance(self.tool, SWEBenchTool)
         if not test_directives:
             return True, ""
 
         test_cmd = self._build_test_cmd(repo, test_directives)
-        cmd = f"{CONDA_ACTIVATE} && {test_cmd}"  # tool.working_dir is already the testbed
-        output = self.tool.bash_unlimited(cmd, timeout=timeout)
+        # Run tests, capture exit code, and tail output in one pipeline.
+        # bash_unlimited returns the pipeline exit code (from tail, always 0);
+        # we extract the real test exit code from the embedded marker line.
+        sentinel = "CUBE_TEST_EXIT_CODE"
+        cmd = (
+            f"{CONDA_ACTIVATE} && "
+            f"{{ {test_cmd} 2>&1; echo '{sentinel}:'$?; }} | tail -n 200"
+        )
+        raw = self.tool.bash_unlimited(cmd, timeout=timeout)
 
-        all_passed = "[exit_code:" not in output and "[error]" not in output
-        return all_passed, output
+        # Handle timeout — bash_unlimited appends "[error]" on timeout
+        if "[error]" in raw:
+            return False, raw
+
+        # Extract exit code from sentinel line
+        m = re.search(rf"^{sentinel}:(\d+)\s*$", raw, re.MULTILINE)
+        if m:
+            exit_code = int(m.group(1))
+            output = re.sub(rf"^{sentinel}:\d+\s*\n?", "", raw, flags=re.MULTILINE).rstrip()
+            return exit_code == 0, output
+
+        # Fallback: sentinel missing means the outer shell itself failed
+        return False, raw
 
     @staticmethod
     def _normalize_django_directive(directive: str) -> str:
