@@ -313,14 +313,16 @@ class Episode:
                     termination_reason = termination_reason or TerminationReason.ENV_DONE
                 elif turns >= self.config.max_steps:
                     termination_reason = TerminationReason.MAX_STEPS
-                else:
-                    termination_reason = termination_reason or TerminationReason.STOPPED
                 
                 if termination_reason != TerminationReason.ENV_DONE:
                     env_ts = time.time()
+                    logger.info(colored(f"Episode pre-maturely terminated due to {termination_reason}, running evaluation...", "yellow"))
                     reward, info = evaluate_fn(env_output.obs)
                     env_output = EnvironmentOutput(obs=env_output.obs, reward=reward, info=info)
                     env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
+                    self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
+                    summary_proc.on_step(len(trajectory.steps), env_step)
+                    trajectory.steps.append(env_step)
 
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}

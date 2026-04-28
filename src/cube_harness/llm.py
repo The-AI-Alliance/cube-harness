@@ -43,6 +43,8 @@ class LLMConfig(TypedBaseModel):
     tool_choice: Literal["auto", "none", "required"] = "auto"
     parallel_tool_calls: bool = False
     logprobs: bool = False
+    include_stop_str_in_output: bool = False
+    skip_special_tokens: bool = True
     top_logprobs: int | None = None
     training: bool = False  # whether the call is for training (vs inference); may affect caching and logging behavior
     extra_body: dict = Field(default_factory=dict)

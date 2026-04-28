@@ -9,7 +9,6 @@ from cube_harness.llm import LLMCall
 class TerminationReason(str, Enum):
     NO_ACTION = "no_action"
     ENV_DONE = "env_done"
-    STOPPED = "stopped"
     MAX_STEPS = "max_steps"
     AGENT_ERROR = "agent_error"
     ENV_ERROR = "env_error"
