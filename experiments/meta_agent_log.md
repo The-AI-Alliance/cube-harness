@@ -86,3 +86,43 @@ and watch for unrealistic timeouts.
 called automatically on tool registration / `action_set` access in
 cube-standard, so missing descriptions fail loudly instead of silently shipping
 to the LLM. That belongs in cube-standard, not here.
+
+## Iteration 3 — 2026-04-28 — Recipe never reached `max_steps=30`; agent capped at 10
+
+**Tasks**: `django__django-10097` (run #2)
+
+**What we observed**: Episode 0 ended at turn 11 with reward 0.0 and the log line:
+
+> `cube_harness.agents.react:74 step() - Max actions reached, issuing STOP action.`
+
+The recipe sets `Experiment.max_steps=30` but never set `ReactAgentConfig.max_actions`,
+which defaults to **10** in `src/cube_harness/agents/react.py:19`. The smaller of
+the two limits wins; the agent was force-stopped at action 10 and the harness
+fired `final_step` for it.
+
+This means the recipe has been silently giving every SWE-bench task a 10-action
+budget — far below what real-world bug fixes need (explore → read → patch →
+verify ≈ 20–40 actions). Every `reward=0.0` we'd ever seen on this cube was
+under-resourced.
+
+**Hypothesis**: Two competing limits exist. The `Experiment.max_steps` is the
+episode-wall limit; `AgentConfig.max_actions` is an agent-internal counter that
+short-circuits earlier. Recipes need to set both, or the agent ones default low.
+
+**Intervention**: Skipped — the log line is unambiguous and the default value
+in `react.py` matches.
+
+**Fix** (`recipes/hello_swebench_verified.py`): set
+`max_actions=30` on the `ReactAgentConfig` to match `max_steps`, with a
+comment so the next reader doesn't strip it.
+
+**Result**: pending re-run.
+
+**Follow-up candidates** (out of scope for this branch, but worth noting):
+- `ReactAgentConfig.max_actions` default of 10 is too low for any
+  multi-step coding/reasoning task. Either raise the default to match common
+  use, or remove the agent-side cap and let the experiment-level
+  `max_steps` be the single source of truth.
+- The harness should warn (or refuse to start) when
+  `agent.max_actions < experiment.max_steps`, since the smaller value is
+  almost always a misconfiguration.
