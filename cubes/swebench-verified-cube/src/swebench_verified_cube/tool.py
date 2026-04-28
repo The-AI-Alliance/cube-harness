@@ -103,7 +103,7 @@ class SWEBenchTool(Tool):
         """
         if line_start is not None or line_end is not None:
             start = max(1, line_start or 1)
-            end = line_end or ""
+            end = str(line_end) if line_end is not None else "$"
             cmd = f"sed -n '{start},{end}p' {shlex.quote(path)}"
         else:
             cmd = f"cat {shlex.quote(path)}"
