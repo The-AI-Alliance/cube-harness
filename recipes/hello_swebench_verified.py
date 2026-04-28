@@ -3,46 +3,37 @@
 # dependencies = [
 #     "cube-harness",
 #     "swebench-verified-cube",
-#     "cube-infra-daytona",
-#     "python-dotenv",
 # ]
 #
 # [tool.uv.sources]
 # cube-harness = { path = "..", editable = true }
 # swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }
-# cube-infra-daytona = { path = "/Users/alexandre.lacoste/dev/cube/cube-standard/cube-resources/cube-infra-daytona", editable = true }
 # ///
 
-"""Run swebench-verified-cube with AgentLab2.
+"""Run swebench-verified-cube with the ReactAgent.
 
 Usage:
-    uv run recipes/hello_swebench_verified.py debug              # 2 default tasks, sequential
-    uv run recipes/hello_swebench_verified.py debug --tasks psf__requests-1142,pallets__flask-5014
-    uv run recipes/hello_swebench_verified.py 10 --model gpt-5.4 # 10 tasks with Ray
-    uv run recipes/hello_swebench_verified.py full --model gpt-5.4
+    uv run recipes/hello_swebench_verified.py                          # 2 debug tasks, sequential
+    uv run recipes/hello_swebench_verified.py --tasks psf__requests-1142,pallets__flask-5014
+    uv run recipes/hello_swebench_verified.py --model azure/gpt-5.4 --n-parallel 5
+    uv run recipes/hello_swebench_verified.py --repo django/django --model azure/gpt-5.4
 
-The recipe in "full" mode runs all 500 tasks. Use --repo to filter by repository, e.g.:
-    uv run recipes/hello_swebench_verified.py full --model gpt-5.4 --repo django/django
+Infrastructure:
+    The benchmark defaults to LocalInfraConfig (local Docker/Podman).
+    To use Daytona, install cube-infra-daytona separately and pass infra=DaytonaInfraConfig()
+    to SWEBenchVerifiedBenchmark.
 
 Prerequisites:
-    - DAYTONA_API_KEY in env (or ~/.env-cube)
-    - Sibling checkout of cube-standard at ../../cube-standard for the
-      cube-infra-daytona editable dep above
+    - Docker or Podman running locally (default)
+    - Model API key in environment (e.g. AZURE_API_KEY, OPENAI_API_KEY)
 """
 
 import argparse
 import logging
-import time
-from pathlib import Path
 
-from cube_infra_daytona import DaytonaInfraConfig
-from dotenv import load_dotenv
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
-# Credentials: prefer ~/.env-cube (per PR #314), fall back to ~/.env when keys live there.
-load_dotenv(Path.home() / ".env-cube")
-load_dotenv(Path.home() / ".env", override=False)
-
+from cube_harness import make_experiment_output_dir
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
@@ -50,11 +41,21 @@ from cube_harness.llm import LLMConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
+# Default debug tasks: clean signal, 1 fail_to_pass test each, simple pytest setup.
+# psf__requests-1142: don't send Content-Length on GET; 1 f2p, 5 p2p.
+# pallets__flask-5014: raise ValueError on empty Blueprint name; 1 f2p, 59 p2p.
+DEBUG_TASKS = ["psf__requests-1142", "pallets__flask-5014"]
+
 SWE_SYSTEM_PROMPT = """\
 You are an autonomous coding agent. You have access to a Linux sandbox with the repository already cloned at /testbed.
 Your task is to resolve the GitHub issue described below. Use the provided tools to explore the codebase, \
 understand the problem, and implement a fix.
 Start by exploring the repository structure and reading relevant files before making changes.
+
+IMPORTANT — the issue requires you to ADD or CHANGE behavior in the source code. \
+The existing test suite will pass before your fix — that is expected. \
+Do NOT call final_step just because existing tests pass. \
+Only call final_step after you have actually modified the source code to resolve the issue.
 
 Before calling final_step, verify your fix by running the relevant tests:
 - Django projects: cd /testbed && ./tests/runtests.py --verbosity 2 <test_module>
@@ -62,32 +63,22 @@ Before calling final_step, verify your fix by running the relevant tests:
 - SymPy projects: cd /testbed && ./bin/test <path/to/test_file.py>
 - Other Python projects: cd /testbed && python -m pytest <test_path> -x -q
 
-IMPORTANT: You MUST call the `final_step` tool to submit your solution — do NOT just write \
-a text response. Every turn must end with a tool call. If your fix is complete and tests pass, \
-call `final_step`. If you need to keep working, call another tool (bash, read_file, write_file)."""
-
-
-# Default debug tasks: clean signal, 1 fail_to_pass test each, simple pytest setup (no Django DB).
-# psf__requests-1142: don't send Content-Length on GET; 1 f2p, 5 p2p.
-# pallets__flask-5014: raise ValueError on empty Blueprint name; 1 f2p, 59 p2p.
-DEBUG_TASKS = ["psf__requests-1142", "pallets__flask-5014"]
+IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 
 
 def main(
-    mode: str,
+    debug: bool,
     model: str = "azure/gpt-5.4",
     repo: str | None = None,
     task_ids: list[str] | None = None,
+    n_parallel: int = 5,
 ) -> None:
     model_short = model.split("/")[-1]
-    current_datetime = time.strftime("%Y%m%d_%H%M%S")
-    output_dir = Path.home() / "cube_harness_results" / f"swebench_verified_{mode}_{model_short}_{current_datetime}"
+    output_dir = make_experiment_output_dir("react", "swebench-verified", llm_name=model_short)
 
-    infra = DaytonaInfraConfig()
+    benchmark = SWEBenchVerifiedBenchmark()
 
-    benchmark = SWEBenchVerifiedBenchmark(infra=infra)
-
-    if mode == "debug":
+    if debug:
         tasks = task_ids or DEBUG_TASKS
         benchmark = benchmark.subset_from_list(tasks)
     elif task_ids is not None:
@@ -95,14 +86,6 @@ def main(
     elif repo is not None:
         benchmark = benchmark.subset_from_glob("repo", repo)
 
-    max_tasks = {"10": 10}.get(mode)
-    if max_tasks is not None:
-        tasks = list(benchmark.task_metadata.keys())[:max_tasks]
-        benchmark = benchmark.subset_from_list(tasks)
-
-    # max_actions is per-agent and defaults to 10 — must be raised together with
-    # max_steps or the harness force-stops the agent at turn 10 with reward 0.
-    # SWE-bench tasks typically need 20+ steps to explore + diff + verify.
     agent_config = ReactAgentConfig(
         llm_config=LLMConfig(model_name=model),
         system_prompt=SWE_SYSTEM_PROMPT,
@@ -117,19 +100,19 @@ def main(
         max_steps=30,
     )
 
-    if mode == "debug":
+    if debug:
         run_sequentially(exp)
     else:
-        n_cpus = min(max_tasks or 500, 10)
-        run_with_ray(exp, n_cpus=n_cpus, episode_timeout=1800.0)
+        run_with_ray(exp, n_cpus=n_parallel, step_timeout_s=1800.0)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SWE-bench Verified experiments")
-    parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "10", "full"])
+    parser.add_argument("--debug", action="store_true", help="Run 2 debug tasks sequentially")
     parser.add_argument("--model", default="azure/gpt-5.4")
-    parser.add_argument("--repo", default=None, help="Filter by repository, e.g. 'django/django'")
-    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs to run, e.g. 'psf__requests-1142,pallets__flask-5014'")
+    parser.add_argument("--repo", default=None, help="Filter by repository glob, e.g. 'django/django'")
+    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
+    parser.add_argument("--n-parallel", type=int, default=5, help="Ray workers for parallel run (default: 5)")
     args = parser.parse_args()
     task_ids = [t.strip() for t in args.tasks.split(",")] if args.tasks else None
-    main(args.mode, model=args.model, repo=args.repo, task_ids=task_ids)
+    main(args.debug, model=args.model, repo=args.repo, task_ids=task_ids, n_parallel=args.n_parallel)
