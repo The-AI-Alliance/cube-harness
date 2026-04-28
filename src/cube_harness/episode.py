@@ -12,6 +12,7 @@ from termcolor import colored
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
+from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.metrics.tracer import get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -132,14 +133,38 @@ class Episode:
     ) -> Trajectory:
         """Run loop for the agent on the task."""
         task_id = self.config.task_config.task_id
+        trajectory_id = f"{task_id}_ep{self.config.id}"
         tracer = get_tracer(self.config.exp_name)
+
+        # Heartbeat 1: top of _run_loop (covers stuck setup_fn — env reset, container boot).
+        # If the prior status is terminal AND this Episode opted in to overwrite (a
+        # legitimate retry), archive the prior directory so its terminal status.json
+        # survives. Without `allow_overwrite`, save_trajectory will raise — preserving
+        # the existing safety guard against accidental double-runs.
+        prior = self.storage.read_episode_status(trajectory_id)
+        if prior is not None and prior.status in TERMINAL_STATUSES and self.allow_overwrite:
+            ep_dir = self.storage._episode_dir(trajectory_id)
+            if ep_dir.exists():
+                self.storage._archive_episode(ep_dir)
+        ep_status = EpisodeStatus(
+            status="RUNNING",
+            task_id=task_id,
+            episode_id=self.config.id,
+            started_at=time.time(),
+            last_heartbeat_at=time.time(),
+            current_step=0,
+            retry_count=next_retry_count(prior),
+        )
+        self.storage.write_episode_status(trajectory_id, ep_status)
+
+        trajectory: Trajectory | None = None
         try:
             with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
-                start_time = time.time()
+                start_time = ep_status.started_at
                 env_output = setup_fn()
                 agent_name = type(self.config.agent_config).__name__
                 trajectory = Trajectory(
-                    id=f"{task_id}_ep{self.config.id}",
+                    id=trajectory_id,
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
                     metadata={
                         "task_id": task_id,
@@ -158,6 +183,11 @@ class Episode:
                 logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
+                    # Heartbeat 2: start of each turn, before agent.step() and step_fn().
+                    ep_status.last_heartbeat_at = time.time()
+                    ep_status.current_step = turns + 1
+                    self.storage.write_episode_status(trajectory_id, ep_status)
+
                     with tracer.step(f"turn_{turns}") as span:
                         ts = time.time()
                         try:
@@ -169,6 +199,7 @@ class Episode:
                             self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                             summary_proc.on_step(len(trajectory.steps), agent_step)
                             trajectory.steps.append(agent_step)
+                            ep_status.had_step_errors = True
                             raise e
 
                         self.log_agent_output(turns, agent_output)
@@ -176,6 +207,8 @@ class Episode:
                         self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), agent_step)
                         trajectory.steps.append(agent_step)
+                        if agent_output.error is not None:
+                            ep_status.had_step_errors = True
 
                         if not agent_output.actions and not agent_output.error:
                             logger.info(colored("Agent returned no actions — stopping episode.", "yellow"))
@@ -191,6 +224,7 @@ class Episode:
                             self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                             summary_proc.on_step(len(trajectory.steps), env_step)
                             trajectory.steps.append(env_step)
+                            ep_status.had_step_errors = True
                             raise e
 
                         logger.info(
@@ -202,6 +236,8 @@ class Episode:
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), env_step)
                         trajectory.steps.append(env_step)
+                        if env_output.error is not None:
+                            ep_status.had_step_errors = True
                         span.set_attribute("done", env_output.done)
                         span.set_attribute("reward", env_output.reward)
                         turns += 1
@@ -212,12 +248,23 @@ class Episode:
                 summary_proc.on_episode_complete(trajectory, self.storage)
                 logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
                 final_reward = trajectory.last_env_step().reward
+                ep_status.reward = final_reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
+            ep_status.status = "COMPLETED"
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
+            ep_status.status = "FAILED"
+            ep_status.error_type = type(e).__name__
+            ep_status.error_message = str(e)[:500]
             raise e
         finally:
+            ep_status.ended_at = time.time()
+            ep_status.last_heartbeat_at = ep_status.ended_at
+            try:
+                self.storage.write_episode_status(trajectory_id, ep_status)
+            except Exception:
+                logger.exception("Failed to write final episode status")
             close_fn()
             tracer.shutdown()
         return trajectory

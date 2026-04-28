@@ -1350,3 +1350,81 @@ class TestExperimentResultGetRecords:
         episodes = list(result)
         assert len(episodes) == 2
         assert all(isinstance(ep, EpisodeResult) for ep in episodes)
+
+
+class TestEpisodeStatusIO:
+    """Tests for status.json atomic write/read on FileStorage."""
+
+    def test_write_then_read_roundtrip(self, tmp_dir) -> None:
+        from cube_harness.episode_status import EpisodeStatus
+
+        storage = FileStorage(tmp_dir)
+        status = EpisodeStatus(
+            status="COMPLETED",
+            task_id="t1",
+            episode_id=0,
+            started_at=1.0,
+            ended_at=2.0,
+            last_heartbeat_at=2.0,
+            current_step=3,
+            reward=1.0,
+        )
+        storage.write_episode_status("t1_ep0", status)
+
+        loaded = storage.read_episode_status("t1_ep0")
+        assert loaded is not None
+        assert loaded.status == "COMPLETED"
+        assert loaded.task_id == "t1"
+        assert loaded.reward == 1.0
+        assert loaded.current_step == 3
+
+    def test_read_missing_returns_none(self, tmp_dir) -> None:
+        storage = FileStorage(tmp_dir)
+        assert storage.read_episode_status("does_not_exist") is None
+
+    def test_atomic_write_no_partial_file(self, tmp_dir) -> None:
+        """Writing always goes via .tmp + os.replace — a partial status.json is never observed."""
+        from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
+
+        storage = FileStorage(tmp_dir)
+        status_path = storage._episode_status_path("t1_ep0")
+
+        status = EpisodeStatus(status="RUNNING", task_id="t1", episode_id=0, started_at=1.0)
+        storage.write_episode_status("t1_ep0", status)
+
+        siblings = list(status_path.parent.iterdir())
+        assert STATUS_FILENAME in [s.name for s in siblings]
+        assert not any(s.name.endswith(".tmp") for s in siblings)
+
+        status.status = "COMPLETED"
+        storage.write_episode_status("t1_ep0", status)
+        assert not any(s.name.endswith(".tmp") for s in status_path.parent.iterdir())
+        loaded = storage.read_episode_status("t1_ep0")
+        assert loaded is not None and loaded.status == "COMPLETED"
+
+    def test_list_episode_statuses(self, tmp_dir) -> None:
+        """list_episode_statuses returns statuses keyed by trajectory_id (skipping dirs without configs)."""
+        from cube_harness.episode_status import EpisodeStatus
+
+        storage = FileStorage(tmp_dir)
+        for tid, st in [("t1_ep0", "COMPLETED"), ("t2_ep0", "FAILED")]:
+            ep_dir = storage._episode_dir(tid)
+            ep_dir.mkdir(parents=True, exist_ok=True)
+            (ep_dir / "episode_config.json").write_text("{}")
+            storage.write_episode_status(
+                tid, EpisodeStatus(status=st, task_id=tid.split("_ep")[0], episode_id=0, started_at=0.0)
+            )
+        statuses = storage.list_episode_statuses()
+        assert set(statuses.keys()) == {"t1_ep0", "t2_ep0"}
+        assert statuses["t1_ep0"].status == "COMPLETED"
+        assert statuses["t2_ep0"].status == "FAILED"
+
+    def test_corrupt_status_returns_none(self, tmp_dir) -> None:
+        """A malformed status.json is treated as missing rather than raising."""
+        from cube_harness.episode_status import STATUS_FILENAME
+
+        storage = FileStorage(tmp_dir)
+        ep_dir = storage._episode_dir("t1_ep0")
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        (ep_dir / STATUS_FILENAME).write_text("not valid json")
+        assert storage.read_episode_status("t1_ep0") is None

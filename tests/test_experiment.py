@@ -1,16 +1,18 @@
 """Tests for cube_harness.experiment module."""
 
 import json
+import time
 
 from cube.benchmark import Benchmark as CubeBenchmark
 from cube.benchmark import BenchmarkMetadata
-from cube.core import EnvironmentOutput, Observation, StepError
+from cube.core import EnvironmentOutput, Observation
 from cube.task import TaskMetadata
 
 from cube_harness.core import Trajectory, TrajectoryStep
 from cube_harness.episode import Episode
 from cube_harness.exp_runner import run_sequentially
-from cube_harness.experiment import Experiment, ExpResult
+from cube_harness.episode_status import EpisodeStatus
+from cube_harness.experiment import Experiment, ExpResult, sweep_stale_statuses
 from cube_harness.storage import FileStorage
 from tests.conftest import MockCubeBenchmark, MockCubeTaskConfig
 
@@ -215,7 +217,7 @@ class TestExperiment:
         assert actual_task_ids == expected_task_ids
 
     def test_retry_failed_episodes(self, tmp_dir, mock_agent_config):
-        """Test retry_failed=True returns only failed episodes."""
+        """retry_failed=True returns FAILED + missing-status episodes (gated by max_retries)."""
         benchmark = _make_benchmark(3)
 
         exp = Experiment(
@@ -225,30 +227,75 @@ class TestExperiment:
             benchmark=benchmark,
         )
 
-        # Create episodes
         episodes = exp.get_episodes_to_run()
 
-        # Run first episode to completion (successful)
+        # Episode 0: complete successfully → COMPLETED status
         episodes[0].run()
 
-        # Simulate failure for second episode by creating a trajectory with error
+        # Episode 1: write a FAILED status manually
         storage = FileStorage(tmp_dir)
-        failed_traj = Trajectory(
-            id=f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}",
-            metadata={"task_id": episodes[1].config.task_config.task_id},
+        traj_id_1 = f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}"
+        storage.write_episode_status(
+            traj_id_1,
+            EpisodeStatus(
+                status="FAILED",
+                task_id=episodes[1].config.task_config.task_id,
+                episode_id=episodes[1].config.id,
+                started_at=time.time() - 10,
+                ended_at=time.time(),
+                last_heartbeat_at=time.time(),
+                error_type="RuntimeError",
+                error_message="boom",
+                retry_count=0,
+            ),
         )
-        obs = Observation.from_text("test")
-        failed_env_output = EnvironmentOutput(obs=obs, error=StepError.from_exception(ValueError("Test error")))
-        failed_traj.steps.append(TrajectoryStep(output=failed_env_output))
-        storage.save_trajectory(failed_traj)
 
-        # Third episode not started (no trajectory)
+        # Episode 2: no status.json (never started)
 
-        # With retry_failed=True, should find only episode 1 as failed
         exp.retry_failed = True
         failed_episodes = exp.get_episodes_to_run()
-        assert len(failed_episodes) == 1
-        assert failed_episodes[0].config.id == episodes[1].config.id
+        # Both episode 1 (FAILED) and episode 2 (missing status) qualify
+        ids = {ep.config.id for ep in failed_episodes}
+        assert ids == {episodes[1].config.id, episodes[2].config.id}
+
+    def test_retry_respects_max_retries(self, tmp_dir, mock_agent_config):
+        """retry_count >= max_retries excludes the episode from retry."""
+        benchmark = _make_benchmark(2)
+        exp = Experiment(
+            name="test_max_retries",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+            max_retries=2,
+        )
+        episodes = exp.get_episodes_to_run()
+        storage = FileStorage(tmp_dir)
+        # Episode 0: capped (retry_count == max_retries)
+        storage.write_episode_status(
+            f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}",
+            EpisodeStatus(
+                status="FAILED",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time(),
+                retry_count=2,
+            ),
+        )
+        # Episode 1: still under cap
+        storage.write_episode_status(
+            f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}",
+            EpisodeStatus(
+                status="FAILED",
+                task_id=episodes[1].config.task_config.task_id,
+                episode_id=episodes[1].config.id,
+                started_at=time.time(),
+                retry_count=1,
+            ),
+        )
+        exp.retry_failed = True
+        retried = exp.get_episodes_to_run()
+        ids = {ep.config.id for ep in retried}
+        assert ids == {episodes[1].config.id}
 
     def test_resume_returns_unstarted(self, tmp_dir, mock_agent_config):
         """Test resume=True returns only unstarted episodes."""
@@ -305,3 +352,115 @@ class TestExperiment:
         exp.resume = True
         exp.retry_failed = True
         assert exp.get_episodes_to_run() == []
+
+
+class TestStatusBasedSelection:
+    """Focused tests for the status-driven selection logic."""
+
+    def test_stale_sweep_marks_orphaned_running(self, tmp_dir, mock_agent_config):
+        """A RUNNING entry with a stale heartbeat is swept to STALE and becomes retriable."""
+        benchmark = _make_benchmark(1)
+        exp = Experiment(
+            name="test_stale_sweep",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+        episodes = exp.get_episodes_to_run()
+        traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
+        storage = FileStorage(tmp_dir)
+        # Heartbeat 1 hour ago — older than step_timeout(1s) + cancel_grace(1s)
+        storage.write_episode_status(
+            traj_id,
+            EpisodeStatus(
+                status="RUNNING",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time() - 3600,
+                last_heartbeat_at=time.time() - 3600,
+                current_step=5,
+                retry_count=0,
+            ),
+        )
+
+        swept = sweep_stale_statuses(storage, step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0)
+        assert swept == [traj_id]
+        status = storage.read_episode_status(traj_id)
+        assert status is not None
+        assert status.status == "STALE"
+
+        exp.retry_failed = True
+        retried = exp.get_episodes_to_run(step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0)
+        assert len(retried) == 1
+        assert retried[0].config.id == episodes[0].config.id
+
+    def test_stale_sweep_keeps_fresh_running(self, tmp_dir, mock_agent_config):
+        """A RUNNING entry with a fresh heartbeat is left alone."""
+        benchmark = _make_benchmark(1)
+        exp = Experiment(
+            name="test_fresh_running",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+        episodes = exp.get_episodes_to_run()
+        traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
+        storage = FileStorage(tmp_dir)
+        storage.write_episode_status(
+            traj_id,
+            EpisodeStatus(
+                status="RUNNING",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time(),
+                last_heartbeat_at=time.time(),
+                current_step=1,
+            ),
+        )
+        swept = sweep_stale_statuses(storage, step_timeout_s=60.0, cancel_grace_s=60.0, orphan_threshold_s=3600.0)
+        assert swept == []
+        # Fresh RUNNING is never returned, even with both flags.
+        exp.resume = True
+        exp.retry_failed = True
+        assert exp.get_episodes_to_run() == []
+
+    def test_resume_returns_missing_status_only(self, tmp_dir, mock_agent_config):
+        """resume=True returns episodes whose status.json is absent (never started)."""
+        benchmark = _make_benchmark(3)
+        exp = Experiment(
+            name="test_resume_missing",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+        episodes = exp.get_episodes_to_run()
+        storage = FileStorage(tmp_dir)
+        # Episode 0: COMPLETED — should NOT be returned
+        storage.write_episode_status(
+            f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}",
+            EpisodeStatus(
+                status="COMPLETED",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time(),
+                ended_at=time.time(),
+                last_heartbeat_at=time.time(),
+                reward=1.0,
+            ),
+        )
+        # Episode 1: FAILED — should NOT be returned by resume alone
+        storage.write_episode_status(
+            f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}",
+            EpisodeStatus(
+                status="FAILED",
+                task_id=episodes[1].config.task_config.task_id,
+                episode_id=episodes[1].config.id,
+                started_at=time.time(),
+            ),
+        )
+        # Episode 2: no status.json — SHOULD be returned by resume
+
+        exp.resume = True
+        resumed = exp.get_episodes_to_run()
+        ids = {ep.config.id for ep in resumed}
+        assert ids == {episodes[2].config.id}
