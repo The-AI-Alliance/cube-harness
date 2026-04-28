@@ -31,9 +31,14 @@ def main(debug: bool) -> None:
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     tool_config = ToolboxConfig(
-        tool_configs=[BraveWebSearchToolConfig(), WebFetchToolConfig(), SubmitAnswerToolConfig()]
+        tool_configs=[
+            BraveWebSearchToolConfig(),
+            WebFetchToolConfig(query_llm_model="gpt-5.4-mini"),
+            SubmitAnswerToolConfig(),
+        ]
     )
     benchmark = BrowseCompBenchmark(default_tool_config=tool_config, scorer_model="gpt-5.4-mini")
+    benchmark.install()
 
     exp = Experiment(
         name="browsercomp",
