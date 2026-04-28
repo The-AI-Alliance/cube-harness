@@ -217,7 +217,7 @@ class TestExperiment:
         assert actual_task_ids == expected_task_ids
 
     def test_retry_failed_episodes(self, tmp_dir, mock_agent_config):
-        """retry_failed=True returns FAILED + missing-status episodes (gated by max_retries)."""
+        """resume=True returns FAILED + missing-status episodes (gated by max_retries)."""
         benchmark = _make_benchmark(3)
 
         exp = Experiment(
@@ -252,7 +252,7 @@ class TestExperiment:
 
         # Episode 2: no status.json (never started)
 
-        exp.retry_failed = True
+        exp.resume = True
         failed_episodes = exp.get_episodes_to_run()
         # Both episode 1 (FAILED) and episode 2 (missing status) qualify
         ids = {ep.config.id for ep in failed_episodes}
@@ -292,7 +292,7 @@ class TestExperiment:
                 retry_count=1,
             ),
         )
-        exp.retry_failed = True
+        exp.resume = True
         retried = exp.get_episodes_to_run()
         ids = {ep.config.id for ep in retried}
         assert ids == {episodes[1].config.id}
@@ -336,7 +336,7 @@ class TestExperiment:
         assert result.failures == {}
 
     def test_resume_and_retry_empty_when_all_succeeded(self, tmp_dir, mock_agent_config, mock_cube_benchmark):
-        """Test resume and retry_failed return empty when all episodes succeeded."""
+        """resume returns empty when all episodes succeeded."""
         exp = Experiment(
             name="test_no_relaunch",
             output_dir=tmp_dir,
@@ -350,7 +350,7 @@ class TestExperiment:
             episode.run()
 
         exp.resume = True
-        exp.retry_failed = True
+        exp.resume = True
         assert exp.get_episodes_to_run() == []
 
 
@@ -389,10 +389,67 @@ class TestStatusBasedSelection:
         assert status is not None
         assert status.status == "STALE"
 
-        exp.retry_failed = True
+        exp.resume = True
         retried = exp.get_episodes_to_run(step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0)
         assert len(retried) == 1
         assert retried[0].config.id == episodes[0].config.id
+
+    def test_queued_orphan_swept_to_stale(self, tmp_dir, mock_agent_config):
+        """A QUEUED entry older than `orphan_threshold_s` is swept to STALE."""
+        benchmark = _make_benchmark(1)
+        exp = Experiment(
+            name="test_queued_orphan",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+        episodes = exp.get_episodes_to_run()
+        traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
+        storage = FileStorage(tmp_dir)
+        # QUEUED with started_at way in the past — Ray never picked it up.
+        storage.write_episode_status(
+            traj_id,
+            EpisodeStatus(
+                status="QUEUED",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time() - 7200,
+                last_heartbeat_at=None,
+                current_step=0,
+            ),
+        )
+        swept = sweep_stale_statuses(storage, step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0)
+        assert swept == [traj_id]
+        assert storage.read_episode_status(traj_id).status == "STALE"
+
+    def test_queued_fresh_not_swept(self, tmp_dir, mock_agent_config):
+        """A QUEUED entry younger than `orphan_threshold_s` is left alone (still queued)."""
+        benchmark = _make_benchmark(1)
+        exp = Experiment(
+            name="test_queued_fresh",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+        episodes = exp.get_episodes_to_run()
+        traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
+        storage = FileStorage(tmp_dir)
+        storage.write_episode_status(
+            traj_id,
+            EpisodeStatus(
+                status="QUEUED",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time(),
+                last_heartbeat_at=None,
+                current_step=0,
+            ),
+        )
+        swept = sweep_stale_statuses(storage, step_timeout_s=60.0, cancel_grace_s=60.0, orphan_threshold_s=3600.0)
+        assert swept == []
+        # In-flight (QUEUED) is never returned by resume.
+        exp.resume = True
+        assert exp.get_episodes_to_run() == []
 
     def test_stale_sweep_keeps_fresh_running(self, tmp_dir, mock_agent_config):
         """A RUNNING entry with a fresh heartbeat is left alone."""
@@ -419,16 +476,15 @@ class TestStatusBasedSelection:
         )
         swept = sweep_stale_statuses(storage, step_timeout_s=60.0, cancel_grace_s=60.0, orphan_threshold_s=3600.0)
         assert swept == []
-        # Fresh RUNNING is never returned, even with both flags.
+        # Fresh RUNNING is never returned, even with resume=True.
         exp.resume = True
-        exp.retry_failed = True
         assert exp.get_episodes_to_run() == []
 
-    def test_resume_returns_missing_status_only(self, tmp_dir, mock_agent_config):
-        """resume=True returns episodes whose status.json is absent (never started)."""
+    def test_resume_returns_unstarted_and_failed_skipping_completed(self, tmp_dir, mock_agent_config):
+        """resume=True returns missing-status + retriable failures, skipping COMPLETED."""
         benchmark = _make_benchmark(3)
         exp = Experiment(
-            name="test_resume_missing",
+            name="test_resume_mixed",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             benchmark=benchmark,
@@ -448,7 +504,7 @@ class TestStatusBasedSelection:
                 reward=1.0,
             ),
         )
-        # Episode 1: FAILED — should NOT be returned by resume alone
+        # Episode 1: FAILED — SHOULD be returned (resume covers retriable failures)
         storage.write_episode_status(
             f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}",
             EpisodeStatus(
@@ -458,9 +514,38 @@ class TestStatusBasedSelection:
                 started_at=time.time(),
             ),
         )
-        # Episode 2: no status.json — SHOULD be returned by resume
+        # Episode 2: no status.json — SHOULD be returned (never started)
 
         exp.resume = True
         resumed = exp.get_episodes_to_run()
         ids = {ep.config.id for ep in resumed}
-        assert ids == {episodes[2].config.id}
+        assert ids == {episodes[1].config.id, episodes[2].config.id}
+
+    def test_resume_skips_max_steps_reached(self, tmp_dir, mock_agent_config):
+        """resume=True does NOT re-run MAX_STEPS_REACHED — it's a legitimate outcome."""
+        benchmark = _make_benchmark(2)
+        exp = Experiment(
+            name="test_max_steps_skip",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark=benchmark,
+        )
+        episodes = exp.get_episodes_to_run()
+        storage = FileStorage(tmp_dir)
+        # Episode 0: MAX_STEPS_REACHED → skipped on resume
+        storage.write_episode_status(
+            f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}",
+            EpisodeStatus(
+                status="MAX_STEPS_REACHED",
+                task_id=episodes[0].config.task_config.task_id,
+                episode_id=episodes[0].config.id,
+                started_at=time.time(),
+                ended_at=time.time(),
+                last_heartbeat_at=time.time(),
+                reward=0.0,
+            ),
+        )
+        # Episode 1: missing → included
+        exp.resume = True
+        resumed = exp.get_episodes_to_run()
+        assert {ep.config.id for ep in resumed} == {episodes[1].config.id}

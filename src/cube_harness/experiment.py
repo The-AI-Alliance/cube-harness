@@ -32,7 +32,6 @@ class Experiment(TypedBaseModel):
     agent_config: AgentConfig
     benchmark: Benchmark
     resume: bool = False
-    retry_failed: bool = False
     max_steps: int = MAX_STEPS
     max_retries: int = 3
 
@@ -47,20 +46,18 @@ class Experiment(TypedBaseModel):
         cancel_grace_s: float = 120.0,
         orphan_threshold_s: float = 3600.0,
     ) -> list[Episode]:
-        """Get episodes to run based on resume/retry_failed flags.
+        """Return episodes to run based on `resume`.
 
         Decisions are driven by `status.json` per episode (no trajectory deserialisation).
 
-        - Neither flag set: creates all episodes from scratch.
-        - resume=True: episodes with no status.json (never started).
-        - retry_failed=True: episodes with status in {FAILED, STALE, CANCELLED}, OR
-          missing status.json, gated by `retry_count < max_retries`.
-        - Both flags: union.
-
-        `RUNNING` (with fresh heartbeat) is never returned. Stale `RUNNING` entries are
-        first swept to `STALE` so they become eligible for retry.
+        - `resume=False`: create all episodes from scratch (any prior data is archived
+          per-attempt by pre-claim / save_trajectory).
+        - `resume=True`: pick up everything that's not COMPLETED (or MAX_STEPS_REACHED) —
+          unstarted (no status.json) plus retriable failures (FAILED / STALE /
+          CANCELLED), gated by `retry_count < max_retries`. Stale `RUNNING` entries are
+          swept to `STALE` first so they become eligible.
         """
-        if not self.resume and not self.retry_failed:
+        if not self.resume:
             return self._create_all_episodes()
 
         storage = FileStorage(self.output_dir)
@@ -97,24 +94,15 @@ class Experiment(TypedBaseModel):
             episode.allow_overwrite = status is not None
             episodes.append(episode)
 
-        logger.info(
-            f"Selected {len(episodes)} episode(s) to run (out of {len(config_files)} total) "
-            f"with resume={self.resume}, retry_failed={self.retry_failed}"
-        )
+        logger.info(f"Selected {len(episodes)} episode(s) to run (out of {len(config_files)} total) with resume=True")
         return episodes
 
     def _should_relaunch(self, status: EpisodeStatus | None) -> bool:
-        # Missing status.json
+        """True iff `resume=True` should re-run this episode (status-driven)."""
         if status is None:
-            # resume picks it up unconditionally; retry_failed gates by max_retries
-            # but with retry_count=0 (the default) it always passes for missing status.
-            return self.resume or self.retry_failed
-        if status.status == "RUNNING":
-            return False  # alive (sweep ran first; surviving RUNNING is fresh)
-        if status.status == "COMPLETED":
-            return False
-        # FAILED / CANCELLED / STALE
-        if not self.retry_failed:
+            return True  # never started → run it
+        if status.status not in RETRIABLE_STATUSES:
+            # COMPLETED / MAX_STEPS_REACHED / in-flight (QUEUED, RUNNING) → leave alone
             return False
         return status.retry_count < self.max_retries
 
@@ -214,29 +202,30 @@ def sweep_stale_statuses(
     cancel_grace_s: float,
     orphan_threshold_s: float,
 ) -> list[str]:
-    """Mark `RUNNING` episodes whose worker is dead as `STALE`.
+    """Mark in-flight episodes whose worker is dead as `STALE`.
 
-    A `RUNNING` entry is stale if either:
-    - `last_heartbeat_at` is set and older than `step_timeout_s + cancel_grace_s`, or
-    - `last_heartbeat_at` is `None` (queued but never picked up) and `started_at` is
-      older than `orphan_threshold_s`.
+    Two cases:
+    - `RUNNING` with `last_heartbeat_at` older than `step_timeout_s + cancel_grace_s`
+      (worker died mid-episode without writing a terminal status).
+    - `QUEUED` with `started_at` older than `orphan_threshold_s` (driver pre-claimed
+      but Ray never picked the episode up — typically because the prior driver
+      crashed before the worker started).
 
     Returns the list of trajectory_ids that were swept.
     """
     now = time.time()
     swept: list[str] = []
     for trajectory_id, status in storage.list_episode_statuses().items():
-        if status.status != "RUNNING":
-            continue
         is_stale = False
-        if status.last_heartbeat_at is not None:
+        if status.status == "RUNNING" and status.last_heartbeat_at is not None:
             if now - status.last_heartbeat_at > step_timeout_s + cancel_grace_s:
                 is_stale = True
-        else:
+        elif status.status == "QUEUED":
             if now - status.started_at > orphan_threshold_s:
                 is_stale = True
         if not is_stale:
             continue
+        prior_state = status.status
         status.status = "STALE"
         status.ended_at = now
         status.error_type = status.error_type or "WorkerDied"
@@ -245,7 +234,7 @@ def sweep_stale_statuses(
         )
         storage.write_episode_status(trajectory_id, status)
         swept.append(trajectory_id)
-        logger.warning(f"Swept stale RUNNING -> STALE for {trajectory_id}")
+        logger.warning(f"Swept stale {prior_state} -> STALE for {trajectory_id}")
     return swept
 
 

@@ -15,9 +15,15 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
-Status = Literal["RUNNING", "COMPLETED", "FAILED", "CANCELLED", "STALE"]
+Status = Literal["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "STALE", "MAX_STEPS_REACHED"]
 
-TERMINAL_STATUSES: frozenset[Status] = frozenset({"COMPLETED", "FAILED", "CANCELLED", "STALE"})
+# In-flight: episode hasn't reached a terminal state yet. Driver poll should
+# leave these alone (subject to orphan/heartbeat sweeps for dead-worker cleanup).
+IN_FLIGHT_STATUSES: frozenset[Status] = frozenset({"QUEUED", "RUNNING"})
+
+TERMINAL_STATUSES: frozenset[Status] = frozenset({"COMPLETED", "FAILED", "CANCELLED", "STALE", "MAX_STEPS_REACHED"})
+# MAX_STEPS_REACHED is terminal but NOT retriable: the agent legitimately ran out of
+# its step budget, retrying would just truncate again from a fresh initial state.
 RETRIABLE_STATUSES: frozenset[Status] = frozenset({"FAILED", "CANCELLED", "STALE"})
 
 STATUS_FILENAME = "status.json"
@@ -82,11 +88,11 @@ def next_retry_count(prior: "EpisodeStatus | None") -> int:
     """Return the retry_count for a new attempt, given the prior status (if any).
 
     - No prior: 0 (original attempt).
-    - Prior was RUNNING: same retry_count (e.g., re-pre-claim within a round, idempotent).
-    - Prior was terminal (FAILED/CANCELLED/STALE/COMPLETED): prior + 1.
+    - Prior in-flight (QUEUED / RUNNING): same retry_count (idempotent re-pre-claim).
+    - Prior terminal (FAILED/CANCELLED/STALE/COMPLETED/MAX_STEPS_REACHED): prior + 1.
     """
     if prior is None:
         return 0
-    if prior.status == "RUNNING":
+    if prior.status in IN_FLIGHT_STATUSES:
         return prior.retry_count
     return prior.retry_count + 1

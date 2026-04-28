@@ -10,7 +10,7 @@ import ray
 from cube_harness.core import Trajectory
 from cube_harness.episode import Episode
 from cube_harness.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
-from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
+from cube_harness.episode_status import RETRIABLE_STATUSES, TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.experiment import Experiment, ExpResult, sweep_stale_statuses
 from cube_harness.metrics.tracer import get_trace_env_vars, get_tracer
 from cube_harness.storage import FileStorage
@@ -31,7 +31,11 @@ def _trajectory_id(episode: Episode) -> str:
 
 
 def _pre_claim(storage: FileStorage, episode: Episode) -> None:
-    """Write `RUNNING` for an episode before submitting it to Ray.
+    """Write `QUEUED` for an episode before submitting it to Ray.
+
+    `QUEUED` distinguishes "submitted to Ray, waiting for a worker" from
+    `RUNNING` (a worker has actually picked it up and is heartbeating). The
+    worker overwrites `QUEUED` → `RUNNING` when it enters `_open_status`.
 
     If the previous attempt left a terminal status, archive its directory first
     so the per-attempt history (including the terminal `status.json`) is preserved.
@@ -45,7 +49,7 @@ def _pre_claim(storage: FileStorage, episode: Episode) -> None:
     storage.write_episode_status(
         traj_id,
         EpisodeStatus(
-            status="RUNNING",
+            status="QUEUED",
             task_id=episode.config.task_config.task_id,
             episode_id=episode.config.id,
             started_at=time.time(),
@@ -64,12 +68,11 @@ def run_with_ray(
     step_timeout_s: float = 1800.0,
     cancel_grace_s: float = 120.0,
     orphan_threshold_s: float = 3600.0,
-    max_retry_rounds: int = 3,
     otlp_endpoint: str | None = None,
     model: str | None = None,
     agent_name: str | None = None,
 ) -> ExpResult:
-    """Run `exp` in parallel on Ray, with auto-retry rounds and step-timeout enforcement."""
+    """Run `exp` in parallel on Ray, with auto-retry and step-timeout enforcement."""
     model = model or _extract_model(exp)
     tracer = get_tracer(
         exp.name,
@@ -87,10 +90,15 @@ def run_with_ray(
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
-                max_retry_rounds=max_retry_rounds,
             )
     finally:
         tracer.shutdown()
+
+
+def _has_retriable_episodes(exp: Experiment) -> bool:
+    """True iff any episode is FAILED/STALE/CANCELLED with retry_count below the cap."""
+    statuses = FileStorage(exp.output_dir).list_episode_statuses()
+    return any(s.status in RETRIABLE_STATUSES and s.retry_count < exp.max_retries for s in statuses.values())
 
 
 def _run_with_retries(
@@ -101,12 +109,15 @@ def _run_with_retries(
     step_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
-    max_retry_rounds: int,
 ) -> ExpResult:
-    """Run the experiment, then re-run any retriable failures up to `max_retry_rounds` times."""
+    """Run the experiment, then keep re-running retriable failures until none remain.
+
+    Termination is guaranteed by the per-episode `max_retries` cap: each retried
+    episode increments `retry_count`, so eventually every retriable episode either
+    succeeds or hits the cap and `_has_retriable_episodes` returns False.
+    """
     aggregated = ExpResult(tasks_num=0, config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     original_resume = exp.resume
-    original_retry_failed = exp.retry_failed
     try:
         round_num = 0
         while True:
@@ -125,27 +136,15 @@ def _run_with_retries(
             for k in round_result.trajectories:
                 aggregated.failures.pop(k, None)
 
-            if round_num >= max_retry_rounds:
-                break
-
-            # Decide whether to run another retry round by checking if anything is still retriable.
-            storage = FileStorage(exp.output_dir)
-            statuses = storage.list_episode_statuses()
-            has_retriable = any(
-                s.status in ("FAILED", "CANCELLED", "STALE") and s.retry_count < exp.max_retries
-                for s in statuses.values()
-            )
-            if not has_retriable:
+            if not _has_retriable_episodes(exp):
                 break
 
             round_num += 1
-            logger.info(f"Auto-retry round {round_num}/{max_retry_rounds}: re-running retriable episodes")
-            exp.resume = False
-            exp.retry_failed = True
+            logger.info(f"Auto-retry round {round_num}: re-running retriable episodes")
+            exp.resume = True
         return aggregated
     finally:
         exp.resume = original_resume
-        exp.retry_failed = original_retry_failed
 
 
 def _run_with_ray_impl(
@@ -290,8 +289,9 @@ def _kill_stale_workers(
     for ref in list(episodes_in_progress):
         traj_id = ref_to_traj_id[ref]
         status = storage.read_episode_status(traj_id)
-        if status is None or status.last_heartbeat_at is None:
-            # Pre-claim only — episode is queued in Ray, not yet picked up.
+        # QUEUED → episode hasn't been picked up by a Ray worker yet (no heartbeat to check).
+        # The orphan threshold path in the STALE sweep handles a never-picked-up QUEUED.
+        if status is None or status.status != "RUNNING" or status.last_heartbeat_at is None:
             continue
         age = now - status.last_heartbeat_at
         if age <= step_timeout_s + cancel_grace_s:
@@ -328,7 +328,6 @@ def run_sequentially(
     exp: Experiment,
     debug_limit: int | None = None,
     *,
-    max_retry_rounds: int = 3,
     step_timeout_s: float = 1800.0,
     cancel_grace_s: float = 120.0,
     orphan_threshold_s: float = 3600.0,
@@ -336,7 +335,7 @@ def run_sequentially(
     model: str | None = None,
     agent_name: str | None = None,
 ) -> ExpResult:
-    """Run `exp` in-process (no Ray) with auto-retry rounds — the debug-friendly path."""
+    """Run `exp` in-process (no Ray) with auto-retry — the debug-friendly path."""
     model = model or _extract_model(exp)
     tracer = get_tracer(
         exp.name,
@@ -350,7 +349,6 @@ def run_sequentially(
             return _run_sequentially_with_retries(
                 exp,
                 debug_limit=debug_limit,
-                max_retry_rounds=max_retry_rounds,
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
@@ -363,15 +361,16 @@ def _run_sequentially_with_retries(
     exp: Experiment,
     *,
     debug_limit: int | None,
-    max_retry_rounds: int,
     step_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
 ) -> ExpResult:
-    """Run sequential rounds back-to-back, replaying retriable failures up to `max_retry_rounds`."""
+    """Run sequential rounds back-to-back until no retriable failures remain.
+
+    Termination is guaranteed by the per-episode `max_retries` cap.
+    """
     aggregated = ExpResult(tasks_num=0, config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     original_resume = exp.resume
-    original_retry_failed = exp.retry_failed
     try:
         round_num = 0
         while True:
@@ -389,26 +388,15 @@ def _run_sequentially_with_retries(
             for k in round_result.trajectories:
                 aggregated.failures.pop(k, None)
 
-            if round_num >= max_retry_rounds:
-                break
-
-            storage = FileStorage(exp.output_dir)
-            statuses = storage.list_episode_statuses()
-            has_retriable = any(
-                s.status in ("FAILED", "CANCELLED", "STALE") and s.retry_count < exp.max_retries
-                for s in statuses.values()
-            )
-            if not has_retriable:
+            if not _has_retriable_episodes(exp):
                 break
 
             round_num += 1
-            logger.info(f"Auto-retry round {round_num}/{max_retry_rounds}: re-running retriable episodes")
-            exp.resume = False
-            exp.retry_failed = True
+            logger.info(f"Auto-retry round {round_num}: re-running retriable episodes")
+            exp.resume = True
         return aggregated
     finally:
         exp.resume = original_resume
-        exp.retry_failed = original_retry_failed
 
 
 def _run_sequentially_impl(

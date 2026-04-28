@@ -144,11 +144,14 @@ class DebugAgent(Agent):
     def __init__(self, config: DebugAgentConfig):
         super().__init__(config)
         self.config = config
+        self._task_id: str | None = None
 
     def step(self, obs: Observation) -> AgentOutput:
-        # Initial observation embeds task_id; pull it out.
-        text = obs.contents[0].data if obs.contents else ""
-        task_id = text.replace("task_id=", "").strip()
+        # Initial observation embeds task_id; cache it across subsequent steps.
+        if self._task_id is None:
+            text = obs.contents[0].data if obs.contents else ""
+            self._task_id = text.replace("task_id=", "").strip()
+        task_id = self._task_id
         scenarios = self.config.scenarios[task_id]
         attempt = _next_attempt(self.config.counter_dir, task_id)
         # Saturate at the last scenario if attempts exceed the script length.
@@ -161,6 +164,9 @@ class DebugAgent(Agent):
         if behavior == "hang":
             time.sleep(self.config.hang_seconds)
             return AgentOutput(actions=[Action(name="final_step", arguments={})])
+        if behavior == "loop":
+            # Non-terminating action — drives the runner toward max_steps.
+            return AgentOutput(actions=[Action(name="click", arguments={"element_id": "x"})])
         raise ValueError(f"Unknown behavior: {behavior}")
 
 
@@ -196,7 +202,6 @@ def test_retry_machinery_end_to_end(tmp_dir: Path) -> None:
         step_timeout_s=1.5,
         cancel_grace_s=0.5,
         orphan_threshold_s=30.0,
-        max_retry_rounds=3,
     )
 
     storage = FileStorage(tmp_dir)
@@ -261,7 +266,7 @@ def test_mixed_state_recovery_via_ray(tmp_dir: Path) -> None:
 
     - `task_already_done`: COMPLETED status → never re-run.
     - `task_was_stuck`: stale RUNNING → swept to STALE → retried → COMPLETED.
-    - `task_never_started`: no status.json → retried (resume + retry_failed) → COMPLETED.
+    - `task_never_started`: no status.json → retried (resume) → COMPLETED.
     """
     scenarios = {
         "task_already_done": ["succeed"],  # won't actually be re-run
@@ -319,9 +324,8 @@ def test_mixed_state_recovery_via_ray(tmp_dir: Path) -> None:
     missing_traj_id = f"task_never_started_ep{episodes['task_never_started'].config.id}"
     # No status.json written for this one — exists as an episode_config only.
 
-    # New driver: resume picks up missing-status; retry_failed picks up STALE.
+    # New driver: resume picks up both the swept-STALE and the missing-status episode.
     exp.resume = True
-    exp.retry_failed = True
     result = run_with_ray(
         exp,
         n_cpus=2,
@@ -329,7 +333,6 @@ def test_mixed_state_recovery_via_ray(tmp_dir: Path) -> None:
         step_timeout_s=10.0,
         cancel_grace_s=1.0,
         orphan_threshold_s=10.0,
-        max_retry_rounds=0,
     )
 
     # task_already_done: untouched.
@@ -377,7 +380,7 @@ def test_run_sequentially_auto_retries_flaky_episode(tmp_dir: Path) -> None:
         max_retries=3,
     )
 
-    result = run_sequentially(exp, max_retry_rounds=2)
+    result = run_sequentially(exp)
 
     storage = FileStorage(tmp_dir)
     statuses = storage.list_episode_statuses()
@@ -396,12 +399,57 @@ def test_run_sequentially_auto_retries_flaky_episode(tmp_dir: Path) -> None:
     assert traj_id in result.trajectories
 
 
-def test_max_retry_rounds_zero_disables_auto_retry(tmp_dir: Path) -> None:
-    """max_retry_rounds=0 → a failing episode stays FAILED with no retry attempts.
+def test_max_steps_terminates_with_forced_eval(tmp_dir: Path) -> None:
+    """Hitting max_steps produces MAX_STEPS_REACHED + a real reward (forced evaluate).
 
-    Scenarios script "fail" forever; with max_retry_rounds=0 we expect exactly one
-    attempt (retry_count=0, no archives), confirming the auto-retry loop short-circuits
-    even though `max_retries=3` would otherwise allow retries.
+    The agent issues non-terminating actions, so the loop runs until `max_steps`
+    fires. Without our forced final-eval the trajectory would record reward=0;
+    the fix calls evaluate() once at end-of-loop so the reward reflects the task's
+    real assessment (DebugCubeTask returns 1.0). Status is MAX_STEPS_REACHED, which
+    is terminal but NOT retriable — a second resume run leaves it alone.
+    """
+    scenarios = {"task_loops": ["loop"]}
+    benchmark = make_debug_benchmark(scenarios)
+    agent_config = DebugAgentConfig(
+        counter_dir=str(tmp_dir / "_counters"),
+        scenarios=scenarios,
+        hang_seconds=0.0,
+    )
+    exp = Experiment(
+        name="max_steps",
+        output_dir=tmp_dir,
+        agent_config=agent_config,
+        benchmark=benchmark,
+        max_steps=2,
+        max_retries=3,
+    )
+
+    result = run_sequentially(exp)
+
+    storage = FileStorage(tmp_dir)
+    statuses = storage.list_episode_statuses()
+    assert len(statuses) == 1
+    traj_id, final = next(iter(statuses.items()))
+    assert final.status == "MAX_STEPS_REACHED", final
+    assert final.retry_count == 0
+    assert final.reward == 1.0  # from the forced evaluate call (DebugCubeTask returns 1.0)
+    assert _archive_count(tmp_dir, traj_id) == 0  # no retries
+
+    # The aggregated trajectory got a real reward, not 0.0.
+    assert traj_id in result.trajectories
+    assert result.trajectories[traj_id].last_env_step().reward == 1.0
+
+    # MAX_STEPS_REACHED is not retriable: a fresh resume returns nothing.
+    exp.resume = True
+    assert exp.get_episodes_to_run() == []
+
+
+def test_max_retries_zero_disables_auto_retry(tmp_dir: Path) -> None:
+    """max_retries=0 → a failing episode stays FAILED with no retry attempts.
+
+    The auto-retry loop only retries episodes with `retry_count < max_retries`.
+    Setting `max_retries=0` makes the cap bind immediately so the loop never runs
+    a second round.
     """
     scenarios = {"task_no_retry": ["fail"]}
     benchmark = make_debug_benchmark(scenarios)
@@ -415,10 +463,10 @@ def test_max_retry_rounds_zero_disables_auto_retry(tmp_dir: Path) -> None:
         output_dir=tmp_dir,
         agent_config=agent_config,
         benchmark=benchmark,
-        max_retries=3,
+        max_retries=0,
     )
 
-    result = run_sequentially(exp, max_retry_rounds=0)
+    result = run_sequentially(exp)
 
     storage = FileStorage(tmp_dir)
     statuses = storage.list_episode_statuses()

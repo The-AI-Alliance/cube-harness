@@ -117,13 +117,14 @@ class Episode:
         action_set = task.action_set
         step_fn = task.step
         close_fn = task.close
+        evaluate_fn = task.evaluate
 
         def setup_fn() -> EnvironmentOutput:
             obs, info = task.reset()
             return EnvironmentOutput(obs=obs, info=info)
 
         agent = self.config.agent_config.make(action_set, task_id=self.config.task_config.task_id)
-        return self._run_loop(setup_fn, step_fn, close_fn, agent)
+        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, agent)
 
     def _open_status(self, trajectory_id: str) -> EpisodeStatus:
         """Initialise `status.json` for this attempt.
@@ -156,6 +157,7 @@ class Episode:
         self,
         setup_fn: Callable[[], EnvironmentOutput],
         step_fn: Callable,
+        evaluate_fn: Callable,
         close_fn: Callable,
         agent,
     ) -> Trajectory:
@@ -251,6 +253,29 @@ class Episode:
                         span.set_attribute("done", env_output.done)
                         span.set_attribute("reward", env_output.reward)
                         turns += 1
+                # Loop exited without `done=True` — either max_steps fired or the agent
+                # gave up. cube's task.step only calls evaluate() when done or
+                # validate_per_step, so we'd otherwise return reward=0.0. Force one
+                # final evaluation and save it as a synthetic env step so the
+                # trajectory's last_env_step carries the real reward.
+                max_steps_reached = turns >= self.config.max_steps and not env_output.done
+                if not env_output.done:
+                    try:
+                        eval_ts = time.time()
+                        forced_reward, forced_info = evaluate_fn(env_output.obs)
+                        env_output = EnvironmentOutput(
+                            obs=env_output.obs,
+                            reward=forced_reward,
+                            done=env_output.done,
+                            info={**env_output.info, **forced_info},
+                            error=env_output.error,
+                        )
+                        forced_step = TrajectoryStep(output=env_output, start_time=eval_ts, end_time=time.time())
+                        self.storage.save_step(forced_step, trajectory.id, len(trajectory.steps))
+                        summary_proc.on_step(len(trajectory.steps), forced_step)
+                        trajectory.steps.append(forced_step)
+                    except Exception:
+                        logger.exception("Final evaluate() raised; trajectory keeps last step's reward")
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
                 trajectory.summary_stats = _compute_summary_stats(trajectory)
@@ -261,7 +286,7 @@ class Episode:
                 ep_status.reward = final_reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
-            ep_status.status = "COMPLETED"
+            ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
             ep_status.status = "FAILED"
