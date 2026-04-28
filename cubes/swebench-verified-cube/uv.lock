@@ -261,8 +261,8 @@ wheels = [
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc5"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata#10167a40f0dc3145309fb671c0863eb97f866df4" }
+version = "0.1.0rc6"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -274,6 +274,10 @@ dependencies = [
     { name = "rich" },
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/2f/edbd8d5fbe604209d5df7b0a3ac6e5122c1e4df4c0a2408dc4e9801d7f01/cube_standard-0.1.0rc6.tar.gz", hash = "sha256:b4d26eb0a6f6078b8b788759fe9c5b6d22bbaaf4ecb762951eccd504ab47cf11", size = 101612 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/b9/2bf11d1a1f8acef016b4d108c0fa9e7fe90cfc90ba7f9794581fecedaa39/cube_standard-0.1.0rc6-py3-none-any.whl", hash = "sha256:78c7dda410a432788b8026f64789abdf6eb8cee2b32fdea9f3fa39183f54fd51", size = 121360 },
 ]
 
 [package.optional-dependencies]
@@ -1335,13 +1339,8 @@ name = "swebench-verified-cube"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "cube-standard" },
-    { name = "datasets" },
-]
-
-[package.optional-dependencies]
-debug = [
     { name = "cube-standard", extra = ["docker"] },
+    { name = "datasets" },
 ]
 
 [package.dev-dependencies]
@@ -1351,8 +1350,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
-    { name = "cube-standard", extras = ["docker"], marker = "extra == 'debug'", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task-metadata" },
+    { name = "cube-standard", extras = ["docker"], specifier = ">=0.1.0rc6" },
     { name = "datasets" },
 ]
 

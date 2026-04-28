@@ -43,8 +43,8 @@ Focus on:
 - Current progress toward the goal
 Provide a concise summary that preserves all information needed to continue the task."""
 
-    def make(self, action_set: list[ActionSchema]) -> "ReactAgent":
-        return ReactAgent(config=self, tools=action_set)
+    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "ReactAgent":
+        return ReactAgent(config=self, tools=action_set or [])
 
 
 class ReactAgent(Agent):

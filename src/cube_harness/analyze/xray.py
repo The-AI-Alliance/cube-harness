@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 import gradio as gr
+import pandas as pd
 from cube.core import EnvironmentOutput
 from PIL import Image
 
 from cube_harness import EXP_DIR
+from cube_harness.agent import AgentConfig
 from cube_harness.analyze import inspect_results, xray_utils
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.storage import FileStorage
@@ -107,13 +109,14 @@ class XRayState:
         self._storage_configs = {}
         for exp_dir, storage in zip(exp_dirs, self._storages):
             trajs = storage.load_all_trajectory_metadata()
+            stubs = storage.load_missing_trajectory_stubs()
             self._load_experiment_config(exp_dir, storage)
             self._exp_tags[id(storage)] = xray_utils._parse_exp_date(exp_dir)
-            for traj in trajs:
-                self._maybe_backfill(traj, storage)
+            for traj in trajs + stubs:
+                self._apply_agent_name(traj, storage)
                 self._apply_exp_tag(traj, storage)
-            self.trajectories.extend(trajs)
-            self._traj_storages.extend([storage] * len(trajs))
+            self.trajectories.extend(trajs + stubs)
+            self._traj_storages.extend([storage] * (len(trajs) + len(stubs)))
         self.selected_agent_key = None
         self.selected_task_id = None
         self.current_trajectory = None
@@ -166,17 +169,28 @@ class XRayState:
                         break
                 except Exception:
                     continue
-        agent_type = agent_cfg.get("_type", "") if agent_cfg else ""
-        self._backfill_names[id(storage)] = agent_type.split(".")[-1] if agent_type else None
+        derived_name: str | None = None
+        if agent_cfg:
+            try:
+                derived_name = AgentConfig.model_validate(dict(agent_cfg)).agent_name
+            except Exception:
+                agent_type = agent_cfg.get("_type", "")
+                derived_name = agent_type.split(".")[-1] if agent_type else None
+        self._backfill_names[id(storage)] = derived_name
         self._storage_configs[id(storage)] = (
             json.dumps(agent_cfg, indent=2) if agent_cfg else None,
             json.dumps(exp_cfg_display, indent=2) if exp_cfg_display else None,
         )
 
-    def _maybe_backfill(self, traj: Trajectory, storage: FileStorage) -> None:
-        """Inject backfill name into a trajectory's metadata if agent_name is absent."""
+    def _apply_agent_name(self, traj: Trajectory, storage: FileStorage) -> None:
+        """Override trajectory agent_name with the config-derived name.
+
+        The config is the source of truth — this corrects stale class-name strings
+        (e.g. "GennyConfig") written by older versions of episode.py.
+        Only applied when a derived name is available (i.e. a config file exists).
+        """
         name = self._backfill_names.get(id(storage))
-        if name and "agent_name" not in traj.metadata:
+        if name:
             traj.metadata["agent_name"] = name
 
     def _apply_exp_tag(self, traj: Trajectory, storage: FileStorage) -> None:
@@ -232,10 +246,13 @@ class XRayState:
                 # Skip if already fully loaded (e.g. user clicked it first)
                 if traj.steps:
                     continue
+                # Skip missing stubs — they have no trajectory file to load
+                if traj.metadata.get("_missing"):
+                    continue
                 storage = my_storages[i]
                 try:
                     full = storage.load_trajectory(traj.id)
-                    self._maybe_backfill(full, storage)
+                    self._apply_agent_name(full, storage)
                     self._apply_exp_tag(full, storage)
                     if self._bg_gen == my_gen:
                         my_trajs[i] = full
@@ -272,7 +289,7 @@ class XRayState:
                     continue
                 try:
                     full = storage.load_trajectory(traj_id)
-                    self._maybe_backfill(full, storage)
+                    self._apply_agent_name(full, storage)
                     self._apply_exp_tag(full, storage)
                     self._traj_mtimes[traj_id] = mtime
                     changed = True
@@ -356,12 +373,13 @@ class XRayState:
             self._env_step_indices = []
             return
         traj = self.trajectories[idx]
-        # Stub has steps=[]; load full trajectory on first access and cache it in place
-        if not traj.steps:
+        # Stub has steps=[]; load full trajectory on first access and cache it in place.
+        # Skip missing stubs — they have no trajectory file on disk to load.
+        if not traj.steps and not traj.metadata.get("_missing"):
             storage = self._traj_storages[idx]
             try:
                 traj = storage.load_trajectory(traj_id)
-                self._maybe_backfill(traj, storage)
+                self._apply_agent_name(traj, storage)
                 self._apply_exp_tag(traj, storage)
                 self.trajectories[idx] = traj
                 self._traj_storages[idx] = storage
@@ -370,6 +388,15 @@ class XRayState:
         self.current_trajectory = traj
         self.step = 0
         self._env_step_indices = self._build_env_indices()
+
+    def current_storage(self) -> FileStorage | None:
+        """Return the FileStorage that owns the currently selected trajectory."""
+        if self.current_trajectory is None:
+            return None
+        idx = next((i for i, t in enumerate(self.trajectories) if t is self.current_trajectory), None)
+        if idx is None:
+            return None
+        return self._traj_storages[idx]
 
     def _build_env_indices(self) -> list[int]:
         """Return raw indices of all EnvironmentOutput steps in current trajectory."""
@@ -841,7 +868,7 @@ def run_xray(
         if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
             return [], [], StepId(), gr.Tab(label="Seeds (0)")
         row = evt.index[0]
-        task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 0]))
+        task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 1]))
         state.select_task(task_id)
         if state.selected_agent_key is None:
             return [], [], StepId(), gr.Tab(label="Seeds (0)")
@@ -955,23 +982,16 @@ def run_xray(
             return "No trajectory selected"
         task_id = state.current_trajectory.metadata.get("task_id", "unknown")
         agent_name = state.current_trajectory.metadata.get("agent_name", "")
+        status = xray_utils.trajectory_status(state.current_trajectory)
+        status_label = xray_utils._STATUS_LABEL[status]
         header = f"**{task_id}**"
         if agent_name:
             header += f" │ {agent_name}"
-        if state.current_trajectory.reward_info:
-            reward = state.current_trajectory.reward_info.get("reward", 0.0)
-            done = state.current_trajectory.reward_info.get("done", True)
-        else:
-            reward = 0.0
-            done = False
-            for traj_step in reversed(state.current_trajectory.steps):
-                if isinstance(traj_step.output, EnvironmentOutput):
-                    reward = traj_step.output.reward
-                    done = traj_step.output.done
-                    break
-        reward_emoji = "✅" if reward > 0 and done else "❌" if done else "⏳"
-        step_info = f"Step {state.step + 1}/{state.total_ui_steps()}"
-        return header + f" │ {reward_emoji} Reward: {reward:.2f} │ {step_info}"
+        header += f" │ {status_label}"
+        n_steps = state.total_ui_steps()
+        if n_steps > 0:
+            header += f" │ Step {state.step + 1}/{n_steps}"
+        return header
 
     def update_timeline() -> str:
         return xray_utils.generate_timeline_html(state.current_trajectory, state.step)
@@ -1079,8 +1099,10 @@ def run_xray(
         return xray_utils.get_paired_error_markdown(env_out, agent_out)
 
     def _render_logs() -> str:
-        env_out = state.get_env_output()
-        return xray_utils.get_step_logs_markdown(env_out, state.current_trajectory)
+        traj = state.current_trajectory
+        storage = state.current_storage()
+        log_content = storage.load_logs(traj.id) if storage and traj else ""
+        return xray_utils.get_logs_tab_markdown(traj, log_content)
 
     def _render_debug() -> tuple[str, str, str]:
         env_out = state.get_env_output()
@@ -1108,16 +1130,35 @@ def run_xray(
     # Experiment-level analysis tabs (lazy, rendered on tab select)
     # ------------------------------------------------------------------
 
-    def _render_constants_variables() -> tuple[list[list], list[list]]:
-        if not state.trajectories:
-            return [], []
-        df = inspect_results.trajectories_to_df(state.trajectories)
+    def _render_constants_variables() -> tuple[pd.DataFrame, pd.DataFrame]:
+        # Collect one (agent_name, config_dict) pair per loaded storage.
+        # Agent name is taken from the first trajectory belonging to that storage so it
+        # matches exactly what is displayed in the Agents table (including timestamp tag).
+        storage_to_agent: dict[int, str] = {}
+        for traj, storage in zip(state.trajectories, state._traj_storages):
+            sid = id(storage)
+            if sid not in storage_to_agent:
+                storage_to_agent[sid] = traj.metadata.get("agent_name", "unknown")
+
+        agents: list[tuple[str, dict]] = []
+        for storage in state._storages:
+            sid = id(storage)
+            agent_cfg_json, _ = state._storage_configs.get(sid, (None, None))
+            if not agent_cfg_json:
+                continue
+            try:
+                cfg = json.loads(agent_cfg_json)
+            except Exception:
+                continue
+            agents.append((storage_to_agent.get(sid, "unknown"), cfg))
+
+        if not agents:
+            return pd.DataFrame(columns=["parameter", "value"]), pd.DataFrame(columns=["parameter"])
+
+        df = inspect_results.agent_configs_to_df(agents)
         if df is None:
-            return [], []
-        const_df, var_df = inspect_results.format_constants_and_variables(df)
-        const_rows = const_df.values.tolist() if not const_df.empty else []
-        var_rows = var_df.values.tolist() if not var_df.empty else []
-        return const_rows, var_rows
+            return pd.DataFrame(columns=["parameter", "value"]), pd.DataFrame(columns=["parameter"])
+        return inspect_results.format_agent_comparison(df)
 
     def _render_global_report() -> list[list]:
         if not state.trajectories:
@@ -1205,7 +1246,7 @@ def run_xray(
 - **Step Details**: detailed env observation + agent output with token stats.
 - **AXTree**: raw accessibility tree text.
 - **Task Error**: environment and agent errors for this step.
-- **Logs**: step info dict and trajectory metadata.
+- **Logs**: full episode log file (all logger output from the run).
 - **Debug**: raw JSON for the env step, LLM calls, and tool schemas.
 """,
                     elem_classes="help-content",
@@ -1229,7 +1270,7 @@ def run_xray(
                 experiment_stats = gr.Markdown("")
             with gr.Tab("Agents") as agents_tab:
                 agent_table = gr.DataFrame(
-                    headers=["agent_name", "n_tasks", "n_trajs", "avg_reward", "total_cost"],
+                    headers=["agent_name", "n_trajs", "n_err", "n_running", "avg_reward", "total_cost"],
                     datatype="html",
                     max_height=260,
                     show_label=False,
@@ -1237,7 +1278,16 @@ def run_xray(
                 )
             with gr.Tab("Tasks") as tasks_tab:
                 task_table = gr.DataFrame(
-                    headers=["task_id", "n_seeds", "avg_reward", "avg_steps", "avg_duration", "avg_tokens", "avg_cost"],
+                    headers=[
+                        "status",
+                        "task_id",
+                        "n_seeds",
+                        "n_success",
+                        "avg_steps",
+                        "avg_duration",
+                        "avg_tokens",
+                        "avg_cost",
+                    ],
                     datatype="html",
                     max_height=260,
                     show_label=False,
@@ -1245,7 +1295,7 @@ def run_xray(
                 )
             with gr.Tab("Seeds") as seeds_tab:
                 seed_table = gr.DataFrame(
-                    headers=["status", "traj_id", "reward", "n_steps", "duration", "tokens", "cost"],
+                    headers=["status", "traj_id", "n_steps", "duration", "tokens", "cost"],
                     datatype="html",
                     max_height=260,
                     show_label=False,
@@ -1258,7 +1308,7 @@ def run_xray(
             with gr.Tab("Constants & Variables") as cv_tab:
                 with gr.Row():
                     with gr.Column():
-                        gr.Markdown("**Constants** (same across all trajectories)")
+                        gr.Markdown("**Constants** (identical across all selected experiments)")
                         cv_const_table = gr.DataFrame(
                             headers=["parameter", "value"],
                             max_height=400,
@@ -1266,9 +1316,8 @@ def run_xray(
                             interactive=False,
                         )
                     with gr.Column():
-                        gr.Markdown("**Variables** (differ across trajectories)")
+                        gr.Markdown("**Variables** (differ between agents — one column per agent)")
                         cv_var_table = gr.DataFrame(
-                            headers=["parameter", "n_unique", "sample_values"],
                             max_height=400,
                             show_label=False,
                             interactive=False,
@@ -1526,7 +1575,7 @@ def _rows_to_table(rows: list[dict[str, Any]], active_key: str | None = None, ke
         return []
     result = []
     for row in rows:
-        is_active = active_key is not None and str(row.get(key_col, "")) == str(active_key)
+        is_active = active_key is not None and re.sub(r"<[^>]+>", "", str(row.get(key_col, ""))) == str(active_key)
         if is_active:
             cells = [f'<span style="font-weight:600;color:#1d4ed8">{v}</span>' for v in row.values()]
         else:

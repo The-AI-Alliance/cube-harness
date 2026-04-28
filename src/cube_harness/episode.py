@@ -1,6 +1,5 @@
 import logging
 import time
-import warnings
 from pathlib import Path
 from typing import Callable, Self
 
@@ -8,14 +7,11 @@ from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import EnvironmentOutput, StepError, TypedBaseModel
 from cube.task import TaskConfig
-from cube.tool import ToolConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
-from cube_harness.legacy import Benchmark as LegacyBenchmark
-from cube_harness.legacy import EnvConfig
 from cube_harness.metrics.tracer import get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -29,15 +25,11 @@ class EpisodeConfig(TypedBaseModel):
     """Configuration for an episode that can be saved and reloaded."""
 
     id: int
-    task_id: str
     agent_config: AgentConfig
     exp_name: str
     output_dir: Path
     max_steps: int
-    # New cube path:
-    task_config: TaskConfig | None = None
-    # Deprecated legacy path:
-    tool_config: ToolConfig | None = None
+    task_config: TaskConfig
 
 
 class Episode:
@@ -48,59 +40,38 @@ class Episode:
         id: int,
         output_dir: Path,
         agent_config: AgentConfig,
-        task_config: TaskConfig | None = None,  # new cube path: pass full TaskConfig
-        env_config: EnvConfig | None = None,  # deprecated legacy path: pass EnvConfig
+        task_config: TaskConfig,
         exp_name: str = "default",
         max_steps: int = MAX_STEPS,
         storage: Storage | None = None,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> None:
-        if task_config is None and env_config is None:
-            raise ValueError("Provide either task_config (new) or env_config (deprecated).")
-        if task_config is not None and env_config is not None:
-            raise ValueError("Provide only one of task_config (new) or env_config (deprecated).")
-
-        if env_config is not None:
-            warnings.warn(
-                "env_config is deprecated. Pass task_config with a cube.Task instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            effective_task_id = env_config.task.id
-        else:
-            assert task_config is not None  # guaranteed by earlier check
-            effective_task_id = task_config.task_id
-
         self.config = EpisodeConfig(
             id=id,
-            task_id=effective_task_id,
             agent_config=agent_config,
             exp_name=exp_name,
             output_dir=output_dir,
             max_steps=max_steps,
             task_config=task_config,
-            tool_config=env_config.tool_config if env_config is not None else None,
         )
-        self._env_config = env_config  # kept for the legacy run path
-        self._runtime_context = runtime_context  # passed to task_config.make()
-        self._container_backend = container_backend  # passed to task_config.make()
+        self._runtime_context = runtime_context
+        self._container_backend = container_backend
         self.storage = storage or FileStorage(output_dir)
         self.allow_overwrite = False
 
     @classmethod
-    def load_episode_from_config(cls, config_path: Path, benchmark: Benchmark | LegacyBenchmark | None = None) -> Self:
+    def load_episode_from_config(cls, config_path: Path, benchmark: Benchmark | None = None) -> Self:
         """
         Load episode configuration from disk and recreate the episode.
 
-        For the new cube path, `benchmark` is optional — the full TaskConfig is
-        stored in EpisodeConfig and is self-contained (call task_config.make()).
-
-        For the legacy path, `benchmark` is required to map task_id → Task instance.
+        The full TaskConfig is stored in EpisodeConfig and is self-contained
+        (call task_config.make()). `benchmark` is optional — if provided, its
+        runtime_context and container_backend are forwarded to the episode.
 
         Args:
             config_path: Path to the episode config JSON file
-            benchmark: Benchmark instance (required for legacy path only)
+            benchmark: Benchmark instance (optional; used for runtime_context/container_backend)
 
         Returns:
             Episode instance ready to run
@@ -116,93 +87,40 @@ class Episode:
         storage = FileStorage(output_dir)
         episode_config = storage.load_episode_config(config_path)
 
-        if episode_config.task_config is not None:
-            # New cube path — fully self-contained, benchmark is optional
-            if not isinstance(benchmark, Benchmark) and benchmark is not None:
-                raise ValueError(
-                    f"benchmark must be a cube.benchmark.Benchmark instance or None, got {type(benchmark)}"
-                )
-            runtime_context = benchmark._runtime_context if benchmark is not None else None
-            container_backend = benchmark.container_backend if benchmark is not None else None
-            return cls(
-                id=episode_config.id,
-                output_dir=episode_config.output_dir,
-                agent_config=episode_config.agent_config,
-                task_config=episode_config.task_config,
-                exp_name=episode_config.exp_name,
-                max_steps=episode_config.max_steps,
-                storage=storage,
-                runtime_context=runtime_context,
-                container_backend=container_backend,
-            )
-        else:
-            # Legacy path — needs benchmark to reconstruct Task
-            if not isinstance(benchmark, LegacyBenchmark) or benchmark is None:
-                raise ValueError(
-                    f"benchmark must be a cube_harness.legacy.Benchmark instance for legacy episodes, got {type(benchmark)}"
-                )
-
-            # Find the task in the benchmark
-            tasks = benchmark.load_tasks()
-            task = None
-            for t in tasks:
-                if t.id == episode_config.task_id:
-                    task = t
-                    break
-
-            if task is None:
-                raise ValueError(f"Task {episode_config.task_id} not found in benchmark")
-
-            # Recreate EnvConfig
-            assert episode_config.tool_config is not None, "Legacy EpisodeConfig must have tool_config"
-            env_config = EnvConfig(task=task, tool_config=episode_config.tool_config)
-
-            # Create and return Episode with config stored internally
-            episode = cls(
-                id=episode_config.id,
-                output_dir=episode_config.output_dir,
-                agent_config=episode_config.agent_config,
-                env_config=env_config,
-                exp_name=episode_config.exp_name,
-                max_steps=episode_config.max_steps,
-                storage=storage,  # Allow overwriting existing trajectory since this is a resumed episode
-            )
-            return episode
+        if benchmark is not None and not isinstance(benchmark, Benchmark):
+            raise ValueError(f"benchmark must be a cube.benchmark.Benchmark instance or None, got {type(benchmark)}")
+        runtime_context = benchmark._runtime_context if benchmark is not None else None
+        container_backend = benchmark.container_backend if benchmark is not None else None
+        return cls(
+            id=episode_config.id,
+            output_dir=episode_config.output_dir,
+            agent_config=episode_config.agent_config,
+            task_config=episode_config.task_config,
+            exp_name=episode_config.exp_name,
+            max_steps=episode_config.max_steps,
+            storage=storage,
+            runtime_context=runtime_context,
+            container_backend=container_backend,
+        )
 
     def run(self) -> Trajectory:
         """Main loop to run the agent on a single specific task.
 
-        Dispatches to the cube path (task_config) or the deprecated legacy path (env_config),
-        then delegates to the shared _run_loop.
-
         Returns:
             Trajectory containing the full history of the run.
         """
-        if self.config.task_config is not None:
-            task = self.config.task_config.make(
-                runtime_context=self._runtime_context, container_backend=self._container_backend
-            )
-            action_set = task.action_set
-            step_fn = task.step
-            close_fn = task.close
+        task = self.config.task_config.make(
+            runtime_context=self._runtime_context, container_backend=self._container_backend
+        )
+        action_set = task.action_set
+        step_fn = task.step
+        close_fn = task.close
 
-            def setup_fn() -> EnvironmentOutput:
-                obs, info = task.reset()
-                return EnvironmentOutput(obs=obs, info=info)
-        else:
-            warnings.warn(
-                "Running via env_config is deprecated. Use task_config with a cube.Task.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            assert self._env_config is not None  # guaranteed: task_config is None means env_config was provided
-            env = self._env_config.make()
-            action_set = env.action_set
-            step_fn = env.step
-            close_fn = env.close
-            setup_fn = env.setup
+        def setup_fn() -> EnvironmentOutput:
+            obs, info = task.reset()
+            return EnvironmentOutput(obs=obs, info=info)
 
-        agent = self.config.agent_config.make(action_set)
+        agent = self.config.agent_config.make(action_set, task_id=self.config.task_config.task_id)
         return self._run_loop(setup_fn, step_fn, close_fn, agent)
 
     def _run_loop(
@@ -212,8 +130,8 @@ class Episode:
         close_fn: Callable,
         agent,
     ) -> Trajectory:
-        """Shared run loop used by both the cube path and the legacy path."""
-        task_id = self.config.task_id
+        """Run loop for the agent on the task."""
+        task_id = self.config.task_config.task_id
         tracer = get_tracer(self.config.exp_name)
         try:
             with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
@@ -237,7 +155,7 @@ class Episode:
                 )
                 summary_proc = SummaryProcessor(ep_dir)
                 summary_proc.on_step(0, trajectory.steps[0])
-                logger.info(colored(f"Start env output: {env_output}", "blue"))
+                logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
                     with tracer.step(f"turn_{turns}") as span:
@@ -275,7 +193,11 @@ class Episode:
                             trajectory.steps.append(env_step)
                             raise e
 
-                        logger.info(colored(f"Turn {turns} Env output: {env_output}", "blue"))
+                        logger.info(
+                            colored(
+                                f"Turn {turns} Env output: done={env_output.done} reward={env_output.reward}", "blue"
+                            )
+                        )
                         env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), env_step)
@@ -309,7 +231,8 @@ class Episode:
             if hasattr(llm_call.output, "thinking_blocks") and llm_call.output.thinking_blocks:
                 for block in llm_call.output.thinking_blocks:
                     logger.info(colored(f"Turn {turns} LLM Thinking Block: {block}", "cyan"))
-        logger.info(colored(f"Turn {turns} Agent output: {agent_output}", "magenta"))
+        actions_summary = [a.name for a in agent_output.actions] if agent_output.actions else []
+        logger.info(colored(f"Turn {turns} Agent output: actions={actions_summary}", "magenta"))
 
 
 def _compute_summary_stats(traj: Trajectory) -> dict:

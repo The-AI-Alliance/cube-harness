@@ -2,6 +2,19 @@
 
 For contribution philosophy, DCO requirements, RFC process, and community guidelines, see the canonical [CONTRIBUTING.md in cube-standard](https://github.com/The-AI-Alliance/cube-standard/blob/main/CONTRIBUTING.md).
 
+## OpenSpec — how we manage contracts
+
+We follow the [OpenSpec](https://github.com/Fission-AI/OpenSpec) methodology. Each layer of
+cube-harness has a living spec in `openspec/specs/<layer>/spec.md` that defines its public
+API, invariants, and gotchas. Before modifying a layer, read its spec. After a PR that
+changes a public contract, run `/update-openspec` in Claude Code to sync the spec.
+
+For breaking changes, write a short delta proposal in `openspec/changes/<name>/` before
+coding — this makes the contract change visible to the team before code lands.
+
+Full workflow, delta format, and examples: [`openspec/README.md`](openspec/README.md).  
+The methodology reference is in [cube-standard's openspec/README.md](https://github.com/The-AI-Alliance/cube-standard/blob/main/openspec/README.md).
+
 ## Setup
 
 ```bash

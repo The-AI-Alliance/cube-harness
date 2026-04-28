@@ -67,7 +67,21 @@ class SWEBenchTool(Tool):
 
     def bash_unlimited(self, command: str, timeout: int = 120) -> str:
         """Like bash() but without output truncation — for internal use (e.g. evaluate())."""
-        return self._run_bash(command, timeout=timeout)
+        result = self._container.exec(
+            command,
+            timeout=timeout,
+            workdir=self._config.working_dir,
+        )
+        parts = []
+        if result.stdout:
+            parts.append(result.stdout)
+        if result.stderr:
+            parts.append(result.stderr)
+        if result.exit_code == 124:
+            parts.append(f"[error] Command timed out after {timeout}s")
+        elif result.exit_code != 0:
+            parts.append(f"[exit_code: {result.exit_code}]")
+        return "\n".join(parts) if parts else "(no output)"
 
     @tool_action
     def read_file(self, path: str) -> str:

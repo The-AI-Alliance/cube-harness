@@ -9,10 +9,9 @@ import base64
 import logging
 from typing import Any
 
-from cube.benchmark import RuntimeContext
-from cube.container import ContainerBackend
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
 
 from swebench_live_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -51,6 +50,15 @@ class SWEBenchLiveTask(Task):
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+
+    def _build_tool(self) -> None:
+        new_wd = relocate_if_readonly(
+            self._container,
+            self.tool_config.working_dir,
+            "/tmp/testbed",
+            extra_setup="git config --global --add safe.directory /tmp/testbed",
+        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -105,13 +113,6 @@ class SWEBenchLiveTask(Task):
             "test_output": test_output[:2000],
         }
 
-    def close(self) -> None:
-        super().close()
-        if self._container is not None:
-            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
-            self._container.stop()
-            self._container = None
-
     # ── Private helpers ────────────────────────────────────────────
 
     def _apply_patch(self, patch: str) -> str:
@@ -121,17 +122,16 @@ class SWEBenchLiveTask(Task):
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
         # Try git apply first
-        result = self.tool.bash_unlimited("cd /testbed && git apply /tmp/patch.diff 2>&1", timeout=30)
+        # Commands run in tool.working_dir (may be relocated to writable copy).
+        result = self.tool.bash_unlimited("git apply /tmp/patch.diff 2>&1", timeout=30)
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
-        # Fallback: git apply --reject
-        result = self.tool.bash_unlimited("cd /testbed && git apply --reject /tmp/patch.diff 2>&1", timeout=30)
+        result = self.tool.bash_unlimited("git apply --reject /tmp/patch.diff 2>&1", timeout=30)
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
-        # Final fallback: patch
-        return self.tool.bash_unlimited("cd /testbed && patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
 
     def _run_test_cmds(self, test_cmds: list[str], timeout: int = 1800) -> str:
         """Run the explicit test commands from the dataset."""
@@ -141,7 +141,7 @@ class SWEBenchLiveTask(Task):
 
         outputs = []
         for cmd in test_cmds:
-            full_cmd = f"{CONDA_ACTIVATE} && cd /testbed && {cmd}"
+            full_cmd = f"{CONDA_ACTIVATE} && {cmd}"  # tool.working_dir already set
             output = self.tool.bash_unlimited(full_cmd, timeout=timeout)
             outputs.append(output)
         return "\n".join(outputs)
@@ -203,8 +203,12 @@ class SWEBenchLiveTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchLiveTask:
-        if container_backend is None:
-            raise ValueError("SWEBenchLiveTaskConfig.make() requires a container_backend")
+        has_infra = runtime_context is not None and "infra" in runtime_context
+        if not has_infra and container_backend is None:
+            raise ValueError(
+                "SWEBenchLiveTaskConfig.make() requires runtime_context['infra'] "
+                "(preferred) or a legacy container_backend."
+            )
 
         # Import here to avoid circular import (benchmark imports task)
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
