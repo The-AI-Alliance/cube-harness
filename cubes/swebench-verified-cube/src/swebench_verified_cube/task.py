@@ -132,8 +132,11 @@ class SWEBenchVerifiedTask(Task):
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
-        # Final fallback: patch
-        result = self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        # Final fallback: patch --forward prevents reversing an already-applied patch
+        # (patch --batch otherwise treats "content already present" as a reversed patch
+        # and removes it, causing test_empty_name_not_allowed-style evaluation failures
+        # when the agent proactively added test content that the test_patch also adds).
+        result = self.tool.bash_unlimited("patch --batch --forward --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
         if "[exit_code:" in result or "[error]" in result:
             logger.warning("_apply_patch: all methods failed.\npatch output:\n%s", result)
         return result
