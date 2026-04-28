@@ -221,6 +221,3 @@ WORKARENA_TASK_HINTS: dict[str, str] = {
     "workarena.servicenow.filter-service-catalog-item-list": _FILTER_HINT,
     "workarena.servicenow.filter-user-list": _FILTER_HINT,
 }
-
-# Backward compat
-WORKARENA_DEFAULT_HINT: str = ""

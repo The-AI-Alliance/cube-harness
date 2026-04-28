@@ -16,6 +16,7 @@ from typing import Any
 from browsergym.core.action.utils import get_elem_by_bid
 from cube.core import Action, Content, Observation, StepError
 from cube.tool import Tool, Toolbox, ToolConfig, tool_action
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import Field
 
 from cube_harness.tools.browsergym import BrowsergymConfig, BrowsergymTool
@@ -28,6 +29,14 @@ class ExtraWebActionsTool(Tool):
 
     Holds a reference to a BrowsergymTool to share its page and observation
     extraction — both tools operate on the same browser session.
+
+    Intentionally uses composition rather than inheritance: this tool adds
+    actions on top of BrowsergymTool but is not a BrowsergymTool. It depends
+    on BrowsergymTool specifically (not a generic BrowserTaskTool) because it
+    accesses .page and .page_obs() which are BrowsergymTool-specific.
+
+    Experimental: if BrowserGym adds native keyboard-event support in a future
+    release, keyboard_type_into can be removed and this class may become empty.
     """
 
     def __init__(self, browser: BrowsergymTool) -> None:
@@ -46,15 +55,15 @@ class ExtraWebActionsTool(Tool):
     def keyboard_type_into(self, bid: str, text: str) -> str:
         """Type text into an element character-by-character, firing keyboard events per character.
 
-        Use this for fields that show autocomplete suggestions or dynamic dropdowns as you type
-        — fill() sets the value directly and bypasses those events. After typing, call noop() to
-        wait for suggestions to appear, then click the desired suggestion.
+        Use this instead of fill() for fields that show autocomplete suggestions or dynamic
+        dropdowns as you type — fill() sets the value directly and bypasses keyboard events.
+        After typing, call noop() to wait for suggestions to appear, then click the suggestion.
         """
         logger.info(f"keyboard_type_into: bid={bid!r} text={text!r}")
         try:
             get_elem_by_bid(self._browser.page, bid).press_sequentially(text, delay=50)
             return "Success"
-        except Exception as e:
+        except PlaywrightError as e:
             return f"Failed: {type(e).__name__}: {e}"
 
     @tool_action
@@ -83,7 +92,7 @@ class ExtraWebActionsTool(Tool):
                 f"() => {{ try {{ return {code}; }} catch(e) {{ return 'JS error: ' + e.message; }} }}"
             )
             return json.dumps(raw, default=str)
-        except Exception as e:
+        except PlaywrightError as e:
             return f"Failed: {type(e).__name__}: {e}"
 
 

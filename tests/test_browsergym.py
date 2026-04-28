@@ -12,7 +12,7 @@ from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE
 from cube.core import Action, Observation
 from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 from cube_harness.tools.browsergym import (
     BrowsergymConfig,
@@ -620,7 +620,7 @@ _AUTOCOMPLETE_PAGE = """<!DOCTYPE html>
 
 
 @pytest.fixture(scope="module")
-def live_page():
+def live_page() -> Generator[Page, None, None]:
     """Real headless Chromium page configured with bgym's test-id attribute."""
     with sync_playwright() as p:
         p.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
@@ -634,7 +634,7 @@ def live_page():
 class TestKeyboardTypeIntoVsFill:
     """Integration tests verifying keyboard_type_into fires keydown events that fill() skips."""
 
-    def test_fill_does_not_fire_keydown_events(self, live_page) -> None:
+    def test_fill_does_not_fire_keydown_events(self, live_page: Page) -> None:
         live_page.set_content(_AUTOCOMPLETE_PAGE)
 
         get_elem_by_bid(live_page, _AUTOCOMPLETE_BID).fill("hello")
@@ -644,7 +644,7 @@ class TestKeyboardTypeIntoVsFill:
         suggestions = live_page.locator("#suggestions li").count()
         assert suggestions == 0
 
-    def test_press_sequentially_fires_keydown_per_character(self, live_page) -> None:
+    def test_press_sequentially_fires_keydown_per_character(self, live_page: Page) -> None:
         live_page.set_content(_AUTOCOMPLETE_PAGE)
 
         get_elem_by_bid(live_page, _AUTOCOMPLETE_BID).press_sequentially("hello", delay=0)
@@ -654,7 +654,7 @@ class TestKeyboardTypeIntoVsFill:
         suggestions = live_page.locator("#suggestions li").count()
         assert suggestions == 5
 
-    def test_keyboard_type_into_action_fires_keydown_events(self, live_page) -> None:
+    def test_keyboard_type_into_action_fires_keydown_events(self, live_page: Page) -> None:
         """End-to-end: ExtraWebActionsTool.keyboard_type_into reaches the element via get_elem_by_bid."""
         live_page.set_content(_AUTOCOMPLETE_PAGE)
 
