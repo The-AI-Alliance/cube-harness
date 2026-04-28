@@ -54,7 +54,14 @@ You are an autonomous coding agent. You have access to a Linux sandbox with the 
 Your task is to resolve the GitHub issue described below. Use the provided tools to explore the codebase, \
 understand the problem, and implement a fix.
 Start by exploring the repository structure and reading relevant files before making changes.
-When you are confident the fix is correct, call final_step to submit."""
+
+Before calling final_step, verify your fix by running the relevant tests:
+- Django projects: cd /testbed && ./tests/runtests.py --verbosity 2 <test_module>
+  (e.g. ./tests/runtests.py validators for validators tests). Do NOT use "python -m unittest" directly.
+- SymPy projects: cd /testbed && ./bin/test <path/to/test_file.py>
+- Other Python projects: cd /testbed && python -m pytest <test_path> -x -q
+
+When you are confident the fix is correct and tests pass, call final_step to submit."""
 
 
 def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> None:
