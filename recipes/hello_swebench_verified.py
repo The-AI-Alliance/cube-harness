@@ -10,7 +10,7 @@
 # [tool.uv.sources]
 # cube-harness = { path = "..", editable = true }
 # swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }
-# cube-infra-daytona = { path = "/Users/alexandre.lacoste/dev/cube/cube-standard/cube-resources/cube-infra-daytona", editable = true }
+# cube-infra-daytona = { path = "../../cube-standard/cube-resources/cube-infra-daytona", editable = true }
 # ///
 
 """Run swebench-verified-cube with AgentLab2.
@@ -39,14 +39,14 @@ from cube_infra_daytona import DaytonaInfraConfig
 from dotenv import load_dotenv
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
-# Credentials: prefer ~/.env-cube (per PR #314), fall back to ~/.env when keys live there.
-load_dotenv(Path.home() / ".env-cube")
-load_dotenv(Path.home() / ".env", override=False)
-
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+
+# Credentials: prefer ~/.env-cube (per PR #314), fall back to ~/.env when keys live there.
+load_dotenv(Path.home() / ".env-cube")
+load_dotenv(Path.home() / ".env", override=False)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
@@ -62,9 +62,7 @@ Before calling final_step, verify your fix by running the relevant tests:
 - SymPy projects: cd /testbed && ./bin/test <path/to/test_file.py>
 - Other Python projects: cd /testbed && python -m pytest <test_path> -x -q
 
-IMPORTANT: You MUST call the `final_step` tool to submit your solution — do NOT just write \
-a text response. Every turn must end with a tool call. If your fix is complete and tests pass, \
-call `final_step`. If you need to keep working, call another tool (bash, read_file, write_file)."""
+IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 
 
 # Default debug tasks: clean signal, 1 fail_to_pass test each, simple pytest setup (no Django DB).
@@ -129,7 +127,9 @@ if __name__ == "__main__":
     parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "10", "full"])
     parser.add_argument("--model", default="azure/gpt-5.4")
     parser.add_argument("--repo", default=None, help="Filter by repository, e.g. 'django/django'")
-    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs to run, e.g. 'psf__requests-1142,pallets__flask-5014'")
+    parser.add_argument(
+        "--tasks", default=None, help="Comma-separated task IDs to run, e.g. 'psf__requests-1142,pallets__flask-5014'"
+    )
     args = parser.parse_args()
     task_ids = [t.strip() for t in args.tasks.split(",")] if args.tasks else None
     main(args.mode, model=args.model, repo=args.repo, task_ids=task_ids)

@@ -63,13 +63,10 @@ class SWEBenchTool(Tool):
         Args:
             command: Shell command to run. The working directory is /testbed
                 (the cloned repo). Use absolute paths or assume cwd=/testbed.
-            timeout: Wall-clock seconds to wait before killing the command.
-                Default 120s. Use larger values (600-1800) for test suites.
-                NOT milliseconds.
+            timeout: Wall-clock seconds (NOT milliseconds). Default 120s.
+                Use larger values (600-1800) for test suites. Max 3600s.
         """
-        # Guard against millisecond-scale values (LLM training artefact: 120000ms → 120s)
-        if timeout > 7200:
-            timeout = 120
+        timeout = min(timeout, 3600)
         output = self._run_bash(command, timeout=timeout)
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:

@@ -107,8 +107,8 @@ class SWEBenchVerifiedTask(Task):
             "resolved": resolved,
             "fail_to_pass_passed": f2p_passed,
             "pass_to_pass_passed": p2p_passed,
-            "fail_to_pass_output": f2p_output[-20000:],
-            "pass_to_pass_output": p2p_output[-20000:],
+            "fail_to_pass_output": f2p_output,
+            "pass_to_pass_output": p2p_output,
         }
 
     # ── Private helpers ────────────────────────────────────────────
@@ -136,12 +136,7 @@ class SWEBenchVerifiedTask(Task):
         return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
 
     def _run_tests(self, repo: str, test_directives: list[str], timeout: int = 1800) -> tuple[bool, str]:
-        """Run test directives and return (all_passed, output).
-
-        Only the last 200 lines of output are retained — the setup preamble
-        (DB creation, parallel-worker cloning) can be tens of thousands of
-        characters; the useful signal is always in the tail.
-        """
+        """Run test directives; return (all_passed, last-200-lines-of-output)."""
         assert isinstance(self.tool, SWEBenchTool)
         if not test_directives:
             return True, ""
@@ -151,10 +146,7 @@ class SWEBenchVerifiedTask(Task):
         # bash_unlimited returns the pipeline exit code (from tail, always 0);
         # we extract the real test exit code from the embedded marker line.
         sentinel = "CUBE_TEST_EXIT_CODE"
-        cmd = (
-            f"{CONDA_ACTIVATE} && "
-            f"{{ {test_cmd} 2>&1; echo '{sentinel}:'$?; }} | tail -n 200"
-        )
+        cmd = f"{CONDA_ACTIVATE} && {{ {test_cmd} 2>&1; echo '{sentinel}:'$?; }} | tail -n 200"
         raw = self.tool.bash_unlimited(cmd, timeout=timeout)
 
         # Handle timeout — bash_unlimited appends "[error]" on timeout
