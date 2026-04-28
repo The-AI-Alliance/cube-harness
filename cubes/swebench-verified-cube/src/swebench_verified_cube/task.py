@@ -133,7 +133,10 @@ class SWEBenchVerifiedTask(Task):
             return result
 
         # Final fallback: patch
-        return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        result = self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        if "[exit_code:" in result or "[error]" in result:
+            logger.warning("_apply_patch: all methods failed.\npatch output:\n%s", result)
+        return result
 
     def _run_tests(self, repo: str, test_directives: list[str], timeout: int = 1800) -> tuple[bool, str]:
         """Run test directives; return (all_passed, last-200-lines-of-output)."""
@@ -188,6 +191,10 @@ class SWEBenchVerifiedTask(Task):
         if "sympy" in repo:
             tests = " ".join(shlex.quote(t) for t in test_directives)
             return f"bin/test -C --verbose {tests}"
+        if "pytest-dev" in repo:
+            # Old pytest versions inside the testbed don't support --no-header
+            tests = " ".join(shlex.quote(t) for t in test_directives)
+            return f"python -m pytest -rN -p no:cacheprovider {tests}"
         tests = " ".join(shlex.quote(t) for t in test_directives)
         return f"python -m pytest --no-header -rN -p no:cacheprovider {tests}"
 

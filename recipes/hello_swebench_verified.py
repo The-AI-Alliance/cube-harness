@@ -56,6 +56,11 @@ Your task is to resolve the GitHub issue described below. Use the provided tools
 understand the problem, and implement a fix.
 Start by exploring the repository structure and reading relevant files before making changes.
 
+IMPORTANT — the issue requires you to ADD or CHANGE behavior in the source code. \
+The existing test suite will pass before your fix — that is expected. \
+Do NOT call final_step just because existing tests pass. \
+Only call final_step after you have actually modified the source code to resolve the issue.
+
 Before calling final_step, verify your fix by running the relevant tests:
 - Django projects: cd /testbed && ./tests/runtests.py --verbosity 2 <test_module>
   (e.g. ./tests/runtests.py validators for validators tests). Do NOT use "python -m unittest" directly.
@@ -118,7 +123,7 @@ def main(
     if mode == "debug":
         run_sequentially(exp)
     else:
-        n_cpus = min(max_tasks or 500, 10)
+        n_cpus = min(max_tasks or 500, 5)  # Daytona free tier: ~10GiB total, ~2GiB/sandbox
         run_with_ray(exp, n_cpus=n_cpus, step_timeout_s=1800.0)
 
 
