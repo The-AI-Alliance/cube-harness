@@ -93,21 +93,25 @@ class TirAgent(Agent):
         prompt = Prompt(messages=messages, tools=self.tools)
         prompt_tokens = self.token_counter(messages=messages, tools=self.tools)
         
-        remaining = self.config.llm_config.max_tokens - prompt_tokens
+        max_model_len = self.config.llm_config.max_model_len
+        remaining = max_model_len - prompt_tokens
         if remaining < self.config.min_generation_tokens:
             logger.warning(
                 "Prompt length %d leaves only %d tokens for generation (max_model_len=%d), stopping loop",
-                prompt_tokens, remaining, self.config.llm_config.max_tokens,
+                prompt_tokens, remaining, max_model_len,
             )
             return AgentOutput(actions=[])
 
         # FIX THIS
-        # max_tokens_this_turn = min(configured_max_tokens, remaining)
-        # if max_tokens_this_turn < configured_max_tokens:
-        #     logger.warning(
-        #         "Turn %d: capping max_tokens from %d to %d (prompt_len=%d, max_model_len=%d)",
-        #         _turn, configured_max_tokens, max_tokens_this_turn, prompt_len, max_model_len,
-        #     )
+        configured_max_tokens = self.config.llm_config.max_completion_tokens
+        self.llm.config.max_completion_tokens = configured_max_tokens
+        max_tokens_this_turn = min(configured_max_tokens, remaining)
+        if max_tokens_this_turn < configured_max_tokens:
+            logger.warning(
+                "capping max_tokens from %d to %d (prompt_len=%d, max_model_len=%d)",
+                configured_max_tokens, max_tokens_this_turn, prompt_tokens, max_model_len,
+            )
+            self.config.llm_config.max_completion_tokens = max_tokens_this_turn
 
         llm_response = self.llm(prompt)
         llm_output = llm_response.message
