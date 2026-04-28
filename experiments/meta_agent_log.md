@@ -309,3 +309,62 @@ fix was right but it forgot to call `final_step`.
 
 **Result**: Run 6 — `psf__requests-1142` reward=1.0 in 10 turns (agent correctly called final_step).
 Combined run 6 result: **2/2 tasks solved** (first 100% solve rate across all runs).
+
+## Iteration 11 — 2026-04-28 — get_records() always shows reward=0.0
+
+**Tasks**: all (harness-level bug affecting every benchmark)
+
+**What was broken**: `ExperimentResult.get_records()` returned `reward=0.0` for every completed
+episode, masking all successes. Root cause: `get_exp_record()` read `reward` from `summary_stats`
+(which stores the field as `final_reward`, not `reward`). The authoritative value is in
+`reward_info.reward`. Same bug affected `cost_usd` (stored as `cost` in `summary_stats`).
+
+**Fix** (`src/cube_harness/results.py`):
+Explicitly pull `reward` from `meta.reward_info["reward"]`; remap `cost` → `cost_usd`. All
+existing records (including earlier episode.metadata.json files) now report correctly.
+
+**Result**: Both flask-5014 and requests-1142 from run 082247 correctly report reward=1.0 after fix.
+
+## Iteration 12 — 2026-04-28 — Ray workers crash with working_dir=None and missing packages
+
+**Tasks**: all (Ray parallelism blocked)
+
+**What was broken**: Two bugs in `exp_runner.py`:
+1. `runtime_env={"working_dir": None, ...}` — Ray's uv hook raises `TypeError: path_or_uri must
+   be a string, got <class 'NoneType'>` when `working_dir` is explicitly set to `None`.
+2. Ray workers couldn't import `swebench_verified_cube` or other editable/PEP-723 packages because
+   workers don't inherit the calling process's `sys.path` — they use their own bare Python env.
+
+**Fix** (`src/cube_harness/exp_runner.py`):
+Drop `working_dir` key from `runtime_env` entirely. Propagate `sys.path` to workers via
+`PYTHONPATH` env var so editable installs and PEP-723 isolated venvs are visible to workers.
+Also fix recipe: rename `episode_timeout` → `step_timeout_s` to match actual `run_with_ray` signature.
+
+**Result**: 20-task parallel run completed. 5/5 concurrency limited by Daytona free tier (10 GiB
+total). Reduced `n_cpus` to 5. Overall 13/16 completed tasks passed (81% pass rate).
+
+## Iteration 13 — 2026-04-28 — pytest-dev runner, _apply_patch logging, prompt clarity
+
+**Tasks**: `pytest-dev__pytest-5809`, `pallets__flask-5014`
+
+**pytest-5809**: `_build_test_cmd` added `--no-header` for all non-django/sympy repos. But old pytest
+versions inside the testbed (the repo being tested) don't support this flag, causing eval to fail
+with "unrecognized arguments: --no-header" regardless of fix quality.
+
+**flask-5014**: Agent ran existing test suite, saw all tests pass, concluded task was done — never
+implemented the required change (ValueError for empty Blueprint name). The system prompt said
+"verify your fix by running tests" but did not say "the existing tests pass before your fix too."
+
+**_apply_patch**: All three patching methods (git apply, git apply --reject, patch) can fail silently.
+The function returned without error, evaluation found no test function, and the real cause was hidden
+behind "test not found" messages.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/task.py`):
+- Add `pytest-dev` case to `_build_test_cmd`: use `python -m pytest -rN -p no:cacheprovider` (no `--no-header`)
+- Log a warning in `_apply_patch` when all three methods fail
+
+**Fix** (`recipes/hello_swebench_verified.py`):
+Add explicit note: "The existing test suite will pass before your fix. Do NOT call final_step just
+because existing tests pass. Only call final_step after you have modified the source code."
+
+**Result**: Pending verification run on pytest-5809 and flask-5014.
