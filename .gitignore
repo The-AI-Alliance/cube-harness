@@ -288,3 +288,6 @@ pac.entitlement
 
 # Personal/throwaway experiment recipes (use custom_* prefix)
 recipes/custom_*
+
+# Local cube-standard clone for cross-repo development (see: make review PR=<n>)
+cube-standard/
