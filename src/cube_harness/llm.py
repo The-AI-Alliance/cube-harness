@@ -44,9 +44,9 @@ class LLMConfig(TypedBaseModel):
     tool_choice: Literal["auto", "none", "required"] = "auto"
     parallel_tool_calls: bool = False
     logprobs: bool = False
-    include_stop_str_in_output: bool = False
-    skip_special_tokens: bool = True
-    top_logprobs: int | None = None
+    include_stop_str_in_output: bool | None = None
+    skip_special_tokens: bool | None = None
+    top_p: float | None = None
     training: bool = False  # whether the call is for training (vs inference); may affect caching and logging behavior
     extra_body: dict = Field(default_factory=dict)
     num_retries: int = 5
@@ -106,12 +106,16 @@ class LLM:
             kwargs["api_key"] = self.config.api_key
         if self.config.logprobs:
             kwargs["logprobs"] = True
-        if self.config.top_logprobs is not None:
-            kwargs["top_logprobs"] = self.config.top_logprobs
+        if self.config.top_p is not None:
+            kwargs["top_p"] = self.config.top_p
         if self.config.extra_body:
             kwargs["extra_body"] = self.config.extra_body
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.include_stop_str_in_output is not None:
+            kwargs["include_stop_str_in_output"] = self.config.include_stop_str_in_output
+        if self.config.skip_special_tokens is not None:
+            kwargs["skip_special_tokens"] = self.config.skip_special_tokens
         response = completion_with_retries(**kwargs)
         usage = self._extract_usage(response)
         completion_logprobs = self._extract_completion_logprobs(response)
