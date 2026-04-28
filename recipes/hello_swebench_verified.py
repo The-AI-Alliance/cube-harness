@@ -16,12 +16,13 @@
 """Run swebench-verified-cube with AgentLab2.
 
 Usage:
-    uv run recipes/hello_swebench_verified.py debug              # 2 django tasks, sequential
-    uv run recipes/hello_swebench_verified.py 10 --model gpt-4.1 # 10 tasks with Ray
-    uv run recipes/hello_swebench_verified.py full --model gpt-4.1
+    uv run recipes/hello_swebench_verified.py debug              # 2 default tasks, sequential
+    uv run recipes/hello_swebench_verified.py debug --tasks psf__requests-1142,pallets__flask-5014
+    uv run recipes/hello_swebench_verified.py 10 --model gpt-5.4 # 10 tasks with Ray
+    uv run recipes/hello_swebench_verified.py full --model gpt-5.4
 
 The recipe in "full" mode runs all 500 tasks. Use --repo to filter by repository, e.g.:
-    uv run recipes/hello_swebench_verified.py full --model gpt-4.1 --repo django/django
+    uv run recipes/hello_swebench_verified.py full --model gpt-5.4 --repo django/django
 
 Prerequisites:
     - DAYTONA_API_KEY in env (or ~/.env-cube)
@@ -64,7 +65,18 @@ Before calling final_step, verify your fix by running the relevant tests:
 When you are confident the fix is correct and tests pass, call final_step to submit."""
 
 
-def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> None:
+# Default debug tasks: clean signal, 1 fail_to_pass test each, simple pytest setup (no Django DB).
+# psf__requests-1142: don't send Content-Length on GET; 1 f2p, 5 p2p.
+# pallets__flask-5014: raise ValueError on empty Blueprint name; 1 f2p, 59 p2p.
+DEBUG_TASKS = ["psf__requests-1142", "pallets__flask-5014"]
+
+
+def main(
+    mode: str,
+    model: str = "azure/gpt-5.4",
+    repo: str | None = None,
+    task_ids: list[str] | None = None,
+) -> None:
     model_short = model.split("/")[-1]
     current_datetime = time.strftime("%Y%m%d_%H%M%S")
     output_dir = Path.home() / "cube_harness_results" / f"swebench_verified_{mode}_{model_short}_{current_datetime}"
@@ -73,11 +85,11 @@ def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> Non
 
     benchmark = SWEBenchVerifiedBenchmark(infra=infra)
 
-    # In debug mode, restrict to 2 django tasks so tests run fast locally
     if mode == "debug":
-        benchmark = benchmark.subset_from_glob("repo", "django/django")
-        tasks = list(benchmark.task_metadata.keys())[:2]
+        tasks = task_ids or DEBUG_TASKS
         benchmark = benchmark.subset_from_list(tasks)
+    elif task_ids is not None:
+        benchmark = benchmark.subset_from_list(task_ids)
     elif repo is not None:
         benchmark = benchmark.subset_from_glob("repo", repo)
 
@@ -113,7 +125,9 @@ def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> Non
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run SWE-bench Verified experiments")
     parser.add_argument("mode", nargs="?", default="debug", choices=["debug", "10", "full"])
-    parser.add_argument("--model", default="gpt-4.1-mini")
+    parser.add_argument("--model", default="azure/gpt-5.4")
     parser.add_argument("--repo", default=None, help="Filter by repository, e.g. 'django/django'")
+    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs to run, e.g. 'psf__requests-1142,pallets__flask-5014'")
     args = parser.parse_args()
-    main(args.mode, model=args.model, repo=args.repo)
+    task_ids = [t.strip() for t in args.tasks.split(",")] if args.tasks else None
+    main(args.mode, model=args.model, repo=args.repo, task_ids=task_ids)
