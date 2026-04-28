@@ -58,7 +58,15 @@ class SWEBenchTool(Tool):
 
     @tool_action
     def bash(self, command: str, timeout: int = 120) -> str:
-        """Execute a bash command in the sandbox and return its output."""
+        """Execute a bash command in the sandbox and return its output.
+
+        Args:
+            command: Shell command to run. The working directory is /testbed
+                (the cloned repo). Use absolute paths or assume cwd=/testbed.
+            timeout: Wall-clock seconds to wait before killing the command.
+                Default 120s. Use larger values (600-1800) for test suites.
+                NOT milliseconds.
+        """
         output = self._run_bash(command, timeout=timeout)
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:
@@ -85,7 +93,12 @@ class SWEBenchTool(Tool):
 
     @tool_action
     def read_file(self, path: str) -> str:
-        """Read the contents of a file in the sandbox."""
+        """Read the contents of a file in the sandbox.
+
+        Args:
+            path: Path to the file. Relative paths resolve against /testbed
+                (e.g. 'django/core/validators.py'). Absolute paths also work.
+        """
         result = self._exec(f"cat {shlex.quote(path)}")
         if result.exit_code != 0:
             return f"Error reading {path}: {result.stderr or result.stdout}"
@@ -93,7 +106,15 @@ class SWEBenchTool(Tool):
 
     @tool_action
     def write_file(self, path: str, content: str) -> str:
-        """Write content to a file in the sandbox."""
+        """Write content to a file in the sandbox (overwrites any existing file).
+
+        Args:
+            path: Destination path. Parent directories are created as needed.
+                Relative paths resolve against /testbed.
+            content: Full file contents to write. Pass the entire new file body —
+                this is not a patch tool. For incremental edits, use bash with
+                sed / patch / git apply.
+        """
         self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
         escaped = content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
