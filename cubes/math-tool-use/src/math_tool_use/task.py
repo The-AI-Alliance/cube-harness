@@ -100,7 +100,7 @@ class SolveMathToolUseTask(Task):
         if self.tool.final_answer is not None:
             submitted = self.tool.final_answer
         else:
-            submitted = ""
+            submitted = self.tool._last_python_output or ""
 
         answer_status = _verify_answer_status(submitted, self._expected, strict=True)
         reward_table = RewardTable(**self.metadata.extra_info['rewards'])

@@ -58,6 +58,8 @@ def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_comple
         ## Important for accurate RL data collection:
         training=True,  # ensure cache is disabled for accurate RL data collection
         logprobs=True,
+        skip_special_tokens=True,
+        include_stop_str_in_output=False,
         top_logprobs=1,
         extra_body={"return_token_ids": True},
     )

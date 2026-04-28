@@ -103,7 +103,8 @@ def load_task_metadata() -> dict[str, TaskMetadata]:
                 },
             )
 
-            logger.info(f"Loading {dataset_name}: {len(tasks_data)} tasks")
+        logger.info(f"Loading {dataset_name}: {len(tasks_data)} tasks")
+        
     logger.info(f"Loading total of {len(metadata)} tasks")
     return metadata
 
