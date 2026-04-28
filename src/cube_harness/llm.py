@@ -38,6 +38,7 @@ class LLMConfig(TypedBaseModel):
     api_key: str | None = None
     temperature: float = 1.0
     max_tokens: int = 128000
+    max_model_len: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     tool_choice: Literal["auto", "none", "required"] = "auto"
