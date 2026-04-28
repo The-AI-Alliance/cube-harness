@@ -62,7 +62,9 @@ Before calling final_step, verify your fix by running the relevant tests:
 - SymPy projects: cd /testbed && ./bin/test <path/to/test_file.py>
 - Other Python projects: cd /testbed && python -m pytest <test_path> -x -q
 
-When you are confident the fix is correct and tests pass, call final_step to submit."""
+IMPORTANT: You MUST call the `final_step` tool to submit your solution — do NOT just write \
+a text response. Every turn must end with a tool call. If your fix is complete and tests pass, \
+call `final_step`. If you need to keep working, call another tool (bash, read_file, write_file)."""
 
 
 # Default debug tasks: clean signal, 1 fail_to_pass test each, simple pytest setup (no Django DB).
