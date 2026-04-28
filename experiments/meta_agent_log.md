@@ -180,3 +180,31 @@ Agents that don't pass line ranges are unaffected.
 
 **Minor fix also committed**: `import re` moved from inside `_normalize_django_directive()` to
 module-level (EX-001 violation).
+
+## Iteration 6 — 2026-04-28 — Agent calls wrong test runner; fix never verified
+
+**Tasks**: `django__django-10097` (run #3, ep0)
+
+**What the agent saw**: At turn 17 the agent ran `python3 -m unittest tests.validators.tests -v`.
+This failed with `ImproperlyConfigured: Requested setting DATABASES`. Django tests require either
+`DJANGO_SETTINGS_MODULE` to be set or the `runtests.py` launcher. The agent's inline validation
+scripts passed (correct URLValidator behaviour) so it concluded the fix was right and called
+`final_step` — but the eval used `./tests/runtests.py` and the actual test cases failed (agent's
+regex allowed `:` in the password part; gold requires `[^\s:@/]*` in both halves).
+
+**Hypothesis**: The system prompt said "when you are confident the fix is correct, call final_step"
+but gave no guidance on *how* to run tests in this repo. The LLM defaulted to `python -m unittest`
+which is the generic Python pattern — not the Django runtests.py approach used during evaluation.
+
+**Intervention**: Confirmed by reading the agent's episode log turn-by-turn.
+
+**Fix** (`recipes/hello_swebench_verified.py` — `SWE_SYSTEM_PROMPT`):
+Add framework-specific test commands:
+- Django → `./tests/runtests.py --verbosity 2 <module>`
+- SymPy → `./bin/test`
+- Other → `python -m pytest`
+and note that `python -m unittest` does NOT work for Django.
+
+**Result**: pending re-run (run 4 in progress).
+
+**Blast radius**: Recipe-only (system prompt). No library code changed.
