@@ -323,16 +323,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 # === Module-level helpers ===
 
 
-# Descriptions that replace BrowserGym's upstream text.
-# Use sparingly — only when the upstream description is misleading about when to use the action.
-_ACTION_DESCRIPTION_OVERRIDES: dict[str, str] = {
-    "fill": (
-        "Fill a form field by setting its value directly. It does not fire keyboard events, so autocomplete suggestions"
-        " will not appear. Use keyboard_type_into() instead for fields that require autocomplete."
-    ),
-}
-
-
 def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
     """Convert bgym's HighLevelActionSet to a list of ActionSchema objects."""
     tool_descs = action_set.to_tool_description(api="openai")
@@ -342,8 +332,7 @@ def _build_action_schemas(action_set: HighLevelActionSet) -> list[ActionSchema]:
         # parameters already has "type": "object" which Azure/OpenAI require — don't remove it.
         params = desc.get("parameters", {})
         name = desc["name"]
-        description = _ACTION_DESCRIPTION_OVERRIDES.get(name, desc.get("description", name))
-        schemas.append(ActionSchema(name=name, description=description, parameters=params))
+        schemas.append(ActionSchema(name=name, description=desc.get("description", name), parameters=params))
     return schemas
 
 
