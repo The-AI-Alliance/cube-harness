@@ -208,3 +208,46 @@ and note that `python -m unittest` does NOT work for Django.
 **Result**: pending re-run (run 4 in progress).
 
 **Blast radius**: Recipe-only (system prompt). No library code changed.
+
+## Iteration 7 — 2026-04-28 — evaluate() output preamble drowns test results even at 20000 chars
+
+**Tasks**: `django__django-10097` (run #4, ep0)
+
+**What we observed**: With the 20000-char `[:20000]` limit from iter 4, the stored F2P output still
+showed only "Cloning test database for alias 'other'..." — Django runs 128 parallel workers, each
+cloning a DB, producing tens of thousands of preamble lines before any test results appear.
+Switching to `[-20000:]` showed the same content — the preamble fills the entire output.
+
+**Hypothesis**: The setup preamble (DB creation + parallel worker cloning) for 438 tests with 128
+workers is ~100k+ chars. Storing any fixed prefix or suffix of the raw output is unreliable;
+the test result lines are sandwiched between preamble and summary in the middle.
+
+**Fix** (`_run_tests()` in `task.py`):
+Pipe `{ test_cmd 2>&1; echo CUBE_TEST_EXIT_CODE:$?; } | tail -n 200` to keep only the last 200
+lines. Embed the actual exit code in a sentinel line before the tail so the pipeline exit code
+(always 0 from `tail`) doesn't mask failures. Regex-extracts and removes the sentinel line before
+returning the output.
+
+**Result**: pending run 5 (first run with the tail fix active).
+
+**Blast radius**: `_run_tests()` only. `all_passed` logic unchanged in semantics; sentinel approach
+handles pass/fail/timeout correctly (verified by unit test in session).
+
+## Iteration 8 — 2026-04-28 — Agent still passes timeout=120000 for bash commands
+
+**Tasks**: `django__django-10554` (run #4, ep1)
+
+**What we observed**: At T9/T13, the agent called `bash(command="grep ...", timeout=120000)`.
+Despite the docstring saying "NOT milliseconds", the LLM defaults to millisecond-scale values from
+its training data (120000ms ≈ 120s). The grep finishes in milliseconds regardless, so no
+functional harm — but a test-suite call with timeout=120000 would wait 33 hours.
+
+**Hypothesis**: The LLM's pattern-matching overrides the docstring. "NOT milliseconds" is easy to
+miss especially since the LLM's prior association is strong (120000 is a common millisecond timeout).
+
+**Fix** (`tool.py:bash()`): Silently cap timeout to 120s when the value exceeds 7200s. This
+converts the agent's intended 120000ms → 120s without any visible error.
+
+**Follow-up**: The description says "Use larger values (600-1800)" — perhaps 120000ms → 120s is
+not what the agent wants for tests. Monitor whether agents use large timeouts for test commands
+and whether the cap causes premature timeouts.
