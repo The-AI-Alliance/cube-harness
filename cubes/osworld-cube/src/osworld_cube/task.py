@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import io
 import logging
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from cube.infra_utils import free_port, open_tunnel
 from PIL import Image
 from pydantic import PrivateAttr
 
@@ -105,6 +107,9 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
     and replace axtree with an indexed element table before returning obs."""
 
     _handle: ResourceHandle | None = PrivateAttr(default=None)
+    _extra_tunnels: list[subprocess.Popen] = PrivateAttr(default_factory=list)
+    _chromium_port: int = PrivateAttr(default=_CHROMIUM_PORT)
+    _vlc_port: int = PrivateAttr(default=_VLC_PORT)
 
     def model_post_init(self, __context: Any) -> None:
         """Create the Computer tool without a VM — VM is deferred to reset()."""
@@ -145,6 +150,41 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
         self._handle = infra.launch(OSWORLD_UBUNTU_RESOURCE)
         logger.info("VM ready (run_id=%s)", self._handle.run_id[:8])
         self._computer.attach_endpoint(self._handle.endpoint)
+        self._open_auxiliary_tunnels()
+
+    def _open_auxiliary_tunnels(self) -> None:
+        """Open host tunnels for VM services that OSWorld accesses directly.
+
+        Some cloud infra handles expose only the guest-agent endpoint. OSWorld setup
+        and evaluation also connect to Chromium CDP and VLC from the host process,
+        so reuse the handle's SSH tunnel details when available.
+        """
+        if self._handle is None or self._extra_tunnels:
+            return
+
+        tunnel = getattr(self._handle, "_tunnel", None)
+        tunnel_args = getattr(tunnel, "args", None)
+        if not isinstance(tunnel_args, (list, tuple)):
+            return
+
+        try:
+            identity_index = tunnel_args.index("-i") + 1
+            ssh_privkey = str(tunnel_args[identity_index])
+            ssh_target = str(tunnel_args[-1])
+            ssh_user, vm_ip = ssh_target.split("@", 1)
+        except (ValueError, IndexError):
+            logger.warning("Could not parse SSH tunnel arguments; using default VM ports")
+            return
+
+        self._chromium_port = free_port()
+        self._extra_tunnels.append(open_tunnel(vm_ip, ssh_user, ssh_privkey, self._chromium_port, _CHROMIUM_PORT))
+        self._vlc_port = free_port()
+        self._extra_tunnels.append(open_tunnel(vm_ip, ssh_user, ssh_privkey, self._vlc_port, _VLC_PORT))
+        logger.info(
+            "Opened auxiliary VM tunnels: Chromium localhost:%d -> 9222, VLC localhost:%d -> 8080",
+            self._chromium_port,
+            self._vlc_port,
+        )
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
         """Return (chromium_port, vlc_port, server_port).
@@ -155,8 +195,8 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
         """
         if self._handle is not None and self._handle.endpoint:
             server_port = urlparse(self._handle.endpoint).port or _SERVER_PORT
-            return _CHROMIUM_PORT, _VLC_PORT, server_port
-        return _CHROMIUM_PORT, _VLC_PORT, _SERVER_PORT
+            return self._chromium_port, self._vlc_port, server_port
+        return self._chromium_port, self._vlc_port, _SERVER_PORT
 
     def _setup_task(self, task_data: dict) -> Observation:
         """Run setup scripts, wait for VM to stabilise, return initial observation.
@@ -177,6 +217,7 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
                 guest=self._computer._guest,
                 chromium_port=chromium_port,
                 vlc_port=vlc_port,
+                guest_chromium_port=_CHROMIUM_PORT,
                 cache_dir=task_cache_dir,
                 screen_width=1920,
                 screen_height=1080,
@@ -354,6 +395,14 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
         """Clean up task resources: stop tool, then close VM handle."""
         logger.info("Closing OSWorldTask: %s", self.metadata.id)
         super().close()  # calls self.tool.close()
+        for tunnel in self._extra_tunnels:
+            try:
+                tunnel.terminate()
+            except Exception:
+                logger.warning("Failed to terminate auxiliary tunnel", exc_info=True)
+        self._extra_tunnels = []
+        self._chromium_port = _CHROMIUM_PORT
+        self._vlc_port = _VLC_PORT
         if self._handle is not None:
             self._handle.close()
             self._handle = None
