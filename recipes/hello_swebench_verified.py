@@ -79,9 +79,13 @@ def main(mode: str, model: str = "gpt-4.1-mini", repo: str | None = None) -> Non
         tasks = list(benchmark.task_metadata.keys())[:max_tasks]
         benchmark = benchmark.subset_from_list(tasks)
 
+    # max_actions is per-agent and defaults to 10 — must be raised together with
+    # max_steps or the harness force-stops the agent at turn 10 with reward 0.
+    # SWE-bench tasks typically need 20+ steps to explore + diff + verify.
     agent_config = ReactAgentConfig(
         llm_config=LLMConfig(model_name=model),
         system_prompt=SWE_SYSTEM_PROMPT,
+        max_actions=30,
     )
 
     exp = Experiment(
