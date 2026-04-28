@@ -176,21 +176,12 @@ def _run_with_ray_impl(
             return episode.run()
 
     if not ray.is_initialized():
-        import os
-        import sys
-
-        # Propagate the current sys.path so workers can import packages installed in
-        # the calling process's environment (e.g. editable installs, PEP 723 venvs).
-        pythonpath = os.pathsep.join(p for p in sys.path if p)
-        env_vars = {**get_trace_env_vars()}
-        if pythonpath:
-            env_vars["PYTHONPATH"] = pythonpath
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",
             include_dashboard=True,
             log_to_driver=True,
-            runtime_env={"env_vars": env_vars},
+            runtime_env={"env_vars": get_trace_env_vars()},
         )  # TODO: Ray breaks signal handling, we cannot react to Ctrl+C here, still cannot find a workaround
 
     exp.benchmark.setup()
