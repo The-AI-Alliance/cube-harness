@@ -367,4 +367,32 @@ behind "test not found" messages.
 Add explicit note: "The existing test suite will pass before your fix. Do NOT call final_step just
 because existing tests pass. Only call final_step after you have modified the source code."
 
-**Result**: Pending verification run on pytest-5809 and flask-5014.
+**Result**: pytest-5809: r=1.0 ✓ (--no-header removal confirmed). flask-5014: r=0.0 ✗ — root cause found in Iteration 14.
+
+## Iteration 14 — 2026-04-28 — patch --batch reverses already-applied test patches
+
+**Tasks**: `pallets__flask-5014`
+
+**Root cause**: `_apply_patch(test_patch)` in `evaluate()` uses `patch --batch --fuzz=5 -p1` as the
+final fallback. When the agent proactively adds the test function to the test file (as gpt-5.4 did),
+`patch --batch` interprets "content already present" as a reversed patch and **removes** the function
+from the file. Evaluation then runs pytest, the function is missing, and r=0.0.
+
+The agent was actually correct: it modified `blueprints.py` (added ValueError for empty name) AND
+added `test_empty_name_not_allowed` to `test_blueprints.py`, ran pytest, got 60 passed. But
+evaluation reversed the test_patch and lost the test.
+
+**Investigation**: Read T05 prompt (013 messages) — agent saw "60 passed in 0.21s" and correctly
+called final_step. The `_apply_patch` warning never fired because `patch --batch` exited 0 after
+reversing.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/task.py`):
+Change `patch --batch --fuzz=5 -p1` → `patch --batch --forward --fuzz=5 -p1`. `--forward` prevents
+patch from interpreting already-present content as a reversed patch. If content is already there,
+patch exits 1 (warning fires), but the function remains in the file and tests pass.
+
+**Blast radius**: Only the `patch` fallback path (git apply already failed). Normal cases (agent
+didn't touch tests) are unaffected. Edge case (agent added exactly the same content) now fails to
+"apply" but correctly leaves content in place → tests pass → reward=1.0.
+
+**Result**: Pending verification.
