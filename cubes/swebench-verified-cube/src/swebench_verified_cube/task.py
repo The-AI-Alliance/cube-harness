@@ -93,11 +93,15 @@ class SWEBenchVerifiedTask(Task):
         # Run FAIL_TO_PASS tests — these must all pass for resolution
         f2p_passed, f2p_output = self._run_tests(self.metadata.repo, fail_to_pass, timeout=eval_timeout)
 
-        # Run PASS_TO_PASS tests — these must remain passing
+        # Run PASS_TO_PASS tests — these must remain passing.
+        # strict=False: exit-4 "no tests collected" treated as passed (truncated test IDs
+        # in SWE-bench data cannot be collected; agent is not responsible for that).
         p2p_passed = True
         p2p_output = ""
         if pass_to_pass:
-            p2p_passed, p2p_output = self._run_tests(self.metadata.repo, pass_to_pass, timeout=eval_timeout)
+            p2p_passed, p2p_output = self._run_tests(
+                self.metadata.repo, pass_to_pass, timeout=eval_timeout, strict=False
+            )
 
         resolved = f2p_passed and p2p_passed
         reward = 1.0 if resolved else 0.0
@@ -141,8 +145,20 @@ class SWEBenchVerifiedTask(Task):
             logger.warning("_apply_patch: all methods failed.\npatch output:\n%s", result)
         return result
 
-    def _run_tests(self, repo: str, test_directives: list[str], timeout: int = 1800) -> tuple[bool, str]:
-        """Run test directives; return (all_passed, last-200-lines-of-output)."""
+    def _run_tests(
+        self,
+        repo: str,
+        test_directives: list[str],
+        timeout: int = 1800,
+        strict: bool = True,
+    ) -> tuple[bool, str]:
+        """Run test directives; return (all_passed, last-200-lines-of-output).
+
+        When strict=False (used for pass_to_pass), pytest exit code 4 ("no tests
+        collected") is treated as passed rather than failed.  SWE-bench stores some
+        parameterised test IDs in truncated form (e.g. test_stem[png-w/ missing the
+        closing ]) that pytest cannot collect; penalising the agent for this is wrong.
+        """
         assert isinstance(self.tool, SWEBenchTool)
         if not test_directives:
             return True, ""
@@ -164,6 +180,10 @@ class SWEBenchVerifiedTask(Task):
         if m:
             exit_code = int(m.group(1))
             output = re.sub(rf"^{sentinel}:\d+\s*\n?", "", raw, flags=re.MULTILINE).rstrip()
+            # exit 4 = no tests collected (e.g. truncated parametrised IDs in SWE-bench data).
+            # For pass_to_pass this is not the agent's fault; treat as passed.
+            if exit_code == 4 and not strict:
+                return True, output
             return exit_code == 0, output
 
         # Fallback: sentinel missing means the outer shell itself failed
@@ -190,7 +210,9 @@ class SWEBenchVerifiedTask(Task):
         if "django" in repo:
             normalized = [SWEBenchVerifiedTask._normalize_django_directive(t) for t in test_directives]
             tests = " ".join(shlex.quote(t) for t in normalized)
-            return f"./tests/runtests.py --verbosity 2 {tests}"
+            # PYTHONIOENCODING=utf-8: Django's test runner emits Unicode characters
+            # (e.g. U+2026 ellipsis) that fail when the container locale is ASCII-only.
+            return f"PYTHONIOENCODING=utf-8 ./tests/runtests.py --verbosity 2 {tests}"
         if "sympy" in repo:
             tests = " ".join(shlex.quote(t) for t in test_directives)
             return f"bin/test -C --verbose {tests}"
