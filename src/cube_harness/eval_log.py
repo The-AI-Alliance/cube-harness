@@ -2,11 +2,12 @@
 
 Two files per experiment:
     experiment_record.json  — ExperimentRecord (once per experiment): agent, benchmark, git provenance
-    eval_log.jsonl          — EpisodeRecord per line: outcome, usage, trajectory summary
+    episodes/<id>/episode_record.json  — one EpisodeRecord per episode, written after each episode
 
 Records are plain JSON, no cube-harness dependency to read.
 
 Classes:
+    EvalLibrary       — library descriptor (name, version)
     UsageSummary      — aggregated LLM token/cost stats across an episode
     AgentInfo         — agent descriptor: config, dependency versions, git provenance
     BenchmarkSubset   — benchmark subset descriptor for MNAR propensity correction
@@ -14,7 +15,7 @@ Classes:
     JudgeOutput       — per-episode judge assessment (optional)
     Verifier          — task verifier reference (optional)
     ExperimentRecord  — experiment-level record written to experiment_record.json
-    EpisodeRecord     — episode-level record appended to eval_log.jsonl
+    EpisodeRecord     — episode-level record written after each episode completes
     EvalLog           — two-level container with save/load
 """
 
@@ -146,19 +147,31 @@ def _extract_error_type(trajectory: Trajectory) -> str | None:
     return None
 
 
+def compute_evaluation_id(exp_name: str, output_dir: Path) -> str:
+    """Return a stable 16-char evaluation_id from experiment name + output dir."""
+    return hashlib.sha256(f"{exp_name}{output_dir}".encode()).hexdigest()[:16]
+
+
 # ---------------------------------------------------------------------------
 # Public models
 # ---------------------------------------------------------------------------
 
 
+class EvalLibrary(TypedBaseModel):
+    """Library that produced the evaluation."""
+
+    name: str = "cube-harness"
+    version: str
+
+
 class UsageSummary(TypedBaseModel):
     """Aggregated LLM token usage and cost across a complete episode."""
 
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
     total_tokens: int = 0
-    cached_tokens: int = 0
-    cache_creation_tokens: int = 0
+    input_tokens_cache_read: int = 0
+    input_tokens_cache_write: int = 0
     total_cost_usd: float = 0.0
     n_llm_calls: int = 0
 
@@ -170,11 +183,11 @@ class UsageSummary(TypedBaseModel):
         prompt = stats.get("prompt_tokens", 0)
         completion = stats.get("completion_tokens", 0)
         return cls(
-            prompt_tokens=prompt,
-            completion_tokens=completion,
+            input_tokens=prompt,
+            output_tokens=completion,
             total_tokens=prompt + completion,
-            cached_tokens=stats.get("cached_tokens", 0),
-            cache_creation_tokens=stats.get("cache_creation_tokens", 0),
+            input_tokens_cache_read=stats.get("cached_tokens", 0),
+            input_tokens_cache_write=stats.get("cache_creation_tokens", 0),
             total_cost_usd=stats.get("cost", 0.0),
             n_llm_calls=stats.get("total_llm_calls", 0),
         )
@@ -299,16 +312,16 @@ class Verifier(TypedBaseModel):
 
 
 class ExperimentRecord(TypedBaseModel):
-    """Experiment-level record. Written once to experiment_record.json.
+    """Experiment-level record. Written once to experiment_record.json at experiment start.
 
     Contains all fields shared across every episode: agent description, benchmark
-    metadata, git provenance. EpisodeRecord links to this via experiment_id.
+    metadata, git provenance. EpisodeRecord links to this via evaluation_id.
     """
 
-    experiment_id: str = Field(description="SHA-256(experiment_name + output_dir)[:16] — stable within a run.")
+    evaluation_id: str = Field(description="SHA-256(experiment_name + output_dir)[:16] — stable within a run.")
     experiment_name: str = Field(description="Experiment name as set in Experiment.name.")
-    timestamp: float = Field(description="Experiment export time as Unix timestamp.")
-    framework_version: str = Field(description="cube-harness version.")
+    evaluation_timestamp: float = Field(description="Experiment start time as Unix timestamp.")
+    eval_library: EvalLibrary = Field(description="Library that produced the evaluation.")
     agent: AgentInfo = Field(description="Agent descriptor (config, dependency versions, git provenance).")
     benchmark_name: str = Field(description="Benchmark name from benchmark_metadata.name.")
     benchmark_version: str | None = Field(default=None, description="Benchmark version string.")
@@ -328,7 +341,6 @@ class ExperimentRecord(TypedBaseModel):
         git_cwd: str | None = None,
     ) -> "ExperimentRecord":
         """Build ExperimentRecord from experiment parameters."""
-        experiment_id = hashlib.sha256(f"{exp_name}{output_dir}".encode()).hexdigest()[:16]
         harness_version = _get_package_version("cube-harness") or "unknown"
         agent_info = AgentInfo.from_agent_config(agent_config, git_cwd=git_cwd)
         bm_metadata = getattr(benchmark, "benchmark_metadata", None)
@@ -336,10 +348,10 @@ class ExperimentRecord(TypedBaseModel):
         bm_version = getattr(bm_metadata, "version", None) if bm_metadata else None
 
         return cls(
-            experiment_id=experiment_id,
+            evaluation_id=compute_evaluation_id(exp_name, output_dir),
             experiment_name=exp_name,
-            timestamp=time.time(),
-            framework_version=harness_version,
+            evaluation_timestamp=time.time(),
+            eval_library=EvalLibrary(version=harness_version),
             agent=agent_info,
             benchmark_name=bm_name,
             benchmark_version=bm_version,
@@ -348,15 +360,15 @@ class ExperimentRecord(TypedBaseModel):
 
 
 class EpisodeRecord(TypedBaseModel):
-    """Episode-level record. One line per episode in eval_log.jsonl.
+    """Episode-level record. Written to episodes/<trajectory_id>/episode_record.json after each episode.
 
-    Links to ExperimentRecord via experiment_id. Contains all episode-specific fields:
+    Links to ExperimentRecord via evaluation_id. Contains all episode-specific fields:
     task identity, per-episode tool list, outcome, usage, and optional judge output.
     """
 
-    experiment_id: str = Field(description="FK to ExperimentRecord.experiment_id.")
-    task_id: str = Field(description="Unique task identifier within the benchmark.")
-    task_version_hash: str | None = Field(
+    evaluation_id: str = Field(description="FK → ExperimentRecord.evaluation_id.")
+    sample_id: str = Field(description="Unique task identifier within the benchmark.")
+    sample_hash: str | None = Field(
         default=None,
         description="SHA-256 of TaskConfig JSON. Detects task drift across benchmark versions.",
     )
@@ -373,13 +385,13 @@ class EpisodeRecord(TypedBaseModel):
             "different tools on different tasks due to task-level action filtering."
         ),
     )
-    success: bool = Field(description="True when final reward > 0.")
-    reward: float = Field(description="Final reward from the last EnvironmentOutput.")
-    error_type: str | None = Field(
+    is_correct: bool = Field(description="True when final score > 0.")
+    score: float = Field(description="Final reward from the last EnvironmentOutput.")
+    error: str | None = Field(
         default=None,
         description="Exception class name if any step raised an error. None for clean episodes.",
     )
-    n_steps: int = Field(description="Total trajectory steps (agent + env combined).")
+    num_turns: int = Field(description="Total trajectory steps (agent + env combined).")
     n_agent_steps: int = Field(description="Agent steps (LLM decision turns).")
     n_env_steps: int = Field(description="Environment steps (tool executions).")
     wall_time_s: float | None = Field(default=None, description="Episode wall-clock duration in seconds.")
@@ -402,27 +414,27 @@ class EpisodeRecord(TypedBaseModel):
     def from_trajectory(
         cls,
         trajectory: Trajectory,
-        experiment_id: str,
+        evaluation_id: str,
         task_metadata: Any | None = None,
         task_config: Any | None = None,
     ) -> "EpisodeRecord":
         """Assemble an EpisodeRecord from a completed trajectory."""
-        task_id = trajectory.metadata.get("task_id", "")
+        sample_id = trajectory.metadata.get("task_id", "")
         action_schemas: list[dict] = trajectory.metadata.get("action_schemas", [])
         tool_names = _extract_tool_names(action_schemas)
 
         last_env = trajectory.last_env_step()
-        reward = last_env.reward
+        score = last_env.reward
         stats = trajectory.summary_stats or {}
 
         wall_time_s: float | None = None
         if trajectory.start_time is not None and trajectory.end_time is not None:
             wall_time_s = trajectory.end_time - trajectory.start_time
 
-        task_version_hash: str | None = None
+        sample_hash: str | None = None
         seed: int | None = None
         if task_config is not None:
-            task_version_hash = hashlib.sha256(
+            sample_hash = hashlib.sha256(
                 task_config.model_dump_json(serialize_as_any=True).encode()
             ).hexdigest()
             seed = getattr(task_config, "seed", None)
@@ -434,17 +446,17 @@ class EpisodeRecord(TypedBaseModel):
             task_description = getattr(task_metadata, "abstract_description", None) or None
 
         return cls(
-            experiment_id=experiment_id,
-            task_id=task_id,
-            task_version_hash=task_version_hash,
+            evaluation_id=evaluation_id,
+            sample_id=sample_id,
+            sample_hash=sample_hash,
             seed=seed,
             split=split,
             task_description=task_description,
             tool_names=tool_names,
-            success=reward > 0,
-            reward=reward,
-            error_type=_extract_error_type(trajectory),
-            n_steps=len(trajectory.steps),
+            is_correct=score > 0,
+            score=score,
+            error=_extract_error_type(trajectory),
+            num_turns=len(trajectory.steps),
             n_agent_steps=stats.get("n_agent_steps", trajectory.n_agent_steps),
             n_env_steps=stats.get("n_env_steps", trajectory.n_env_steps),
             wall_time_s=wall_time_s,
@@ -459,12 +471,28 @@ EXPERIMENT_RECORD_FILENAME = "experiment_record.json"
 _EPISODES_DIR = "episodes"
 
 
+def write_experiment_record(output_dir: Path, record: ExperimentRecord) -> None:
+    """Write experiment_record.json to output_dir."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / EXPERIMENT_RECORD_FILENAME
+    path.write_text(record.model_dump_json(indent=2))
+    logger.info(f"Saved experiment record to {path}")
+
+
+def write_episode_record(output_dir: Path, record: EpisodeRecord) -> None:
+    """Write episode_record.json to episodes/<trajectory_id>/ inside output_dir."""
+    ep_dir = Path(output_dir) / _EPISODES_DIR / record.trajectory_id
+    ep_dir.mkdir(parents=True, exist_ok=True)
+    (ep_dir / EPISODE_RECORD_FILENAME).write_text(record.model_dump_json(indent=2))
+
+
 class EvalLog(TypedBaseModel):
     """Two-level eval log container.
 
-    Experiment-level data goes to experiment_record.json (written once).
+    Experiment-level data goes to experiment_record.json (written once at experiment start).
     Episode-level data goes to episodes/<trajectory_id>/episode_record.json
-    (one file per episode, co-located with the trajectory).
+    (one file per episode, co-located with the trajectory, written after each episode).
 
     All files are plain JSON, readable without a cube-harness dependency.
 
@@ -478,14 +506,9 @@ class EvalLog(TypedBaseModel):
     def save(self, output_dir: Path) -> None:
         """Write experiment_record.json and per-trajectory episode_record.json files."""
         output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        exp_path = output_dir / EXPERIMENT_RECORD_FILENAME
-        exp_path.write_text(self.experiment.model_dump_json(indent=2))
+        write_experiment_record(output_dir, self.experiment)
         for record in self.episodes:
-            ep_dir = output_dir / _EPISODES_DIR / record.trajectory_id
-            ep_dir.mkdir(parents=True, exist_ok=True)
-            (ep_dir / EPISODE_RECORD_FILENAME).write_text(record.model_dump_json(indent=2))
-        logger.info(f"Saved experiment record to {exp_path}")
+            write_episode_record(output_dir, record)
         logger.info(f"Saved {len(self.episodes)} episode records under {output_dir / _EPISODES_DIR}")
 
     @classmethod

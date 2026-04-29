@@ -10,11 +10,11 @@ from pydantic import Field
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import Trajectory
-from cube_harness.episode import MAX_STEPS, Episode, EpisodeConfig
+from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus
-from cube_harness.eval_log import EpisodeRecord, EvalLog, ExperimentRecord
-from cube_harness.storage import EPISODES_DIR, FileStorage
+from cube_harness.eval_log import EvalLog, ExperimentRecord, write_experiment_record
+from cube_harness.storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class Experiment(TypedBaseModel):
     resume: bool = False
     max_steps: int = MAX_STEPS
     max_retries: int = 3
+    git_cwd: str | None = None
 
     @property
     def config(self) -> dict:
@@ -135,6 +136,14 @@ class Experiment(TypedBaseModel):
         with open(config_path, "w") as f:
             f.write(self.model_dump_json(indent=2, serialize_as_any=True))
         logger.info(f"Saved experiment config to {config_path}")
+        exp_record = ExperimentRecord.from_experiment(
+            exp_name=self.name,
+            output_dir=self.output_dir,
+            agent_config=self.agent_config,
+            benchmark=self.benchmark,
+            git_cwd=self.git_cwd,
+        )
+        write_experiment_record(output_path, exp_record)
 
     @classmethod
     def load_config(cls, path: str) -> Self:
@@ -195,76 +204,21 @@ class Experiment(TypedBaseModel):
         logger.info(f"  Failed tasks: {len(results.failures)}")
         logger.info(f"Saved to: {self.output_dir}")
 
-    def export_eval_log(self, output_dir: Path | None = None, git_cwd: str | None = None) -> EvalLog:
-        """Export evaluation records for all completed trajectories as an Atlas EvalLog.
+    def export_eval_log(self, output_dir: Path | None = None) -> EvalLog:
+        """Load the EvalLog from per-trajectory records written during the run.
 
-        Writes experiment_record.json (once) and episodes/<id>/episode_record.json
-        (one per trajectory). Action schemas are read from trajectory.metadata so no
-        task re-instantiation is required.
+        experiment_record.json is written at experiment start (save_config).
+        episode_record.json files are written by the runner after each episode.
+        This method simply reads those files and packages them.
 
         Args:
-            output_dir: Destination directory. Defaults to self.output_dir.
-            git_cwd: Working directory for git introspection of the agent codebase.
+            output_dir: Directory to read from. Defaults to self.output_dir.
 
         Returns:
-            EvalLog with ExperimentRecord and one EpisodeRecord per completed trajectory.
+            EvalLog with ExperimentRecord and one EpisodeRecord per completed episode.
         """
-        storage = FileStorage(self.output_dir)
         resolved_dir = output_dir if output_dir is not None else self.output_dir
-
-        exp_record = ExperimentRecord.from_experiment(
-            exp_name=self.name,
-            output_dir=self.output_dir,
-            agent_config=self.agent_config,
-            benchmark=self.benchmark,
-            git_cwd=git_cwd,
-        )
-
-        task_metadata_index: dict[str, object] = getattr(self.benchmark, "task_metadata", {})
-        episode_config_index = _load_episode_config_index(storage, self.output_dir)
-
-        episodes: list[EpisodeRecord] = []
-        for trajectory_id in storage.list_trajectory_ids():
-            try:
-                trajectory = storage.load_trajectory(trajectory_id)
-            except Exception as e:
-                logger.warning(f"Skipping trajectory {trajectory_id}: failed to load: {e}")
-                continue
-
-            ep_config = episode_config_index.get(trajectory_id)
-            task_config = ep_config.task_config if ep_config is not None else None
-            task_id = trajectory.metadata.get("task_id", "")
-            task_metadata = task_metadata_index.get(task_id)
-
-            record = EpisodeRecord.from_trajectory(
-                trajectory,
-                experiment_id=exp_record.experiment_id,
-                task_metadata=task_metadata,
-                task_config=task_config,
-            )
-            episodes.append(record)
-
-        eval_log = EvalLog(experiment=exp_record, episodes=episodes)
-        eval_log.save(resolved_dir)
-        return eval_log
-
-
-def _load_episode_config_index(storage: FileStorage, output_dir: Path) -> dict[str, EpisodeConfig]:
-    """Return a trajectory_id → EpisodeConfig mapping from V2 episode directories."""
-    index: dict[str, EpisodeConfig] = {}
-    episodes_dir = output_dir / EPISODES_DIR
-    if not episodes_dir.exists():
-        return index
-    for ep_dir in episodes_dir.iterdir():
-        if not ep_dir.is_dir():
-            continue
-        config_file = ep_dir / "episode_config.json"
-        if config_file.exists():
-            try:
-                index[ep_dir.name] = storage.load_episode_config(config_file)
-            except Exception as e:
-                logger.warning(f"Failed to load episode config {config_file}: {e}")
-    return index
+        return EvalLog.load(resolved_dir)
 
 
 def sweep_stale_statuses(
