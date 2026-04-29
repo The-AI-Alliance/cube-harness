@@ -38,6 +38,10 @@ analyze = [
     "gradio~=5.49",
     "pandas~=2.0",
 ]
+# SWE-bench Verified benchmark (local workspace package)
+swebench = [
+    "swebench-verified-cube",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
@@ -46,6 +50,8 @@ build-backend = "uv_build"
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
+[tool.uv.sources]
+swebench-verified-cube = { path = "cubes/swebench-verified-cube", editable = true }
 
 [tool.ruff]
 fix = true
@@ -62,7 +68,7 @@ line-ending = "auto"
 extend-select = ["I"] # sort imports
 
 [tool.ruff.lint.per-file-ignores]
-"meta_agent/recipes/*.py" = ["E402"]
+"recipes/*.py" = ["E402"]
 
 [project.scripts]
 ch-mcp-server = "cube_harness.mcp.server:main"
