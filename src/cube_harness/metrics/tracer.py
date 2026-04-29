@@ -146,6 +146,11 @@ def _get_parent_ctx_env() -> Context | None:
 
 
 def get_trace_env_vars() -> dict[str, str]:
+    """Return OTel tracing vars to forward to Ray workers.
+
+    Credentials (API keys, secrets) are intentionally NOT included here.
+    Workers load credentials from ~/.env-cube via load_dotenv() on startup.
+    """
     env_vars = {}
     for key in (RAY_ENV_TRACEPARENT, RAY_ENV_OTLP_ENDPOINT, RAY_ENV_MODEL, RAY_ENV_AGENT_NAME):
         if val := os.environ.get(key):
