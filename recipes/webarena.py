@@ -12,11 +12,11 @@
 
 import sys
 
+from cube.infra_local import LocalInfraConfig
 from cube.tool import ToolboxConfig
 from cube_browser_playwright import PlaywrightSessionConfig
-from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
-from webarena_verified.types.task import WebArenaSite
-from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
+from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmarkConfig
+from webarena_verified_cube.resources import WEBARENA_ALL
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 from cube_harness import make_experiment_output_dir
@@ -38,17 +38,17 @@ def main(debug: bool) -> None:
             SubmitResponseConfig(),
         ]
     )
-    wav_config = WebArenaVerifiedConfig(
-        environments={
-            WebArenaSite.SHOPPING: EnvironmentConfig(urls=["http://localhost:7770"]),
-            WebArenaSite.SHOPPING_ADMIN: EnvironmentConfig(urls=["http://localhost:7780"]),
-            WebArenaSite.GITLAB: EnvironmentConfig(urls=["http://localhost:8023"]),
-            WebArenaSite.REDDIT: EnvironmentConfig(urls=["http://localhost:9999"]),
-            WebArenaSite.WIKIPEDIA: EnvironmentConfig(urls=["http://localhost:8888"]),
-            WebArenaSite.MAP: EnvironmentConfig(urls=["http://localhost:3000"]),
-        }
+    # Automatic mode: declare the DockerServiceConfig in resources= and let make() provision + launch on demand.
+    # Swap LocalInfraConfig() for any other InfraConfig (e.g., AWSInfraConfig()) for cloud users.
+    # Swap WEBARENA_ALL for any other entry in webarena_verified_cube.resources (e.g. WEBARENA_SHOPPING_ADMIN for a specific site).
+    benchmark = (
+        WebArenaVerifiedBenchmarkConfig(
+            tool_config=tool_config,
+            resources=[WEBARENA_ALL],
+        )
+        .subset_from_glob("sites", "*shopping_admin*")
+        .make(infra=LocalInfraConfig())
     )
-    benchmark = WebArenaVerifiedBenchmark(tool_config=tool_config, wav_config=wav_config)
 
     exp = Experiment(
         name="webarena-verified",

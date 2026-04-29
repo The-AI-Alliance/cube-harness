@@ -129,14 +129,13 @@ class WebArenaVerifiedTaskConfig(TaskConfig):
         container_backend: ContainerBackend | None = None,
     ) -> WebArenaVerifiedTask:
         _ = runtime_context, container_backend
-        # Import here to avoid circular import (benchmark imports task)
-        from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
-
         wav = WebArenaVerified(config=self.wav_config)
         wav_task = wav.get_task(int(self.task_id))
-        metadata = WebArenaVerifiedBenchmark.task_metadata[self.task_id]
+        assert isinstance(self.metadata, WebArenaVerifiedTaskMetadata), (
+            "metadata must be a WebArenaVerifiedTaskMetadata"
+        )
         return WebArenaVerifiedTask(
-            metadata=metadata,
+            metadata=self.metadata,
             tool_config=self.tool_config or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),
             wav_task=wav_task,
             wav_config=self.wav_config,

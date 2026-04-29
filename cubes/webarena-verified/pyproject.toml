@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.entry-points."cube.benchmarks"]
-webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmark"
+webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
