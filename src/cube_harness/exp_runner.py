@@ -1,12 +1,10 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
-import traceback
 import time
 from uuid import uuid4
 
 import ray
-from ray.util.state.api import list_tasks
 
 from cube_harness.core import Trajectory
 from cube_harness.episode import Episode
