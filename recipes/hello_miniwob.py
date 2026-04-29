@@ -13,7 +13,7 @@
 import sys
 
 from cube_browser_tool import PlaywrightConfig
-from miniwob_cube.benchmark import MiniWobBenchmark
+from miniwob_cube.benchmark import MiniWobBenchmarkConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.react import ReactAgentConfig
@@ -29,7 +29,7 @@ def main(debug: bool) -> None:
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
-    benchmark = MiniWobBenchmark(default_tool_config=tool_config)
+    benchmark = MiniWobBenchmarkConfig(tool_config=tool_config).make()
 
     exp = Experiment(
         name="miniwob",

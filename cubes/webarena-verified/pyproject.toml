@@ -4,14 +4,14 @@ version = "1.0.0"
 description = "WebArena-Verified benchmark cube — 812 verified web automation tasks"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc5",
+    "cube-standard>=0.1.0rc7",
     "cube-browser-tool>=0.2.0",
     "webarena-verified",
     "Pillow",
 ]
 
 [project.entry-points."cube.benchmarks"]
-webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmark"
+webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
@@ -19,6 +19,10 @@ build-backend = "uv_build"
 
 [tool.uv-build]
 include = ["src/webarena_verified_cube/task_metadata.json"]
+
+[tool.uv.sources]
+# TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "9982b279dd780bdae95b0f8cbcf2a7f3fab79d0e" }
 
 [tool.ruff]
 fix = true

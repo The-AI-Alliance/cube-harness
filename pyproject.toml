@@ -11,7 +11,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc5",
+    "cube-standard>=0.1.0rc7",
     "cube-browser-playwright>=0.2.0",  # added back temporarily for browsergym.py, should be removed once browsergym.py is moved to cube-browser-tool package
     "pydantic~=2.0",
     "litellm~=1.80.8",
@@ -81,3 +81,7 @@ markers = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv.sources]
+# TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "9982b279dd780bdae95b0f8cbcf2a7f3fab79d0e" }

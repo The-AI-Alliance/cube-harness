@@ -8,12 +8,13 @@ FinalAgentResponse object directly to wav.evaluate_task(), which expects str/dic
 Only errors (Python exceptions) are treated as failures.
 
 The debug suite uses tasks 0 and 1 (shopping_admin RETRIEVE tasks). The shopping_admin
-container is started automatically via benchmark.setup() — a local Docker daemon must
-be available when no infra= is provided.
+container is started automatically by ``WebArenaVerifiedBenchmarkConfig.make(infra)``,
+which defaults to ``LocalInfraConfig()`` when no ``infra`` is passed — a local
+Docker daemon must be available. Cloud users pass their own infra to ``make()``.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_benchmark(infra=None)    -> Benchmark
+get_debug_benchmark()              -> WebArenaVerifiedBenchmarkConfig
 make_debug_agent(task_id: str)     -> DebugAgent
 
 Usage:
@@ -25,15 +26,12 @@ from __future__ import annotations
 import logging
 import sys
 
-from cube import LocalInfraConfig
-from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from cube.resource import InfraConfig
 from cube.testing import run_debug_suite
 from webarena_verified.api.webarena_verified import WebArenaVerified
 from webarena_verified.types.agent_response import FinalAgentResponse
 
-from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmark
+from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmarkConfig
 from webarena_verified_cube.resources import WEBARENA_SHOPPING_ADMIN
 
 logger = logging.getLogger(__name__)
@@ -66,20 +64,15 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(expected_response=wav_task.expected_agent_response)
 
 
-def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
-    """Return a benchmark pre-filtered to the 2 debug tasks.
+def get_debug_benchmark() -> WebArenaVerifiedBenchmarkConfig:
+    """Return a config pre-filtered to the 2 debug tasks.
 
-    The shopping_admin container is started automatically by benchmark.setup().
-
-    Args:
-        infra: InfraConfig to use for provisioning and launching the Docker stack.
-               Defaults to LocalInfraConfig() (requires a local Docker daemon).
+    The harness invokes ``config.make(infra)`` itself; when no ``infra`` is
+    passed the config defaults to ``LocalInfraConfig()``.
     """
-    bench = WebArenaVerifiedBenchmark(
-        infra=infra or LocalInfraConfig(),
+    return WebArenaVerifiedBenchmarkConfig(
         resources=[WEBARENA_SHOPPING_ADMIN],
-    )
-    return bench.subset_from_list(_DEBUG_TASK_IDS)
+    ).subset_from_list(_DEBUG_TASK_IDS)
 
 
 if __name__ == "__main__":
