@@ -30,3 +30,9 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -n 10 tests/ -v
+
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
+
+      - name: Run integration tests
+        run: uv run pytest tests/ -m integration -v

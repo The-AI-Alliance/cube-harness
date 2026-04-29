@@ -7,9 +7,12 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from browsergym.core.action.highlevel import HighLevelActionSet
+from browsergym.core.action.utils import get_elem_by_bid
+from browsergym.core.constants import BROWSERGYM_ID_ATTRIBUTE
 from cube.core import Action, Observation
 from cube_browser_playwright.playwright_session import PlaywrightSession, PlaywrightSessionConfig
 from PIL import Image
+from playwright.sync_api import Page, sync_playwright
 
 from cube_harness.tools.browsergym import (
     BrowsergymConfig,
@@ -17,6 +20,7 @@ from cube_harness.tools.browsergym import (
     _action_to_bgym_string,
     _build_action_schemas,
 )
+from cube_harness.tools.web_actions import ExtraWebActionsTool
 
 
 @pytest.fixture
@@ -589,3 +593,80 @@ class TestBrowsergymToolLifecycle:
         tool = BrowsergymTool(config)
 
         tool.close()
+
+
+# HTML page with a keydown-based autocomplete simulation.
+# fill() sets the value directly without firing keydown/keypress — suggestions stay empty.
+# press_sequentially() fires a full keyboard event sequence per character — suggestions appear.
+# bgym BIDs for top-level elements are numeric strings ("1", "2", ...).
+# Leading lowercase letters are parsed as iframe-descent prefixes by get_elem_by_bid.
+_AUTOCOMPLETE_BID = "1"
+_AUTOCOMPLETE_PAGE = """<!DOCTYPE html>
+<html><body>
+  <input {bid_attr}="{bid}" id="search">
+  <ul id="suggestions"></ul>
+  <script>
+    window.keydownCount = 0;
+    document.getElementById('search').addEventListener('keydown', function(e) {{
+      if (e.key.length === 1) {{
+        window.keydownCount++;
+        const li = document.createElement('li');
+        li.textContent = e.key;
+        document.getElementById('suggestions').appendChild(li);
+      }}
+    }});
+  </script>
+</body></html>""".format(bid_attr=BROWSERGYM_ID_ATTRIBUTE, bid=_AUTOCOMPLETE_BID)
+
+
+@pytest.fixture(scope="module")
+def live_page() -> Generator[Page, None, None]:
+    """Real headless Chromium page configured with bgym's test-id attribute."""
+    with sync_playwright() as p:
+        p.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        yield page
+        browser.close()
+
+
+@pytest.mark.integration
+class TestKeyboardTypeIntoVsFill:
+    """Integration tests verifying keyboard_type_into fires keydown events that fill() skips."""
+
+    def test_fill_does_not_fire_keydown_events(self, live_page: Page) -> None:
+        live_page.set_content(_AUTOCOMPLETE_PAGE)
+
+        get_elem_by_bid(live_page, _AUTOCOMPLETE_BID).fill("hello")
+
+        keydown_count = live_page.evaluate("window.keydownCount")
+        assert keydown_count == 0, "fill() must not fire keydown events"
+        suggestions = live_page.locator("#suggestions li").count()
+        assert suggestions == 0
+
+    def test_press_sequentially_fires_keydown_per_character(self, live_page: Page) -> None:
+        live_page.set_content(_AUTOCOMPLETE_PAGE)
+
+        get_elem_by_bid(live_page, _AUTOCOMPLETE_BID).press_sequentially("hello", delay=0)
+
+        keydown_count = live_page.evaluate("window.keydownCount")
+        assert keydown_count == 5, "press_sequentially must fire one keydown per character"
+        suggestions = live_page.locator("#suggestions li").count()
+        assert suggestions == 5
+
+    def test_keyboard_type_into_action_fires_keydown_events(self, live_page: Page) -> None:
+        """End-to-end: ExtraWebActionsTool.keyboard_type_into reaches the element via get_elem_by_bid."""
+        live_page.set_content(_AUTOCOMPLETE_PAGE)
+
+        bgym = BrowsergymTool(BrowsergymConfig())
+        bgym._session = MagicMock()
+        bgym._session.page = live_page
+        extra = ExtraWebActionsTool(bgym)
+
+        result = extra.keyboard_type_into(_AUTOCOMPLETE_BID, "abc")
+
+        assert result == "Success"
+        keydown_count = live_page.evaluate("window.keydownCount")
+        assert keydown_count == 3
+        suggestions = live_page.locator("#suggestions li").count()
+        assert suggestions == 3

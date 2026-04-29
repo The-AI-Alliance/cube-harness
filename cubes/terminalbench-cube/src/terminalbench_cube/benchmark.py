@@ -13,7 +13,11 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import ClassVar
 
+from pydantic import Field
+
 from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.infra_local import LocalInfraConfig
+from cube.resource import InfraConfig
 from cube.task import TaskConfig
 from terminalbench_cube.task import TerminalBenchTaskConfig, TerminalBenchTaskMetadata
 
@@ -84,6 +88,12 @@ class TerminalBenchBenchmark(Benchmark):
 
     # User-configurable fields
     oracle_mode: bool = False
+    infra: InfraConfig = Field(default_factory=LocalInfraConfig)
+    """Infra that launches one Docker container per task.  Defaults to LocalInfraConfig.
+
+    Passed to each Task via ``self._runtime_context["infra"]`` so ``TaskConfig.make()``
+    can call ``infra.launch()`` for the per-task resource.
+    """
 
     # ── Benchmark lifecycle ────────────────────────────────────────
 
@@ -138,8 +148,13 @@ class TerminalBenchBenchmark(Benchmark):
             logger.info(f"Removed execution cache at {exec_cache_dir}")
 
     def _setup(self) -> None:
-        """No shared infrastructure needed — task containers are launched per-task in make()."""
-        logger.info(f"TerminalBenchBenchmark ready with {len(self.task_metadata)} tasks")
+        """Publish the shared InfraConfig to runtime_context; per-task containers are launched per-task in make()."""
+        # GC orphans from earlier crashed runs so stale containers don't pile up.
+        self.infra.cleanup_stale()
+        self._runtime_context["infra"] = self.infra
+        logger.info(
+            f"TerminalBenchBenchmark ready with {len(self.task_metadata)} tasks (infra={self.infra.fingerprint()})"
+        )
 
     def close(self) -> None:
         logger.info("Terminal-Bench benchmark closed")

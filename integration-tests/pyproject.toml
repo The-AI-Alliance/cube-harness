@@ -3,14 +3,34 @@ name = "cube-integration-tests"
 version = "0.1.0"
 description = "End-to-end integration tests for CUBE infra backends + benchmark cubes"
 requires-python = ">=3.12"
-dependencies = ["cube-standard"]
+dependencies = [
+    "cube-standard>=0.1.0rc6",
+    "pytest>=8.0",
+    "tenacity>=9.1.4",
+]
+
+[tool.uv]
+# Each backend's dependency tree (aws/azure/daytona) pulls different transitive
+# constraints; declaring them as conflicts lets uv resolve one group at a time.
+# aws/azure are the widest trees and can't be resolved simultaneously with the
+# single-infra groups.
+conflicts = [
+    [{group = "aws"}, {group = "local"}],
+    [{group = "aws"}, {group = "daytona"}],
+    [{group = "aws"}, {group = "toolkit"}],
+    [{group = "aws"}, {group = "modal"}],
+    [{group = "azure"}, {group = "local"}],
+    [{group = "azure"}, {group = "daytona"}],
+    [{group = "azure"}, {group = "toolkit"}],
+    [{group = "azure"}, {group = "modal"}],
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = []
+packages = ["cube_integration_tests"]
 
 [dependency-groups]
 aws = [
@@ -23,10 +43,62 @@ azure = [
     "osworld-cube",
     "webarena-verified-cube",
 ]
+local = [
+    "terminalbench-cube",
+    "swebench-verified-cube",
+    "swebench-live-cube",
+    "docker>=7.1.0",
+    "tenacity>=9.1.4",
+]
+daytona = [
+    "cube-infra-daytona",
+    "terminalbench-cube",
+    "swebench-verified-cube",
+    "swebench-live-cube",
+]
+toolkit = [
+    "cube-infra-toolkit",
+    "terminalbench-cube",
+    "swebench-verified-cube",
+    "swebench-live-cube",
+]
+modal = [
+    "cube-infra-modal",
+    "terminalbench-cube",
+    "swebench-verified-cube",
+    "swebench-live-cube",
+]
+dev = [
+    "pytest-xdist>=3.8.0",
+    "pytest-timeout>=2.3.0",
+]
+
+[tool.pytest.ini_options]
+# Show log output inline as tests run (no more silent hangs).
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
+log_cli_date_format = "%H:%M:%S"
+# Hard ceiling per test item — the harness also enforces this in a thread
+# so the failure message is informative, but pytest-timeout is the backstop.
+timeout = 960
+markers = [
+    "integration: end-to-end integration tests requiring external services",
+]
 
 [tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }  # TODO: remove once 0.1.0rc5 released
-cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }  # TODO: remove once cube-infra-aws released
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }  # TODO: remove once cube-infra-azure released
+# cube-standard comes from PyPI via the version pin in [project].dependencies.
+# The cube-infra-* and cube-vm-backend packages are not yet on PyPI, so we pull
+# them from the cube-standard repo (default branch: main). Drop each entry here
+# once the corresponding package is published to PyPI.
+cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-aws" }
+cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-azure" }
+cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-daytona" }
+cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-toolkit" }
+cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-modal" }
+cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-vm-backend" }
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
+terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
+swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }
+swebench-live-cube = { path = "../cubes/swebench-live-cube", editable = true }

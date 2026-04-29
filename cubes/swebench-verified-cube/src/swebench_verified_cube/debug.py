@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from cube.backends import LocalContainerBackend
 from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
+from cube.infra_local import LocalInfraConfig
+from cube.resource import InfraConfig
 
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Each debug task runs in oracle_mode: the gold patch is written to
 # /tmp/gold_patch.diff during reset(). The debug agent applies it
 # and calls final_step, which triggers evaluate() → tests → reward == 1.0.
-_APPLY_PATCH = Action(name="bash", arguments={"command": "cd /testbed && git apply /tmp/gold_patch.diff 2>&1"})
+_APPLY_PATCH = Action(name="bash", arguments={"command": "git apply /tmp/gold_patch.diff 2>&1"})
 _FINAL = Action(name="final_step", arguments={})
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
@@ -51,11 +52,16 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> Benchmark:
-    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks."""
-    container_backend = LocalContainerBackend()
+def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
+    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks.
+
+    Args:
+        infra: InfraConfig that provisions and launches per-task containers.
+               Defaults to ``LocalInfraConfig()``. Override to target Daytona,
+               Toolkit, etc.
+    """
     bench = SWEBenchVerifiedBenchmark(
-        container_backend=container_backend,
+        infra=infra or LocalInfraConfig(),
         oracle_mode=True,
     )
     bench.install()

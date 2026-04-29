@@ -6,10 +6,9 @@ import logging
 import shlex
 from typing import Any
 
-from cube.benchmark import RuntimeContext
-from cube.container import ContainerBackend
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -48,6 +47,15 @@ class SWEBenchVerifiedTask(Task):
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+
+    def _build_tool(self) -> None:
+        new_wd = relocate_if_readonly(
+            self._container,
+            self.tool_config.working_dir,
+            "/tmp/testbed",
+            extra_setup="git config --global --add safe.directory /tmp/testbed",
+        )
+        self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
@@ -102,13 +110,6 @@ class SWEBenchVerifiedTask(Task):
             "pass_to_pass_output": p2p_output[:2000],
         }
 
-    def close(self) -> None:
-        super().close()
-        if self._container is not None:
-            logger.info(f"Stopping container {self._container.id} for task {self.metadata.id}")
-            self._container.stop()
-            self._container = None
-
     # ── Private helpers ────────────────────────────────────────────
 
     def _apply_patch(self, patch: str) -> str:
@@ -118,17 +119,20 @@ class SWEBenchVerifiedTask(Task):
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
         # Try git apply first
-        result = self.tool.bash_unlimited("cd /testbed && git apply /tmp/patch.diff 2>&1", timeout=30)
+        # Commands run in tool.working_dir (set by SWEBenchToolConfig) — no need
+        # to cd, and hardcoding '/testbed' breaks when the tool relocated to a
+        # writable copy (see _maybe_relocate_testbed).
+        result = self.tool.bash_unlimited("git apply /tmp/patch.diff 2>&1", timeout=30)
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
         # Fallback: git apply --reject
-        result = self.tool.bash_unlimited("cd /testbed && git apply --reject /tmp/patch.diff 2>&1", timeout=30)
+        result = self.tool.bash_unlimited("git apply --reject /tmp/patch.diff 2>&1", timeout=30)
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
         # Final fallback: patch
-        return self.tool.bash_unlimited("cd /testbed && patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
 
     def _run_tests(self, repo: str, test_directives: list[str], timeout: int = 1800) -> tuple[bool, str]:
         """Run test directives and return (all_passed, output)."""
@@ -137,7 +141,7 @@ class SWEBenchVerifiedTask(Task):
             return True, ""
 
         test_cmd = self._build_test_cmd(repo, test_directives)
-        cmd = f"{CONDA_ACTIVATE} && cd /testbed && {test_cmd}"
+        cmd = f"{CONDA_ACTIVATE} && {test_cmd}"  # tool.working_dir is already the testbed
         output = self.tool.bash_unlimited(cmd, timeout=timeout)
 
         all_passed = "[exit_code:" not in output and "[error]" not in output
@@ -189,8 +193,12 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchVerifiedTask:
-        if container_backend is None:
-            raise ValueError("SWEBenchVerifiedTaskConfig.make() requires a container_backend")
+        has_infra = runtime_context is not None and "infra" in runtime_context
+        if not has_infra and container_backend is None:
+            raise ValueError(
+                "SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'] "
+                "(preferred) or a legacy container_backend."
+            )
 
         # Import here to avoid circular import (benchmark imports task)
         from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark

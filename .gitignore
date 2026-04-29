@@ -285,3 +285,8 @@ node_modules
 
 # LSF license
 pac.entitlement
+
+# Local cube-standard clone for cross-repo development (see: make review PR=<n>)
+cube-standard/
+# Personal/throwaway experiment recipes (use custom_* prefix)
+recipes/custom_*

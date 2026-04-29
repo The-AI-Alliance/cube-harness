@@ -20,6 +20,7 @@ from typing import Protocol, cast
 from cube.core import Action, ActionSchema, Observation
 from cube.task import STOP_ACTION
 from litellm import Message
+from pydantic import Field
 from termcolor import colored
 
 from cube_harness.agent import Agent, AgentConfig
@@ -52,13 +53,13 @@ class Profiler:
 
 _DEFAULT_SYSTEM_PROMPT = """\
 You are an expert AI agent. Understand the goal, take targeted actions, and reason clearly about progress.
-Be concise and focused."""
+Verify that each action had the intended effect before proceeding. Be concise and focused."""
 
 _DEFAULT_REACT_PROMPT = """\
 Review the latest observation and produce the next action.
 Think step by step:
 1. What does the observation show?
-2. What was the effect of the last action?
+2. Did the last action have the intended effect? If the page state is unchanged or the action failed, do NOT repeat it — try a different element, method, or approach.
 3. What is the best next action?
 Then call the appropriate function."""
 
@@ -276,12 +277,32 @@ class GennyConfig(AgentConfig):
     # Observation window
     render_last_n_obs: int | None = None  # None = all
 
+    # General hint injected after the goal in every step's context.
+    # Use this when one hint applies to a whole task subset (one config per subset).
+    hint: str = ""
+
+    # Per-task hints: task_id -> hint text. Takes precedence over `hint` when a task_id match is found.
+    # These are general or task-specific hints that help the LLM work better.
+    task_hints: dict[str, str] = Field(default_factory=dict)
+
+    # Per-task precision: task_id -> text that clarifies the goal when the task description
+    # is under-defined (e.g. expected answer format, submission method). Injected as part of
+    # the goal — not as a separate hint section.
+    task_clarification: dict[str, str] = Field(default_factory=dict)
+
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
 
-    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Genny":
-        return Genny(config=self, action_schemas=action_set or [])
+    @property
+    def agent_name(self) -> str:
+        name = f"Genny-{self.llm_config.model_name}".replace("/", "_")
+        if self.summarize_llm_config and self.summarize_llm_config.model_name != self.llm_config.model_name:
+            name += f"+{self.summarize_llm_config.model_name}".replace("/", "_")
+        return name
+
+    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny":
+        return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
 
 
 # ---------------------------------------------------------------------------
@@ -307,8 +328,19 @@ class Genny(Agent):
     input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
     output_content_types: list[str] = ["application/json"]
 
-    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema]):
+    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema], task_id: str | None = None):
         self.config = config
+        self.task_id = task_id
+        if task_id is None and (config.task_hints or config.task_clarification):
+            logger.debug(
+                "task_id is None — %d task_hints and %d task_clarifications not applied",
+                len(config.task_hints),
+                len(config.task_clarification),
+            )
+        # task_hints takes precedence over the general hint; falls back to hint if no match.
+        self._task_hint: str = config.task_hints.get(task_id, config.hint) if task_id else config.hint
+        # task_clarification is injected as part of the goal, not as a hint.
+        self._task_clarification: str = config.task_clarification.get(task_id, "") if task_id else ""
         self.llm: LLM = config.llm_config.make()
         # Summarize LLM uses the same config as the act LLM (including tool_choice) so the
         # full request — messages, tools, and parameters — is identical between the two passes
@@ -399,6 +431,12 @@ class Genny(Agent):
         """
         messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.goal)
+        if self._task_clarification:
+            messages.append({"role": "user", "content": f"## Additional task details\n\n{self._task_clarification}"})
+            messages.append({"role": "assistant", "content": "Understood."})
+        if self._task_hint:
+            messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
+            messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
         past_summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else list(self.summaries)
         if past_summaries:
             messages.append({"role": "assistant", "content": _format_summaries_block(past_summaries)})

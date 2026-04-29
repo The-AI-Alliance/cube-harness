@@ -11,7 +11,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc4",
+    "cube-standard>=0.1.0rc5",
     "cube-computer-tool>=0.1.0",
     "cube-browser-playwright>=0.2.0",  # added back temporarily for browsergym.py, should be removed once browsergym.py is moved to cube-browser-tool package
     "pydantic~=2.0",
@@ -80,9 +80,13 @@ line-ending = "auto"
 [tool.ruff.lint]
 extend-select = ["I"] # sort imports
 
+[tool.ruff.lint.per-file-ignores]
+"meta_agent/recipes/*.py" = ["E402"]
+
 [project.scripts]
 ch-mcp-server = "cube_harness.mcp.server:main"
 ch-xray = "cube_harness.analyze.xray:main"
+ch-trace = "cube_harness.analyze.trace:main"
 
 [dependency-groups]
 dev = [
@@ -91,12 +95,14 @@ dev = [
     "pytest-cov>=6.0",
     "pytest-xdist>=3.8.0",
     "pytest-asyncio>=1.3.0",
+    "pytest-playwright>=0.7.2",
 ]
 
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')"
+    "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')",
+    "integration: requires a live browser (headless Chromium via Playwright)"
 ]
 
 [tool.setuptools.packages.find]

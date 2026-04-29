@@ -1,0 +1,52 @@
+name: CLAUDE.md Weekly Audit
+
+on:
+  schedule:
+    # Every Monday at 12:00 UTC
+    - cron: "0 12 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push branch
+      pull-requests: write   # open PR
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run claude-md-improver skill
+        uses: anthropics/claude-code-action@673eb13aa77026be5c507eda12322c1a58b80f0b  # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          prompt: |
+            Audit and improve all CLAUDE.md / AGENTS.md files in this repository
+            using the claude-md-improver workflow:
+
+            1. Discovery — find every CLAUDE.md and AGENTS.md in the repo
+               (including .claude.local.md). List them.
+            2. Quality assessment — grade each against:
+               commands/workflows documented, architecture clarity, non-obvious
+               patterns, conciseness, currency, actionability. Report scores
+               (A 90–100 / B 70–89 / C 50–69 / D 30–49 / F 0–29) per file.
+            3. Targeted updates — propose focused improvements: newly discovered
+               commands, gotchas, package relationships, testing approaches,
+               configuration quirks. Show diffs with rationale for each change.
+            4. Apply updates — commit changes and open a pull request titled
+               "chore: weekly CLAUDE.md audit".
+
+            IMPORTANT: Do not change project content unrelated to CLAUDE.md /
+            AGENTS.md files. Do not modify openspec/ specs. Do not touch source
+            code. This job is scoped to agent-context documentation only.
+
+            If all files score B or higher and no meaningful updates are
+            proposed, exit without opening a PR and post a summary comment
+            instead.
+
+          claude_args: |
+            --model claude-sonnet-4-6 --max-turns 30 --allowedTools "Read,Glob,Grep,Edit,Bash(git status),Bash(git diff:*),Bash(git add:*),Bash(git checkout:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*),Bash(gh pr comment:*)"

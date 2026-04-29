@@ -4,7 +4,7 @@ import urllib.request
 from collections.abc import Generator
 from typing import ClassVar
 
-from pydantic import PrivateAttr, model_validator
+from pydantic import PrivateAttr
 from cube.benchmark import Benchmark, BenchmarkMetadata
 from cube.resource import DockerServiceConfig, InfraConfig, ResourceHandle
 from cube.task import TaskConfig
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class WebArenaVerifiedBenchmark(Benchmark):
     """WebArena Verified — 812 verified web automation tasks across 6 platforms.
 
-    Exactly one of two setup modes must be used at construction time:
+    Exactly one of two setup modes must be configured before calling ``setup()``:
 
     **Automatic** — infra provisions and starts the Docker stack, then populates
     ``wav_config.environments`` from the live endpoints::
@@ -41,7 +41,7 @@ class WebArenaVerifiedBenchmark(Benchmark):
             )
         )
 
-    Mixing both modes (or providing neither) raises a ``ValueError`` at construction.
+    Mixing both modes (or providing neither) raises a ``ValueError`` at ``setup()`` time.
 
     Filtering is done in user-land via subset_from_glob() / subset_from_list():
         bench.subset_from_glob("sites", "*shopping_admin*")
@@ -86,8 +86,8 @@ class WebArenaVerifiedBenchmark(Benchmark):
 
     _handle: ResourceHandle | None = PrivateAttr(default=None)
 
-    @model_validator(mode="after")
-    def _validate_setup_mode(self) -> "WebArenaVerifiedBenchmark":
+    def _setup(self) -> None:
+        # Validation to ensure exactly one mode is configured correctly.
         has_environments = self.wav_config.environments is not None
         has_infra = self.infra is not None
         has_docker_resources = any(isinstance(r, DockerServiceConfig) for r in self.resources)
@@ -108,10 +108,9 @@ class WebArenaVerifiedBenchmark(Benchmark):
                 "infra= is set but no DockerServiceConfig found in resources=. "
                 "Pass resources=[WEBARENA_SHOPPING_ADMIN] (or another site config) at construction time."
             )
-        return self
 
-    def _setup(self) -> None:
-        if self.infra is not None:
+        # If infra is provided, take control of provisioning/launching and populating wav_config.
+        if has_infra:
             self._handle = self._launch_and_configure()
             return
 

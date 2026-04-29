@@ -4,11 +4,12 @@ import json
 
 import pytest
 from cube.core import Action, EnvironmentOutput, Observation
+from cube.task import TaskMetadata
 
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.storage import _read_step_file
-from tests.conftest import MockAgent
+from tests.conftest import MockAgent, MockAgentConfig, MockCubeTask, MockCubeTaskConfig, MockToolConfig
 
 
 class TestEpisode:
@@ -20,13 +21,13 @@ class TestEpisode:
         assert mock_episode.config.output_dir == tmp_dir
         assert mock_episode.config.max_steps == MAX_STEPS
 
-    def test_episode_custom_max_steps(self, tmp_dir, mock_agent_config, mock_env_config):
+    def test_episode_custom_max_steps(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode with custom max_steps."""
         episode = Episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
             max_steps=10,
         )
 
@@ -83,7 +84,7 @@ class TestEpisode:
             data = _read_step_file(step_file)
             assert isinstance(data, dict)
 
-    def test_episode_run_respects_max_steps(self, tmp_dir, mock_agent_config, mock_env_config):
+    def test_episode_run_respects_max_steps(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode run respects max_steps limit."""
 
         # Create an agent that never stops
@@ -94,7 +95,7 @@ class TestEpisode:
                 return AgentOutput(actions=[Action(name="click", arguments={"element_id": "btn"})])
 
         class NeverStopsConfig(type(mock_agent_config)):
-            def make(self, *args):
+            def make(self, *args, **kwargs):
                 agent = NeverStopsAgent(config=self)
                 return agent
 
@@ -104,25 +105,23 @@ class TestEpisode:
             id=0,
             output_dir=tmp_dir,
             agent_config=config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
             max_steps=3,
         )
 
         trajectory = episode.run()
 
         # Should have stopped at max_steps
-        # Steps: initial_env + (agent + env) * max_steps
-        # But it's limited by max_steps, so agent should only step 3 times
-        agent_steps = sum(1 for step in trajectory.steps if isinstance(step, AgentOutput))
+        agent_steps = sum(1 for step in trajectory.steps if isinstance(step.output, AgentOutput))
         assert agent_steps <= 3
 
-    def test_episode_run_stops_on_done(self, tmp_dir, mock_agent_config, mock_env_config):
+    def test_episode_run_stops_on_done(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode run stops when done=True."""
         episode = Episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
             max_steps=100,  # High limit
         )
 
@@ -165,22 +164,54 @@ class TestEpisode:
         step_files = list(steps_dir.iterdir())
         assert len(step_files) == 3
 
-    def test_episode_closes_env_on_completion(self, mock_episode, mock_task):
+    def test_episode_closes_env_on_completion(self, tmp_dir, mock_agent_config):
         """Test Episode closes environment after run."""
-        mock_episode.run()
+        close_calls: list[bool] = []
 
-        # Task teardown should have been called
-        assert mock_task.teardown_called
+        class TrackCloseTask(MockCubeTask):
+            def close(self):
+                close_calls.append(True)
+                super().close()
 
-    def test_episode_closes_env_on_error(self, tmp_dir, mock_agent_config, mock_task, mock_env_config):
+        class TrackCloseConfig(MockCubeTaskConfig):
+            def make(self, runtime_context=None, container_backend=None):
+                return TrackCloseTask(
+                    metadata=TaskMetadata(id=self.task_id),
+                    tool_config=MockToolConfig(),
+                )
+
+        episode = Episode(
+            id=0,
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            task_config=TrackCloseConfig(task_id="track_close_task"),
+        )
+        episode.run()
+
+        assert close_calls, "task.close() was not called"
+
+    def test_episode_closes_env_on_error(self, tmp_dir, mock_agent_config):
         """Test Episode closes environment even when error occurs."""
+        close_calls: list[bool] = []
+
+        class TrackCloseTask(MockCubeTask):
+            def close(self):
+                close_calls.append(True)
+                super().close()
+
+        class TrackCloseConfig(MockCubeTaskConfig):
+            def make(self, runtime_context=None, container_backend=None):
+                return TrackCloseTask(
+                    metadata=TaskMetadata(id=self.task_id),
+                    tool_config=MockToolConfig(),
+                )
 
         class ErrorAgent(MockAgent):
             def step(self, obs):
                 raise RuntimeError("Test error")
 
-        class ErrorConfig(type(mock_agent_config)):
-            def make(self, *args) -> "ErrorAgent":
+        class ErrorConfig(MockAgentConfig):
+            def make(self, *args, **kwargs) -> "ErrorAgent":
                 return ErrorAgent(config=self)
 
         config = ErrorConfig()
@@ -189,22 +220,21 @@ class TestEpisode:
             id=0,
             output_dir=tmp_dir,
             agent_config=config,
-            env_config=mock_env_config,
+            task_config=TrackCloseConfig(task_id="track_close_error_task"),
         )
 
         with pytest.raises(RuntimeError, match="Test error"):
             episode.run()
 
-        # Environment should still be closed
-        assert mock_task.teardown_called
+        assert close_calls, "task.close() was not called on error"
 
-    def test_episode_output_filename(self, tmp_dir, mock_agent_config, mock_env_config):
+    def test_episode_output_filename(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode generates correct output directory name."""
         episode = Episode(
             id=42,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
         )
 
         episode.run()
@@ -213,7 +243,7 @@ class TestEpisode:
         ep_dirs = [d.name for d in episodes_dir.iterdir() if d.is_dir()]
         assert any("_ep42" in d for d in ep_dirs)
 
-    def test_episode_captures_agent_error(self, tmp_dir, mock_agent_config, mock_env_config):
+    def test_episode_captures_agent_error(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode captures agent errors correctly in trajectory."""
 
         class ErrorAgent(MockAgent):
@@ -221,7 +251,7 @@ class TestEpisode:
                 raise RuntimeError("Agent step failed")
 
         class ErrorConfig(type(mock_agent_config)):
-            def make(self, *args) -> "ErrorAgent":
+            def make(self, *args, **kwargs) -> "ErrorAgent":
                 return ErrorAgent(config=self)
 
         config = ErrorConfig()
@@ -230,19 +260,18 @@ class TestEpisode:
             id=0,
             output_dir=tmp_dir,
             agent_config=config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
         )
 
         # Episode should raise the error
         with pytest.raises(RuntimeError, match="Agent step failed"):
-            trajectory = episode.run()
+            episode.run()
 
         # But error should be saved in trajectory before raising
-        # Load the trajectory to verify
         from cube_harness.storage import FileStorage
 
         storage = FileStorage(tmp_dir)
-        traj_id = f"{episode.config.task_id}_ep{episode.config.id}"
+        traj_id = f"{episode.config.task_config.task_id}_ep{episode.config.id}"
         trajectory = storage.load_trajectory(traj_id)
 
         # Find the agent output step with error
@@ -254,55 +283,36 @@ class TestEpisode:
         assert error_step.output.error.error_type == "RuntimeError"
         assert "Agent step failed" in error_step.output.error.exception_str
 
-    def test_episode_captures_env_error(self, tmp_dir, mock_agent_config, mock_tool_config):
+    def test_episode_captures_env_error(self, tmp_dir, mock_agent_config):
         """Test Episode captures environment errors correctly in trajectory."""
 
-        from cube.core import ActionSchema
-
-        from cube_harness.legacy import Task
-
-        class ErrorTask(Task):
-            id = "error_task"
-            validate_per_step = True
-
-            def setup(self, tool):
-                from cube.core import Observation
-
-                return Observation.from_text("Start"), {}
-
-            def validate_task(self, obs):
+        class ErrorEvalTask(MockCubeTask):
+            def evaluate(self, obs=None):
                 raise ValueError("Environment validation failed")
 
-            def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-                return actions
-
-            def accept_agent_stop(self) -> bool:
-                return True
-
-            def teardown(self) -> None:
-                pass
-
-        from cube_harness.legacy import EnvConfig
-
-        error_task = ErrorTask()
-        env_config = EnvConfig(task=error_task, tool_config=mock_tool_config)
+        class ErrorEvalConfig(MockCubeTaskConfig):
+            def make(self, runtime_context=None, container_backend=None):
+                return ErrorEvalTask(
+                    metadata=TaskMetadata(id=self.task_id),
+                    tool_config=MockToolConfig(),
+                )
 
         episode = Episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=env_config,
+            task_config=ErrorEvalConfig(task_id="error_eval_task"),
         )
 
-        # Episode should raise the error
+        # Episode should raise the error (evaluate() is called when done=True via final_step)
         with pytest.raises(ValueError, match="Environment validation failed"):
-            trajectory = episode.run()
+            episode.run()
 
         # But error should be saved in trajectory before raising
         from cube_harness.storage import FileStorage
 
         storage = FileStorage(tmp_dir)
-        traj_id = f"{episode.config.task_id}_ep{episode.config.id}"
+        traj_id = f"{episode.config.task_config.task_id}_ep{episode.config.id}"
         trajectory = storage.load_trajectory(traj_id)
 
         # Find the environment output step with error
@@ -314,13 +324,15 @@ class TestEpisode:
         assert error_step.output.error.error_type == "ValueError"
         assert "Environment validation failed" in error_step.output.error.exception_str
 
-    def test_episode_run_raises_on_duplicate_trajectory(self, tmp_dir, mock_agent_config, mock_env_config) -> None:
+    def test_episode_run_raises_on_duplicate_trajectory(
+        self, tmp_dir, mock_agent_config, mock_cube_task_config
+    ) -> None:
         """Running the same episode twice raises FileExistsError (prevents accidental overwrites)."""
         episode = Episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
         )
         episode.run()
 
@@ -329,18 +341,18 @@ class TestEpisode:
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
         )
         with pytest.raises(FileExistsError):
             episode2.run()
 
-    def test_episode_relaunch_archives_old_trajectory(self, tmp_dir, mock_agent_config, mock_env_config) -> None:
+    def test_episode_relaunch_archives_old_trajectory(self, tmp_dir, mock_agent_config, mock_cube_task_config) -> None:
         """An episode loaded from config (_allow_overwrite=True) archives the old trajectory."""
         episode = Episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
         )
         episode.run()
 
@@ -348,7 +360,7 @@ class TestEpisode:
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            env_config=mock_env_config,
+            task_config=mock_cube_task_config,
         )
         episode2.allow_overwrite = True
         episode2.run()
