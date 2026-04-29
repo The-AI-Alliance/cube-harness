@@ -181,48 +181,48 @@ def _run_with_ray_impl(
             dashboard_host="0.0.0.0",
             include_dashboard=True,
             log_to_driver=True,
-            runtime_env={"working_dir": None, "env_vars": get_trace_env_vars()},
+            runtime_env={"env_vars": get_trace_env_vars()},
         )  # TODO: Ray breaks signal handling, we cannot react to Ctrl+C here, still cannot find a workaround
 
-    exp.benchmark.setup()
-    try:
-        episodes = exp.get_episodes_to_run(
-            step_timeout_s=step_timeout_s,
-            cancel_grace_s=cancel_grace_s,
-            orphan_threshold_s=orphan_threshold_s,
-        )
+    with exp.benchmark_config.make(exp.infra) as benchmark:
+        try:
+            episodes = exp.get_episodes_to_run(
+                benchmark,
+                step_timeout_s=step_timeout_s,
+                cancel_grace_s=cancel_grace_s,
+                orphan_threshold_s=orphan_threshold_s,
+            )
 
-        # Pre-claim every episode before any Ray submission so a concurrent runner
-        # opening the same output_dir sees them as RUNNING (queued).
-        for episode in episodes:
-            _pre_claim(storage, episode)
+            # Pre-claim every episode before any Ray submission so a concurrent runner
+            # opening the same output_dir sees them as RUNNING (queued).
+            for episode in episodes:
+                _pre_claim(storage, episode)
 
-        ref_to_traj_id: dict[ray.ObjectRef, str] = {}
-        for episode in episodes:
-            ref = run_episode.remote(episode)
-            ref_to_traj_id[ref] = _trajectory_id(episode)
-        logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
-        results = _poll_ray(
-            exp,
-            ref_to_traj_id,
-            storage,
-            ray_poll_timeout=ray_poll_timeout,
-            step_timeout_s=step_timeout_s,
-            cancel_grace_s=cancel_grace_s,
-        )
-        exp.print_stats(results)
-        return results
-    finally:
-        ray.shutdown()
-        # End-of-run STALE sweep: any RUNNING entries whose worker just got killed
-        # by ray.shutdown() get marked STALE so the next round can retry them.
-        sweep_stale_statuses(
-            storage,
-            step_timeout_s=step_timeout_s,
-            cancel_grace_s=cancel_grace_s,
-            orphan_threshold_s=orphan_threshold_s,
-        )
-        exp.benchmark.close()
+            ref_to_traj_id: dict[ray.ObjectRef, str] = {}
+            for episode in episodes:
+                ref = run_episode.remote(episode)
+                ref_to_traj_id[ref] = _trajectory_id(episode)
+            logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
+            results = _poll_ray(
+                exp,
+                ref_to_traj_id,
+                storage,
+                ray_poll_timeout=ray_poll_timeout,
+                step_timeout_s=step_timeout_s,
+                cancel_grace_s=cancel_grace_s,
+            )
+            exp.print_stats(results)
+            return results
+        finally:
+            ray.shutdown()
+            # End-of-run STALE sweep: any RUNNING entries whose worker just got killed
+            # by ray.shutdown() get marked STALE so the next round can retry them.
+            sweep_stale_statuses(
+                storage,
+                step_timeout_s=step_timeout_s,
+                cancel_grace_s=cancel_grace_s,
+                orphan_threshold_s=orphan_threshold_s,
+            )
 
 
 def _poll_ray(
@@ -425,9 +425,9 @@ def _run_sequentially_impl(
     """Run a single sequential round in-process, returning trajectories and failures for this round."""
     exp.save_config()
     storage = FileStorage(exp.output_dir)
-    exp.benchmark.setup()
-    try:
+    with exp.benchmark_config.make(exp.infra) as benchmark:
         all_episodes = exp.get_episodes_to_run(
+            benchmark,
             step_timeout_s=step_timeout_s,
             cancel_grace_s=cancel_grace_s,
             orphan_threshold_s=orphan_threshold_s,
@@ -455,5 +455,3 @@ def _run_sequentially_impl(
                     results.failures[traj_id] = str(e)
         exp.print_stats(results)
         return results
-    finally:
-        exp.benchmark.close()

@@ -21,10 +21,10 @@ from urllib.parse import urlparse
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers WAATask.model_rebuild()
 from cube.core import Observation
 from cube.resource import InfraConfig, ResourceHandle
-from cube.task import Task
+from cube.task import Task, TaskExecutionInfo
 from cube_computer_tool.axtree import linearize_accessibility_tree, tag_screenshot
 from PIL import Image
-from pydantic import PrivateAttr
+from pydantic import Field, PrivateAttr
 
 from waa_cube.azure import WAA_WINDOWS_RESOURCE
 from waa_cube.vm_backend.evaluator import Evaluator
@@ -79,6 +79,23 @@ def _reformat_axtree(raw: str) -> str:
     return "\n".join(out)
 
 
+class WAATaskExecutionInfo(TaskExecutionInfo):
+    """Heavy per-task execution data for WAA tasks.
+
+    Carries the bits that drive setup + evaluation but aren't needed for
+    listing / glob-filtering: the setup-script chain, the validator config,
+    related-app list, etc. Lives outside `task_metadata.json` so the
+    in-tree metadata stays small (≤1 KB/task).
+    """
+
+    domain: str = "unknown"
+    snapshot: str = "init_state"
+    config: list[dict[str, Any]] = Field(default_factory=list)
+    evaluator: dict[str, Any] = Field(default_factory=dict)
+    related_apps: list[str] = Field(default_factory=list)
+    test_sets: list[str] = Field(default_factory=list)
+
+
 class WAATask(Task):
     """A single WAA desktop-automation task running inside a Windows 11 VM.
 
@@ -87,12 +104,13 @@ class WAATask(Task):
     to restore, setup scripts, and an evaluator configuration.
 
     Pydantic fields:
-        metadata:      TaskMetadata  — extra_info keys: domain, snapshot, config,
-                                       evaluator, related_apps
-        tool_config:   ToolConfig    — pass ComputerConfig(...)
-        infra:         InfraConfig   — InfraConfig used to launch task VMs.
-        validate_per_step: bool      — inherited; default False
-        accept_agent_stop: bool      — inherited; default True
+        metadata:        TaskMetadata          — id, abstract_description (light)
+        execution_info:  WAATaskExecutionInfo  — heavy per-task data (config,
+                                                  evaluator, snapshot, …)
+        tool_config:     ToolConfig            — pass ComputerConfig(...)
+        infra:           InfraConfig           — used to launch task VMs.
+        validate_per_step: bool                — inherited; default False
+        accept_agent_stop: bool                — inherited; default True
     """
 
     infra: InfraConfig | None = None
@@ -124,7 +142,9 @@ class WAATask(Task):
 
         logger.info("Launching VM via %s", type(self.infra).__name__)
         self._resource_handle = self.infra.launch(WAA_WINDOWS_RESOURCE)
-        self._computer.attach_endpoint(self._resource_handle.endpoint)
+        # ComputerBase.attach_vm() takes any object with an `.endpoint` str
+        # attribute; the cube-infra handle satisfies that protocol.
+        self._computer.attach_vm(self._resource_handle)
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
         """Return (chromium_port, vlc_port, server_port) from the current handle.
@@ -198,9 +218,10 @@ class WAATask(Task):
             vlc_port=vlc_port,
             server_port=server_port,
         )
+        exec_info = self._waa_execution_info()
         eval_config = {
             "id": self.metadata.id,
-            "evaluator": self.metadata.extra_info.get("evaluator", {}),
+            "evaluator": exec_info.evaluator,
         }
         try:
             reward = evaluator.evaluate(eval_config, self._computer._action_history)
@@ -210,30 +231,42 @@ class WAATask(Task):
             logger.error("Evaluation failed: %s", exc)
             return 0.0
 
+    def _waa_execution_info(self) -> "WAATaskExecutionInfo":
+        """Return self.execution_info coerced to WAATaskExecutionInfo.
+
+        WAATaskConfig.make() always populates this, but defensively handle the
+        case where a task is constructed directly without it (returns the
+        default WAATaskExecutionInfo with empty fields, matching the old
+        ``extra_info.get(..., default)`` semantics).
+        """
+        if isinstance(self.execution_info, WAATaskExecutionInfo):
+            return self.execution_info
+        return WAATaskExecutionInfo()
+
     def reset(self) -> tuple[Observation, dict]:
         """Run setup scripts and return the initial obs.
 
         Steps:
           1. Launch VM if not yet running (via infra)
-          2. Build task_data dict from metadata.extra_info
+          2. Build task_data dict from execution_info
           3. Run setup scripts, wait
           4. Post-process the observation (SoM or linearize axtree)
           5. Prepend task instruction as text observation
           6. Return (obs, info)
         """
         self._ensure_vm()
-        extra = self.metadata.extra_info
+        exec_info = self._waa_execution_info()
 
         task_data = {
             "id": self.metadata.id,
             "instruction": self.metadata.abstract_description,
-            "config": extra.get("config", []),
-            "evaluator": extra.get("evaluator", {}),
-            "snapshot": extra.get("snapshot", "init_state"),
-            "related_apps": extra.get("related_apps", []),
+            "config": exec_info.config,
+            "evaluator": exec_info.evaluator,
+            "snapshot": exec_info.snapshot,
+            "related_apps": exec_info.related_apps,
         }
 
-        logger.info("Resetting WAATask %s (domain=%s)", self.metadata.id, extra.get("domain", "unknown"))
+        logger.info("Resetting WAATask %s (domain=%s)", self.metadata.id, exec_info.domain)
 
         obs = self._setup_task(task_data)
         obs = self.obs_postprocess(obs)
@@ -243,9 +276,9 @@ class WAATask(Task):
 
         info = {
             "task_id": self.metadata.id,
-            "task_domain": extra.get("domain", "unknown"),
-            "task_snapshot": extra.get("snapshot", "init_state"),
-            "task_related_apps": extra.get("related_apps", []),
+            "task_domain": exec_info.domain,
+            "task_snapshot": exec_info.snapshot,
+            "task_related_apps": exec_info.related_apps,
         }
         return obs, info
 
@@ -254,7 +287,7 @@ class WAATask(Task):
 
         reward ∈ [0.0, 1.0]:  1.0 = task fully completed.
         """
-        evaluator_cfg = self.metadata.extra_info.get("evaluator", {})
+        evaluator_cfg = self._waa_execution_info().evaluator
 
         if not evaluator_cfg:
             logger.warning("Task %s: no evaluator configured, returning 0.0", self.metadata.id)

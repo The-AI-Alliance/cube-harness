@@ -84,29 +84,15 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    benchmark = WAABenchmark(
-        default_tool_config=tool_config,
-        infra=LocalInfraConfig(cpu_cores=8, ram_gb=8),
-    )
-    benchmark.install()
-    benchmark.setup()
-
-    # Exclude chrome/msedge tasks: Chrome DevTools (CDP) setup has a timing
-    # issue — Playwright gets a 502 connecting to the CDP port before Chrome
-    # is fully ready.  Until the setup_controller adds a CDP-readiness retry,
-    # skip these domains to avoid false failures.
-    keep_ids = [
-        tid
-        for tid, meta in benchmark.task_metadata.items()
-        if meta.extra_info.get("domain") not in ("chrome", "msedge")
-    ]
-    benchmark = benchmark.subset_from_list(keep_ids)
+    infra = LocalInfraConfig(cpu_cores=8, ram_gb=8)
+    bench_config = WAABenchmark(tool_config=tool_config, infra=infra)
 
     exp = Experiment(
         name="waa_genny_gpt5",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=bench_config,
+        infra=infra,
         max_steps=15,
     )
 

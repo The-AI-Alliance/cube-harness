@@ -445,6 +445,8 @@ class TestFileStorageEpisodeConfig:
             storage.load_episode_config(config_path)
 
     def test_list_episode_configs(self, tmp_dir, mock_agent_config):
+        from cube.task import TaskMetadata
+
         from cube_harness.episode import EpisodeConfig
         from tests.conftest import MockCubeTaskConfig
 
@@ -453,7 +455,7 @@ class TestFileStorageEpisodeConfig:
             config = EpisodeConfig(
                 id=i,
                 agent_config=mock_agent_config,
-                task_config=MockCubeTaskConfig(task_id=f"task_{i}"),
+                task_config=MockCubeTaskConfig(metadata=TaskMetadata(id=f"task_{i}")),
                 exp_name="test_exp",
                 output_dir=tmp_dir,
                 max_steps=100,
@@ -475,6 +477,8 @@ class TestFileStorageEpisodeConfig:
         assert config_files == []
 
     def test_episode_config_filename_parsing(self, tmp_dir, mock_agent_config):
+        from cube.task import TaskMetadata
+
         from cube_harness.episode import EpisodeConfig
         from tests.conftest import MockCubeTaskConfig
 
@@ -482,7 +486,7 @@ class TestFileStorageEpisodeConfig:
         config = EpisodeConfig(
             id=10,
             agent_config=mock_agent_config,
-            task_config=MockCubeTaskConfig(task_id="task_with_underscores_123"),
+            task_config=MockCubeTaskConfig(metadata=TaskMetadata(id="task_with_underscores_123")),
             exp_name="test_exp",
             output_dir=tmp_dir,
             max_steps=100,

@@ -1,5 +1,6 @@
 import logging
 import time
+import warnings
 from pathlib import Path
 from typing import Callable, Self
 
@@ -43,11 +44,11 @@ class Episode:
         output_dir: Path,
         agent_config: AgentConfig,
         task_config: TaskConfig,
-        exp_name: str = "default",
-        max_steps: int = MAX_STEPS,
-        storage: Storage | None = None,
-        runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
+        exp_name: str,
+        max_steps: int,
+        storage: Storage | None,
+        runtime_context: RuntimeContext | None,
+        container_backend: ContainerBackend | None,
     ) -> None:
         self.config = EpisodeConfig(
             id=id,
@@ -92,7 +93,14 @@ class Episode:
         if benchmark is not None and not isinstance(benchmark, Benchmark):
             raise ValueError(f"benchmark must be a cube.benchmark.Benchmark instance or None, got {type(benchmark)}")
         runtime_context = benchmark._runtime_context if benchmark is not None else None
-        container_backend = benchmark.container_backend if benchmark is not None else None
+        # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
+        # reading it raises a DeprecationWarning. Forward it for backwards
+        # compatibility until cube-standard removes it.
+        container_backend = None
+        if benchmark is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                container_backend = benchmark.config.container_backend
         return cls(
             id=episode_config.id,
             output_dir=episode_config.output_dir,
