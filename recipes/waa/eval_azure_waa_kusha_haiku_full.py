@@ -138,7 +138,7 @@ def main() -> None:
 
     try:
         print(f"\nHAIKU FULL EVAL — output: {output_dir}")
-        run_with_ray(exp, n_cpus=20)
+        run_with_ray(exp, n_cpus=10)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:

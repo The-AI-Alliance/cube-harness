@@ -333,6 +333,30 @@ class SetupController:
                         break
                     last_exc = requests.RequestException(f"Upload failed ({resp.status_code}): {resp.text}")
                     logger.warning("Upload attempt %d returned %d; retrying...", attempt + 1, resp.status_code)
+                    # Diagnostic: when /upload 502s, probe other endpoints to see
+                    # if it's upload-specific or whole-VM. Logs only — doesn't gate retry.
+                    if resp.status_code == 502:
+                        try:
+                            probe_resp = requests.get(self.http_server + "/probe", timeout=5)
+                            logger.warning(
+                                "  502 diag: /probe → %d (%.0fb)",
+                                probe_resp.status_code, len(probe_resp.content),
+                            )
+                        except Exception as exc2:
+                            logger.warning("  502 diag: /probe → exc %s", exc2)
+                        try:
+                            exec_resp = requests.post(
+                                self.http_server_setup_root + "/execute",
+                                data=json.dumps({"command": ["cmd", "/c", "echo", "hi"], "shell": False}),
+                                headers={"Content-Type": "application/json"},
+                                timeout=10,
+                            )
+                            logger.warning(
+                                "  502 diag: /setup/execute → %d (body %.40s)",
+                                exec_resp.status_code, exec_resp.text[:80],
+                            )
+                        except Exception as exc2:
+                            logger.warning("  502 diag: /setup/execute → exc %s", exc2)
                 except requests.RequestException as exc:
                     last_exc = exc
                     logger.warning("Upload attempt %d failed: %s; retrying...", attempt + 1, exc)

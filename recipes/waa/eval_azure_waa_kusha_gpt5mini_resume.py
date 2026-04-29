@@ -1,30 +1,31 @@
-"""WAA full-corpus eval — Azure GPT-5-mini on the full 152-task Windows corpus.
+"""Resume the 3 unfinalized episodes from the GPT-5-mini full eval.
 
-Companion to `eval_azure_waa_kusha_haiku_full.py` (Haiku 4.5). Same Genny+axtree
-setup, same full corpus, running on the LO-enabled image (waa-windows-vm-kusha-lo).
+Original run (output 20260428_171223) ended with 149/152 finalized.
+The 3 unfinalized:
+  - ep8  04d9aeaf-…   Upload failed (502) at /setup/upload (long-tail VM bug)
+  - ep9  06fe7178-…   Chrome CDP failed (long-tail chrome-not-listening)
+  - ep150 fba2c100-…  Hung mid-run at step 65 (likely LLM call timeout)
 
-Model: `azure/gpt-5-mini`. Substitute for the paper's GPT-4o-mini row (which
-isn't deployed on this Azure resource — only GPT-5-family models are).
-
-Closest comparison points from the paper Table 4 (OneOCR + ✓UIA, no Navi
-grounding pipeline — closest to our setup):
-    GPT-4o-mini → 7.3% overall
-    GPT-4o      → 13.3% overall
+Mechanism:
+  - resume=True picks up all 3 (ep150's partial trajectory was deleted before
+    this run, so it looks "unstarted" to the resume check). retry_failed=True
+    would also pick up the 45 legitimately-lost tasks, which we don't want
+    to re-run.
 
 Usage:
-    uv run recipes/waa/eval_azure_waa_kusha_gpt5mini_full.py
+    uv run recipes/waa/eval_azure_waa_kusha_gpt5mini_resume.py
 """
 
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 
-from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
 from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
@@ -44,6 +45,10 @@ INFRA = AzureInfraConfig(
     windows_admin_username="Docker",
     image_name_suffix="-kusha-lo",
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
+)
+
+ORIGINAL_OUTPUT_DIR = Path(
+    "/Users/kusha.sareen/cube_harness_results/20260428_171223_genny_azure_kusha_gpt5mini_full_waa-cube"
 )
 
 WAA_SYSTEM_PROMPT = """\
@@ -70,6 +75,13 @@ Use the window title and window list to track which application is in focus.
 You will see the last 3 observations in context — use this history to track progress.
 
 ## Actions
+
+**CRITICAL: Every response MUST include exactly one tool call. Never reply with
+plain text only — there is no human reading your messages between steps. The
+only ways to advance are run_pyautogui(code), wait(), done(), or fail().
+If you are unsure, call run_pyautogui with your best guess; never stop without
+calling done() or fail().**
+
 You control the computer by calling run_pyautogui(code) with valid Python/pyautogui code.
 
 ### Common pyautogui commands
@@ -94,7 +106,8 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 5. Prefer hotkey shortcuts over mouse clicks when practical
 6. Do NOT ask for clarification — always proceed with available information
 7. After completing the task, verify by checking the next observation then call done()
-8. Do not loop — if an action has no effect after 2 attempts, try a completely different approach\
+8. Do not loop — if an action has no effect after 2 attempts, try a completely different approach
+9. NEVER respond with text only — every step MUST end in a tool call (run_pyautogui, wait, done, or fail)\
 """
 
 
@@ -102,13 +115,14 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_gpt5mini_full", "waa-cube")
+    if not ORIGINAL_OUTPUT_DIR.exists():
+        raise SystemExit(f"Original output dir not found: {ORIGINAL_OUTPUT_DIR}")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
-        max_actions=100,
+        max_actions=50,  # halved from 100 to bound the hung-worker risk
         render_last_n_obs=3,
         enable_summarize=False,
         tools_as_text=False,
@@ -127,20 +141,19 @@ def main() -> None:
     )
     benchmark.setup()
 
-    # Full 152-task corpus on the LO-enabled image.
-    logging.info("GPT-5-mini full eval: %d tasks", len(benchmark.task_metadata))
-
     exp = Experiment(
         name="waa_gpt5mini_full",
-        output_dir=output_dir,
+        output_dir=ORIGINAL_OUTPUT_DIR,
         agent_config=agent_config,
         benchmark=benchmark,
-        max_steps=100,
+        max_steps=50,
+        resume=True,        # picks up ep8, ep9, ep150 (all 3 unstarted)
     )
 
+    print(f"\nGPT-5-MINI RESUME — output: {ORIGINAL_OUTPUT_DIR}")
+
     try:
-        print(f"\nGPT-5-MINI FULL EVAL — output: {output_dir}")
-        run_with_ray(exp, n_cpus=10)
+        run_with_ray(exp, n_cpus=3)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:

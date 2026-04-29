@@ -1,30 +1,30 @@
-"""WAA full-corpus eval — Azure GPT-5-mini on the full 152-task Windows corpus.
+"""Re-run the 2 chrome-CDP-failed tasks from the full Haiku eval.
 
-Companion to `eval_azure_waa_kusha_haiku_full.py` (Haiku 4.5). Same Genny+axtree
-setup, same full corpus, running on the LO-enabled image (waa-windows-vm-kusha-lo).
+Background: of 152 episodes, 2 failed at `_chrome_open_tabs_setup` after 30
+retries × 5s — root cause traced to a port-allocation race in
+cube/infra_utils.py:free_port (now fixed). The 7 episodes that recovered
+within 2-3 retries are real successes and not retried here.
 
-Model: `azure/gpt-5-mini`. Substitute for the paper's GPT-4o-mini row (which
-isn't deployed on this Azure resource — only GPT-5-family models are).
-
-Closest comparison points from the paper Table 4 (OneOCR + ✓UIA, no Navi
-grounding pipeline — closest to our setup):
-    GPT-4o-mini → 7.3% overall
-    GPT-4o      → 13.3% overall
+Mechanism: Experiment(resume=True) reuses the original output_dir and runs
+only episodes that have an episode_config.json but no trajectory data
+(i.e. setup never finished). retry_failed=True wouldn't help here because
+it requires episode.metadata.json to exist, which our 2 setup-failures
+never wrote.
 
 Usage:
-    uv run recipes/waa/eval_azure_waa_kusha_gpt5mini_full.py
+    uv run recipes/waa/eval_azure_waa_kusha_haiku_retry_failed.py
 """
 
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 
-from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
 from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
@@ -44,6 +44,11 @@ INFRA = AzureInfraConfig(
     windows_admin_username="Docker",
     image_name_suffix="-kusha-lo",
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
+)
+
+# Output dir of the full eval whose failed tasks we want to retry.
+ORIGINAL_OUTPUT_DIR = Path(
+    "/Users/kusha.sareen/cube_harness_results/20260427_143250_genny_azure_kusha_haiku_full_waa-cube"
 )
 
 WAA_SYSTEM_PROMPT = """\
@@ -102,9 +107,10 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_gpt5mini_full", "waa-cube")
+    if not ORIGINAL_OUTPUT_DIR.exists():
+        raise SystemExit(f"Original output dir not found: {ORIGINAL_OUTPUT_DIR}")
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
@@ -127,20 +133,24 @@ def main() -> None:
     )
     benchmark.setup()
 
-    # Full 152-task corpus on the LO-enabled image.
-    logging.info("GPT-5-mini full eval: %d tasks", len(benchmark.task_metadata))
-
     exp = Experiment(
-        name="waa_gpt5mini_full",
-        output_dir=output_dir,
+        name="waa_haiku_full",
+        output_dir=ORIGINAL_OUTPUT_DIR,
         agent_config=agent_config,
         benchmark=benchmark,
         max_steps=100,
+        resume=True,
     )
 
+    # Sanity-check: how many will be retried?
+    to_run = exp.get_episodes_to_run()
+    print(f"\nHAIKU RETRY — output: {ORIGINAL_OUTPUT_DIR}")
+    print(f"Will retry {len(to_run)} episode(s):")
+    for ep in to_run:
+        print(f"  - {ep.task_config.task.id if hasattr(ep, 'task_config') else ep}")
+
     try:
-        print(f"\nGPT-5-MINI FULL EVAL — output: {output_dir}")
-        run_with_ray(exp, n_cpus=10)
+        run_with_ray(exp, n_cpus=2)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:

@@ -56,6 +56,7 @@ class WAATaskConfig(TaskConfig):
 
     infra: InfraConfig | None = None
     metadata: TaskMetadata | None = None
+    use_som: bool = False
 
     def make(
         self,
@@ -77,6 +78,7 @@ class WAATaskConfig(TaskConfig):
             metadata=metadata,
             tool_config=self.tool_config,
             infra=self.infra,
+            use_som=self.use_som,
             runtime_context=runtime_context,
             container_backend=container_backend,
         )
@@ -157,6 +159,7 @@ class WAABenchmark(Benchmark):
                 seed=None,
                 infra=self.infra,
                 metadata=tm,
+                use_som=self.use_som,
             )
 
     # ------------------------------------------------------------------

@@ -1,18 +1,13 @@
-"""WAA full-corpus eval — Azure GPT-5-mini on the full 152-task Windows corpus.
+"""WAA LO smoke eval — sequential (n_cpus=1) variant of eval_azure_waa_kusha_lo_smoke.
 
-Companion to `eval_azure_waa_kusha_haiku_full.py` (Haiku 4.5). Same Genny+axtree
-setup, same full corpus, running on the LO-enabled image (waa-windows-vm-kusha-lo).
-
-Model: `azure/gpt-5-mini`. Substitute for the paper's GPT-4o-mini row (which
-isn't deployed on this Azure resource — only GPT-5-family models are).
-
-Closest comparison points from the paper Table 4 (OneOCR + ✓UIA, no Navi
-grounding pipeline — closest to our setup):
-    GPT-4o-mini → 7.3% overall
-    GPT-4o      → 13.3% overall
+If this gets significantly fewer setup-fail rates than the parallel smoke
+(which had ~20%, and the haiku full eval at n_cpus=20 has ~17%), it tells us
+the /setup/upload 502 is dominated by concurrent pressure. If sequential
+still has comparable failure rates, it's per-VM systematic and not a
+host-side concurrency artifact.
 
 Usage:
-    uv run recipes/waa/eval_azure_waa_kusha_gpt5mini_full.py
+    uv run recipes/waa/eval_azure_waa_kusha_lo_smoke_seq.py
 """
 
 import logging
@@ -45,6 +40,22 @@ INFRA = AzureInfraConfig(
     image_name_suffix="-kusha-lo",
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
+
+# 10 LO tasks (5 calc + 5 writer) — same set as eval_azure_waa_kusha_lo_smoke.py.
+CALC_IDS = [
+    "01b269ae-2111-4a07-81fd-3fcd711993b0-WOS",
+    "035f41ba-6653-43ab-aa63-c86d449d62e5-WOS",
+    "04d9aeaf-7bed-4024-bedb-e10e6f00eb7f-WOS",
+    "0a2e43bf-b26c-4631-a966-af9dfa12c9e5-WOS",
+    "0acbd372-ca7a-4507-b949-70673120190f-WOS",
+]
+WRITER_IDS = [
+    "0810415c-bde4-4443-9047-d5f70165a697-WOS",
+    "0a0faba3-5580-44df-965d-f562a99b291c-WOS",
+    "0b17a146-2934-46c7-8727-73ff6b6483e8-WOS",
+    "0e47de2a-32e0-456c-a366-8c607ef7a9d2-WOS",
+    "0e763496-b6bb-4508-a427-fad0b6c3e195-WOS",
+]
 
 WAA_SYSTEM_PROMPT = """\
 You are a desktop automation agent controlling a real Windows 11 computer.
@@ -102,9 +113,9 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_gpt5mini_full", "waa-cube")
+    output_dir = make_experiment_output_dir("genny_azure_kusha_haiku_lo_smoke_seq", "waa-cube")
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="claude-haiku-4-5-20251001", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
@@ -127,11 +138,14 @@ def main() -> None:
     )
     benchmark.setup()
 
-    # Full 152-task corpus on the LO-enabled image.
-    logging.info("GPT-5-mini full eval: %d tasks", len(benchmark.task_metadata))
+    keep_ids = CALC_IDS + WRITER_IDS
+    available = set(benchmark.task_metadata.keys())
+    keep_ids = [tid for tid in keep_ids if tid in available]
+    benchmark = benchmark.subset_from_list(keep_ids)
+    logging.info("LO smoke eval (sequential): %d tasks", len(keep_ids))
 
     exp = Experiment(
-        name="waa_gpt5mini_full",
+        name="waa_azure_kusha_haiku_lo_smoke_seq",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -139,8 +153,8 @@ def main() -> None:
     )
 
     try:
-        print(f"\nGPT-5-MINI FULL EVAL — output: {output_dir}")
-        run_with_ray(exp, n_cpus=10)
+        print(f"\nLO SMOKE SEQ EVAL — n_cpus=1, output: {output_dir}")
+        run_with_ray(exp, n_cpus=1)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
         if deleted:

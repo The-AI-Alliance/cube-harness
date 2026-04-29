@@ -1,18 +1,23 @@
-"""WAA full-corpus eval — Azure GPT-5-mini on the full 152-task Windows corpus.
+"""WAA full-corpus eval — Azure GPT-4o on the full 152-task Windows corpus.
 
-Companion to `eval_azure_waa_kusha_haiku_full.py` (Haiku 4.5). Same Genny+axtree
+Companion to `eval_azure_waa_kusha_haiku_full.py` (Haiku 4.5) and
+`eval_azure_waa_kusha_gpt5mini_full.py` (GPT-5-mini). Same Genny+axtree
 setup, same full corpus, running on the LO-enabled image (waa-windows-vm-kusha-lo).
 
-Model: `azure/gpt-5-mini`. Substitute for the paper's GPT-4o-mini row (which
-isn't deployed on this Azure resource — only GPT-5-family models are).
+Model: `azure/gpt-4o` (`gpt-4o-2024-11-20` deployment, added to the
+ui-assist Azure OpenAI resource by collaborator). Direct comparison point
+to the paper's GPT-4o row (Table 4, OneOCR + ✓UIA): 13.3% overall.
 
-Closest comparison points from the paper Table 4 (OneOCR + ✓UIA, no Navi
-grounding pipeline — closest to our setup):
-    GPT-4o-mini → 7.3% overall
-    GPT-4o      → 13.3% overall
+Concurrency: n_cpus=10. n_cpus=20 still triggers persistent /setup/upload 502s
+(separate from the port-collision fix already landed) — diagnosing that is a
+separate workstream.
+
+Prompt note: GPT-4o was returning empty action lists ~22% of the time at
+n_cpus=20 — model produced text without tool calls and the agent treated
+that as "stop". Prompt updated below to demand a tool call every step.
 
 Usage:
-    uv run recipes/waa/eval_azure_waa_kusha_gpt5mini_full.py
+    uv run recipes/waa/eval_azure_waa_kusha_gpt4o_full.py
 """
 
 import logging
@@ -70,6 +75,13 @@ Use the window title and window list to track which application is in focus.
 You will see the last 3 observations in context — use this history to track progress.
 
 ## Actions
+
+**CRITICAL: Every response MUST include exactly one tool call. Never reply with
+plain text only — there is no human reading your messages between steps. The
+only ways to advance are run_pyautogui(code), wait(), done(), or fail().
+If you are unsure, call run_pyautogui with your best guess; never stop without
+calling done() or fail().**
+
 You control the computer by calling run_pyautogui(code) with valid Python/pyautogui code.
 
 ### Common pyautogui commands
@@ -94,7 +106,8 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 5. Prefer hotkey shortcuts over mouse clicks when practical
 6. Do NOT ask for clarification — always proceed with available information
 7. After completing the task, verify by checking the next observation then call done()
-8. Do not loop — if an action has no effect after 2 attempts, try a completely different approach\
+8. Do not loop — if an action has no effect after 2 attempts, try a completely different approach
+9. NEVER respond with text only — every step MUST end in a tool call (run_pyautogui, wait, done, or fail)\
 """
 
 
@@ -102,9 +115,14 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_SYSTEM_PROMPT.format(today=today)
 
-    output_dir = make_experiment_output_dir("genny_azure_kusha_gpt5mini_full", "waa-cube")
+    output_dir = make_experiment_output_dir("genny_azure_kusha_gpt4o_full", "waa-cube")
 
-    llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
+    # GPT-4o was returning empty action lists ~22% of the time at n=20 —
+    # model produced text without tool calls and the agent treated as stop.
+    # We rely on the strengthened system prompt (see WAA_SYSTEM_PROMPT) to
+    # push toward tool calls; tool_choice="auto" so a genuinely stuck model
+    # can still call fail() instead of looping to max_steps.
+    llm_config = LLMConfig(model_name="azure/gpt-4o", temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
@@ -128,10 +146,10 @@ def main() -> None:
     benchmark.setup()
 
     # Full 152-task corpus on the LO-enabled image.
-    logging.info("GPT-5-mini full eval: %d tasks", len(benchmark.task_metadata))
+    logging.info("GPT-4o full eval: %d tasks", len(benchmark.task_metadata))
 
     exp = Experiment(
-        name="waa_gpt5mini_full",
+        name="waa_gpt4o_full",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -139,7 +157,7 @@ def main() -> None:
     )
 
     try:
-        print(f"\nGPT-5-MINI FULL EVAL — output: {output_dir}")
+        print(f"\nGPT-4O FULL EVAL — output: {output_dir}")
         run_with_ray(exp, n_cpus=10)
     finally:
         deleted = INFRA.cleanup_orphaned_resources()
