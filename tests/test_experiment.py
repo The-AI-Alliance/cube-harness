@@ -15,7 +15,7 @@ from cube_harness.core import Trajectory, TrajectoryStep
 from cube_harness.episode import Episode
 from cube_harness.episode_status import EpisodeStatus
 from cube_harness.exp_runner import _kill_stale_workers, run_sequentially
-from cube_harness.experiment import Experiment, ExpResult, sweep_stale_statuses
+from cube_harness.experiment import _UUID_SUFFIX_RE, Experiment, ExpResult, sweep_stale_statuses
 from cube_harness.storage import FileStorage
 from tests.conftest import MockAgentConfig, MockCubeBenchmark, MockCubeTask, MockCubeTaskConfig, MockToolConfig
 
@@ -150,6 +150,20 @@ class TestExperiment:
         assert exp.output_dir == tmp_dir
         assert exp.agent_config == mock_agent_config
         assert exp.benchmark == mock_cube_benchmark
+
+    def test_experiment_auto_output_dir(self, mock_agent_config, mock_cube_benchmark):
+        """output_dir is auto-generated when omitted."""
+        exp = Experiment(
+            name="my_run",
+            agent_config=mock_agent_config,
+            benchmark=mock_cube_benchmark,
+        )
+
+        assert exp.output_dir is not None
+        assert exp.output_dir.exists()
+        assert _UUID_SUFFIX_RE.search(exp.output_dir.name)
+        assert "mock-cube" in exp.output_dir.name
+        assert mock_agent_config.agent_name in exp.output_dir.name
 
     def test_experiment_config_property(self, tmp_dir, mock_agent_config, mock_cube_benchmark):
         """Test Experiment config property."""

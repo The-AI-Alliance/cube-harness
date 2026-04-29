@@ -59,7 +59,7 @@ class ExpResult(TypedBaseModel):
 
 class Experiment(TypedBaseModel):
     name: str
-    output_dir: Path
+    output_dir: Path | None = None
     agent_config: AgentConfig
     benchmark: Benchmark
     resume: bool = False
@@ -69,7 +69,13 @@ class Experiment(TypedBaseModel):
 
     @model_validator(mode="after")
     def _ensure_unique_output_dir(self) -> "Experiment":
-        if not _UUID_SUFFIX_RE.search(self.output_dir.name):
+        if self.output_dir is None:
+            self.output_dir = make_experiment_output_dir(
+                agent_name=self.agent_config.agent_name,
+                benchmark_name=self.benchmark.benchmark_metadata.name,
+                tag=self.name,
+            )
+        elif not _UUID_SUFFIX_RE.search(self.output_dir.name):
             self.output_dir = self.output_dir.parent / f"{self.output_dir.name}_{uuid4().hex[:8]}"
         return self
 
