@@ -10,12 +10,15 @@ from cube.core import Content, EnvironmentOutput, Observation, StepError
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.eval_log import (
     AgentInfo,
+    BenchmarkSubset,
+    EpisodeRecord,
     EvalLog,
-    TaskEvalRecord,
-    TaskInfo,
+    ExperimentRecord,
+    JudgeConfig,
+    JudgeOutput,
     UsageSummary,
+    Verifier,
     _extract_error_type,
-    _extract_first_observation_text,
     _extract_llm_model,
     _extract_tool_names,
     _to_github_url,
@@ -145,32 +148,6 @@ def test_extract_error_type_returns_first_error() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _extract_first_observation_text
-# ---------------------------------------------------------------------------
-
-
-def test_extract_first_observation_text_returns_text() -> None:
-    traj = _trajectory(reward=1.0)
-    text = _extract_first_observation_text(traj)
-    assert text == "Task: do it"
-
-
-def test_extract_first_observation_text_empty_trajectory() -> None:
-    traj = Trajectory(id="empty")
-    assert _extract_first_observation_text(traj) is None
-
-
-def test_extract_first_observation_text_joins_multiple_contents() -> None:
-    obs = Observation(contents=[Content.from_data("Goal:"), Content.from_data("Click the button")])
-    env_out = EnvironmentOutput(obs=obs, reward=0.0, done=False, info={})
-    traj = Trajectory(id="t1")
-    traj.steps.append(TrajectoryStep(output=env_out, start_time=0.0, end_time=1.0))
-    text = _extract_first_observation_text(traj)
-    assert "Goal:" in text
-    assert "Click the button" in text
-
-
-# ---------------------------------------------------------------------------
 # _to_github_url
 # ---------------------------------------------------------------------------
 
@@ -243,29 +220,19 @@ def test_agent_info_from_agent_config_basic(mock_agent_config) -> None:
     assert isinstance(info.framework_version, str)
 
 
-def test_agent_info_from_agent_config_with_schemas(mock_agent_config) -> None:
-    schemas = [{"type": "function", "function": {"name": "click"}}]
-    info = AgentInfo.from_agent_config(mock_agent_config, action_schemas=schemas)
-    assert info.tools == schemas
-    assert info.tool_names == ["click"]
-
-
 def test_agent_info_agent_id_is_stable(mock_agent_config) -> None:
     info1 = AgentInfo.from_agent_config(mock_agent_config)
     info2 = AgentInfo.from_agent_config(mock_agent_config)
     assert info1.agent_id == info2.agent_id
 
 
-def test_agent_info_with_action_schemas_returns_copy(mock_agent_config) -> None:
+def test_agent_info_has_no_tools_field(mock_agent_config) -> None:
     info = AgentInfo.from_agent_config(mock_agent_config)
-    schemas = [{"type": "function", "function": {"name": "scroll"}}]
-    enriched = info.with_action_schemas(schemas)
-    assert enriched.tool_names == ["scroll"]
-    assert info.tool_names == []  # original unchanged
+    assert not hasattr(info, "tools")
+    assert not hasattr(info, "tool_names")
 
 
 def test_agent_info_llm_model_extracted() -> None:
-    """AgentConfig with llm_config sub-dict gets llm_model populated."""
     from cube_harness.agent import AgentConfig
 
     class LLMAgentConfig(AgentConfig):
@@ -280,187 +247,283 @@ def test_agent_info_llm_model_extracted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# TaskInfo
+# BenchmarkSubset
 # ---------------------------------------------------------------------------
 
 
-def test_task_info_from_trajectory_minimal() -> None:
-    traj = _trajectory(task_id="task-42")
-    info = TaskInfo.from_trajectory_and_metadata(traj)
-    assert info.task_id == "task-42"
-    assert info.benchmark_name == "unknown"
-    assert info.first_observation_text == "Task: do it"
+def test_benchmark_subset_from_benchmark(mock_cube_benchmark) -> None:
+    subset = BenchmarkSubset.from_benchmark(mock_cube_benchmark)
+    assert subset.name == "mock-cube"
+    assert subset.n_tasks == 2
+    assert subset.filter is None
 
 
-def test_task_info_with_benchmark_metadata() -> None:
-    from cube.benchmark import BenchmarkMetadata
-
-    bm = BenchmarkMetadata(name="MiniWoB", version="1.0", description="Mini browser tasks", authors=["A"], tags=["browser"])
-    traj = _trajectory(task_id="click-dialog")
-    info = TaskInfo.from_trajectory_and_metadata(traj, benchmark_metadata=bm)
-    assert info.benchmark_name == "MiniWoB"
-    assert info.benchmark_id == "miniwob"
-    assert info.benchmark_version == "1.0"
-    assert "A" in info.benchmark_authors
+def test_benchmark_subset_unknown_benchmark() -> None:
+    subset = BenchmarkSubset.from_benchmark(object())
+    assert subset.name == "unknown"
+    assert subset.n_tasks == 0
 
 
-def test_task_info_with_task_metadata() -> None:
+# ---------------------------------------------------------------------------
+# ExperimentRecord
+# ---------------------------------------------------------------------------
+
+
+def test_experiment_record_experiment_id_is_stable(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+    rec1 = ExperimentRecord.from_experiment("my_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    rec2 = ExperimentRecord.from_experiment("my_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    assert rec1.experiment_id == rec2.experiment_id
+    assert len(rec1.experiment_id) == 16
+
+
+def test_experiment_record_fields(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+    rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    assert rec.experiment_name == "test_exp"
+    assert rec.benchmark_name == "mock-cube"
+    assert rec.benchmark_version == "0.1.0"
+    assert rec.benchmark_subset.n_tasks == 2
+    assert rec.judge_config is None
+
+
+def test_experiment_record_roundtrip(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+    rec = ExperimentRecord.from_experiment("roundtrip_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    serialized = rec.model_dump_json()
+    restored = ExperimentRecord.model_validate_json(serialized)
+    assert restored.experiment_id == rec.experiment_id
+    assert restored.benchmark_name == rec.benchmark_name
+
+
+# ---------------------------------------------------------------------------
+# EpisodeRecord
+# ---------------------------------------------------------------------------
+
+
+def test_episode_record_success() -> None:
+    traj = _trajectory(reward=1.0)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.success is True
+    assert record.reward == 1.0
+    assert record.trajectory_id == "t1_ep0"
+
+
+def test_episode_record_failure() -> None:
+    traj = _trajectory(reward=0.0)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.success is False
+    assert record.reward == 0.0
+
+
+def test_episode_record_wall_time() -> None:
+    traj = _trajectory(reward=1.0)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.wall_time_s == pytest.approx(10.0)
+
+
+def test_episode_record_n_steps() -> None:
+    traj = _trajectory(reward=1.0, n_agent_steps=3)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.n_steps == len(traj.steps)
+    assert record.n_agent_steps == 3
+
+
+def test_episode_record_tool_names_from_metadata() -> None:
+    traj = _trajectory(reward=1.0)
+    traj.metadata["action_schemas"] = [{"type": "function", "function": {"name": "click"}}]
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.tool_names == ["click"]
+
+
+def test_episode_record_tool_names_empty_without_metadata() -> None:
+    traj = _trajectory(reward=1.0)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.tool_names == []
+
+
+def test_episode_record_with_task_metadata() -> None:
     from cube.task import TaskMetadata
 
-    tm = TaskMetadata(
-        id="click-dialog",
-        split="test",
-        abstract_description="Click a dialog button",
-        recommended_max_steps=10,
-        extra_info={"difficulty": "easy"},
-    )
     traj = _trajectory(task_id="click-dialog")
-    info = TaskInfo.from_trajectory_and_metadata(traj, task_metadata=tm)
-    assert info.split == "test"
-    assert info.abstract_description == "Click a dialog button"
-    assert info.recommended_max_steps == 10
-    assert info.extra_info["difficulty"] == "easy"
+    tm = TaskMetadata(id="click-dialog", split="test", abstract_description="Click a dialog button")
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123", task_metadata=tm)
+    assert record.split == "test"
+    assert record.task_description == "Click a dialog button"
 
 
-def test_task_info_task_version_hash_from_task_config(mock_tool_config) -> None:
-    from cube.task import TaskConfig, TaskMetadata
+def test_episode_record_with_task_config(mock_tool_config) -> None:
+    from cube.task import TaskConfig
 
     class MockTaskConfig(TaskConfig):
         def make(self, runtime_context=None, container_backend=None):  # type: ignore[override]
             raise NotImplementedError
 
-    tc = MockTaskConfig(task_id="t1", seed=42, tool_config=mock_tool_config)
     traj = _trajectory(task_id="t1")
-    info = TaskInfo.from_trajectory_and_metadata(traj, task_config=tc)
-    assert info.seed == 42
-    assert info.task_version_hash is not None
-    assert len(info.task_version_hash) == 64
+    tc = MockTaskConfig(task_id="t1", seed=42, tool_config=mock_tool_config)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123", task_config=tc)
+    assert record.seed == 42
+    assert record.task_version_hash is not None
+    assert len(record.task_version_hash) == 64
 
 
-# ---------------------------------------------------------------------------
-# TaskEvalRecord
-# ---------------------------------------------------------------------------
-
-
-def test_task_eval_record_success(mock_agent_config) -> None:
+def test_episode_record_judge_output_optional() -> None:
     traj = _trajectory(reward=1.0)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info, exp_name="exp1")
-    assert record.success is True
-    assert record.reward == 1.0
-    assert record.run_id == "exp1_t1_ep0"
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
+    assert record.judge_output is None
+    assert record.verifier is None
 
 
-def test_task_eval_record_failure(mock_agent_config) -> None:
+def test_episode_record_with_judge_output() -> None:
     traj = _trajectory(reward=0.0)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info)
-    assert record.success is False
-    assert record.reward == 0.0
-
-
-def test_task_eval_record_wall_time(mock_agent_config) -> None:
-    traj = _trajectory(reward=1.0)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info)
-    assert record.wall_time_s == pytest.approx(10.0)
-
-
-def test_task_eval_record_n_steps(mock_agent_config) -> None:
-    traj = _trajectory(reward=1.0, n_agent_steps=3)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info)
-    assert record.n_steps == len(traj.steps)
-    assert record.n_agent_steps == 3
-
-
-def test_task_eval_record_declaration_defaults_empty(mock_agent_config) -> None:
-    traj = _trajectory(reward=1.0)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info)
-    assert record.declaration == {}
-
-
-def test_task_eval_record_declaration_roundtrip(mock_agent_config) -> None:
-    traj = _trajectory(reward=1.0)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info)
+    record = EpisodeRecord.from_trajectory(traj, experiment_id="abc123")
     record = record.model_copy(
         update={
-            "declaration": {
-                "motivation": "capability_probe",
-                "task_selection_method": "random",
-                "compute_budget": "full_benchmark",
-            }
+            "judge_output": JudgeOutput(
+                difficulty="hard",
+                feasible=True,
+                failure_root_cause="Agent did not find the submit button",
+            )
         }
     )
-    assert record.declaration["motivation"] == "capability_probe"
-    assert record.declaration["task_selection_method"] == "random"
+    assert record.judge_output.difficulty == "hard"
+    assert record.judge_output.feasible is True
 
 
 # ---------------------------------------------------------------------------
-# EvalLog JSONL round-trip
+# EvalLog: two-level round-trip
 # ---------------------------------------------------------------------------
 
 
-def test_eval_log_save_and_load(mock_agent_config) -> None:
-    traj = _trajectory(reward=1.0)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info, exp_name="test_exp")
-    log = EvalLog(records=[record])
+def test_eval_log_save_and_load(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+    traj = _trajectory(reward=1.0, task_id="task-a")
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    ep_rec = EpisodeRecord.from_trajectory(traj, experiment_id=exp_rec.experiment_id)
+    log = EvalLog(experiment=exp_rec, episodes=[ep_rec])
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "eval_log.jsonl"
-        log.save_jsonl(path)
-        loaded = EvalLog.load_jsonl(path)
+    with tempfile.TemporaryDirectory() as out:
+        out_dir = Path(out)
+        log.save(out_dir)
+        assert (out_dir / "experiment_record.json").exists()
+        assert (out_dir / "eval_log.jsonl").exists()
+        loaded = EvalLog.load(out_dir)
 
-    assert len(loaded.records) == 1
-    assert loaded.records[0].trajectory_id == record.trajectory_id
-    assert loaded.records[0].success == record.success
-    assert loaded.records[0].reward == record.reward
+    assert loaded.experiment.experiment_id == exp_rec.experiment_id
+    assert len(loaded.episodes) == 1
+    assert loaded.episodes[0].trajectory_id == "task-a_ep0"
 
 
-def test_eval_log_jsonl_is_valid_json_per_line(mock_agent_config) -> None:
+def test_eval_log_episode_jsonl_is_valid_json_per_line(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
     traj = _trajectory(reward=0.5)
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info = TaskInfo.from_trajectory_and_metadata(traj)
-    record = TaskEvalRecord.from_trajectory(traj, agent_info, task_info)
-    log = EvalLog(records=[record])
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    ep_rec = EpisodeRecord.from_trajectory(traj, experiment_id=exp_rec.experiment_id)
+    log = EvalLog(experiment=exp_rec, episodes=[ep_rec])
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "out.jsonl"
-        log.save_jsonl(path)
-        lines = path.read_text().strip().splitlines()
+    with tempfile.TemporaryDirectory() as out:
+        log.save(Path(out))
+        lines = (Path(out) / "eval_log.jsonl").read_text().strip().splitlines()
+        assert len(lines) == 1
+        parsed = json.loads(lines[0])
 
-    assert len(lines) == 1
-    parsed = json.loads(lines[0])
-    assert "task" in parsed
-    assert "agent" in parsed
+    assert "experiment_id" in parsed
+    assert "task_id" in parsed
     assert "reward" in parsed
 
 
-def test_eval_log_append_record(mock_agent_config) -> None:
+def test_eval_log_experiment_record_is_valid_json(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    log = EvalLog(experiment=exp_rec, episodes=[])
+
+    with tempfile.TemporaryDirectory() as out:
+        log.save(Path(out))
+        parsed = json.loads((Path(out) / "experiment_record.json").read_text())
+
+    assert "experiment_id" in parsed
+    assert "agent" in parsed
+    assert "benchmark_subset" in parsed
+
+
+def test_eval_log_append_episode(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
     traj1 = _trajectory(reward=1.0, task_id="t1")
     traj2 = _trajectory(reward=0.0, task_id="t2")
-    agent_info = AgentInfo.from_agent_config(mock_agent_config)
-    task_info1 = TaskInfo.from_trajectory_and_metadata(traj1)
-    task_info2 = TaskInfo.from_trajectory_and_metadata(traj2)
-    rec1 = TaskEvalRecord.from_trajectory(traj1, agent_info, task_info1)
-    rec2 = TaskEvalRecord.from_trajectory(traj2, agent_info, task_info2)
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    rec1 = EpisodeRecord.from_trajectory(traj1, experiment_id=exp_rec.experiment_id)
+    rec2 = EpisodeRecord.from_trajectory(traj2, experiment_id=exp_rec.experiment_id)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "streamed.jsonl"
-        EvalLog.append_record(rec1, path)
-        EvalLog.append_record(rec2, path)
-        loaded = EvalLog.load_jsonl(path)
+    with tempfile.TemporaryDirectory() as out:
+        out_path = Path(out) / "eval_log.jsonl"
+        EvalLog.append_episode(rec1, out_path)
+        EvalLog.append_episode(rec2, out_path)
+        lines = out_path.read_text().strip().splitlines()
 
-    assert len(loaded.records) == 2
-    task_ids = {r.task.task_id for r in loaded.records}
+    assert len(lines) == 2
+    task_ids = {json.loads(line)["task_id"] for line in lines}
     assert task_ids == {"t1", "t2"}
+
+
+def test_eval_log_experiment_id_fk_consistent(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+    """EpisodeRecords carry the same experiment_id as ExperimentRecord."""
+    exp_rec = ExperimentRecord.from_experiment("fk_test", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    traj = _trajectory(reward=1.0)
+    ep_rec = EpisodeRecord.from_trajectory(traj, experiment_id=exp_rec.experiment_id)
+    assert ep_rec.experiment_id == exp_rec.experiment_id
+
+
+# ---------------------------------------------------------------------------
+# Optional models
+# ---------------------------------------------------------------------------
+
+
+def test_judge_config_roundtrip() -> None:
+    cfg = JudgeConfig(model="claude-opus-4-7", prompt_version="v1.2", judged_at="2026-04-28T12:00:00Z")
+    restored = JudgeConfig.model_validate_json(cfg.model_dump_json())
+    assert restored.model == "claude-opus-4-7"
+    assert restored.judged_at == "2026-04-28T12:00:00Z"
+
+
+def test_verifier_roundtrip() -> None:
+    v = Verifier(ref="https://github.com/org/repo/blob/abc123/eval.py", source="def evaluate(): return 1.0")
+    restored = Verifier.model_validate_json(v.model_dump_json())
+    assert "abc123" in restored.ref
+
+
+# ---------------------------------------------------------------------------
+# Integration test
+# ---------------------------------------------------------------------------
+
+
+def test_export_eval_log_integration(tmp_dir, mock_agent_config, mock_cube_benchmark) -> None:
+    """Full experiment run followed by export_eval_log produces correct two-level output."""
+    from cube_harness.exp_runner import run_sequentially
+    from cube_harness.experiment import Experiment
+
+    exp = Experiment(
+        name="integration_test",
+        output_dir=tmp_dir,
+        agent_config=mock_agent_config,
+        benchmark=mock_cube_benchmark,
+    )
+    run_sequentially(exp)
+
+    eval_log = exp.export_eval_log(tmp_dir)
+
+    exp_record_path = tmp_dir / "experiment_record.json"
+    eval_log_path = tmp_dir / "eval_log.jsonl"
+    assert exp_record_path.exists(), "experiment_record.json was not created"
+    assert eval_log_path.exists(), "eval_log.jsonl was not created"
+
+    exp_data = json.loads(exp_record_path.read_text())
+    assert exp_data["experiment_name"] == "integration_test"
+    assert "agent" in exp_data
+    assert exp_data["benchmark_subset"]["n_tasks"] == 2
+
+    lines = eval_log_path.read_text().strip().splitlines()
+    assert len(lines) == 2, f"Expected 2 episode records, got {len(lines)}"
+
+    experiment_id = eval_log.experiment.experiment_id
+    for line in lines:
+        episode = json.loads(line)
+        assert episode["experiment_id"] == experiment_id
+        assert episode["reward"] == pytest.approx(1.0)
+        assert episode["success"] is True
+
+    loaded = EvalLog.load(tmp_dir)
+    assert loaded.experiment.experiment_id == experiment_id
+    assert len(loaded.episodes) == 2

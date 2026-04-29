@@ -6,9 +6,9 @@ Changes against current specs in `openspec/specs/`.
 
 ## `episode/spec.md`
 
-### MODIFIED — `Episode.run` and `Episode._run_loop`
+### MODIFIED — `Episode.run`
 
-`Episode.run` collects action schemas immediately after the agent is constructed and
+`Episode.run` collects action schemas immediately after the action set is resolved and
 passes them via the `extra_metadata` parameter:
 
 ```python
@@ -23,34 +23,40 @@ return self._run_loop(setup_fn, step_fn, close_fn, agent, extra_metadata=extra_m
 metadata={
     "task_id": task_id,
     "agent_name": agent_name,
-    **(extra_metadata or {}),    # ← injects action_schemas
+    **(extra_metadata or {}),    # injects action_schemas
     **env_output.info,
 },
 ```
 
 **Why:** action schemas are only available at `task.reset()` time. Persisting them in
-metadata lets `export_eval_log()` reconstruct `AgentInfo.tools` post-hoc without
+metadata lets `export_eval_log()` reconstruct `EpisodeRecord.tool_names` post-hoc without
 re-instantiating the task or environment.
 
 ---
 
 ## `experiment/spec.md`
 
-### ADDED — `Experiment.export_eval_log`
+### MODIFIED — `Experiment.export_eval_log`
+
+Signature change: `output_path: Path | None` → `output_dir: Path | None` (now writes
+two files instead of one JSONL file).
 
 ```python
 def export_eval_log(
     self,
-    output_path: Path | None = None,
+    output_dir: Path | None = None,
     git_cwd: str | None = None,
 ) -> EvalLog
 ```
 
+- Builds one `ExperimentRecord` (agent info, benchmark metadata, git provenance).
 - Iterates `storage.list_trajectory_ids()`.
-- Builds one `TaskEvalRecord` per trajectory (reads action schemas from
+- Builds one `EpisodeRecord` per trajectory (reads action schemas from
   `trajectory.metadata["action_schemas"]`).
 - Resolves `task_config` from the episode config index for `task_version_hash` and `seed`.
-- Writes to `output_path` or `<output_dir>/eval_log.jsonl` by default.
+- Writes to `output_dir` or `self.output_dir` by default:
+  - `experiment_record.json` — one JSON object
+  - `eval_log.jsonl` — one JSON line per episode
 - Returns the in-memory `EvalLog`.
 
 No task re-instantiation; all data comes from persisted files.
@@ -59,11 +65,12 @@ No task re-instantiation; all data comes from persisted files.
 
 ## `storage/spec.md`
 
-### ADDED — output file
+### ADDED — output files
 
 ```
 <output_dir>/
-├── eval_log.jsonl    ← ADDED: one JSON line per completed episode
+├── experiment_record.json    ← ADDED: ExperimentRecord (once per experiment)
+├── eval_log.jsonl            ← ADDED: one EpisodeRecord JSON line per completed episode
 ```
 
 Written by `Experiment.export_eval_log()`. Not written automatically during runs;
@@ -75,24 +82,33 @@ must be called explicitly post-experiment.
 
 ### ADDED — `src/cube_harness/eval_log.py`
 
-Five public classes:
+Eight public classes:
 
 | Class | Purpose |
 |---|---|
 | `UsageSummary` | Aggregated LLM token/cost stats across an episode |
-| `AgentInfo` | Agent descriptor: agent_id, config, tools, git provenance, dependency versions |
-| `TaskInfo` | Task descriptor: benchmark metadata, task_id, hash, seed, split, first_observation_text |
-| `TaskEvalRecord` | Complete episode record (task + agent + outcome + usage + declaration) |
-| `EvalLog` | JSONL collection with `save_jsonl` / `load_jsonl` / `append_record` |
+| `AgentInfo` | Agent descriptor: agent_id, config, dependency versions, git provenance |
+| `BenchmarkSubset` | Benchmark subset descriptor for MNAR propensity correction |
+| `JudgeConfig` | Configuration of the LLM judge (optional) |
+| `JudgeOutput` | Per-episode judge assessment: difficulty, feasibility, failure root cause |
+| `Verifier` | Task verifier reference: GitHub URL + source code |
+| `ExperimentRecord` | Experiment-level record → `experiment_record.json` |
+| `EpisodeRecord` | Episode-level record → line in `eval_log.jsonl` |
+| `EvalLog` | Two-level container: `save(output_dir)` / `load(output_dir)` / `append_episode` |
 
 Key invariants:
 
 - `AgentInfo.agent_id` — SHA-256 of sorted serialized agent config JSON. Stable across
   runs with the same config. Primary matrix row key for ATLAS.
-- `TaskInfo.task_version_hash` — SHA-256 of `TaskConfig.model_dump_json()`. Changes when
-  the task config changes, even if `task_id` stays the same. Detects silent benchmark drift.
-- `TaskInfo.first_observation_text` — extracted from the first `EnvironmentOutput` in the
-  trajectory (what the agent actually saw, not the static eval spec).
-- `TaskEvalRecord.declaration` — MNAR bias correction fields. Optional; required for ATLAS
-  community submissions.
+- `AgentInfo` has no `tools` field — tools are episode-specific (same agent gets different
+  action sets on different tasks). See `EpisodeRecord.tool_names`.
+- `ExperimentRecord.experiment_id` — SHA-256(experiment_name + output_dir)[:16]. Stable
+  within a run; unique across different output directories.
+- `EpisodeRecord.experiment_id` — FK linking back to `ExperimentRecord`. Consistent across
+  all episode records in an experiment.
+- `EpisodeRecord.task_version_hash` — SHA-256 of `TaskConfig.model_dump_json()`. Detects
+  silent benchmark drift across submissions.
+- `EpisodeRecord.tool_names` — read from `trajectory.metadata["action_schemas"]` at export
+  time. Empty list for trajectories produced before this field was added.
+- `BenchmarkSubset` — automatically derived from the benchmark object; no user input required.
 - JSONL format: one JSON object per line, no envelope, no cube-harness dependency to read.

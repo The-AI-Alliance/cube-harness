@@ -1,19 +1,21 @@
-"""Atlas EvalLog: structured evaluation records for community-scale agent benchmarking.
+"""Atlas EvalLog: two-level structured evaluation records for community-scale agent benchmarking.
 
-Implements the TaskEvalRecord schema required by Project ATLAS for populating the
-Community EvalLog. Records are emitted after each episode and exported as JSONL,
-making them compatible with any framework that can parse JSON.
+Two files per experiment:
+    experiment_record.json  — ExperimentRecord (once per experiment): agent, benchmark, git provenance
+    eval_log.jsonl          — EpisodeRecord per line: outcome, usage, trajectory summary
 
-The Pydantic models are for internal convenience; the on-disk format is plain JSON,
-so downstream frameworks (non-Python, non-cube) can consume it without any dependency
-on cube-harness.
+Records are plain JSON, no cube-harness dependency to read.
 
 Classes:
-    UsageSummary   — aggregated LLM token usage and cost across an episode
-    AgentInfo      — full agent descriptor: config, capabilities, dependencies, git provenance
-    TaskInfo       — full task descriptor: benchmark metadata, task metadata, content hash
-    TaskEvalRecord — complete evaluation record ready for Atlas ingestion
-    EvalLog        — collection of records with JSONL save/load and streaming append
+    UsageSummary      — aggregated LLM token/cost stats across an episode
+    AgentInfo         — agent descriptor: config, dependency versions, git provenance
+    BenchmarkSubset   — benchmark subset descriptor for MNAR propensity correction
+    JudgeConfig       — configuration of the judge LLM (optional)
+    JudgeOutput       — per-episode judge assessment (optional)
+    Verifier          — task verifier reference (optional)
+    ExperimentRecord  — experiment-level record written to experiment_record.json
+    EpisodeRecord     — episode-level record appended to eval_log.jsonl
+    EvalLog           — two-level container with save/load
 """
 
 import hashlib
@@ -22,17 +24,17 @@ import json
 import logging
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
-from cube.core import EnvironmentOutput, TypedBaseModel
+from cube.core import TypedBaseModel
 from pydantic import Field
 
 from cube_harness.core import Trajectory
 
 logger = logging.getLogger(__name__)
 
-# Key packages whose installed versions are captured for reproducibility.
 _TRACKED_PACKAGES: list[str] = [
     "cube-harness",
     "cube",
@@ -144,22 +146,6 @@ def _extract_error_type(trajectory: Trajectory) -> str | None:
     return None
 
 
-def _extract_first_observation_text(trajectory: Trajectory) -> str | None:
-    """Extract text content from the first EnvironmentOutput in the trajectory.
-
-    This is the actual task instruction as the agent received it.
-    """
-    for step in trajectory.steps:
-        if isinstance(step.output, EnvironmentOutput):
-            texts = [
-                content.data
-                for content in step.output.obs.contents
-                if isinstance(getattr(content, "data", None), str)
-            ]
-            return "\n".join(texts) if texts else None
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Public models
 # ---------------------------------------------------------------------------
@@ -195,42 +181,21 @@ class UsageSummary(TypedBaseModel):
 
 
 class AgentInfo(TypedBaseModel):
-    """Complete agent descriptor for Atlas embedding and reproducibility.
+    """Agent descriptor for Atlas embedding and reproducibility.
 
-    Designed for maximum downstream utility: includes structured fields (config, tools,
-    versions) that can be queried or used to synthesize a prose description for LLM
-    embedding, without requiring access to the agent's source code.
+    Tools are NOT included here — they vary per episode due to task-level action filtering.
+    See EpisodeRecord.tool_names for the per-episode tool list.
     """
 
-    # Identity
-    agent_id: str = Field(
-        description="SHA-256 of the serialized agent config — stable unique identifier across runs."
-    )
-
-    # Config (structured, queryable)
+    agent_id: str = Field(description="SHA-256 of the serialized agent config — stable unique identifier across runs.")
     config_type: str = Field(description="Agent config class name (from _type discriminator field).")
     config: dict = Field(description="Full serialized agent config (model_dump with serialize_as_any=True).")
     llm_model: str | None = Field(default=None, description="LLM model name extracted from config.")
-
-    # Capabilities — populated per-episode from the action set given to this agent.
-    # The same agent gets different tools on different tasks; these reflect THIS episode.
-    tools: list[dict] = Field(
-        default_factory=list,
-        description="Full action schemas in litellm function-call format (type, function.name, description, parameters).",
-    )
-    tool_names: list[str] = Field(
-        default_factory=list,
-        description="Action names for quick lookup — derived from tools.",
-    )
-
-    # Runtime environment
     framework_version: str = Field(description="cube-harness version at eval time.")
     dependency_versions: dict[str, str] = Field(
         default_factory=dict,
-        description="Installed versions of key packages (cube-harness, litellm, anthropic, openai, ...).",
+        description="Installed versions of tracked packages (cube-harness, litellm, anthropic, openai, ...).",
     )
-
-    # Code provenance — enables Atlas to link records to an exact, auditable code state.
     git_commit: str | None = Field(default=None, description="Git SHA-1 of the repo HEAD at eval time.")
     git_remote_url: str | None = Field(
         default=None,
@@ -243,32 +208,21 @@ class AgentInfo(TypedBaseModel):
             "from git_commit alone. None when git info is unavailable."
         ),
     )
-
-    # Optional prose — intended for Atlas LLM embedding warm-start.
-    # Can be human-authored or synthesized from the structured fields above.
     description: str | None = Field(
         default=None,
-        description=(
-            "Free-form prose description of the agent (e.g. 'ReAct agent using gpt-4o, "
-            "browser tools, no memory, 16k context window'). "
-            "Used by Atlas to embed the agent in latent space via a frontier LLM."
-        ),
+        description="Free-form prose description of the agent for Atlas LLM embedding warm-start.",
     )
 
     @classmethod
     def from_agent_config(
         cls,
         agent_config: Any,
-        action_schemas: list[dict] | None = None,
         git_cwd: str | None = None,
     ) -> "AgentInfo":
-        """Build AgentInfo from a serialized agent config.
+        """Build AgentInfo from an agent config object.
 
         Args:
             agent_config: Any AgentConfig (TypedBaseModel subclass).
-            action_schemas: Pre-serialized action schemas in litellm format, as stored
-                            in trajectory.metadata["action_schemas"]. If provided, no
-                            task instantiation is needed to capture capabilities.
             git_cwd: Working directory for git commands. Defaults to CWD.
         """
         harness_version = _get_package_version("cube-harness") or "unknown"
@@ -276,8 +230,6 @@ class AgentInfo(TypedBaseModel):
         agent_id = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()
         config_type = config_dict.get("_type", type(agent_config).__name__)
         llm_model = _extract_llm_model(config_dict)
-        tools = action_schemas or []
-        tool_names = _extract_tool_names(tools)
         git_commit, git_remote_url, git_is_dirty = _get_git_info(cwd=git_cwd)
 
         return cls(
@@ -285,8 +237,6 @@ class AgentInfo(TypedBaseModel):
             config_type=config_type,
             config=config_dict,
             llm_model=llm_model,
-            tools=tools,
-            tool_names=tool_names,
             framework_version=harness_version,
             dependency_versions=_collect_dependency_versions(),
             git_commit=git_commit,
@@ -294,167 +244,141 @@ class AgentInfo(TypedBaseModel):
             git_is_dirty=git_is_dirty,
         )
 
-    def with_action_schemas(self, action_schemas: list[dict]) -> "AgentInfo":
-        """Return a copy of this AgentInfo with the given action schemas applied."""
-        return self.model_copy(update={"tools": action_schemas, "tool_names": _extract_tool_names(action_schemas)})
 
+class BenchmarkSubset(TypedBaseModel):
+    """Benchmark subset descriptor for MNAR propensity correction.
 
-class TaskInfo(TypedBaseModel):
-    """Complete task descriptor for Atlas embedding and reproducibility.
-
-    Covers both the benchmark-level context (name, version, authors) and the specific
-    task instance (id, seed, split, description). The first_observation_text field
-    carries the actual instruction the agent saw — crucial for Atlas task embedding.
+    Automatically derived from the benchmark object. The name field captures any subset
+    suffix applied via subset_from_glob (e.g., "[level=l1]") or subset_from_list.
+    n_tasks is the denominator for computing completion rate without requiring the benchmark.
     """
 
-    # Benchmark identity
-    benchmark_id: str = Field(description="Stable machine-readable benchmark identifier (lowercased name).")
-    benchmark_name: str = Field(description="Human-readable benchmark name (from BenchmarkMetadata).")
-    benchmark_version: str | None = Field(default=None, description="Benchmark version string.")
-    benchmark_description: str | None = Field(default=None, description="Benchmark description.")
-    benchmark_authors: list[str] = Field(default_factory=list, description="Benchmark author names.")
-    benchmark_tags: list[str] = Field(
-        default_factory=list, description="Benchmark tags (domain, modality, difficulty, etc.)."
-    )
-
-    # Task identity
-    task_id: str = Field(description="Unique task identifier within the benchmark.")
-    task_version_hash: str | None = Field(
+    name: str = Field(description="Benchmark name including any subset suffix (benchmark_metadata.name).")
+    n_tasks: int = Field(description="Total tasks in this subset — denominator for completion rate.")
+    filter: str | None = Field(
         default=None,
-        description=(
-            "SHA-256 of the serialized TaskConfig JSON. Detects task drift: if a benchmark update "
-            "silently changes a task, the hash changes and Atlas can flag the record as stale."
-        ),
-    )
-    seed: int | None = Field(default=None, description="Random seed for this task instance.")
-    split: str | None = Field(default=None, description="Dataset split: 'train', 'val', or 'test'.")
-
-    # Task description (layered, as Atlas specifies)
-    abstract_description: str | None = Field(
-        default=None,
-        description=(
-            "Broad task description from TaskMetadata.abstract_description — for searching and "
-            "filtering only. Not the specific goal shown to the agent."
-        ),
-    )
-    first_observation_text: str | None = Field(
-        default=None,
-        description=(
-            "Text content of the first observation as the agent received it — the actual task "
-            "instruction. This is the primary field for Atlas task embedding."
-        ),
-    )
-    recommended_max_steps: int | None = Field(
-        default=None, description="Benchmark-recommended step budget for this task."
-    )
-    extra_info: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Additional task metadata from TaskMetadata.extra_info (difficulty, domain, etc.).",
+        description="Glob expression if the subset was created via subset_from_glob.",
     )
 
     @classmethod
-    def from_trajectory_and_metadata(
+    def from_benchmark(cls, benchmark: Any) -> "BenchmarkSubset":
+        """Derive BenchmarkSubset from a cube Benchmark object."""
+        bm_metadata = getattr(benchmark, "benchmark_metadata", None)
+        name = bm_metadata.name if bm_metadata else "unknown"
+        n_tasks = len(getattr(benchmark, "task_metadata", {}))
+        return cls(name=name, n_tasks=n_tasks)
+
+
+class JudgeConfig(TypedBaseModel):
+    """Configuration of the LLM judge used for post-hoc episode assessment."""
+
+    model: str = Field(description="Judge model identifier (e.g. 'claude-opus-4-7').")
+    prompt_version: str = Field(description="Version or hash of the judge prompt template.")
+    judged_at: str | None = Field(default=None, description="ISO-8601 timestamp when judging was run.")
+
+
+class JudgeOutput(TypedBaseModel):
+    """Per-episode assessment from a post-hoc LLM judge."""
+
+    difficulty: str | None = Field(default=None, description="Estimated task difficulty (free-form or enum).")
+    feasible: bool | None = Field(default=None, description="Whether the task was deemed completable by the judge.")
+    failure_root_cause: str | None = Field(default=None, description="Short description of why the agent failed.")
+
+
+class Verifier(TypedBaseModel):
+    """Task verifier reference for reproducibility and post-hoc inspection."""
+
+    ref: str | None = Field(
+        default=None,
+        description="Permanent GitHub URL pointing to the verifier function at the exact commit.",
+    )
+    source: str | None = Field(
+        default=None,
+        description="Verifier source code at eval time (for auditing without git access).",
+    )
+
+
+class ExperimentRecord(TypedBaseModel):
+    """Experiment-level record. Written once to experiment_record.json.
+
+    Contains all fields shared across every episode: agent description, benchmark
+    metadata, git provenance. EpisodeRecord links to this via experiment_id.
+    """
+
+    experiment_id: str = Field(description="SHA-256(experiment_name + output_dir)[:16] — stable within a run.")
+    experiment_name: str = Field(description="Experiment name as set in Experiment.name.")
+    timestamp: float = Field(description="Experiment export time as Unix timestamp.")
+    framework_version: str = Field(description="cube-harness version.")
+    agent: AgentInfo = Field(description="Agent descriptor (config, dependency versions, git provenance).")
+    benchmark_name: str = Field(description="Benchmark name from benchmark_metadata.name.")
+    benchmark_version: str | None = Field(default=None, description="Benchmark version string.")
+    benchmark_subset: BenchmarkSubset = Field(description="Subset descriptor for MNAR propensity correction.")
+    judge_config: JudgeConfig | None = Field(
+        default=None,
+        description="Judge configuration if a post-hoc LLM judge was run on these episodes.",
+    )
+
+    @classmethod
+    def from_experiment(
         cls,
-        trajectory: Trajectory,
-        benchmark_metadata: Any | None = None,
-        task_metadata: Any | None = None,
-        task_config: Any | None = None,
-    ) -> "TaskInfo":
-        """Build TaskInfo from a completed trajectory and optional rich metadata.
-
-        Args:
-            trajectory: Completed episode trajectory (provides task_id, first obs text).
-            benchmark_metadata: cube.benchmark.BenchmarkMetadata (provides name, version, ...).
-            task_metadata: cube.task.TaskMetadata for this task (provides split, description, ...).
-            task_config: cube.task.TaskConfig for this episode (provides seed, content hash).
-        """
-        task_id: str = trajectory.metadata.get("task_id", "")
-
-        if benchmark_metadata is not None:
-            bm_name: str = benchmark_metadata.name
-            bm_id: str = bm_name.lower().replace(" ", "-").replace("+", "plus")
-            bm_version: str | None = benchmark_metadata.version
-            bm_description: str | None = benchmark_metadata.description
-            bm_authors: list[str] = list(benchmark_metadata.authors)
-            bm_tags: list[str] = list(benchmark_metadata.tags)
-        else:
-            bm_name = trajectory.metadata.get("benchmark_name", "unknown")
-            bm_id = bm_name.lower().replace(" ", "-")
-            bm_version = None
-            bm_description = None
-            bm_authors = []
-            bm_tags = []
-
-        split: str | None = None
-        abstract_description: str | None = None
-        recommended_max_steps: int | None = None
-        extra_info: dict[str, Any] = {}
-        if task_metadata is not None:
-            split = task_metadata.split
-            abstract_description = task_metadata.abstract_description or None
-            recommended_max_steps = task_metadata.recommended_max_steps
-            extra_info = dict(task_metadata.extra_info)
-
-        task_version_hash: str | None = None
-        seed: int | None = None
-        if task_config is not None:
-            task_version_hash = hashlib.sha256(
-                task_config.model_dump_json(serialize_as_any=True).encode()
-            ).hexdigest()
-            seed = task_config.seed
+        exp_name: str,
+        output_dir: Path,
+        agent_config: Any,
+        benchmark: Any,
+        git_cwd: str | None = None,
+    ) -> "ExperimentRecord":
+        """Build ExperimentRecord from experiment parameters."""
+        experiment_id = hashlib.sha256(f"{exp_name}{output_dir}".encode()).hexdigest()[:16]
+        harness_version = _get_package_version("cube-harness") or "unknown"
+        agent_info = AgentInfo.from_agent_config(agent_config, git_cwd=git_cwd)
+        bm_metadata = getattr(benchmark, "benchmark_metadata", None)
+        bm_name = bm_metadata.name if bm_metadata else "unknown"
+        bm_version = getattr(bm_metadata, "version", None) if bm_metadata else None
 
         return cls(
-            benchmark_id=bm_id,
+            experiment_id=experiment_id,
+            experiment_name=exp_name,
+            timestamp=time.time(),
+            framework_version=harness_version,
+            agent=agent_info,
             benchmark_name=bm_name,
             benchmark_version=bm_version,
-            benchmark_description=bm_description,
-            benchmark_authors=bm_authors,
-            benchmark_tags=bm_tags,
-            task_id=task_id,
-            task_version_hash=task_version_hash,
-            seed=seed,
-            split=split,
-            abstract_description=abstract_description,
-            first_observation_text=_extract_first_observation_text(trajectory),
-            recommended_max_steps=recommended_max_steps,
-            extra_info=extra_info,
+            benchmark_subset=BenchmarkSubset.from_benchmark(benchmark),
         )
 
 
-class TaskEvalRecord(TypedBaseModel):
-    """Complete evaluation record for one agent-task episode.
+class EpisodeRecord(TypedBaseModel):
+    """Episode-level record. One line per episode in eval_log.jsonl.
 
-    Compatible with Project ATLAS TaskEvalRecord schema. The on-disk format is plain
-    JSON (JSONL), consumable by any framework without a cube-harness dependency.
-
-    Field groups follow the ATLAS design:
-        task        — what was evaluated
-        agent       — who evaluated it
-        outcome     — how it went (reward, errors)
-        trajectory  — execution summary (steps, tokens, time)
-        provenance  — when, where, with what framework version
+    Links to ExperimentRecord via experiment_id. Contains all episode-specific fields:
+    task identity, per-episode tool list, outcome, usage, and optional judge output.
     """
 
-    # Nested descriptors
-    task: TaskInfo
-    agent: AgentInfo
-
-    # Outcome
-    success: bool = Field(description="True when final reward > 0.")
-    reward: float = Field(description="Final reward from the last EnvironmentOutput.")
-    reward_breakdown: dict = Field(
-        default_factory=dict,
-        description="Full reward_info dict from the trajectory (may include sub-goal scores, done flag, etc.).",
-    )
-    error_type: str | None = Field(
+    experiment_id: str = Field(description="FK to ExperimentRecord.experiment_id.")
+    task_id: str = Field(description="Unique task identifier within the benchmark.")
+    task_version_hash: str | None = Field(
         default=None,
+        description="SHA-256 of TaskConfig JSON. Detects task drift across benchmark versions.",
+    )
+    seed: int | None = Field(default=None, description="Random seed for this task instance.")
+    split: str | None = Field(default=None, description="Dataset split: 'train', 'val', or 'test'.")
+    task_description: str | None = Field(
+        default=None,
+        description="Abstract task description from TaskMetadata.abstract_description.",
+    )
+    tool_names: list[str] = Field(
+        default_factory=list,
         description=(
-            "Exception class name if any step raised an error (e.g. 'TimeoutError', 'ValueError'). "
-            "None for clean episodes (even if reward=0)."
+            "Action names available during this episode. Episode-specific: same agent gets "
+            "different tools on different tasks due to task-level action filtering."
         ),
     )
-
-    # Trajectory summary
+    success: bool = Field(description="True when final reward > 0.")
+    reward: float = Field(description="Final reward from the last EnvironmentOutput.")
+    error_type: str | None = Field(
+        default=None,
+        description="Exception class name if any step raised an error. None for clean episodes.",
+    )
     n_steps: int = Field(description="Total trajectory steps (agent + env combined).")
     n_agent_steps: int = Field(description="Agent steps (LLM decision turns).")
     n_env_steps: int = Field(description="Environment steps (tool executions).")
@@ -463,35 +387,30 @@ class TaskEvalRecord(TypedBaseModel):
         default_factory=UsageSummary,
         description="Aggregated LLM token usage and cost for the episode.",
     )
-
-    # Provenance
-    run_id: str = Field(description="Unique run identifier: '{exp_name}_{trajectory_id}'.")
     trajectory_id: str = Field(description="Trajectory ID as stored on disk.")
     timestamp: float = Field(description="Episode start time as Unix timestamp.")
-    framework_version: str = Field(description="cube-harness version.")
-
-    # MNAR bias correction — required for ATLAS community submissions.
-    # motivation: why this run was submitted ("capability_probe"|"leaderboard"|"training_data"|"debugging")
-    # task_selection_method: how tasks were chosen ("random"|"difficulty_stratified"|"domain_filtered"|"cherry_picked")
-    # compute_budget: how much was run ("full_benchmark"|"partial"|"targeted")
-    declaration: dict = Field(
-        default_factory=dict,
-        description=(
-            "Self-reported selection intent for MNAR bias correction. "
-            "Required for ATLAS community submissions; omit for local use."
-        ),
+    verifier: Verifier | None = Field(
+        default=None,
+        description="Task verifier reference for reproducibility and post-hoc inspection.",
+    )
+    judge_output: JudgeOutput | None = Field(
+        default=None,
+        description="Per-episode LLM judge assessment (difficulty, feasibility, failure root cause).",
     )
 
     @classmethod
     def from_trajectory(
         cls,
         trajectory: Trajectory,
-        agent_info: AgentInfo,
-        task_info: TaskInfo,
-        exp_name: str = "",
-    ) -> "TaskEvalRecord":
-        """Assemble a TaskEvalRecord from a completed trajectory and pre-built info objects."""
-        harness_version = _get_package_version("cube-harness") or "unknown"
+        experiment_id: str,
+        task_metadata: Any | None = None,
+        task_config: Any | None = None,
+    ) -> "EpisodeRecord":
+        """Assemble an EpisodeRecord from a completed trajectory."""
+        task_id = trajectory.metadata.get("task_id", "")
+        action_schemas: list[dict] = trajectory.metadata.get("action_schemas", [])
+        tool_names = _extract_tool_names(action_schemas)
+
         last_env = trajectory.last_env_step()
         reward = last_env.reward
         stats = trajectory.summary_stats or {}
@@ -500,66 +419,85 @@ class TaskEvalRecord(TypedBaseModel):
         if trajectory.start_time is not None and trajectory.end_time is not None:
             wall_time_s = trajectory.end_time - trajectory.start_time
 
+        task_version_hash: str | None = None
+        seed: int | None = None
+        if task_config is not None:
+            task_version_hash = hashlib.sha256(
+                task_config.model_dump_json(serialize_as_any=True).encode()
+            ).hexdigest()
+            seed = getattr(task_config, "seed", None)
+
+        split: str | None = None
+        task_description: str | None = None
+        if task_metadata is not None:
+            split = getattr(task_metadata, "split", None)
+            task_description = getattr(task_metadata, "abstract_description", None) or None
+
         return cls(
-            task=task_info,
-            agent=agent_info,
+            experiment_id=experiment_id,
+            task_id=task_id,
+            task_version_hash=task_version_hash,
+            seed=seed,
+            split=split,
+            task_description=task_description,
+            tool_names=tool_names,
             success=reward > 0,
             reward=reward,
-            reward_breakdown=dict(trajectory.reward_info),
             error_type=_extract_error_type(trajectory),
             n_steps=len(trajectory.steps),
             n_agent_steps=stats.get("n_agent_steps", trajectory.n_agent_steps),
             n_env_steps=stats.get("n_env_steps", trajectory.n_env_steps),
             wall_time_s=wall_time_s,
             usage=UsageSummary.from_summary_stats(stats),
-            run_id=f"{exp_name}_{trajectory.id}" if exp_name else trajectory.id,
             trajectory_id=trajectory.id,
             timestamp=trajectory.start_time or 0.0,
-            framework_version=harness_version,
         )
 
 
 class EvalLog(TypedBaseModel):
-    """Collection of TaskEvalRecords with JSONL serialization.
+    """Two-level eval log container with JSONL serialization.
 
-    The JSONL format (one JSON object per line) is the Atlas-compatible wire format.
-    Each line is a self-contained TaskEvalRecord — no schema header, no envelope.
-    Other frameworks read/write the same format without any cube-harness dependency.
+    Experiment-level data goes to experiment_record.json (written once).
+    Episode-level data goes to eval_log.jsonl (one JSON object per line).
 
-    For large experiments, prefer append_record() (streaming) over save_jsonl()
-    (in-memory) to avoid materializing all records at once.
+    Both files are plain JSON, readable by any framework without a cube-harness dependency.
     """
 
-    records: list[TaskEvalRecord] = Field(default_factory=list)
+    experiment: ExperimentRecord
+    episodes: list[EpisodeRecord] = Field(default_factory=list)
 
-    def save_jsonl(self, path: Path) -> None:
-        """Write all records to a JSONL file (one JSON object per line)."""
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            for record in self.records:
+    def save(self, output_dir: Path) -> None:
+        """Write experiment_record.json and eval_log.jsonl to output_dir."""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        exp_path = output_dir / "experiment_record.json"
+        exp_path.write_text(self.experiment.model_dump_json(indent=2))
+        episodes_path = output_dir / "eval_log.jsonl"
+        with open(episodes_path, "w") as f:
+            for record in self.episodes:
                 f.write(record.model_dump_json() + "\n")
-        logger.info(f"Saved {len(self.records)} eval records to {path}")
+        logger.info(f"Saved experiment record to {exp_path}")
+        logger.info(f"Saved {len(self.episodes)} episode records to {episodes_path}")
 
     @classmethod
-    def load_jsonl(cls, path: Path) -> "EvalLog":
-        """Load all records from a JSONL file."""
-        path = Path(path)
-        records = []
-        with open(path) as f:
+    def load(cls, output_dir: Path) -> "EvalLog":
+        """Load experiment_record.json and eval_log.jsonl from output_dir."""
+        output_dir = Path(output_dir)
+        experiment = ExperimentRecord.model_validate_json((output_dir / "experiment_record.json").read_text())
+        episodes: list[EpisodeRecord] = []
+        with open(output_dir / "eval_log.jsonl") as f:
             for line in f:
                 line = line.strip()
                 if line:
-                    records.append(TaskEvalRecord.model_validate_json(line))
-        return cls(records=records)
+                    episodes.append(EpisodeRecord.model_validate_json(line))
+        return cls(experiment=experiment, episodes=episodes)
 
     @staticmethod
-    def append_record(record: TaskEvalRecord, path: Path) -> None:
-        """Append a single record to a JSONL file (streaming mode).
+    def append_episode(record: EpisodeRecord, path: Path) -> None:
+        """Append a single EpisodeRecord to a JSONL file (streaming mode).
 
-        Suitable for writing records immediately after each episode without holding
-        the full log in memory. Not safe for concurrent multi-process writes without
-        external file locking.
+        Suitable for writing records immediately after each episode without holding the full
+        log in memory. Not safe for concurrent multi-process writes without external file locking.
         """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
