@@ -562,3 +562,25 @@ to approximately 35-40% on the evaluated task set. Major drivers:
 - --no-header removal → fixes older pytest containers (astropy 2018-era)
 - test-file modification guard → fixes tasks where agent wrote test code
 - sympy p2p exceptions fix → fixes ~5-10 sympy tasks with pre-existing container issues
+
+## Iteration 21 — 2026-04-29 — Pre-provision images to fix Docker Hub rate limit crashes
+
+**Tasks**: 500-task overnight run (20260428 session) — 302/500 workers crashed with `WorkerDied`
+
+**What the agent saw**: Logs showed `toomanyrequests: You have reached your unauthenticated pull rate limit` and `unauthorized: authentication required` — 273+ rate-limit errors.
+
+**Root cause**: All 500 Ray workers started simultaneously. Each checked ProvisionStore (empty on first run) → all called `docker pull` concurrently → Docker Hub anonymous limit (100/6h) hit after ~100 pulls. `subprocess.run([...], check=True)` in `_provision_docker_service()` raised `CalledProcessError` → Ray marked workers as `WorkerDied`. Not a missing-images problem — all 500 images exist on Docker Hub and pull successfully when done sequentially.
+
+**Hypothesis**: Pre-pulling all images sequentially in `_setup()` before Ray workers start will eliminate all per-worker Docker Hub hits. Workers find ProvisionStore entries and skip provisioning entirely.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/benchmark.py`):
+- Added `prefetch_images: bool = True` field on `SWEBenchVerifiedBenchmark`
+- Added `_prefetch_images()` method: iterates all task images, skips already-provisioned ones (ProvisionStore idempotency), pulls sequentially, writes to ProvisionStore
+- Added `_pull_with_retry()` module-level function: exponential backoff (30s, 60s, 120s…) on 429 responses; raises immediately on other errors; graceful skip so one bad image doesn't abort the whole pre-pull
+- Added `_log_docker_auth_status()`: warns if `~/.docker/config.json` has no Docker Hub credentials (anonymous = 100/6h, free = 200/6h, paid = unlimited)
+- No changes to `cube-standard` required
+
+**Auth UX**: Users log in with `docker login` (or `podman login docker.io`). Credentials stored in `~/.docker/config.json`. Rate limit improves from 100→200/6h (free). The real win is sequential pre-pull: subsequent runs benefit from ProvisionStore cache with zero Docker Hub hits regardless of auth.
+
+**Result**: 302 `WorkerDied` → expected 0 on next run (pre-pull handles all images before workers start)
+**Control set**: n/a (infra fix, not agent fix — no accuracy change expected)
