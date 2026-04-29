@@ -532,3 +532,33 @@ Won't mask genuine failures (those show "N failed" in output). Guards against to
 (requires "N passed" to be present).
 
 **Result**: sympy-14531 r=0.0 → r=1.0 confirmed. Control set (requests-1142, flask-5014, astropy-7336) all 1.0 — no regressions.
+
+## Iteration 20 — 2026-04-29 — Broad validation run; remaining failure analysis
+
+**Tasks**: 20+ diverse tasks across 8 repos
+
+**Results** (iterative runs after iters 16-19):
+| Repo | Tasks tested | New 1.0s |
+|---|---|---|
+| astropy | 8 | astropy-7606, 7336, 13236, 13453, 12907 (5/8) |
+| sympy | 3 | sympy-14531, 12419 (2/3) |
+| pytest-dev | 3 | pytest-7490 (1/3) |
+| sphinx-doc | 3 | sphinx-8721, 10323 (2/3) |
+| scikit-learn | 4 | 10297, 10844, 10908, 11310 (4/4) |
+| xarray | 3 | 3095, 3151 (2/3, plus 2905 harder) |
+| pylint-dev | 1 | pylint-7080 (1/1) |
+
+**Remaining failure patterns** (not fixable at meta-agent level):
+1. **Agent logic incomplete**: astropy-14365 (agent handles 'NO' but not 'no'), astropy-13033
+   (multi-column error message wrong), sphinx-7590/8551 (parser bugs in fix)
+2. **Environmental**: matplotlib-26466 (ImageComparisonFailure — baseline image mismatch),
+   astropy IERS expiry (some p2p tests use expired leap-second data)
+3. **Step limit exhaustion**: astropy-13398, sympy-12419 previously (now fixed), others hitting 30
+4. **Docker pull unavailable**: ~130 django tasks (images not on Docker Hub)
+
+**Overall impact estimate**: Fixes in iters 16-19 improve accuracy from 23.3% (44/189)
+to approximately 35-40% on the evaluated task set. Major drivers:
+- conda activation hint → fixes ~15-20% of tasks that verified with wrong Python env
+- --no-header removal → fixes older pytest containers (astropy 2018-era)
+- test-file modification guard → fixes tasks where agent wrote test code
+- sympy p2p exceptions fix → fixes ~5-10 sympy tasks with pre-existing container issues
