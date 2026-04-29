@@ -57,11 +57,18 @@ The existing test suite will pass before your fix — that is expected. \
 Do NOT call final_step just because existing tests pass. \
 Only call final_step after you have actually modified the source code to resolve the issue.
 
-Before calling final_step, verify your fix by running the relevant tests:
-- Django projects: cd /testbed && ./tests/runtests.py --verbosity 2 <test_module>
-  (e.g. ./tests/runtests.py validators for validators tests). Do NOT use "python -m unittest" directly.
-- SymPy projects: cd /testbed && ./bin/test <path/to/test_file.py>
-- Other Python projects: cd /testbed && python -m pytest <test_path> -x -q
+Before calling final_step, verify your fix by running the relevant tests.
+IMPORTANT: All test dependencies are in the conda 'testbed' environment — always prefix with
+`conda run -n testbed` or activate first: `. /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed`
+- Django projects: cd /testbed && conda run -n testbed python -m pytest tests/<module> -x -q
+  (older Django: ./tests/runtests.py --verbosity 2 <test_module>). Do NOT use "python -m unittest" directly.
+- SymPy projects: cd /testbed && conda run -n testbed bin/test <path/to/test_file.py>
+- Other Python projects: cd /testbed && conda run -n testbed python -m pytest <test_path> -x -q
+Never use bare `python -m pytest` — the base Python lacks test dependencies.
+
+IMPORTANT: Do NOT modify test files (files under tests/ or with test_ prefix). \
+The evaluation framework applies its own test patch during evaluation. \
+Only modify source code files to fix the bug.
 
 IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 

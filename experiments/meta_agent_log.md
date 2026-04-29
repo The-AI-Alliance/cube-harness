@@ -436,3 +436,71 @@ Django PYTHONIOENCODING is a no-op on UTF-8 locales; harmless elsewhere.
 - django-10880: r=0.0 → r=1.0 (pending — new run uses old code; verification run needed)
 
 **Control set**: requests-1142 ✓, flask-5014 pending.
+
+## Iteration 16 — 2026-04-28/29 — Full 500-task run; docker pull failures; conda activation missing
+
+**Tasks**: Full 500-task SWE-bench Verified run (local Podman, 10 workers, azure/gpt-5.4)
+
+**What we observed**:
+- 490/500 processed, 189 evaluated, 301 failed on `docker pull` (subprocess.CalledProcessError)
+- Accuracy on evaluated tasks: 23.3% (44/189), total cost: $67.01, wall-clock ~90 min
+- All 301 pull failures are django tasks: images `django-7530`, `django-9296`, `django-12304`,
+  `django-15xxx+` are not on Docker Hub. ~130/231 django tasks unreachable locally.
+- Among evaluated failures: agent repeatedly failed because it used bare `python -m pytest` to
+  verify fixes. In SWE-bench containers, test deps live only in conda 'testbed' env;
+  `/opt/miniconda3/bin/python` (the base Python) lacks pytest and all project deps.
+  Agent verified fix passed, called final_step → eval ran tests via `conda run -n testbed` and
+  tests failed because agent never actually verified the fix in the right environment.
+
+**Fix** (`recipes/hello_swebench_verified.py` — `SWE_SYSTEM_PROMPT`):
+Add explicit conda activation guidance:
+- "All test dependencies are in the conda 'testbed' environment — always prefix with `conda run -n
+  testbed` or activate first"
+- Per-framework commands all use `conda run -n testbed python -m pytest`
+- "Never use bare `python -m pytest` — the base Python lacks test dependencies."
+
+**Result**: Confirmed on requests-1142 and astropy-7606 — agents now use correct conda env.
+
+**Docker pull gap**: Not fixable locally. Affects ~130 django tasks. Full coverage requires
+pulling images from a registry that has them, or running on infra where images are pre-fetched.
+
+## Iteration 17 — 2026-04-29 — `--no-header` fails on older pytest containers (astropy ~2018)
+
+**Tasks**: `astropy__astropy-7606`, `astropy__astropy-7336`
+
+**What we observed**: Iteration 13 added a special case for `pytest-dev` repos to omit `--no-header`,
+but the general path still used `--no-header`. Old SWE-bench containers for astropy (2018 era) ship
+pytest 3.x which doesn't support `--no-header` at all. Eval command:
+`python -m pytest --no-header -rN -p no:cacheprovider tests/...` exited 4 with
+`pytest.py: error: unrecognized arguments: --no-header`, so all astropy tasks were penalised as
+eval failures regardless of agent fix quality.
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/task.py`, `_build_test_cmd`):
+Remove `--no-header` from the default pytest command entirely. It was added for cleaner output;
+the flag isn't needed for pass/fail detection (we use exit code + sentinel).
+
+**Result**: `astropy__astropy-7606` r=0.0 → r=1.0 confirmed. `astropy__astropy-7336` pending.
+
+## Iteration 18 — 2026-04-29 — Agent modifies test files; conflicts with eval's test_patch
+
+**Tasks**: `astropy__astropy-7336`
+
+**What we observed**: astropy-7336 requires guarding `-> None` return annotation in
+`astropy/units/decorators.py`. Agent correctly added `or wrapped_signature.return_annotation is None`
+to the guard condition. But agent also added new test cases to `py3_test_quantity_annotations.py`
+(file name used in Python 2 era). The eval `test_patch` renames this file to
+`test_quantity_annotations.py` with different content. The merge resulted in
+`SyntaxError: EOF while scanning triple-quoted string literal` at line 248 of the renamed file.
+
+**Root cause**: Agent modified a test file; eval's `test_patch` applies its own version of the same
+test file. The merged file (agent additions + test_patch content) had a truncated triple-quoted string.
+
+**Hypothesis**: Agents modifying test files is a general antipattern for SWE-bench: the task is to
+fix source code, and the eval always applies its own authoritative test_patch. Any agent additions
+to test files will conflict.
+
+**Fix** (`recipes/hello_swebench_verified.py` — `SWE_SYSTEM_PROMPT`):
+Add: "Do NOT modify test files (files under tests/ or with test_ prefix). The evaluation framework
+applies its own test patch during evaluation. Only modify source code files to fix the bug."
+
+**Result**: `astropy__astropy-7336` r=0.0 → r=1.0 confirmed (15 steps, reward=1.0).

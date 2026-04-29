@@ -216,12 +216,9 @@ class SWEBenchVerifiedTask(Task):
         if "sympy" in repo:
             tests = " ".join(shlex.quote(t) for t in test_directives)
             return f"bin/test -C --verbose {tests}"
-        if "pytest-dev" in repo:
-            # Old pytest versions inside the testbed don't support --no-header
-            tests = " ".join(shlex.quote(t) for t in test_directives)
-            return f"python -m pytest -rN -p no:cacheprovider {tests}"
         tests = " ".join(shlex.quote(t) for t in test_directives)
-        return f"python -m pytest --no-header -rN -p no:cacheprovider {tests}"
+        # --no-header requires pytest>=6.0; many SWE-bench containers ship older versions.
+        return f"python -m pytest -rN -p no:cacheprovider {tests}"
 
 
 class SWEBenchVerifiedTaskConfig(TaskConfig):
