@@ -102,8 +102,8 @@ class SWEBenchTool(Tool):
             line_end: Last line to return (1-indexed, inclusive). Omit to read to the end.
         """
         if line_start is not None or line_end is not None:
-            start = max(1, line_start or 1)
-            end = str(line_end) if line_end is not None else "$"
+            start = max(1, int(line_start) if line_start is not None else 1)
+            end = str(int(line_end)) if line_end is not None else "$"
             cmd = f"sed -n '{start},{end}p' {shlex.quote(path)}"
         else:
             cmd = f"cat {shlex.quote(path)}"

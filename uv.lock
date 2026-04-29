@@ -648,6 +648,7 @@ dependencies = [
     { name = "browsergym-core" },
     { name = "cube-browser-playwright" },
     { name = "cube-standard" },
+    { name = "docker" },
     { name = "litellm" },
     { name = "mcp", extra = ["cli"] },
     { name = "msgpack" },
@@ -690,6 +691,7 @@ requires-dist = [
     { name = "browsergym-core", specifier = ">=0.14.3" },
     { name = "cube-browser-playwright", specifier = ">=0.2.0" },
     { name = "cube-standard", specifier = ">=0.1.0rc5" },
+    { name = "docker", specifier = ">=7.1.0" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
     { name = "litellm", specifier = "~=1.80.8" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.26" },
@@ -723,7 +725,7 @@ dev = [
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc5"
+version = "0.1.0rc6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -737,9 +739,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ba/c8/ddd9a01183f67586e3ec57159a789e266952e538473f1b0557078e46984c/cube_standard-0.1.0rc5.tar.gz", hash = "sha256:e47ae233dbd46cee215139b914669a175c6824da8ab9a43818a2ab139c84c751", size = 97233, upload-time = "2026-04-20T19:41:20.191Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/2f/edbd8d5fbe604209d5df7b0a3ac6e5122c1e4df4c0a2408dc4e9801d7f01/cube_standard-0.1.0rc6.tar.gz", hash = "sha256:b4d26eb0a6f6078b8b788759fe9c5b6d22bbaaf4ecb762951eccd504ab47cf11", size = 101612, upload-time = "2026-04-24T02:34:32.432Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4a/5b/12b3fd4ee17eca55c5a22aaf73de57bf8730fde68107aff48c86dab61bbe/cube_standard-0.1.0rc5-py3-none-any.whl", hash = "sha256:e1eaa809f8dce4e51639435d950185735dcc9a541455d4a2fcc917d8b4e1fa9d", size = 117258, upload-time = "2026-04-20T19:41:18.65Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/b9/2bf11d1a1f8acef016b4d108c0fa9e7fe90cfc90ba7f9794581fecedaa39/cube_standard-0.1.0rc6-py3-none-any.whl", hash = "sha256:78c7dda410a432788b8026f64789abdf6eb8cee2b32fdea9f3fa39183f54fd51", size = 121360, upload-time = "2026-04-24T02:34:31.177Z" },
 ]
 
 [[package]]
@@ -792,6 +794,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
+]
+
+[[package]]
+name = "docker"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
 ]
 
 [[package]]
