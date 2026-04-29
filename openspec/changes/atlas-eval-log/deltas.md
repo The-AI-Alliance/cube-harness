@@ -6,21 +6,24 @@ Changes against current specs in `openspec/specs/`.
 
 ## `episode/spec.md`
 
-### MODIFIED — `Episode._run_loop`
+### MODIFIED — `Episode.run` and `Episode._run_loop`
 
-After `agent = self.config.agent_config.make(action_set)`, add:
+`Episode.run` collects action schemas immediately after the agent is constructed and
+passes them via the `extra_metadata` parameter:
 
 ```python
-action_schemas = [a.as_dict() for a in action_set]
+extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
+return self._run_loop(setup_fn, step_fn, close_fn, agent, extra_metadata=extra_metadata)
 ```
 
-Add `"action_schemas": action_schemas` to `trajectory.metadata`:
+`_run_loop` accepts `extra_metadata: dict | None = None` and merges it into
+`trajectory.metadata`:
 
 ```python
 metadata={
     "task_id": task_id,
     "agent_name": agent_name,
-    "action_schemas": action_schemas,    # ← ADDED
+    **(extra_metadata or {}),    # ← injects action_schemas
     **env_output.info,
 },
 ```

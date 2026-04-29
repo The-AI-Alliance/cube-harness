@@ -37,7 +37,7 @@ Three concrete gaps:
   can be built post-hoc without re-instantiating tasks.
 - `Experiment.export_eval_log()` batch-exports one `TaskEvalRecord` per trajectory to
   `<output_dir>/eval_log.jsonl`.
-- 40 unit tests, no regressions.
+- 42 unit tests, no regressions.
 
 Fields are named to mirror EEE destinations (see forward-compatibility map) so adapting
 to Elron's schema review is a small rename-and-nest, not a redesign.
@@ -174,10 +174,10 @@ and `input.reference`, not from reading eval source code.
 
 | File | Change |
 |------|--------|
-| `src/cube_harness/eval_log.py` | **NEW** — `UsageSummary`, `AgentInfo`, `TaskInfo`, `TaskEvalRecord`, `EvalLog` |
-| `src/cube_harness/episode.py` | Store `action_schemas` in `trajectory.metadata` at episode start |
+| `src/cube_harness/eval_log.py` | **NEW** — `UsageSummary`, `AgentInfo`, `TaskInfo`, `TaskEvalRecord`, `EvalLog`; remove `eval_function_ref`; add `declaration` |
+| `src/cube_harness/episode.py` | Store `action_schemas` in `trajectory.metadata` via `extra_metadata` parameter |
 | `src/cube_harness/experiment.py` | Add `export_eval_log(output_path, git_cwd) -> EvalLog` |
-| `tests/test_eval_log.py` | **NEW** — 40 unit tests |
+| `tests/test_eval_log.py` | **NEW** — 42 unit tests |
 
 ### `episode.py` delta
 
