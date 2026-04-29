@@ -120,7 +120,7 @@ class WebArenaVerifiedTask(Task):
         return self._submit_tool.get_submitted_response() is not None
 
 
-class WebArenaVerifiedTaskConfig(TaskConfig):
+class WebArenaVerifiedTaskConfig(TaskConfig[WebArenaVerifiedTaskMetadata]):
     wav_config: WebArenaVerifiedConfig
 
     def make(
@@ -131,9 +131,6 @@ class WebArenaVerifiedTaskConfig(TaskConfig):
         _ = runtime_context, container_backend
         wav = WebArenaVerified(config=self.wav_config)
         wav_task = wav.get_task(int(self.task_id))
-        assert isinstance(self.metadata, WebArenaVerifiedTaskMetadata), (
-            "metadata must be a WebArenaVerifiedTaskMetadata"
-        )
         return WebArenaVerifiedTask(
             metadata=self.metadata,
             tool_config=self.tool_config or ToolboxConfig(tool_configs=[HarPlaywrightConfig(), SubmitResponseConfig()]),

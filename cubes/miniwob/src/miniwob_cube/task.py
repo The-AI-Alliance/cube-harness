@@ -62,7 +62,7 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
         return obs
 
 
-class MiniWobTaskConfig(TaskConfig):
+class MiniWobTaskConfig(TaskConfig[MiniWobTaskMetadata]):
     base_url: str = "http://localhost:8000/miniwob"
     remove_human_display: bool = True
     episode_max_time: int = 1000000
@@ -74,7 +74,6 @@ class MiniWobTaskConfig(TaskConfig):
     ) -> MiniWobTask:
         _ = runtime_context, container_backend
         assert self.tool_config is not None, "tool_config must be set"
-        assert isinstance(self.metadata, MiniWobTaskMetadata), "metadata must be of type MiniWobTaskMetadata"
         return MiniWobTask(
             metadata=self.metadata,
             tool_config=self.tool_config,

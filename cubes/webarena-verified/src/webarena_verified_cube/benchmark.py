@@ -12,13 +12,13 @@ from cube.tool import ToolboxConfig
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
-from webarena_verified_cube.task import WebArenaVerifiedTaskConfig
+from webarena_verified_cube.task import WebArenaVerifiedTaskConfig, WebArenaVerifiedTaskMetadata
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 logger = logging.getLogger(__name__)
 
 
-class WebArenaVerifiedBenchmark(Benchmark):
+class WebArenaVerifiedBenchmark(Benchmark["WebArenaVerifiedBenchmarkConfig"]):
     """Runtime pair — owns the launched DockerServiceConfig handle and resolves
     ``wav_config.environments`` from the live endpoints when running in
     automatic mode.
@@ -30,7 +30,6 @@ class WebArenaVerifiedBenchmark(Benchmark):
         infra: InfraConfig | None = None,
     ) -> None:
         super().__init__(config)
-        self.config: WebArenaVerifiedBenchmarkConfig = config  # type: ignore[assignment]
         self._infra: InfraConfig | None = infra
         self._handle: ResourceHandle | None = None
 
@@ -143,7 +142,7 @@ class WebArenaVerifiedBenchmark(Benchmark):
             self._handle = None
 
 
-class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig):
+class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig[WebArenaVerifiedTaskMetadata]):
     """WebArena Verified — 812 verified web automation tasks across 6 platforms.
 
     Exactly one of two setup modes must be configured before calling ``make()``:

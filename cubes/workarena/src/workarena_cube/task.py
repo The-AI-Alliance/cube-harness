@@ -189,7 +189,7 @@ class WorkArenaTask(Task):
         super().close()
 
 
-class WorkArenaTaskConfig(TaskConfig):
+class WorkArenaTaskConfig(TaskConfig[WorkArenaTaskMetadata]):
     """Serializable configuration for a single WorkArena task."""
 
     def make(
@@ -199,9 +199,6 @@ class WorkArenaTaskConfig(TaskConfig):
     ) -> WorkArenaTask:
         _ = runtime_context, container_backend
         assert self.tool_config, f"WorkArenaTaskConfig requires a tool_config, got {self.tool_config}"
-        assert isinstance(self.metadata, WorkArenaTaskMetadata), (
-            f"metadata must be of type WorkArenaTaskMetadata, got {type(self.metadata).__name__}"
-        )
         return WorkArenaTask(
             metadata=self.metadata,
             tool_config=self.tool_config,

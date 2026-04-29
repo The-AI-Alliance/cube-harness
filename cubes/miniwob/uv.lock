@@ -221,7 +221,7 @@ wheels = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc7"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=main#9982b279dd780bdae95b0f8cbcf2a7f3fab79d0e" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=nico_fix#647742c962129b5fed2b4edfd98465643d3f87a1" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -428,7 +428,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-browser-tool" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=main" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=nico_fix" },
     { name = "miniwob", specifier = ">=1.0" },
 ]
 

@@ -12,15 +12,12 @@ from typing import ClassVar, Generator
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.task import TaskConfig
 
-from miniwob_cube.task import MiniWobTaskConfig
+from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
 
 logger = logging.getLogger(__name__)
 
-
-class MiniWobBenchmark(Benchmark):
+class MiniWobBenchmark(Benchmark["MiniWobBenchmarkConfig"]):
     """Runtime pair — owns the local HTTP server process serving MiniWob HTML."""
-
-    config: "MiniWobBenchmarkConfig"  # type: ignore - MiniWobBenchmarkConfig is a BenchmarkConfig
 
     def __init__(self, config: "MiniWobBenchmarkConfig") -> None:
         super().__init__(config)
@@ -87,7 +84,7 @@ class MiniWobBenchmark(Benchmark):
             self._stderr_file = None
 
 
-class MiniWobBenchmarkConfig(BenchmarkConfig):
+class MiniWobBenchmarkConfig(BenchmarkConfig[MiniWobTaskMetadata]):
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
         name="miniwob-cube",
         version="1.0.0",
