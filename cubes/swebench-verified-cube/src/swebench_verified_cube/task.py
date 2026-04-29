@@ -226,7 +226,6 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
 
     include_hints: bool = False
     oracle_mode: bool = False
-    hint: str | None = None
 
     def make(
         self,
@@ -245,8 +244,6 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
 
         metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
         exec_info = SWEBenchVerifiedBenchmark.load_task_execution_info(self.task_id)
-        if self.hint:
-            exec_info = {**exec_info, "problem_statement": exec_info["problem_statement"] + f"\n\n## Hint\n{self.hint}"}
         metadata = metadata.model_copy(
             update={
                 "extra_info": {
