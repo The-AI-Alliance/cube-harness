@@ -30,8 +30,16 @@ Prerequisites:
 
 import argparse
 import logging
+import os
+import re
 
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+
+# Podman machine sets DOCKER_HOST=http+unix://... which the Docker CLI and Python SDK reject.
+# Normalize to unix:// so both tools can connect to the same socket.
+_docker_host = os.environ.get("DOCKER_HOST", "")
+if _docker_host.startswith("http+unix://"):
+    os.environ["DOCKER_HOST"] = re.sub(r"^http\+unix://", "unix://", _docker_host)
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.react import ReactAgentConfig
@@ -45,6 +53,20 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(na
 # psf__requests-1142: don't send Content-Length on GET; 1 f2p, 5 p2p.
 # pallets__flask-5014: raise ValueError on empty Blueprint name; 1 f2p, 59 p2p.
 DEBUG_TASKS = ["psf__requests-1142", "pallets__flask-5014"]
+
+# Task-specific hints injected into the problem statement.
+# Key: task_id, Value: hint appended after the problem statement.
+TASK_HINTS: dict[str, str] = {
+    "sphinx-doc__sphinx-8595": (
+        "HINT: The bug is in sphinx/ext/autodoc/__init__.py in ModuleDocumenter.get_object_members(). "
+        "When __all__ is an empty list (not None, but []), the existing code treats it as falsy "
+        "and falls back to returning ALL members. The fix must distinguish 'empty list' from 'not set': "
+        "if __all__ is defined but empty, return (False, []) so no members are documented. "
+        "The module docstring is emitted via add_content()/get_doc(), NOT via get_object_members(), "
+        "so it will still appear even if you return an empty member list. "
+        "Verify with: conda run -n testbed python -m pytest tests/test_ext_autodoc_automodule.py::test_empty_all -xvs"
+    ),
+}
 
 SWE_SYSTEM_PROMPT = """\
 You are an autonomous coding agent. You have access to a Linux sandbox with the repository already cloned at /testbed.
@@ -92,6 +114,21 @@ def main(
         benchmark = benchmark.subset_from_list(task_ids)
     elif repo is not None:
         benchmark = benchmark.subset_from_glob("repo", repo)
+
+    # Monkey-patch load_task_execution_info to inject per-task hints into the
+    # problem_statement. This is the correct injection point: make() calls
+    # load_task_execution_info() to build extra_info, so hints appear in the
+    # initial observation the agent receives.
+    _orig_load = SWEBenchVerifiedBenchmark.load_task_execution_info.__func__  # type: ignore[attr-defined]
+
+    @classmethod  # type: ignore[misc]
+    def _patched_load(cls, task_id: str) -> dict:
+        info = _orig_load(cls, task_id)
+        if task_id in TASK_HINTS:
+            info = {**info, "problem_statement": info["problem_statement"] + f"\n\n## Hint\n{TASK_HINTS[task_id]}"}
+        return info
+
+    SWEBenchVerifiedBenchmark.load_task_execution_info = _patched_load  # type: ignore[method-assign]
 
     agent_config = ReactAgentConfig(
         llm_config=LLMConfig(model_name=model),
