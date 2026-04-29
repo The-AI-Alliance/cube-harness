@@ -44,11 +44,11 @@ class Episode:
         output_dir: Path,
         agent_config: AgentConfig,
         task_config: TaskConfig,
-        exp_name: str = "default",
-        max_steps: int = MAX_STEPS,
-        storage: Storage | None = None,
-        runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
+        exp_name: str,
+        max_steps: int,
+        storage: Storage | None,
+        runtime_context: RuntimeContext | None,
+        container_backend: ContainerBackend | None,
     ) -> None:
         self.config = EpisodeConfig(
             id=id,

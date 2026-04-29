@@ -44,7 +44,7 @@ class Experiment(TypedBaseModel):
 
     def get_episodes_to_run(
         self,
-        benchmark: Benchmark | None = None,
+        benchmark: Benchmark,
         *,
         step_timeout_s: float = 1800.0,
         cancel_grace_s: float = 120.0,
@@ -57,12 +57,6 @@ class Experiment(TypedBaseModel):
         for the make/close lifecycle and passes the live instance in so
         episodes can pick up its ``_runtime_context`` and
         ``config.container_backend``.
-
-        When ``benchmark`` is omitted (e.g. unit tests inspecting episode
-        wiring without running), episodes are created with no
-        ``runtime_context`` and the ``container_backend`` is read from the
-        config — sufficient for benchmarks that don't expose shared
-        infrastructure to tasks.
 
         Decisions are driven by `status.json` per episode (no trajectory deserialisation).
 
@@ -122,18 +116,16 @@ class Experiment(TypedBaseModel):
             return False
         return status.retry_count < self.max_retries
 
-    def _create_all_episodes(self, benchmark: Benchmark | None) -> list[Episode]:
+    def _create_all_episodes(self, benchmark: Benchmark) -> list[Episode]:
         """Create all episodes from scratch and save their configs to disk."""
         task_configs = list(self.benchmark_config.get_task_configs())
-        runtime_context = benchmark._runtime_context if benchmark is not None else None
+        runtime_context = benchmark._runtime_context
         # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
         # reading it raises a DeprecationWarning. We have to forward it for
         # backwards compatibility until cube-standard removes it.
-        container_backend = None
-        if benchmark is not None:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                container_backend = benchmark.config.container_backend
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            container_backend = benchmark.config.container_backend
         episodes = [
             Episode(
                 id=i,
@@ -144,6 +136,7 @@ class Experiment(TypedBaseModel):
                 max_steps=self.max_steps,
                 runtime_context=runtime_context,
                 container_backend=container_backend,
+                storage=None,
             )
             for i, tc in enumerate(task_configs)
         ]

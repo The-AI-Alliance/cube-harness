@@ -18,9 +18,10 @@ class TestCubeExperiment:
             benchmark_config=mock_cube_benchmark_config,
         )
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
-            episodes = exp.get_episodes_to_run()
+        with mock_cube_benchmark_config.make() as benchmark:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", DeprecationWarning)
+                episodes = exp.get_episodes_to_run(benchmark)
 
         assert len(episodes) == len(mock_cube_benchmark_config.task_metadata)
         for episode in episodes:
@@ -39,14 +40,15 @@ class TestCubeExperiment:
         )
 
         # First call: no configs on disk yet, creates all episodes from scratch.
-        episodes = exp.get_episodes_to_run()
-        assert len(episodes) == 2
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
+            assert len(episodes) == 2
 
-        # Run only the first episode, leaving the second unstarted.
-        episodes[0].run()
+            # Run only the first episode, leaving the second unstarted.
+            episodes[0].run()
 
-        # resume=True: only the unstarted episode should be returned.
-        resumed = exp.get_episodes_to_run()
+            # resume=True: only the unstarted episode should be returned.
+            resumed = exp.get_episodes_to_run(benchmark)
         assert len(resumed) == 1
         assert resumed[0].config.task_config is not None
         assert resumed[0].config.task_config.task_id != episodes[0].config.task_config.task_id
@@ -75,7 +77,8 @@ class TestCubeExperiment:
             agent_config=mock_agent_config,
             benchmark_config=mock_cube_benchmark_config,
         )
-        episodes = exp.get_episodes_to_run()
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         assert len(episodes) > 0
 
         # Pick the first episode config file and reload it without benchmark

@@ -10,7 +10,6 @@ from cube.benchmark import (  # noqa: F401 — needed for Pydantic to resolve Ta
 )
 from cube.benchmark import (  # noqa: F401
     BenchmarkMetadata,
-    RuntimeContext,
 )
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from cube.task import Task as CubeTask
@@ -175,6 +174,7 @@ class MockToolConfig(ToolConfig):
     """Mock tool configuration for testing."""
 
     def make(self, container=None) -> MockTool:
+        _ = container
         return MockTool()
 
 
@@ -193,6 +193,7 @@ class MockAgentConfig(AgentConfig):
     name: str = "mock_agent"
 
     def make(self, action_set=None, **kwargs) -> "MockAgent":
+        _ = action_set, kwargs
         return MockAgent(config=self)
 
 
@@ -210,6 +211,7 @@ class MockAgent(Agent):
         self.actions_to_return: list[Action] = []
 
     def step(self, obs: Observation) -> AgentOutput:
+        _ = obs
         self.step_count += 1
         if self.actions_to_return:
             actions = self.actions_to_return
@@ -240,6 +242,7 @@ class MockCubeTask(CubeTask):
         return Observation.from_text("Cube task goal"), {}
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict]:
+        _ = obs
         return 1.0, {"success": True}
 
 
@@ -247,6 +250,7 @@ class MockCubeTaskConfig(CubeTaskConfig):
     """Cube TaskConfig that instantiates a MockCubeTask."""
 
     def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:
+        _ = runtime_context, container_backend
         return MockCubeTask(
             metadata=TaskMetadata(id=self.task_id),
             tool_config=self.tool_config or MockToolConfig(),
@@ -299,4 +303,9 @@ def mock_episode(tmp_dir, mock_agent_config, mock_cube_task_config) -> Episode:
         output_dir=tmp_dir,
         agent_config=mock_agent_config,
         task_config=mock_cube_task_config,
+        container_backend=None,
+        exp_name="mock-episode",
+        max_steps=5,
+        runtime_context=None,
+        storage=None,
     )

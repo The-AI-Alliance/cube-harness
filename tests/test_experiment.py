@@ -181,7 +181,8 @@ class TestExperiment:
             benchmark_config=mock_cube_benchmark_config,
         )
 
-        episodes = exp.get_episodes_to_run()
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
 
         assert len(episodes) == len(mock_cube_benchmark_config.task_metadata)
         for i, episode in enumerate(episodes):
@@ -192,16 +193,17 @@ class TestExperiment:
 
     def test_experiment_create_episodes_multiple_tasks(self, tmp_dir, mock_agent_config):
         """Test Experiment create_episodes with multiple tasks."""
-        benchmark = _make_benchmark(5)
+        benchmark_config = _make_benchmark(5)
 
         exp = Experiment(
             name="multi_task_exp",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
 
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         assert len(episodes) == 5
         task_ids = {e.config.task_config.task_id for e in episodes}
         assert task_ids == {f"task_{i}" for i in range(5)}
@@ -270,114 +272,118 @@ class TestExperiment:
             benchmark_config=mock_cube_benchmark_config,
         )
 
-        episodes = exp.get_episodes_to_run()
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         expected_task_ids = set(mock_cube_benchmark_config.task_metadata.keys())
         actual_task_ids = {e.config.task_config.task_id for e in episodes}
         assert actual_task_ids == expected_task_ids
 
     def test_retry_failed_episodes(self, tmp_dir, mock_agent_config):
         """resume=True returns FAILED + missing-status episodes (gated by max_retries)."""
-        benchmark = _make_benchmark(3)
+        benchmark_config = _make_benchmark(3)
 
         exp = Experiment(
             name="test_retry_failed",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
 
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
 
-        # Episode 0: complete successfully → COMPLETED status
-        episodes[0].run()
+            # Episode 0: complete successfully → COMPLETED status
+            episodes[0].run()
 
-        # Episode 1: write a FAILED status manually
-        storage = FileStorage(tmp_dir)
-        traj_id_1 = f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}"
-        storage.write_episode_status(
-            traj_id_1,
-            EpisodeStatus(
-                status="FAILED",
-                task_id=episodes[1].config.task_config.task_id,
-                episode_id=episodes[1].config.id,
-                started_at=time.time() - 10,
-                ended_at=time.time(),
-                last_heartbeat_at=time.time(),
-                error_type="RuntimeError",
-                error_message="boom",
-                retry_count=0,
-            ),
-        )
+            # Episode 1: write a FAILED status manually
+            storage = FileStorage(tmp_dir)
+            traj_id_1 = f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}"
+            storage.write_episode_status(
+                traj_id_1,
+                EpisodeStatus(
+                    status="FAILED",
+                    task_id=episodes[1].config.task_config.task_id,
+                    episode_id=episodes[1].config.id,
+                    started_at=time.time() - 10,
+                    ended_at=time.time(),
+                    last_heartbeat_at=time.time(),
+                    error_type="RuntimeError",
+                    error_message="boom",
+                    retry_count=0,
+                ),
+            )
 
-        # Episode 2: no status.json (never started)
+            # Episode 2: no status.json (never started)
 
-        exp.resume = True
-        failed_episodes = exp.get_episodes_to_run()
-        # Both episode 1 (FAILED) and episode 2 (missing status) qualify
-        ids = {ep.config.id for ep in failed_episodes}
-        assert ids == {episodes[1].config.id, episodes[2].config.id}
+            exp.resume = True
+            failed_episodes = exp.get_episodes_to_run(benchmark)
+            # Both episode 1 (FAILED) and episode 2 (missing status) qualify
+            ids = {ep.config.id for ep in failed_episodes}
+            assert ids == {episodes[1].config.id, episodes[2].config.id}
 
     def test_retry_respects_max_retries(self, tmp_dir, mock_agent_config):
         """retry_count >= max_retries excludes the episode from retry."""
-        benchmark = _make_benchmark(2)
+        benchmark_config = _make_benchmark(2)
         exp = Experiment(
             name="test_max_retries",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
             max_retries=2,
         )
-        episodes = exp.get_episodes_to_run()
-        storage = FileStorage(tmp_dir)
-        # Episode 0: capped (retry_count == max_retries)
-        storage.write_episode_status(
-            f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}",
-            EpisodeStatus(
-                status="FAILED",
-                task_id=episodes[0].config.task_config.task_id,
-                episode_id=episodes[0].config.id,
-                started_at=time.time(),
-                retry_count=2,
-            ),
-        )
-        # Episode 1: still under cap
-        storage.write_episode_status(
-            f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}",
-            EpisodeStatus(
-                status="FAILED",
-                task_id=episodes[1].config.task_config.task_id,
-                episode_id=episodes[1].config.id,
-                started_at=time.time(),
-                retry_count=1,
-            ),
-        )
-        exp.resume = True
-        retried = exp.get_episodes_to_run()
-        ids = {ep.config.id for ep in retried}
-        assert ids == {episodes[1].config.id}
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
+            storage = FileStorage(tmp_dir)
+            # Episode 0: capped (retry_count == max_retries)
+            storage.write_episode_status(
+                f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}",
+                EpisodeStatus(
+                    status="FAILED",
+                    task_id=episodes[0].config.task_config.task_id,
+                    episode_id=episodes[0].config.id,
+                    started_at=time.time(),
+                    retry_count=2,
+                ),
+            )
+            # Episode 1: still under cap
+            storage.write_episode_status(
+                f"{episodes[1].config.task_config.task_id}_ep{episodes[1].config.id}",
+                EpisodeStatus(
+                    status="FAILED",
+                    task_id=episodes[1].config.task_config.task_id,
+                    episode_id=episodes[1].config.id,
+                    started_at=time.time(),
+                    retry_count=1,
+                ),
+            )
+            exp.resume = True
+            retried = exp.get_episodes_to_run(benchmark)
+            ids = {ep.config.id for ep in retried}
+            assert ids == {episodes[1].config.id}
 
     def test_resume_returns_unstarted(self, tmp_dir, mock_agent_config):
         """Test resume=True returns only unstarted episodes."""
-        benchmark = _make_benchmark(3)
+        benchmark_config = _make_benchmark(3)
 
         exp = Experiment(
             name="test_resume_unstarted",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
 
-        # First call creates all episodes and saves configs
-        episodes = exp.get_episodes_to_run()
-        assert len(episodes) == 3
+        with benchmark_config.make() as benchmark:
+            # First call creates all episodes and saves configs
+            episodes = exp.get_episodes_to_run(benchmark)
+            assert len(episodes) == 3
 
-        # Run only first episode (leaving 2 and 3 unstarted)
-        episodes[0].run()
+            # Run only first episode (leaving 2 and 3 unstarted)
+            episodes[0].run()
 
-        # With resume=True, should return only unstarted episodes
-        exp.resume = True
-        resumed_episodes = exp.get_episodes_to_run()
-        assert len(resumed_episodes) == 2
+            # With resume=True, should return only unstarted episodes
+            exp.resume = True
+            resumed_episodes = exp.get_episodes_to_run(benchmark)
+            assert len(resumed_episodes) == 2
 
     def test_run_sequentially(self, tmp_dir, mock_agent_config, mock_cube_benchmark_config):
         """run_sequentially completes all episodes and returns trajectories keyed by trajectory_id."""
@@ -390,9 +396,10 @@ class TestExperiment:
 
         result = run_sequentially(exp)
 
-        expected_trajectory_ids = {
-            f"{ep.config.task_config.task_id}_ep{ep.config.id}" for ep in exp.get_episodes_to_run()
-        }
+        with mock_cube_benchmark_config.make() as benchmark:
+            expected_trajectory_ids = {
+                f"{ep.config.task_config.task_id}_ep{ep.config.id}" for ep in exp.get_episodes_to_run(benchmark)
+            }
         assert set(result.trajectories.keys()) == expected_trajectory_ids
         assert result.failures == {}
 
@@ -406,13 +413,14 @@ class TestExperiment:
         )
 
         # Create episodes and run all successfully
-        episodes = exp.get_episodes_to_run()
-        for episode in episodes:
-            episode.run()
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
+            for episode in episodes:
+                episode.run()
 
-        exp.resume = True
-        exp.resume = True
-        assert exp.get_episodes_to_run() == []
+            exp.resume = True
+            exp.resume = True
+            assert exp.get_episodes_to_run(benchmark) == []
 
 
 class TestStatusBasedSelection:
@@ -449,11 +457,12 @@ class TestStatusBasedSelection:
         expect_swept: bool,
     ) -> None:
         """sweep_stale_statuses marks stale in-flight entries STALE and leaves fresh ones alone."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
-            name="test_sweep", output_dir=tmp_dir, agent_config=mock_agent_config, benchmark_config=benchmark
+            name="test_sweep", output_dir=tmp_dir, agent_config=mock_agent_config, benchmark_config=benchmark_config
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
         storage = FileStorage(tmp_dir)
         now = time.time()
@@ -512,11 +521,12 @@ class TestStatusBasedSelection:
         expect_returned: bool,
     ) -> None:
         """resume=True returns retriable statuses and skips terminal/in-flight ones."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
-            name="test_sel", output_dir=tmp_dir, agent_config=mock_agent_config, benchmark_config=benchmark
+            name="test_sel", output_dir=tmp_dir, agent_config=mock_agent_config, benchmark_config=benchmark_config
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
         storage = FileStorage(tmp_dir)
 
@@ -536,7 +546,10 @@ class TestStatusBasedSelection:
 
         exp.resume = True
         # Use generous timeouts so fresh QUEUED/RUNNING are not swept to STALE.
-        result = exp.get_episodes_to_run(step_timeout_s=3600.0, cancel_grace_s=3600.0, orphan_threshold_s=3600.0)
+        with benchmark_config.make() as benchmark:
+            result = exp.get_episodes_to_run(
+                benchmark, step_timeout_s=3600.0, cancel_grace_s=3600.0, orphan_threshold_s=3600.0
+            )
 
         if expect_returned:
             assert len(result) == 1 and result[0].config.id == episodes[0].config.id
@@ -550,12 +563,12 @@ class TestStatusBasedSelection:
         must have no status.json — they were never submitted, so a resume run can pick
         them up without waiting for orphan_threshold_s to expire.
         """
-        benchmark = _make_benchmark(3)
+        benchmark_config = _make_benchmark(3)
         exp = Experiment(
             name="test_seq_preclaim",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
         storage = FileStorage(tmp_dir)
 
@@ -578,12 +591,12 @@ class TestStatusBasedSelection:
         QUEUED is not in RETRIABLE_STATUSES, so those orphans would be silently skipped on
         a resume=True run until orphan_threshold_s elapsed.
         """
-        benchmark = _make_benchmark(3)
+        benchmark_config = _make_benchmark(3)
         exp = Experiment(
             name="test_debug_orphan",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
         storage = FileStorage(tmp_dir)
 
@@ -596,19 +609,21 @@ class TestStatusBasedSelection:
 
         # resume=True should find 2 episodes to run (the ones that weren't debug-limited).
         exp.resume = True
-        episodes_to_resume = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes_to_resume = exp.get_episodes_to_run(benchmark)
         assert len(episodes_to_resume) == 2, f"Expected 2 episodes available for resume, got {len(episodes_to_resume)}"
 
     def test_heartbeat_advances_current_step_and_timestamp(self, tmp_dir, mock_agent_config):
         """RUNNING → RUNNING: each turn updates last_heartbeat_at and current_step without changing status."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
             name="test_heartbeat",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
         storage = FileStorage(tmp_dir)
 
@@ -640,15 +655,16 @@ class TestStatusBasedSelection:
 
     def test_cancelled_at_max_retries_cap_is_terminal(self, tmp_dir, mock_agent_config):
         """CANCELLED → terminal: retry_count >= max_retries excludes from retry selection."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
             name="test_cancelled_cap",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
             max_retries=2,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         storage = FileStorage(tmp_dir)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
 
@@ -667,19 +683,21 @@ class TestStatusBasedSelection:
         )
 
         exp.resume = True
-        assert exp.get_episodes_to_run() == []
+        with benchmark_config.make() as benchmark:
+            assert exp.get_episodes_to_run(benchmark) == []
 
     def test_stale_at_max_retries_cap_is_terminal(self, tmp_dir, mock_agent_config):
         """STALE → terminal: retry_count >= max_retries excludes from retry selection."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
             name="test_stale_cap",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
             max_retries=2,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         storage = FileStorage(tmp_dir)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
 
@@ -697,18 +715,20 @@ class TestStatusBasedSelection:
         )
 
         exp.resume = True
-        assert exp.get_episodes_to_run() == []
+        with benchmark_config.make() as benchmark:
+            assert exp.get_episodes_to_run(benchmark) == []
 
     def test_resume_auto_sweeps_stale_running_and_returns_for_retry(self, tmp_dir, mock_agent_config) -> None:
         """resume=True sweeps a stale RUNNING entry to STALE and returns it for retry in one call."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
             name="test_resume_sweep",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
         storage = FileStorage(tmp_dir)
 
@@ -726,7 +746,10 @@ class TestStatusBasedSelection:
         )
 
         exp.resume = True
-        retried = exp.get_episodes_to_run(step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0)
+        with benchmark_config.make() as benchmark:
+            retried = exp.get_episodes_to_run(
+                benchmark, step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0
+            )
 
         # The sweep ran implicitly — status is now STALE.
         assert storage.read_episode_status(traj_id).status == "STALE"
@@ -736,14 +759,15 @@ class TestStatusBasedSelection:
 
     def test_resume_auto_sweeps_orphaned_queued_and_returns_for_retry(self, tmp_dir, mock_agent_config) -> None:
         """resume=True sweeps an orphaned QUEUED entry to STALE and returns it for retry in one call."""
-        benchmark = _make_benchmark(1)
+        benchmark_config = _make_benchmark(1)
         exp = Experiment(
             name="test_resume_sweep_queued",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         traj_id = f"{episodes[0].config.task_config.task_id}_ep{episodes[0].config.id}"
         storage = FileStorage(tmp_dir)
 
@@ -761,7 +785,10 @@ class TestStatusBasedSelection:
         )
 
         exp.resume = True
-        retried = exp.get_episodes_to_run(step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0)
+        with benchmark_config.make() as benchmark:
+            retried = exp.get_episodes_to_run(
+                benchmark, step_timeout_s=1.0, cancel_grace_s=1.0, orphan_threshold_s=10.0
+            )
 
         assert storage.read_episode_status(traj_id).status == "STALE"
         assert len(retried) == 1
@@ -769,14 +796,15 @@ class TestStatusBasedSelection:
 
     def test_worker_writes_failed_on_unhandled_exception(self, tmp_dir, mock_agent_config) -> None:
         """RUNNING → FAILED: unhandled exception in step() causes the worker to write FAILED with error fields."""
-        benchmark = _make_failing_benchmark()
+        benchmark_config = _make_failing_benchmark()
         exp = Experiment(
             name="test_failed_status",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         storage = FileStorage(tmp_dir)
 
         with pytest.raises(RuntimeError, match="injected step failure"):
@@ -793,15 +821,16 @@ class TestStatusBasedSelection:
     def test_worker_writes_max_steps_reached_when_loop_exhausted(self, tmp_dir, mock_agent_config) -> None:
         """RUNNING → MAX_STEPS_REACHED: loop exhausts max_steps without done=True."""
         max_steps = 2
-        benchmark = _make_neverending_benchmark(max_steps)
+        benchmark_config = _make_neverending_benchmark(max_steps)
         exp = Experiment(
             name="test_max_steps_status",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark_config=benchmark,
+            benchmark_config=benchmark_config,
             max_steps=max_steps,
         )
-        episodes = exp.get_episodes_to_run()
+        with benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
         storage = FileStorage(tmp_dir)
 
         episodes[0].run()
@@ -813,7 +842,8 @@ class TestStatusBasedSelection:
         assert status.ended_at is not None
         # Not retriable — resume must skip it.
         exp.resume = True
-        assert exp.get_episodes_to_run() == []
+        with benchmark_config.make() as benchmark:
+            assert exp.get_episodes_to_run(benchmark) == []
 
 
 class TestKillStaleWorkersRaceGuard:

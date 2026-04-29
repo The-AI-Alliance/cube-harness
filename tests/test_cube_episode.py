@@ -24,6 +24,11 @@ class TestCubeEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="cube_test",
+            max_steps=5,
+            storage=None,
+            runtime_context=None,
+            container_backend=None,
         )
 
         assert episode.config.task_config == mock_cube_task_config
@@ -42,6 +47,11 @@ class TestCubeEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="cube_test",
+            max_steps=5,
+            storage=None,
+            runtime_context=None,
+            container_backend=None,
         )
 
         with warnings.catch_warnings():
@@ -75,6 +85,10 @@ class TestCubeEpisode:
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
             exp_name="cube_test",
+            max_steps=5,
+            storage=None,
+            runtime_context=None,
+            container_backend=None,
         )
         episode.storage.save_episode_config(episode.config)
 

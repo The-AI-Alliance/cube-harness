@@ -294,7 +294,8 @@ def test_mixed_state_recovery_via_ray(tmp_dir: Path) -> None:
     )
 
     # Materialise episode_config.json for all three (without running anything).
-    episodes = {ep.config.task_config.task_id: ep for ep in exp.get_episodes_to_run()}
+    with benchmark.make() as bm:
+        episodes = {ep.config.task_config.task_id: ep for ep in exp.get_episodes_to_run(bm)}
     storage = FileStorage(tmp_dir)
 
     # Hand-craft pre-existing state to mimic a crashed prior driver:
@@ -447,7 +448,8 @@ def test_max_steps_terminates_with_forced_eval(tmp_dir: Path) -> None:
 
     # MAX_STEPS_REACHED is not retriable: a fresh resume returns nothing.
     exp.resume = True
-    assert exp.get_episodes_to_run() == []
+    with benchmark.make() as bm:
+        assert exp.get_episodes_to_run(bm) == []
 
 
 def test_max_retries_zero_disables_auto_retry(tmp_dir: Path) -> None:

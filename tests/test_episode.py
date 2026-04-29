@@ -1,15 +1,33 @@
 """Tests for cube_harness.episode module."""
 
 import json
+from pathlib import Path
 
 import pytest
 from cube.core import Action, EnvironmentOutput, Observation
-from cube.task import TaskMetadata
+from cube.task import TaskConfig, TaskMetadata
 
+from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
-from cube_harness.episode import MAX_STEPS, Episode
+from cube_harness.episode import Episode
 from cube_harness.storage import _read_step_file
 from tests.conftest import MockAgent, MockAgentConfig, MockCubeTask, MockCubeTaskConfig, MockToolConfig
+
+
+def _make_test_episode(
+    id: int, output_dir: Path, agent_config: AgentConfig, task_config: TaskConfig, max_steps: int = 5
+) -> Episode:
+    return Episode(
+        id=id,
+        output_dir=output_dir,
+        agent_config=agent_config,
+        task_config=task_config,
+        exp_name="test-episode",
+        max_steps=max_steps,
+        runtime_context=None,
+        storage=None,
+        container_backend=None,
+    )
 
 
 class TestEpisode:
@@ -19,11 +37,11 @@ class TestEpisode:
         """Test Episode creation."""
         assert mock_episode.config.id == 0
         assert mock_episode.config.output_dir == tmp_dir
-        assert mock_episode.config.max_steps == MAX_STEPS
+        assert mock_episode.config.max_steps == 5
 
     def test_episode_custom_max_steps(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode with custom max_steps."""
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
@@ -90,18 +108,20 @@ class TestEpisode:
         # Create an agent that never stops
         class NeverStopsAgent(MockAgent):
             def step(self, obs):
+                _ = obs
                 self.step_count += 1
                 # Return non-stop action
                 return AgentOutput(actions=[Action(name="click", arguments={"element_id": "btn"})])
 
         class NeverStopsConfig(type(mock_agent_config)):
             def make(self, *args, **kwargs):
+                _ = args, kwargs
                 agent = NeverStopsAgent(config=self)
                 return agent
 
         config = NeverStopsConfig()
 
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=config,
@@ -117,7 +137,7 @@ class TestEpisode:
 
     def test_episode_run_stops_on_done(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode run stops when done=True."""
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
@@ -175,12 +195,13 @@ class TestEpisode:
 
         class TrackCloseConfig(MockCubeTaskConfig):
             def make(self, runtime_context=None, container_backend=None):
+                _ = runtime_context, container_backend
                 return TrackCloseTask(
                     metadata=TaskMetadata(id=self.task_id),
                     tool_config=MockToolConfig(),
                 )
 
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
@@ -190,7 +211,7 @@ class TestEpisode:
 
         assert close_calls, "task.close() was not called"
 
-    def test_episode_closes_env_on_error(self, tmp_dir, mock_agent_config):
+    def test_episode_closes_env_on_error(self, tmp_dir):
         """Test Episode closes environment even when error occurs."""
         close_calls: list[bool] = []
 
@@ -201,6 +222,7 @@ class TestEpisode:
 
         class TrackCloseConfig(MockCubeTaskConfig):
             def make(self, runtime_context=None, container_backend=None):
+                _ = runtime_context, container_backend
                 return TrackCloseTask(
                     metadata=TaskMetadata(id=self.task_id),
                     tool_config=MockToolConfig(),
@@ -208,15 +230,17 @@ class TestEpisode:
 
         class ErrorAgent(MockAgent):
             def step(self, obs):
+                _ = obs
                 raise RuntimeError("Test error")
 
         class ErrorConfig(MockAgentConfig):
             def make(self, *args, **kwargs) -> "ErrorAgent":
+                _ = args, kwargs
                 return ErrorAgent(config=self)
 
         config = ErrorConfig()
 
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=config,
@@ -230,7 +254,7 @@ class TestEpisode:
 
     def test_episode_output_filename(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Test Episode generates correct output directory name."""
-        episode = Episode(
+        episode = _make_test_episode(
             id=42,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
@@ -248,15 +272,17 @@ class TestEpisode:
 
         class ErrorAgent(MockAgent):
             def step(self, obs):
+                _ = obs
                 raise RuntimeError("Agent step failed")
 
         class ErrorConfig(type(mock_agent_config)):
             def make(self, *args, **kwargs) -> "ErrorAgent":
+                _ = args, kwargs
                 return ErrorAgent(config=self)
 
         config = ErrorConfig()
 
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=config,
@@ -280,6 +306,7 @@ class TestEpisode:
 
         error_step = next((s for s in agent_steps if s.output.error is not None), None)
         assert error_step is not None, "No error found in agent steps"
+        assert error_step.output.error is not None
         assert error_step.output.error.error_type == "RuntimeError"
         assert "Agent step failed" in error_step.output.error.exception_str
 
@@ -288,16 +315,18 @@ class TestEpisode:
 
         class ErrorEvalTask(MockCubeTask):
             def evaluate(self, obs=None):
+                _ = obs
                 raise ValueError("Environment validation failed")
 
         class ErrorEvalConfig(MockCubeTaskConfig):
             def make(self, runtime_context=None, container_backend=None):
+                _ = runtime_context, container_backend
                 return ErrorEvalTask(
                     metadata=TaskMetadata(id=self.task_id),
                     tool_config=MockToolConfig(),
                 )
 
-        episode = Episode(
+        episode = _make_test_episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
@@ -321,6 +350,7 @@ class TestEpisode:
 
         error_step = next((s for s in env_steps if s.output.error is not None), None)
         assert error_step is not None, "No error found in env steps"
+        assert error_step.output.error is not None
         assert error_step.output.error.error_type == "ValueError"
         assert "Environment validation failed" in error_step.output.error.exception_str
 
@@ -333,6 +363,11 @@ class TestEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="test-episode",
+            max_steps=5,
+            runtime_context=None,
+            storage=None,
+            container_backend=None,
         )
         episode.run()
 
@@ -342,6 +377,11 @@ class TestEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="test-episode",
+            max_steps=5,
+            runtime_context=None,
+            storage=None,
+            container_backend=None,
         )
         with pytest.raises(FileExistsError):
             episode2.run()
@@ -353,6 +393,11 @@ class TestEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="test-episode",
+            max_steps=5,
+            runtime_context=None,
+            storage=None,
+            container_backend=None,
         )
         episode.run()
 
@@ -361,6 +406,11 @@ class TestEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="test-episode",
+            max_steps=5,
+            runtime_context=None,
+            storage=None,
+            container_backend=None,
         )
         episode2.allow_overwrite = True
         episode2.run()
