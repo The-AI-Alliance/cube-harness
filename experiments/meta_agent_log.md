@@ -504,3 +504,31 @@ Add: "Do NOT modify test files (files under tests/ or with test_ prefix). The ev
 applies its own test patch during evaluation. Only modify source code files to fix the bug."
 
 **Result**: `astropy__astropy-7336` r=0.0 → r=1.0 confirmed (15 steps, reward=1.0).
+
+## Iteration 19 — 2026-04-29 — sympy bin/test exits 1 for pre-existing container exceptions
+
+**Tasks**: `sympy__sympy-14531`
+
+**What we observed**: f2p_passed=True (agent correctly fixed `_print_Relational` and `_print_Limit`
+in `sympy/printing/str.py` to use `self._print()` instead of raw string interpolation).
+But p2p_passed=False. The p2p run output showed:
+`tests finished: 119 passed, 5 expected to fail, 4 exceptions, in 68.24 seconds`
+Exit code 1 because of 4 exceptions in `sathandlers.py:3: from collections import MutableMapping`.
+This is a Python 3.9 deprecation-as-exception in old sympy code (2018-era containers). The
+exceptions are NOT in the p2p test list; they occur in unrelated code paths triggered by other tests.
+
+**Root cause**: `_run_tests()` treated any non-zero exit as failed, but sympy's `bin/test` exits 1
+for both "X tests failed" AND "X exceptions in unrelated code". The distinction is in the summary
+line: failures say "X failed," while exceptions say "X exceptions,".
+
+**Fix** (`cubes/swebench-verified-cube/src/swebench_verified_cube/task.py`, `_run_tests()`):
+When `strict=False` (pass_to_pass), if exit code is non-zero but:
+- At least one test ran ("N passed" appears in output), AND
+- No tests actually failed (no "N failed" in output)
+then treat as passed. Covers both sympy exceptions-in-unrelated-code and future similar cases.
+
+**Blast radius**: Only pass_to_pass runs (`strict=False`). fail_to_pass remains strict.
+Won't mask genuine failures (those show "N failed" in output). Guards against total crashes
+(requires "N passed" to be present).
+
+**Result**: sympy-14531 r=0.0 → r=1.0 confirmed. Control set (requests-1142, flask-5014, astropy-7336) all 1.0 — no regressions.

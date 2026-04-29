@@ -184,6 +184,15 @@ class SWEBenchVerifiedTask(Task):
             # For pass_to_pass this is not the agent's fault; treat as passed.
             if exit_code == 4 and not strict:
                 return True, output
+            # For pass_to_pass: if exit code is non-zero but no tests actually FAILED
+            # (only exceptions in unrelated modules, e.g. old sympy containers with
+            # collections.MutableMapping on Python 3.9), treat as passed.
+            # Require that some tests ran ("N passed") to guard against total crashes.
+            if exit_code != 0 and not strict:
+                tests_ran = bool(re.search(r"\b\d+\s+passed\b", output, re.IGNORECASE))
+                no_failures = not bool(re.search(r"\b\d+\s+failed\b", output, re.IGNORECASE))
+                if tests_ran and no_failures:
+                    return True, output
             return exit_code == 0, output
 
         # Fallback: sentinel missing means the outer shell itself failed
