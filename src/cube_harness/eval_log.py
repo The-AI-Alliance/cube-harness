@@ -33,8 +33,12 @@ from cube.core import TypedBaseModel
 from pydantic import Field
 
 from cube_harness.core import Trajectory
+from cube_harness.storage import EPISODES_DIR as _EPISODES_DIR
 
 logger = logging.getLogger(__name__)
+
+EPISODE_RECORD_FILENAME = "episode_record.json"
+EXPERIMENT_RECORD_FILENAME = "experiment_record.json"
 
 _TRACKED_PACKAGES: list[str] = [
     "cube-harness",
@@ -313,7 +317,7 @@ class ExperimentRecord(TypedBaseModel):
     metadata, git provenance. EpisodeRecord links to this via evaluation_id.
     """
 
-    evaluation_id: str = Field(description="SHA-256(experiment_name + output_dir)[:16] — stable within a run.")
+    evaluation_id: str = Field(description="output_dir.name — unique per run (includes UUID suffix from make_experiment_output_dir).")
     experiment_name: str = Field(description="Experiment name as set in Experiment.name.")
     evaluation_timestamp: float = Field(description="Experiment start time as Unix timestamp.")
     eval_library: EvalLibrary = Field(description="Library that produced the evaluation.")
@@ -473,11 +477,6 @@ class EpisodeRecord(TypedBaseModel):
         ep_dir = Path(output_dir) / _EPISODES_DIR / self.trajectory_id
         ep_dir.mkdir(parents=True, exist_ok=True)
         (ep_dir / EPISODE_RECORD_FILENAME).write_text(self.model_dump_json(indent=2))
-
-
-EPISODE_RECORD_FILENAME = "episode_record.json"
-EXPERIMENT_RECORD_FILENAME = "experiment_record.json"
-_EPISODES_DIR = "episodes"
 
 
 class EvalLog(TypedBaseModel):
