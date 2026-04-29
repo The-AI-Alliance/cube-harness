@@ -14,7 +14,7 @@ from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
-from cube_harness.eval_log import EpisodeRecord, compute_evaluation_id, write_episode_record
+from cube_harness.eval_log import EpisodeRecord, compute_evaluation_id
 from cube_harness.metrics.tracer import get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -294,7 +294,7 @@ class Episode:
                         evaluation_id=evaluation_id,
                         task_config=self.config.task_config,
                     )
-                    write_episode_record(self.config.output_dir, ep_record)
+                    ep_record.write(self.config.output_dir)
                 except Exception:
                     logger.warning("Failed to write episode record", exc_info=True)
                 logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))

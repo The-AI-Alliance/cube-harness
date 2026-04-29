@@ -13,7 +13,7 @@ from cube_harness.core import Trajectory
 from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus
-from cube_harness.eval_log import EvalLog, ExperimentRecord, write_experiment_record
+from cube_harness.eval_log import EvalLog, ExperimentRecord
 from cube_harness.storage import FileStorage
 
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ class Experiment(TypedBaseModel):
             benchmark=self.benchmark,
             git_cwd=self.git_cwd,
         )
-        write_experiment_record(output_path, exp_record)
+        exp_record.write(output_path)
 
     @classmethod
     def load_config(cls, path: str) -> Self:

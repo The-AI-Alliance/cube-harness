@@ -358,6 +358,14 @@ class ExperimentRecord(TypedBaseModel):
             benchmark_subset=BenchmarkSubset.from_benchmark(benchmark),
         )
 
+    def write(self, output_dir: Path) -> None:
+        """Write experiment_record.json to output_dir."""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / EXPERIMENT_RECORD_FILENAME
+        path.write_text(self.model_dump_json(indent=2))
+        logger.info(f"Saved experiment record to {path}")
+
 
 class EpisodeRecord(TypedBaseModel):
     """Episode-level record. Written to episodes/<trajectory_id>/episode_record.json after each episode.
@@ -465,26 +473,16 @@ class EpisodeRecord(TypedBaseModel):
             timestamp=trajectory.start_time or 0.0,
         )
 
+    def write(self, output_dir: Path) -> None:
+        """Write episode_record.json to episodes/<trajectory_id>/ inside output_dir."""
+        ep_dir = Path(output_dir) / _EPISODES_DIR / self.trajectory_id
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        (ep_dir / EPISODE_RECORD_FILENAME).write_text(self.model_dump_json(indent=2))
+
 
 EPISODE_RECORD_FILENAME = "episode_record.json"
 EXPERIMENT_RECORD_FILENAME = "experiment_record.json"
 _EPISODES_DIR = "episodes"
-
-
-def write_experiment_record(output_dir: Path, record: ExperimentRecord) -> None:
-    """Write experiment_record.json to output_dir."""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / EXPERIMENT_RECORD_FILENAME
-    path.write_text(record.model_dump_json(indent=2))
-    logger.info(f"Saved experiment record to {path}")
-
-
-def write_episode_record(output_dir: Path, record: EpisodeRecord) -> None:
-    """Write episode_record.json to episodes/<trajectory_id>/ inside output_dir."""
-    ep_dir = Path(output_dir) / _EPISODES_DIR / record.trajectory_id
-    ep_dir.mkdir(parents=True, exist_ok=True)
-    (ep_dir / EPISODE_RECORD_FILENAME).write_text(record.model_dump_json(indent=2))
 
 
 class EvalLog(TypedBaseModel):
@@ -506,9 +504,9 @@ class EvalLog(TypedBaseModel):
     def save(self, output_dir: Path) -> None:
         """Write experiment_record.json and per-trajectory episode_record.json files."""
         output_dir = Path(output_dir)
-        write_experiment_record(output_dir, self.experiment)
+        self.experiment.write(output_dir)
         for record in self.episodes:
-            write_episode_record(output_dir, record)
+            record.write(output_dir)
         logger.info(f"Saved {len(self.episodes)} episode records under {output_dir / _EPISODES_DIR}")
 
     @classmethod
