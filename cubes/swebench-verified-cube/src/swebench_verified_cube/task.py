@@ -154,49 +154,36 @@ class SWEBenchVerifiedTask(Task):
     ) -> tuple[bool, str]:
         """Run test directives; return (all_passed, last-200-lines-of-output).
 
-        When strict=False (used for pass_to_pass), pytest exit code 4 ("no tests
-        collected") is treated as passed rather than failed.  SWE-bench stores some
-        parameterised test IDs in truncated form (e.g. test_stem[png-w/ missing the
-        closing ]) that pytest cannot collect; penalising the agent for this is wrong.
+        Output is trimmed to the last 200 lines because some repos (Django) print
+        tens of thousands of lines of DB-setup preamble before test results appear.
+
+        strict=False is used for pass_to_pass checks and relaxes two edge cases
+        that are not the agent's fault:
+        - exit 4: pytest found no tests (SWE-bench stores some truncated test IDs
+          that pytest cannot parse — the benchmark data is malformed for these).
+        - non-zero exit but zero failures: old sympy containers emit import-level
+          deprecation errors that inflate the exit code even when all tests passed.
         """
         assert isinstance(self.tool, SWEBenchTool)
         if not test_directives:
             return True, ""
 
-        test_cmd = self._build_test_cmd(repo, test_directives)
-        # Run tests, capture exit code, and tail output in one pipeline.
-        # bash_unlimited returns the pipeline exit code (from tail, always 0);
-        # we extract the real test exit code from the embedded marker line.
-        sentinel = "CUBE_TEST_EXIT_CODE"
-        cmd = f"{CONDA_ACTIVATE} && {{ {test_cmd} 2>&1; echo '{sentinel}:'$?; }} | tail -n 200"
-        raw = self.tool.bash_unlimited(cmd, timeout=timeout)
+        test_cmd = f"{CONDA_ACTIVATE} && {self._build_test_cmd(repo, test_directives)}"
+        result = self.tool._container.exec(test_cmd, timeout=timeout, workdir=self.tool._config.working_dir)
 
-        # Handle timeout — bash_unlimited appends "[error]" on timeout
-        if "[error]" in raw:
-            return False, raw
+        raw = (result.stdout or "") + (result.stderr or "")
+        output = "\n".join(raw.splitlines()[-200:])
 
-        # Extract exit code from sentinel line
-        m = re.search(rf"^{sentinel}:(\d+)\s*$", raw, re.MULTILINE)
-        if m:
-            exit_code = int(m.group(1))
-            output = re.sub(rf"^{sentinel}:\d+\s*\n?", "", raw, flags=re.MULTILINE).rstrip()
-            # exit 4 = no tests collected (e.g. truncated parametrised IDs in SWE-bench data).
-            # For pass_to_pass this is not the agent's fault; treat as passed.
-            if exit_code == 4 and not strict:
+        if result.exit_code == 124:  # shell timeout
+            return False, output + "\n[timed out]"
+        if result.exit_code == 4 and not strict:
+            return True, output
+        if result.exit_code != 0 and not strict:
+            tests_ran = bool(re.search(r"\b\d+\s+passed\b", output, re.IGNORECASE))
+            no_failures = not bool(re.search(r"\b\d+\s+failed\b", output, re.IGNORECASE))
+            if tests_ran and no_failures:
                 return True, output
-            # For pass_to_pass: if exit code is non-zero but no tests actually FAILED
-            # (only exceptions in unrelated modules, e.g. old sympy containers with
-            # collections.MutableMapping on Python 3.9), treat as passed.
-            # Require that some tests ran ("N passed") to guard against total crashes.
-            if exit_code != 0 and not strict:
-                tests_ran = bool(re.search(r"\b\d+\s+passed\b", output, re.IGNORECASE))
-                no_failures = not bool(re.search(r"\b\d+\s+failed\b", output, re.IGNORECASE))
-                if tests_ran and no_failures:
-                    return True, output
-            return exit_code == 0, output
-
-        # Fallback: sentinel missing means the outer shell itself failed
-        return False, raw
+        return result.exit_code == 0, output
 
     @staticmethod
     def _normalize_django_directive(directive: str) -> str:
