@@ -16,6 +16,8 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+
 
 _logger = logging.getLogger(__name__)
 
@@ -225,6 +227,8 @@ def get_tracer(
 
     os.environ[RAY_ENV_OTLP_ENDPOINT] = otlp_endpoint
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 
     trace.set_tracer_provider(provider)
 

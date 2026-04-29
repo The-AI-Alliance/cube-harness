@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from pathlib import Path
@@ -5,7 +6,7 @@ from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.core import EnvironmentOutput, ImageContent, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from opentelemetry.trace import StatusCode
 from termcolor import colored
@@ -155,6 +156,15 @@ class Episode:
                 )
                 summary_proc = SummaryProcessor(ep_dir)
                 summary_proc.on_step(0, trajectory.steps[0])
+                prompt_parts = []
+                for c in env_output.obs.contents:
+                    if isinstance(c, ImageContent):
+                        prompt_parts.append("<inline image>")
+                    else:
+                        prompt_parts.append(c.to_markdown())
+                prompt_text = "\n".join(prompt_parts)
+                if len(prompt_text) > 0:
+                    episode_span.set_attribute("prompt", prompt_text)
                 logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
@@ -202,6 +212,8 @@ class Episode:
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), env_step)
                         trajectory.steps.append(env_step)
+                        span.set_attribute("agent_output", agent_output.model_dump_json())
+                        span.set_attribute("env_output", env_output.model_dump_json())
                         span.set_attribute("done", env_output.done)
                         span.set_attribute("reward", env_output.reward)
                         turns += 1
@@ -214,6 +226,9 @@ class Episode:
                 final_reward = trajectory.last_env_step().reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
+                if "task_result" in env_output.info:
+                    episode_span.set_attribute("task_result", json.dumps(env_output.info["task_result"]))
+                episode_span.set_attribute("reward", final_reward)
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
             raise e
