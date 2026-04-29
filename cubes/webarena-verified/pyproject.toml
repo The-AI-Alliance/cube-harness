@@ -22,7 +22,7 @@ include = ["src/webarena_verified_cube/task_metadata.json"]
 
 [tool.uv.sources]
 # TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "main" }
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "9982b279dd780bdae95b0f8cbcf2a7f3fab79d0e" }
 
 [tool.ruff]
 fix = true
