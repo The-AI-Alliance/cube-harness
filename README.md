@@ -125,6 +125,16 @@ make test      # Run tests
 make coverage  # Run tests with coverage report
 ```
 
+### Pre-commit hooks
+
+Install once after cloning to get ruff lint/format, trailing-whitespace checks, and DCO sign-off enforcement on every commit:
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg
+```
+
+The `prepare-commit-msg` hook automatically appends `Signed-off-by: Your Name <email>` to every commit message (required by the DCO). You can also sign off manually with `git commit -s`.
+
 ## Project Structure
 
 ```
