@@ -197,14 +197,13 @@ class WorkArenaTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
-        # Import here to avoid circular import (benchmark imports task)
-        from workarena_cube.benchmark import WorkArenaBenchmark
-
         _ = runtime_context, container_backend
-        meta = WorkArenaBenchmark.task_metadata[self.task_id]
         assert self.tool_config, f"WorkArenaTaskConfig requires a tool_config, got {self.tool_config}"
+        assert isinstance(self.metadata, WorkArenaTaskMetadata), (
+            f"metadata must be of type WorkArenaTaskMetadata, got {type(self.metadata).__name__}"
+        )
         return WorkArenaTask(
-            metadata=meta,
+            metadata=self.metadata,
             tool_config=self.tool_config,
             seed=self.seed if self.seed is not None else 42,
         )

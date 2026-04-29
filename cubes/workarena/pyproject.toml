@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.entry-points."cube.benchmarks"]
-workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmark"
+workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
