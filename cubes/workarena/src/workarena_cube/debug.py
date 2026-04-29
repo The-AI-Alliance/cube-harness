@@ -54,7 +54,7 @@ def get_debug_benchmark() -> WorkArenaBenchmarkConfig:
         tool_config=WorkArenaCheatToolConfig(),
     ).named_subset("l1")
     task_ids = list(l1_cfg.tasks().keys())[:_DEBUG_N_TASKS]
-    return l1_cfg.subset_from_list(task_ids, benchmark_name_suffix="debug")  # type: ignore[return-value]
+    return l1_cfg.subset_from_list(task_ids, benchmark_name_suffix="debug")
 
 
 if __name__ == "__main__":
