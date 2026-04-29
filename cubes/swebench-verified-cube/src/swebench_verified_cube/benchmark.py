@@ -40,9 +40,7 @@ def _pull_with_retry(image: str, max_attempts: int = 5, base_delay: float = 30.0
             )
             time.sleep(delay)
             continue
-        raise subprocess.CalledProcessError(
-            result.returncode, ["docker", "pull", image], result.stdout, result.stderr
-        )
+        raise subprocess.CalledProcessError(result.returncode, ["docker", "pull", image], result.stdout, result.stderr)
     raise RuntimeError(f"Rate limit not resolved after {max_attempts} attempts pulling {image!r}")
 
 
@@ -68,6 +66,7 @@ def _log_docker_auth_status() -> None:
             "prefetch_images: Could not read ~/.docker/config.json. "
             "Run `docker login` to authenticate and raise your pull rate limit."
         )
+
 
 _DATASET_NAME = "princeton-nlp/SWE-bench_Verified"
 
