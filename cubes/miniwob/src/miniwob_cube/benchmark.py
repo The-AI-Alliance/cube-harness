@@ -94,7 +94,6 @@ class MiniWobBenchmarkConfig(BenchmarkConfig):
         num_tasks=125,
         tags=["browser", "web", "ui"],
     )
-    task_metadata: ClassVar[dict[str, MiniWobTaskMetadata]]  # type: ignore - populated automatically at import time
     task_config_class: ClassVar[type[TaskConfig]] = MiniWobTaskConfig
     benchmark_class: ClassVar[type[Benchmark]] = MiniWobBenchmark
 

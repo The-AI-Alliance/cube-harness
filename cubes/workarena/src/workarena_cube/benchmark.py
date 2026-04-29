@@ -106,7 +106,6 @@ class WorkArenaBenchmarkConfig(BenchmarkConfig):
         },
         num_tasks=333,
     )
-    task_metadata: ClassVar[dict[str, WorkArenaTaskMetadata]]  # type: ignore - populated automatically at import time
     task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
     benchmark_class: ClassVar[type[Benchmark]] = WorkArenaBenchmark
 

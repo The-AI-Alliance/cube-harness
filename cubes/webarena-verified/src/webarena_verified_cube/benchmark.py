@@ -183,7 +183,6 @@ class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig):
         num_tasks=812,
         tags=["browser", "web", "ui", "webarena"],
     )
-    task_metadata: ClassVar[dict[str, WebArenaVerifiedTaskMetadata]]  # type: ignore - populated automatically at import time
     """task_metadata.json is a shipped package resource containing lightweight public fields
     (sites, expected_action, intent_template_id). No heavy execution data exists."""
     task_config_class: ClassVar[type[TaskConfig]] = WebArenaVerifiedTaskConfig
