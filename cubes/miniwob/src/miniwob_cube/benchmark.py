@@ -1,3 +1,4 @@
+from io import TextIOWrapper
 import logging
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from typing import ClassVar, Generator
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.task import TaskConfig
 
-from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
+from miniwob_cube.task import MiniWobTaskConfig
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +20,13 @@ logger = logging.getLogger(__name__)
 class MiniWobBenchmark(Benchmark):
     """Runtime pair — owns the local HTTP server process serving MiniWob HTML."""
 
-    config: "MiniWobBenchmarkConfig"
+    config: "MiniWobBenchmarkConfig"  # type: ignore - MiniWobBenchmarkConfig is a BenchmarkConfig
 
     def __init__(self, config: "MiniWobBenchmarkConfig") -> None:
         super().__init__(config)
         self._server_process: subprocess.Popen | None = None
-        self._stdout_file: object | None = None
-        self._stderr_file: object | None = None
+        self._stdout_file: TextIOWrapper | None = None
+        self._stderr_file: TextIOWrapper | None = None
 
     def _setup(self) -> None:
         cfg = self.config
@@ -44,7 +45,7 @@ class MiniWobBenchmark(Benchmark):
 
         while time.monotonic() < startup_deadline:
             if self._server_process.poll() is not None:
-                self._stderr_file.flush()  # type: ignore[attr-defined]
+                self._stderr_file.flush()
                 stderr_path = Path(tempfile.gettempdir()) / "miniwob_server_stderr.log"
                 stderr_content = stderr_path.read_text() if stderr_path.exists() else "No stderr available"
                 returncode = self._server_process.returncode
@@ -78,11 +79,11 @@ class MiniWobBenchmark(Benchmark):
             self._server_process = None
 
         if self._stdout_file is not None:
-            self._stdout_file.close()  # type: ignore[attr-defined]
+            self._stdout_file.close()
             self._stdout_file = None
 
         if self._stderr_file is not None:
-            self._stderr_file.close()  # type: ignore[attr-defined]
+            self._stderr_file.close()
             self._stderr_file = None
 
 

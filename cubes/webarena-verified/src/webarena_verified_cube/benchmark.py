@@ -12,7 +12,7 @@ from cube.tool import ToolboxConfig
 from webarena_verified.types.config import EnvironmentConfig, WebArenaVerifiedConfig
 from webarena_verified.types.task import WebArenaSite
 
-from webarena_verified_cube.task import WebArenaVerifiedTaskConfig, WebArenaVerifiedTaskMetadata
+from webarena_verified_cube.task import WebArenaVerifiedTaskConfig
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 logger = logging.getLogger(__name__)
