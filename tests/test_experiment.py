@@ -233,8 +233,8 @@ class TestExperiment:
 
         exp.save_config()
 
-        assert nested_dir.exists()
-        assert (nested_dir / "experiment_config.json").exists()
+        assert exp.output_dir.exists()
+        assert (exp.output_dir / "experiment_config.json").exists()
 
     def test_experiment_serialization(self, tmp_dir, mock_agent_config, mock_cube_benchmark):
         """Test Experiment JSON serialization."""

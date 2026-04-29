@@ -1,12 +1,15 @@
 import json
 import logging
+import os
+import re
 import time
 from pathlib import Path
 from typing import Self
+from uuid import uuid4
 
 from cube.benchmark import Benchmark
 from cube.core import TypedBaseModel
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import Trajectory
@@ -17,6 +20,33 @@ from cube_harness.eval_log import EvalLog, ExperimentRecord
 from cube_harness.storage import FileStorage
 
 logger = logging.getLogger(__name__)
+
+EXP_DIR = Path(os.environ.get("CH_EXP_DIR", "~/cube_harness_results")).expanduser().resolve()
+_UUID_SUFFIX_RE = re.compile(r"_[0-9a-f]{8}$")
+
+
+def make_experiment_output_dir(
+    agent_name: str,
+    benchmark_name: str,
+    llm_name: str | None = None,
+    tag: str | None = None,
+    base_dir: Path | None = None,
+) -> Path:
+    """Create and return a unique output directory for an experiment run.
+
+    Directory name: {date}_{agent_name}_{benchmark_name}[_{llm_name}][_{tag}]_{uuid8}.
+    The directory is created before returning.
+    """
+    now = time.strftime("%Y%m%d_%H%M%S")
+    parts = [now, agent_name, benchmark_name]
+    if llm_name:
+        parts.append(llm_name)
+    if tag:
+        parts.append(tag)
+    parts.append(uuid4().hex[:8])
+    path = (base_dir or EXP_DIR) / "_".join(parts)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 class ExpResult(TypedBaseModel):
@@ -36,6 +66,12 @@ class Experiment(TypedBaseModel):
     max_steps: int = MAX_STEPS
     max_retries: int = 3
     git_cwd: str | None = None
+
+    @model_validator(mode="after")
+    def _ensure_unique_output_dir(self) -> "Experiment":
+        if not _UUID_SUFFIX_RE.search(self.output_dir.name):
+            self.output_dir = self.output_dir.parent / f"{self.output_dir.name}_{uuid4().hex[:8]}"
+        return self
 
     @property
     def evaluation_id(self) -> str:
