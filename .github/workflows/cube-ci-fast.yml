@@ -1,0 +1,96 @@
+name: Cube CI (fast)
+
+# Runs the debug suite for cubes on every PR.
+# All debug agents are scripted — no LLM API keys required.
+# Only infra secrets (HF token, Docker) are needed.
+#
+# Ownership: cube-harness (PR-level smoke tests for cubes in this repo).
+# The full nightly monitoring matrix across all registered cubes and all
+# infra targets is owned by cube-registry.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Expose secret availability as a job output so downstream jobs can use it in
+  # their `if:` conditions. (The `secrets` context is not allowed in job-level
+  # `if:` expressions directly — only in step-level ones.)
+  check-secrets:
+    name: Check available secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has-hf-token: ${{ steps.check.outputs.has-hf-token }}
+    steps:
+      - id: check
+        env:
+          HF_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
+        run: |
+          if [ -n "$HF_TOKEN" ]; then
+            echo "has-hf-token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-hf-token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  miniwob:
+    name: MiniWob debug suite
+    runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Configure git credentials
+        run: git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7.6.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.13'
+
+      - name: Install cube-harness
+        run: make ci-install
+
+      - name: Install miniwob-cube
+        run: uv pip install -e "cubes/miniwob"
+
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
+
+      - name: Run MiniWob debug suite
+        run: uv run cube test miniwob-cube --no-reset-check
+
+  workarena:
+    name: WorkArena debug suite
+    needs: check-secrets
+    # Skip if HF token is not configured (e.g. external fork PRs)
+    if: needs.check-secrets.outputs.has-hf-token == 'true'
+    runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Configure git credentials
+        run: git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7.6.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.13'
+
+      - name: Install cube-harness
+        run: make ci-install
+
+      - name: Install workarena-cube
+        run: uv pip install -e "cubes/workarena"
+
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
+
+      - name: Run WorkArena debug suite
+        run: uv run cube test workarena-cube --no-reset-check
+        env:
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}

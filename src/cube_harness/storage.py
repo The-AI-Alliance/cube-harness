@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import get_log_path as get_episode_log_path
+from cube_harness.episode_logs import trajectory_log_id
+from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
 
 if TYPE_CHECKING:
     from cube_harness.episode import EpisodeConfig
@@ -39,6 +41,12 @@ class Storage(Protocol):
     def save_episode_config(self, episode_config: "EpisodeConfig") -> None: ...
 
     def update_experiment_summary(self, trajectory: Trajectory) -> None: ...
+
+    def write_episode_status(self, trajectory_id: str, status: EpisodeStatus) -> None: ...
+
+    def read_episode_status(self, trajectory_id: str) -> EpisodeStatus | None: ...
+
+    def archive_episode(self, trajectory_id: str) -> None: ...
 
 
 _thread_local = threading.local()
@@ -165,6 +173,12 @@ class FileStorage:
         archived = ep_dir.parent / f"{ep_dir.name}{ARCHIVED_MARKER}{time.time()}"
         ep_dir.rename(archived)
         logger.info(f"Archived {ep_dir.name} -> {archived.name}")
+
+    def archive_episode(self, trajectory_id: str) -> None:
+        """Archive the episode directory for a terminal attempt, preserving its history."""
+        ep_dir = self._episode_dir(trajectory_id)
+        if ep_dir.exists():
+            self._archive_episode(ep_dir)
 
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None:
         ep_dir = self._episode_dir(trajectory_id)
@@ -487,7 +501,7 @@ class FileStorage:
         return stubs
 
     def save_episode_config(self, episode_config: "EpisodeConfig") -> None:
-        traj_id = f"{episode_config.task_config.task_id}_ep{episode_config.id}"
+        traj_id = trajectory_log_id(episode_config.task_config.task_id, episode_config.id)
         ep_dir = self._episode_dir(traj_id)
         ep_dir.mkdir(parents=True, exist_ok=True)
         config_path = ep_dir / "episode_config.json"
@@ -517,3 +531,23 @@ class FileStorage:
         v1_config_dir = self.output_dir / "episode_configs"
         v1_configs = list(v1_config_dir.glob("episode_*_task_*.json")) if v1_config_dir.exists() else []
         return v2_configs + v1_configs
+
+    # --- Episode status (control plane) ---
+
+    def _episode_status_path(self, trajectory_id: str) -> Path:
+        return self._episode_dir(trajectory_id) / STATUS_FILENAME
+
+    def write_episode_status(self, trajectory_id: str, status: EpisodeStatus) -> None:
+        status.write(self._episode_status_path(trajectory_id))
+
+    def read_episode_status(self, trajectory_id: str) -> EpisodeStatus | None:
+        return EpisodeStatus.read(self._episode_status_path(trajectory_id))
+
+    def list_episode_statuses(self) -> dict[str, EpisodeStatus]:
+        """Return {trajectory_id: status} for every non-archived episode dir with a status.json."""
+        result: dict[str, EpisodeStatus] = {}
+        for ep_dir in self._episode_config_dirs():
+            status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+            if status is not None:
+                result[ep_dir.name] = status
+        return result

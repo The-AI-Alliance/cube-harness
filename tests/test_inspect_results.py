@@ -6,8 +6,9 @@ from cube.core import EnvironmentOutput, Observation, StepError
 
 from cube_harness.analyze.inspect_results import (
     _extract_error_from_trajectory,
+    agent_configs_to_df,
     error_report,
-    format_constants_and_variables,
+    format_agent_comparison,
     get_constants_and_variables,
     global_report,
     load_and_analyze,
@@ -197,20 +198,70 @@ class TestErrorReport:
         assert "Traceback" in result
 
 
-class TestFormatConstantsAndVariables:
-    def test_returns_two_dataframes(self, single_agent_trajectories):
-        df = trajectories_to_df(single_agent_trajectories)
-        const_df, var_df = format_constants_and_variables(df)
+class TestFormatAgentComparison:
+    _gpt4o_cfg = {
+        "_type": "ReactAgentConfig",
+        "llm_config": {"model_name": "gpt-4o", "temperature": 1.0, "max_tokens": 8192},
+        "max_actions": 10,
+        "can_finish": True,
+    }
+    _mini_cfg = {
+        "_type": "ReactAgentConfig",
+        "llm_config": {"model_name": "gpt-4o-mini", "temperature": 1.0, "max_tokens": 8192},
+        "max_actions": 10,
+        "can_finish": True,
+    }
+
+    def test_constants_are_shared_params(self) -> None:
+        df = agent_configs_to_df([("Agent-gpt-4o", self._gpt4o_cfg), ("Agent-gpt-4o-mini", self._mini_cfg)])
+        assert df is not None
+        const_df, _ = format_agent_comparison(df)
         assert "parameter" in const_df.columns
         assert "value" in const_df.columns
-        assert "parameter" in var_df.columns
-        assert "n_unique" in var_df.columns
+        # temperature, max_actions, can_finish are shared
+        assert set(const_df["parameter"]).issuperset({"llm_config.temperature", "max_actions", "can_finish"})
 
-    def test_constant_count(self, single_agent_trajectories):
-        df = trajectories_to_df(single_agent_trajectories)
-        const_df, _ = format_constants_and_variables(df)
-        constants, _, _ = get_constants_and_variables(df)
-        assert len(const_df) == len(constants)
+    def test_variables_are_differing_params(self) -> None:
+        df = agent_configs_to_df([("Agent-gpt-4o", self._gpt4o_cfg), ("Agent-gpt-4o-mini", self._mini_cfg)])
+        assert df is not None
+        _, var_df = format_agent_comparison(df)
+        assert "parameter" in var_df.columns
+        # model_name differs between the two agents
+        assert "llm_config.model_name" in var_df["parameter"].values
+
+    def test_variables_pivoted_one_col_per_agent(self) -> None:
+        df = agent_configs_to_df([("Agent-gpt-4o", self._gpt4o_cfg), ("Agent-gpt-4o-mini", self._mini_cfg)])
+        assert df is not None
+        _, var_df = format_agent_comparison(df)
+        assert "Agent-gpt-4o" in var_df.columns
+        assert "Agent-gpt-4o-mini" in var_df.columns
+        row = var_df[var_df["parameter"] == "llm_config.model_name"].iloc[0]
+        assert row["Agent-gpt-4o"] == "gpt-4o"
+        assert row["Agent-gpt-4o-mini"] == "gpt-4o-mini"
+
+    def test_single_agent_all_constants(self) -> None:
+        df = agent_configs_to_df([("Agent-gpt-4o", self._gpt4o_cfg)])
+        assert df is not None
+        const_df, var_df = format_agent_comparison(df)
+        # With one agent everything is a constant
+        assert not const_df.empty
+        assert var_df.empty or "parameter" in var_df.columns
+
+    def test_empty_returns_empty_dfs(self) -> None:
+        df = agent_configs_to_df([])
+        assert df is None
+
+    def test_variables_correct_when_df_rows_reversed(self) -> None:
+        # Regression: iloc-based lookup assigned values to the wrong agent when
+        # DataFrame row order differed from agent_names list order.
+        df = agent_configs_to_df([("Agent-gpt-4o", self._gpt4o_cfg), ("Agent-gpt-4o-mini", self._mini_cfg)])
+        assert df is not None
+        # Reverse the row order to simulate non-sequential indexing.
+        df = df.iloc[::-1].reset_index(drop=True)
+        _, var_df = format_agent_comparison(df)
+        row = var_df[var_df["parameter"] == "llm_config.model_name"].iloc[0]
+        assert row["Agent-gpt-4o"] == "gpt-4o"
+        assert row["Agent-gpt-4o-mini"] == "gpt-4o-mini"
 
 
 class TestLoadAndAnalyze:

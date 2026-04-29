@@ -18,9 +18,12 @@ class Storage(Protocol):
     def save_step(self, step: TrajectoryStep, trajectory_id: str, step_num: int) -> None
     def save_episode_config(self, episode_config: EpisodeConfig) -> None
     def update_experiment_summary(self, trajectory: Trajectory) -> None
+    def write_episode_status(self, trajectory_id: str, status: EpisodeStatus) -> None
+    def read_episode_status(self, trajectory_id: str) -> EpisodeStatus | None
+    def archive_episode(self, trajectory_id: str) -> None
 ```
 
-Custom backends (cloud storage, DB) must implement all four.
+Custom backends (cloud storage, DB) must implement all seven.
 
 ### `FileStorage`
 Writes V2 only. Reads V2 + V1.
@@ -35,6 +38,10 @@ class FileStorage:
     def save_episode_config(ep_config)
     def save_failure(trajectory_id: str, stack_trace: str)      # failure.txt
     def update_experiment_summary(trajectory)                   # experiment_summary.json (flock-protected)
+    def write_episode_status(trajectory_id, status)             # atomic via .tmp + os.replace()
+    def read_episode_status(trajectory_id) -> EpisodeStatus | None  # None if missing or corrupt
+    def archive_episode(trajectory_id)                          # renames dir to <id>.archived_<ts>/
+    def list_episode_statuses() -> dict[str, EpisodeStatus]     # all non-archived dirs with status.json
 
     # Reads (V2 + V1 fallback)
     def load_trajectory(trajectory_id) -> Trajectory
@@ -63,6 +70,7 @@ class FileStorage:
 ├── experiment_summary.json           # aggregated stats; flock-protected
 └── episodes/
     └── <trajectory_id>/              # f"{task_id}_ep{episode_id}"
+        ├── status.json               # EpisodeStatus (QUEUED→RUNNING→terminal)
         ├── episode_config.json
         ├── episode.metadata.json     # Trajectory without steps
         ├── steps/

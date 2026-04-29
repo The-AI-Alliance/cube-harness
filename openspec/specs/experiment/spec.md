@@ -18,13 +18,18 @@ class Experiment(TypedBaseModel):
     agent_config: AgentConfig
     benchmark: Benchmark             # cube.benchmark.Benchmark
     resume: bool = False
-    retry_failed: bool = False
     max_steps: int = MAX_STEPS
+    max_retries: int = 3             # per-episode retry cap
 
     @property
     def config(self) -> dict          # model_dump(serialize_as_any=True)
 
-    def get_episodes_to_run(self) -> list[Episode]
+    def get_episodes_to_run(
+        self,
+        step_timeout_s: float = 1800.0,
+        cancel_grace_s: float = 120.0,
+        orphan_threshold_s: float = 3600.0,
+    ) -> list[Episode]
     def save_config(self) -> None     # writes experiment_config.json
     @classmethod
     def load_config(cls, path: str) -> Experiment
@@ -33,14 +38,17 @@ class Experiment(TypedBaseModel):
 ```
 
 ### Resume / retry semantics
-| `resume` | `retry_failed` | Episodes returned |
-|----------|----------------|-------------------|
-| False    | False          | All episodes created from scratch |
-| True     | False          | Unstarted episodes only (configs exist, no trajectory) |
-| False    | True           | Failed episodes only (trajectory exists but not successful); `allow_overwrite=True` |
-| True     | True           | Unstarted ∪ failed |
 
-Successful = `trajectory.last_env_step().done and no step.output.error`.
+| `resume` | Episodes returned                                                                                                                         |
+|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `False`  | All episodes from scratch                                                                                                                 |
+| `True`   | Episodes with no `status.json` (never started), plus retriable statuses (`FAILED`, `CANCELLED`, `STALE`) with `retry_count < max_retries` |
+
+`RUNNING` / `QUEUED` (in-flight) are never returned. `COMPLETED` and
+`MAX_STEPS_REACHED` (terminal, non-retriable) are always skipped.
+
+When `resume=True`, `sweep_stale_statuses` runs first so orphaned `RUNNING`/`QUEUED`
+entries become `STALE` and are eligible for retry.
 
 ### `ExpResult`
 ```python
