@@ -56,7 +56,7 @@ class SWEBenchTool(Tool):
             parts.append(f"[exit_code: {result.exit_code}]")
         return "\n".join(parts) if parts else "(no output)"
 
-    _MAX_BASH_TIMEOUT: int = 300
+    _MAX_BASH_TIMEOUT: int = 600
 
     @tool_action
     def bash(self, command: str, timeout: int = 120) -> str:
@@ -147,15 +147,24 @@ class SWEBenchTool(Tool):
         if result.exit_code != 0:
             return f"Error reading {path}: {result.stderr or result.stdout}"
         content = result.stdout
-        count = content.count(old_str)
-        if count == 0:
+        if old_str not in content:
+            if new_str in content:
+                return f"Already applied: new content already present in {path}. No changes made."
             return f"Error: old_str not found in {path}. No changes made."
+        count = content.count(old_str)
         if count > 1:
             return (
                 f"Error: old_str appears {count} times in {path} — add more surrounding "
                 "context to make it unique. No changes made."
             )
         new_content = content.replace(old_str, new_str, 1)
+        if old_str in new_content:
+            return (
+                "Error: old_str still appears in the file after replacement — new_str contains "
+                "old_str as a substring, which would create a recursive pattern. Make old_str "
+                "longer and more specific so it uniquely identifies only the text to replace. "
+                "No changes made."
+            )
         escaped = new_content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
         return f"Replaced 1 occurrence in {path}"
