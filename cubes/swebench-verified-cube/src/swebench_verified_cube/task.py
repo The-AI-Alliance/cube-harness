@@ -7,7 +7,7 @@ import re
 import shlex
 from typing import Any
 
-from cube.container import relocate_if_readonly
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
 from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
 
