@@ -355,8 +355,8 @@ class Genny(Agent):
         self.summaries: list[str] = []
         self.history: list[list[dict | Message]] = []  # groups: one per obs or asst turn
         self._actions_cnt: int = 0
-        self._seen_action_keys: set[str] = set()
-        self._loop_warning: str | None = None
+        self._action_repeat_count: dict[str, int] = {}  # key → times this action was attempted
+        self._loop_warnings: list[str] = []  # all accumulated loop violations this episode
 
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
@@ -382,8 +382,7 @@ class Genny(Agent):
             response, act_call = self._act()
         actions = self.tool_adapter.decode(response)
 
-        # Loop detection: warn next step if agent repeats an identical action call.
-        warnings = []
+        # Loop detection: track repeated identical action calls and accumulate warnings.
         for action in actions:
             if action.name == STOP_ACTION.name:
                 continue
@@ -391,15 +390,13 @@ class Genny(Agent):
                 key = f"{action.name}({json.dumps(action.arguments, sort_keys=True)})"
             except (TypeError, ValueError):
                 key = f"{action.name}({action.arguments!r})"
-            if key in self._seen_action_keys:
-                warnings.append(
-                    f"[LOOP WARNING] You already tried `{key}` earlier in this episode "
-                    "and it had no lasting effect. You must try a completely different approach — "
-                    "repeating this exact call will not fix the problem."
+            count = self._action_repeat_count.get(key, 0) + 1
+            self._action_repeat_count[key] = count
+            if count == 2:
+                self._loop_warnings.append(
+                    f"[LOOP] You already tried `{action.name}` with the same arguments and it "
+                    "had no effect. Do NOT repeat it — try a completely different approach."
                 )
-            else:
-                self._seen_action_keys.add(key)
-        self._loop_warning = "\n".join(warnings) or None
 
         if self.config.enable_summarize:
             # Append the decided action to the current step's summary so the
@@ -465,9 +462,10 @@ class Genny(Agent):
         if windowed:
             messages.append({"role": "user", "content": _obs_section_header(self.config.render_last_n_obs)})
             messages.extend(windowed)
-        if self._loop_warning:
-            messages.append({"role": "user", "content": self._loop_warning})
-            messages.append({"role": "assistant", "content": "Understood, I will try a different approach."})
+        if self._loop_warnings:
+            warning_block = "\n".join(self._loop_warnings)
+            messages.append({"role": "user", "content": warning_block})
+            messages.append({"role": "assistant", "content": "Understood. I will not repeat those exact calls."})
         return messages
 
     def _summarize_past(self) -> tuple[str, LLMCall]:

@@ -160,10 +160,12 @@ class SWEBenchTool(Tool):
         new_content = content.replace(old_str, new_str, 1)
         if old_str in new_content:
             return (
-                "Error: old_str still appears in the file after replacement — new_str contains "
-                "old_str as a substring, which would create a recursive pattern. Make old_str "
-                "longer and more specific so it uniquely identifies only the text to replace. "
-                "No changes made."
+                "Error: new_str contains old_str as a substring — the replacement cannot be "
+                "applied safely. This happens when you include old_str verbatim inside new_str "
+                "(e.g. prepending code before a block you also keep). "
+                "Fix: shorten new_str so it does NOT contain old_str. Only include the NEW lines "
+                "you are adding; do not repeat the old lines that follow. "
+                "Alternatively use write_file to overwrite the whole block. No changes made."
             )
         escaped = new_content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
