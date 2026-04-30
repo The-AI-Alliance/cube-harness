@@ -1,6 +1,7 @@
 import sys
 
 from cube_browser_tool import PlaywrightConfig
+from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from miniwob_cube.benchmark import MiniWobBenchmarkConfig
 
 from cube_harness import make_experiment_output_dir
@@ -13,10 +14,10 @@ from cube_harness.llm import LLMConfig
 def main(debug: bool) -> None:
     output_dir = make_experiment_output_dir("react", "miniwob")
 
-    llm_config = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="gpt-5-nano", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    tool_config = PlaywrightConfig(use_screenshot=True, headless=True)
+    tool_config = PlaywrightConfig(use_screenshot=True, browser=PlaywrightSessionConfig(headless=True))
     benchmark_config = MiniWobBenchmarkConfig(tool_config=tool_config)
 
     exp = Experiment(

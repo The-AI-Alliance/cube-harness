@@ -12,7 +12,7 @@ from opentelemetry.trace import StatusCode
 from termcolor import colored
 
 from cube_harness.agent import AgentConfig
-from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
+from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep,
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.eval_log import EpisodeRecord
@@ -136,7 +136,7 @@ class Episode:
         # action_schemas is read by eval_log.AgentInfo (feat/atlas-eval-log) to populate
         # the tool list in structured evaluation records without re-instantiating the task.
         extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
-        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, agent, extra_metadata=extra_metadata)
+        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, task.artifacts, agent, extra_metadata=extra_metadata)
 
     def _open_status(self, trajectory_id: str) -> EpisodeStatus:
         """Initialise `status.json` for this attempt.
@@ -171,6 +171,7 @@ class Episode:
         step_fn: Callable,
         evaluate_fn: Callable,
         close_fn: Callable,
+        artifacts_fn: Callable[[], list[Artifact]],
         agent,
         extra_metadata: dict | None = None,
     ) -> Trajectory:
@@ -309,6 +310,7 @@ class Episode:
                 ep_status.reward = final_reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
+                episode_span.set_attribute("artifacts", task_id
             ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
