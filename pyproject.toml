@@ -67,6 +67,7 @@ constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6
 # `Depends-on: cube-standard/main` (or a pinned ref) so `make review PR=<n>`
 # resolves it.
 cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "fix/waa-guest-agent-methods" }
+cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", rev = "fix/waa-guest-agent-methods" }
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", rev = "fix/waa-guest-agent-methods" }
 miniwob-cube = { path = "cubes/miniwob", editable = true }
 workarena-cube = { path = "cubes/workarena", editable = true }

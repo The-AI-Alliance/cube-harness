@@ -282,16 +282,16 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-compute"
-version = "38.0.0"
+version = "37.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-mgmt-core" },
     { name = "isodate" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/ee/a143c8395267aea8d735c5336519ef94eeaa45f235c89c06f417d1d2ce60/azure_mgmt_compute-38.0.0.tar.gz", hash = "sha256:46cb0864f943b88463ed50ad006738023120cf7e53f50f7e4a740ccd5337abaf", size = 468888, upload-time = "2026-04-28T19:44:20.051Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/e3/c887e27260754014dc63fc33bf612f1c7f1751f74e80d1aaa32491af3ffa/azure_mgmt_compute-37.2.0.tar.gz", hash = "sha256:23499d4d5ad2b2bf40a4c59df2684cc4c9cef0f9672a4e842bb9a1cf6b62f628", size = 534068, upload-time = "2026-01-27T06:39:05.39Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/fc/b048242e79b14dd58a1dbede501ea2bfd3a43cac4aad4c0d76a81416a6e8/azure_mgmt_compute-38.0.0-py3-none-any.whl", hash = "sha256:6307edc4d1dabb540dadf11204be7663565d3108e16bcd253494457300cb3609", size = 438192, upload-time = "2026-04-28T19:44:22.124Z" },
+    { url = "https://files.pythonhosted.org/packages/be/78/8dcdb92dd9f716d08a3ac6b31c31a12cfcf8c430b2c312cbf9cc6e4695e8/azure_mgmt_compute-37.2.0-py3-none-any.whl", hash = "sha256:70741c26ac94c30408a3b20f4fdfe93e6481e308b3c14a6dbefdfd4794028616", size = 686212, upload-time = "2026-01-27T06:39:07.016Z" },
 ]
 
 [[package]]
@@ -901,18 +901,14 @@ wheels = [
 
 [[package]]
 name = "cube-computer-tool"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.2.0"
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&rev=fix%2Fwaa-guest-agent-methods#38933987975c73fe3fe86e8f93d2c40ca4d8744e" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
     { name = "requests" },
     { name = "requests-toolbelt" },
     { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/2f/271ccfc8861448c6a98daab175734309d18f4428cee7c383b2592f042b08/cube_computer_tool-0.1.0.tar.gz", hash = "sha256:3a642be504ee8604bae5227b599fbfc44deecad31a1509fe18a89f6247c0efba", size = 12002, upload-time = "2026-03-18T18:09:07.242Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/ec/60df3ffcc0510cf186b70efe5f656f9135205598ac40c5811dce0bbda937/cube_computer_tool-0.1.0-py3-none-any.whl", hash = "sha256:f1fddfc892fffc971f8f4ccc6b20f8b2ad83305639a0f9307f8126224df57a3e", size = 14265, upload-time = "2026-03-18T18:09:06.141Z" },
 ]
 
 [[package]]
@@ -973,7 +969,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
     { name = "cube-browser-playwright", specifier = ">=0.2.0" },
-    { name = "cube-computer-tool", specifier = ">=0.1.0" },
+    { name = "cube-computer-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&rev=fix%2Fwaa-guest-agent-methods" },
     { name = "cube-infra-azure", marker = "extra == 'waa'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&rev=fix%2Fwaa-guest-agent-methods" },
     { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?rev=fix%2Fwaa-guest-agent-methods" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
@@ -1012,7 +1008,7 @@ dev = [
 [[package]]
 name = "cube-infra-azure"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&rev=fix%2Fwaa-guest-agent-methods#fd49deaf32b8a5e88a66e8c960dc950ba8e19f25" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&rev=fix%2Fwaa-guest-agent-methods#38933987975c73fe3fe86e8f93d2c40ca4d8744e" }
 dependencies = [
     { name = "azure-identity" },
     { name = "azure-mgmt-compute" },
@@ -1027,7 +1023,7 @@ dependencies = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc7"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?rev=fix%2Fwaa-guest-agent-methods#fd49deaf32b8a5e88a66e8c960dc950ba8e19f25" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?rev=fix%2Fwaa-guest-agent-methods#38933987975c73fe3fe86e8f93d2c40ca4d8744e" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
