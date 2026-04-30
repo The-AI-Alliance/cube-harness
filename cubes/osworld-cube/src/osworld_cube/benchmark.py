@@ -362,14 +362,16 @@ class OSWorldBenchmarkConfig(BenchmarkConfig[OSWorldTaskMetadata]):
         ``_setup()`` can publish it into ``runtime_context["infra"]`` for per-task
         VM launches. Provisioning is mirrored from the base implementation.
         """
-        if self.resources and infra is not None:
+        from cube import LocalInfraConfig
+        resolved_infra = infra or LocalInfraConfig()
+        if self.resources:
             for resource in self.resources:
-                if infra.provision_status(resource) == "ready":
-                    logger.info("Resource %s already provisioned on %s", resource.name, infra.fingerprint())
+                if resolved_infra.provision_status(resource) == "ready":
+                    logger.info("Resource %s already provisioned on %s", resource.name, resolved_infra.fingerprint())
                     continue
-                logger.info("Provisioning resource %s on %s...", resource.name, infra.fingerprint())
-                infra.provision(resource)
-        bench = OSWorldBenchmark(config=self, infra=infra)
+                logger.info("Provisioning resource %s on %s...", resource.name, resolved_infra.fingerprint())
+                resolved_infra.provision(resource)
+        bench = OSWorldBenchmark(config=self, infra=resolved_infra)
         bench.setup()
         return bench
 

@@ -162,6 +162,10 @@ class DebugOSWorldBenchmarkConfig(OSWorldBenchmarkConfig):
         """No-op: debug task execution data is embedded in this module."""
         logger.info("DebugOSWorldBenchmarkConfig.uninstall() — nothing to do")
 
+    def make(self, infra: InfraConfig | None = None) -> OSWorldBenchmark:
+        """Resolve infra from OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE if not provided."""
+        return super().make(infra or _get_default_infra())
+
     def get_task_configs(self) -> Generator[OSWorldTaskConfig, None, None]:
         """Yield DebugOSWorldTaskConfig objects."""
         for tm in self.tasks().values():
