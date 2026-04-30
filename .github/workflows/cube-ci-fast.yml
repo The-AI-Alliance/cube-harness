@@ -27,13 +27,8 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             cubes=$(echo "$all_cubes" | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
-            harness_changed=$(git diff --name-only origin/main... | grep -cE '^src/|^\.github/workflows/cube-ci-fast\.yml' || true)
-            if [ "$harness_changed" -gt 0 ]; then
-              cubes=$(echo "$all_cubes" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-            else
-              changed=$(git diff --name-only origin/main... | grep '^cubes/' | cut -d/ -f2 | sort -u)
-              cubes=$(comm -12 <(echo "$all_cubes") <(echo "$changed") | jq -R -s -c 'split("\n") | map(select(length > 0))')
-            fi
+            changed=$(git diff --name-only origin/main... | grep '^cubes/' | cut -d/ -f2 | sort -u)
+            cubes=$(comm -12 <(echo "$all_cubes") <(echo "$changed") | jq -R -s -c 'split("\n") | map(select(length > 0))')
           fi
           echo "cubes=$cubes" >> "$GITHUB_OUTPUT"
 
