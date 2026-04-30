@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "WorkArena ServiceNow benchmark for cube"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "cube-standard>=0.1.0rc5",
+    "cube-standard>=0.1.0rc7",
     "browsergym-workarena",
     "termcolor",
     "cube-browser-tool>=0.2.0",
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.entry-points."cube.benchmarks"]
-workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmark"
+workarena-cube = "workarena_cube.benchmark:WorkArenaBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
@@ -22,6 +22,10 @@ build-backend = "uv_build"
 
 [tool.uv-build]
 include = ["src/workarena_cube/task_metadata.json"]
+
+[tool.uv.sources]
+# TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
 
 [tool.ruff]
 fix = true

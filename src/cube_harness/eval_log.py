@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from cube.benchmark import BenchmarkConfig
 from cube.core import TypedBaseModel
 from pydantic import Field
 
@@ -273,11 +274,10 @@ class BenchmarkSubset(TypedBaseModel):
     )
 
     @classmethod
-    def from_benchmark(cls, benchmark: Any) -> "BenchmarkSubset":
-        """Derive BenchmarkSubset from a cube Benchmark object."""
-        bm_metadata = getattr(benchmark, "benchmark_metadata", None)
-        name = bm_metadata.name if bm_metadata else "unknown"
-        n_tasks = len(getattr(benchmark, "task_metadata", {}))
+    def from_benchmark_config(cls, benchmark_config: BenchmarkConfig) -> "BenchmarkSubset":
+        """Derive BenchmarkSubset from a cube BenchmarkConfig object."""
+        name = benchmark_config.benchmark_metadata.name
+        n_tasks = len(benchmark_config.task_metadata)
         return cls(name=name, n_tasks=n_tasks)
 
 
@@ -338,15 +338,15 @@ class ExperimentRecord(TypedBaseModel):
         exp_name: str,
         output_dir: Path,
         agent_config: Any,
-        benchmark: Any,
+        benchmark_config: BenchmarkConfig,
         git_cwd: str | None = None,
     ) -> "ExperimentRecord":
         """Build ExperimentRecord from experiment parameters."""
         harness_version = _get_package_version("cube-harness") or "unknown"
         agent_info = AgentInfo.from_agent_config(agent_config, git_cwd=git_cwd)
-        bm_metadata = getattr(benchmark, "benchmark_metadata", None)
-        bm_name = bm_metadata.name if bm_metadata else "unknown"
-        bm_version = getattr(bm_metadata, "version", None) if bm_metadata else None
+        bm_metadata = benchmark_config.benchmark_metadata
+        bm_name = bm_metadata.name
+        bm_version = bm_metadata.version
 
         return cls(
             evaluation_id=Path(output_dir).name,
@@ -356,7 +356,7 @@ class ExperimentRecord(TypedBaseModel):
             agent=agent_info,
             benchmark_name=bm_name,
             benchmark_version=bm_version,
-            benchmark_subset=BenchmarkSubset.from_benchmark(benchmark),
+            benchmark_subset=BenchmarkSubset.from_benchmark_config(benchmark_config),
         )
 
     def write(self, output_dir: Path) -> None:

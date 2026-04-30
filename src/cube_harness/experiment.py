@@ -3,13 +3,15 @@ import logging
 import os
 import re
 import time
+import warnings
 from pathlib import Path
 from typing import Self
 from uuid import uuid4
 
-from cube.benchmark import Benchmark
+from cube.benchmark import Benchmark, BenchmarkConfig
 from cube.core import TypedBaseModel
-from pydantic import Field, model_validator
+from cube.resource import InfraConfig
+from pydantic import Field, SerializeAsAny, model_validator
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import Trajectory
@@ -61,7 +63,8 @@ class Experiment(TypedBaseModel):
     name: str
     output_dir: Path | None = None
     agent_config: AgentConfig
-    benchmark: Benchmark
+    benchmark_config: SerializeAsAny[BenchmarkConfig]
+    infra: SerializeAsAny[InfraConfig] | None = None
     resume: bool = False
     max_steps: int = MAX_STEPS
     max_retries: int = 3
@@ -72,7 +75,7 @@ class Experiment(TypedBaseModel):
         if self.output_dir is None:
             self.output_dir = make_experiment_output_dir(
                 agent_name=self.agent_config.agent_name,
-                benchmark_name=self.benchmark.benchmark_metadata.name,
+                benchmark_name=self.benchmark_config.benchmark_metadata.name,
                 tag=self.name,
             )
         elif not _UUID_SUFFIX_RE.search(self.output_dir.name):
@@ -89,12 +92,19 @@ class Experiment(TypedBaseModel):
 
     def get_episodes_to_run(
         self,
+        benchmark: Benchmark,
         *,
         step_timeout_s: float = 1800.0,
         cancel_grace_s: float = 120.0,
         orphan_threshold_s: float = 3600.0,
     ) -> list[Episode]:
         """Return episodes to run based on `resume`.
+
+        ``benchmark`` is the live ``Benchmark`` returned by
+        ``self.benchmark_config.make(self.infra)``; the runner is responsible
+        for the make/close lifecycle and passes the live instance in so
+        episodes can pick up its ``_runtime_context`` and
+        ``config.container_backend``.
 
         Decisions are driven by `status.json` per episode (no trajectory deserialisation).
 
@@ -106,13 +116,13 @@ class Experiment(TypedBaseModel):
           swept to `STALE` first so they become eligible.
         """
         if not self.resume:
-            return self._create_all_episodes()
+            return self._create_all_episodes(benchmark)
 
         storage = FileStorage(self.output_dir)
         config_files = storage.list_episode_configs()
         if not config_files:
             logger.warning(f"No episode configs found in {self.output_dir}, creating from scratch")
-            return self._create_all_episodes()
+            return self._create_all_episodes(benchmark)
 
         # Sweep stale RUNNING entries first so they show up as STALE in retry selection.
         sweep_stale_statuses(
@@ -134,7 +144,7 @@ class Experiment(TypedBaseModel):
             if not self._should_relaunch(status):
                 continue
             try:
-                episode = Episode.load_episode_from_config(config_file, self.benchmark)
+                episode = Episode.load_episode_from_config(config_file, benchmark)
             except Exception:
                 logger.exception(f"Failed to load episode config {config_file}")
                 continue
@@ -154,9 +164,16 @@ class Experiment(TypedBaseModel):
             return False
         return status.retry_count < self.max_retries
 
-    def _create_all_episodes(self) -> list[Episode]:
+    def _create_all_episodes(self, benchmark: Benchmark) -> list[Episode]:
         """Create all episodes from scratch and save their configs to disk."""
-        task_configs = list(self.benchmark.get_task_configs())
+        task_configs = list(self.benchmark_config.get_task_configs())
+        runtime_context = benchmark._runtime_context
+        # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
+        # reading it raises a DeprecationWarning. We have to forward it for
+        # backwards compatibility until cube-standard removes it.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            container_backend = benchmark.config.container_backend
         episodes = [
             Episode(
                 id=i,
@@ -165,8 +182,9 @@ class Experiment(TypedBaseModel):
                 task_config=tc,
                 exp_name=self.name,
                 max_steps=self.max_steps,
-                runtime_context=self.benchmark._runtime_context,
-                container_backend=self.benchmark.container_backend,
+                runtime_context=runtime_context,
+                container_backend=container_backend,
+                storage=None,
             )
             for i, tc in enumerate(task_configs)
         ]
@@ -186,7 +204,7 @@ class Experiment(TypedBaseModel):
             exp_name=self.name,
             output_dir=self.output_dir,
             agent_config=self.agent_config,
-            benchmark=self.benchmark,
+            benchmark_config=self.benchmark_config,
             git_cwd=self.git_cwd,
         )
         exp_record.write(output_path)

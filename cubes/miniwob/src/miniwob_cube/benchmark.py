@@ -1,3 +1,4 @@
+from io import TextIOWrapper
 import logging
 import subprocess
 import sys
@@ -8,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import ClassVar, Generator
 
-from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.task import TaskConfig
 
 from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
@@ -16,47 +17,28 @@ from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
 logger = logging.getLogger(__name__)
 
 
-class MiniWobBenchmark(Benchmark):
-    benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
-        name="miniwob-cube",
-        version="1.0.0",
-        description="MiniWob++ browser automation benchmark tasks",
-        num_tasks=125,
-        tags=["browser", "web", "ui"],
-    )
-    task_metadata: ClassVar[dict[str, MiniWobTaskMetadata]]  # type: ignore - will be populated automatically at import time in Benchmark.__init_subclass__
-    task_config_class: ClassVar[type[TaskConfig]] = MiniWobTaskConfig
+class MiniWobBenchmark(Benchmark["MiniWobBenchmarkConfig"]):
+    """Runtime pair — owns the local HTTP server process serving MiniWob HTML."""
 
-    html_path: str = files("miniwob").joinpath("html").as_posix()  # type: ignore
-    port: int = 8000
-    remove_human_display: bool = True
-    episode_max_time: int = 1000000
-    server_start_timeout: float = 10.0
-    server_start_poll_interval: float = 0.1
-
-    # Runtime state (not serialized)
-    _server_process: subprocess.Popen | None = None
-    _stdout_file: object | None = None
-    _stderr_file: object | None = None
-
-    model_config = {"arbitrary_types_allowed": True}
-
-    @property
-    def base_url(self) -> str:
-        return f"http://localhost:{self.port}/miniwob"
+    def __init__(self, config: "MiniWobBenchmarkConfig") -> None:
+        super().__init__(config)
+        self._server_process: subprocess.Popen | None = None
+        self._stdout_file: TextIOWrapper | None = None
+        self._stderr_file: TextIOWrapper | None = None
 
     def _setup(self) -> None:
+        cfg = self.config
         tmp_dir = Path(tempfile.gettempdir())
         self._stdout_file = open(tmp_dir / "miniwob_server_stdout.log", "w")
         self._stderr_file = open(tmp_dir / "miniwob_server_stderr.log", "w")
-        logger.info(f"Starting MiniWob server at port {self.port} serving from {self.html_path}...")
+        logger.info(f"Starting MiniWob server at port {cfg.port} serving from {cfg.html_path}...")
         self._server_process = subprocess.Popen(
-            [sys.executable, "-m", "http.server", str(self.port)],
-            cwd=self.html_path,
+            [sys.executable, "-m", "http.server", str(cfg.port)],
+            cwd=cfg.html_path,
             stdout=self._stdout_file,
             stderr=self._stderr_file,
         )
-        startup_deadline = time.monotonic() + self.server_start_timeout
+        startup_deadline = time.monotonic() + cfg.server_start_timeout
         last_response_error: Exception | None = None
 
         while time.monotonic() < startup_deadline:
@@ -69,29 +51,19 @@ class MiniWobBenchmark(Benchmark):
                 raise RuntimeError(f"MiniWob server failed to start (exit code {returncode}): {stderr_content}")
 
             try:
-                urllib.request.urlopen(self.base_url, timeout=1)
-                logger.info(f"MiniWob server responding at {self.base_url}")
+                urllib.request.urlopen(cfg.base_url, timeout=1)
+                logger.info(f"MiniWob server responding at {cfg.base_url}")
                 break
             except Exception as e:
                 last_response_error = e
-                time.sleep(self.server_start_poll_interval)
+                time.sleep(cfg.server_start_poll_interval)
         else:
             self.close()
             raise RuntimeError(
-                f"MiniWob server failed to respond at {self.base_url} within {self.server_start_timeout:.1f}s"
+                f"MiniWob server failed to respond at {cfg.base_url} within {cfg.server_start_timeout:.1f}s"
             ) from last_response_error
 
-        self._runtime_context = {"base_url": self.base_url}
-
-    def get_task_configs(self) -> Generator[MiniWobTaskConfig, None, None]:
-        for tm in self.task_metadata.values():
-            yield MiniWobTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
-                base_url=self.base_url,
-                remove_human_display=self.remove_human_display,
-                episode_max_time=self.episode_max_time,
-            )
+        self._runtime_context["base_url"] = cfg.base_url
 
     def close(self) -> None:
         if self._server_process is not None:
@@ -111,3 +83,36 @@ class MiniWobBenchmark(Benchmark):
         if self._stderr_file is not None:
             self._stderr_file.close()
             self._stderr_file = None
+
+
+class MiniWobBenchmarkConfig(BenchmarkConfig[MiniWobTaskMetadata]):
+    benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
+        name="miniwob-cube",
+        version="1.0.0",
+        description="MiniWob++ browser automation benchmark tasks",
+        num_tasks=125,
+        tags=["browser", "web", "ui"],
+    )
+    task_config_class: ClassVar[type[TaskConfig]] = MiniWobTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = MiniWobBenchmark
+
+    html_path: str = files("miniwob").joinpath("html").as_posix()  # type: ignore
+    port: int = 8000
+    remove_human_display: bool = True
+    episode_max_time: int = 1000000
+    server_start_timeout: float = 10.0
+    server_start_poll_interval: float = 0.1
+
+    @property
+    def base_url(self) -> str:
+        return f"http://localhost:{self.port}/miniwob"
+
+    def get_task_configs(self) -> Generator[MiniWobTaskConfig, None, None]:
+        for tm in self.tasks().values():
+            yield MiniWobTaskConfig(
+                metadata=tm,
+                tool_config=self.tool_config,
+                base_url=self.base_url,
+                remove_human_display=self.remove_human_display,
+                episode_max_time=self.episode_max_time,
+            )

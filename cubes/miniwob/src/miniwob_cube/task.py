@@ -4,7 +4,7 @@ from typing import Any
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Content, Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import Task, TaskConfig, TaskMetadata  # noqa: F401 — TaskMetadata kept for typing
 from cube.tools.browser import BrowserTool
 from PIL import Image
 
@@ -62,7 +62,7 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
         return obs
 
 
-class MiniWobTaskConfig(TaskConfig):
+class MiniWobTaskConfig(TaskConfig[MiniWobTaskMetadata]):
     base_url: str = "http://localhost:8000/miniwob"
     remove_human_display: bool = True
     episode_max_time: int = 1000000
@@ -72,14 +72,10 @@ class MiniWobTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> MiniWobTask:
-        from miniwob_cube.benchmark import MiniWobBenchmark
-        # import here to avoid circular import (benchmark imports task)
-
         _ = runtime_context, container_backend
-        task_metadata: TaskMetadata = MiniWobBenchmark.task_metadata[self.task_id]
         assert self.tool_config is not None, "tool_config must be set"
         return MiniWobTask(
-            metadata=task_metadata,
+            metadata=self.metadata,
             tool_config=self.tool_config,
             base_url=self.base_url,
             remove_human_display=self.remove_human_display,

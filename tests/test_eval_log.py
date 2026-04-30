@@ -274,17 +274,16 @@ def test_agent_info_llm_model_extracted() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_benchmark_subset_from_benchmark(mock_cube_benchmark) -> None:
-    subset = BenchmarkSubset.from_benchmark(mock_cube_benchmark)
+def test_benchmark_subset_from_benchmark(mock_cube_benchmark_config) -> None:
+    subset = BenchmarkSubset.from_benchmark_config(mock_cube_benchmark_config)
     assert subset.name == "mock-cube"
     assert subset.n_tasks == 2
     assert subset.filter is None
 
 
 def test_benchmark_subset_unknown_benchmark() -> None:
-    subset = BenchmarkSubset.from_benchmark(object())
-    assert subset.name == "unknown"
-    assert subset.n_tasks == 0
+    with pytest.raises(AttributeError):
+        BenchmarkSubset.from_benchmark_config(None)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -292,13 +291,13 @@ def test_benchmark_subset_unknown_benchmark() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_experiment_record_evaluation_id_is_dir_name(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
-    rec = ExperimentRecord.from_experiment("my_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+def test_experiment_record_evaluation_id_is_dir_name(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
+    rec = ExperimentRecord.from_experiment("my_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     assert rec.evaluation_id == tmp_dir.name
 
 
-def test_experiment_record_fields(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
-    rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+def test_experiment_record_fields(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
+    rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     assert rec.experiment_name == "test_exp"
     assert rec.benchmark_name == "mock-cube"
     assert rec.benchmark_version == "0.1.0"
@@ -307,8 +306,8 @@ def test_experiment_record_fields(mock_agent_config, mock_cube_benchmark, tmp_di
     assert rec.eval_library.name == "cube-harness"
 
 
-def test_experiment_record_roundtrip(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
-    rec = ExperimentRecord.from_experiment("roundtrip_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+def test_experiment_record_roundtrip(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
+    rec = ExperimentRecord.from_experiment("roundtrip_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     serialized = rec.model_dump_json()
     restored = ExperimentRecord.model_validate_json(serialized)
     assert restored.evaluation_id == rec.evaluation_id
@@ -380,7 +379,9 @@ def test_episode_record_with_task_config(mock_tool_config) -> None:
             raise NotImplementedError
 
     traj = _trajectory(task_id="t1")
-    tc = MockTaskConfig(task_id="t1", seed=42, tool_config=mock_tool_config)
+    from cube.task import TaskMetadata
+
+    tc = MockTaskConfig(metadata=TaskMetadata(id="t1"), seed=42, tool_config=mock_tool_config)
     record = EpisodeRecord.from_trajectory(traj, evaluation_id="abc123", task_config=tc)
     assert record.seed == 42
     assert record.sample_hash is not None
@@ -415,9 +416,9 @@ def test_episode_record_with_judge_output() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_eval_log_save_and_load(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+def test_eval_log_save_and_load(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
     traj = _trajectory(reward=1.0, task_id="task-a")
-    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     ep_rec = EpisodeRecord.from_trajectory(traj, evaluation_id=exp_rec.evaluation_id)
     log = EvalLog(experiment=exp_rec, episodes=[ep_rec])
 
@@ -433,9 +434,9 @@ def test_eval_log_save_and_load(mock_agent_config, mock_cube_benchmark, tmp_dir)
     assert loaded.episodes[0].trajectory_id == "task-a_ep0"
 
 
-def test_eval_log_episode_record_is_valid_json(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+def test_eval_log_episode_record_is_valid_json(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
     traj = _trajectory(reward=0.5)
-    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     ep_rec = EpisodeRecord.from_trajectory(traj, evaluation_id=exp_rec.evaluation_id)
     log = EvalLog(experiment=exp_rec, episodes=[ep_rec])
 
@@ -450,8 +451,8 @@ def test_eval_log_episode_record_is_valid_json(mock_agent_config, mock_cube_benc
     assert "score" in parsed
 
 
-def test_eval_log_experiment_record_is_valid_json(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
-    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+def test_eval_log_experiment_record_is_valid_json(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     log = EvalLog(experiment=exp_rec, episodes=[])
 
     with tempfile.TemporaryDirectory() as out:
@@ -464,10 +465,10 @@ def test_eval_log_experiment_record_is_valid_json(mock_agent_config, mock_cube_b
     assert "eval_library" in parsed
 
 
-def test_eval_log_to_jsonl(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+def test_eval_log_to_jsonl(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
     traj1 = _trajectory(reward=1.0, task_id="t1")
     traj2 = _trajectory(reward=0.0, task_id="t2")
-    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    exp_rec = ExperimentRecord.from_experiment("test_exp", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     rec1 = EpisodeRecord.from_trajectory(traj1, evaluation_id=exp_rec.evaluation_id)
     rec2 = EpisodeRecord.from_trajectory(traj2, evaluation_id=exp_rec.evaluation_id)
     log = EvalLog(experiment=exp_rec, episodes=[rec1, rec2])
@@ -482,9 +483,9 @@ def test_eval_log_to_jsonl(mock_agent_config, mock_cube_benchmark, tmp_dir) -> N
     assert sample_ids == {"t1", "t2"}
 
 
-def test_eval_log_evaluation_id_fk_consistent(mock_agent_config, mock_cube_benchmark, tmp_dir) -> None:
+def test_eval_log_evaluation_id_fk_consistent(mock_agent_config, mock_cube_benchmark_config, tmp_dir) -> None:
     """EpisodeRecords carry the same evaluation_id as ExperimentRecord."""
-    exp_rec = ExperimentRecord.from_experiment("fk_test", tmp_dir, mock_agent_config, mock_cube_benchmark)
+    exp_rec = ExperimentRecord.from_experiment("fk_test", tmp_dir, mock_agent_config, mock_cube_benchmark_config)
     traj = _trajectory(reward=1.0)
     ep_rec = EpisodeRecord.from_trajectory(traj, evaluation_id=exp_rec.evaluation_id)
     assert ep_rec.evaluation_id == exp_rec.evaluation_id
@@ -513,7 +514,7 @@ def test_verifier_roundtrip() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_export_eval_log_integration(tmp_dir, mock_agent_config, mock_cube_benchmark) -> None:
+def test_export_eval_log_integration(tmp_dir, mock_agent_config, mock_cube_benchmark_config) -> None:
     """experiment_record.json is written at start; episode_record.json per episode; export_eval_log loads them."""
     from cube_harness.exp_runner import run_sequentially
     from cube_harness.experiment import Experiment
@@ -522,7 +523,7 @@ def test_export_eval_log_integration(tmp_dir, mock_agent_config, mock_cube_bench
         name="integration_test",
         output_dir=tmp_dir,
         agent_config=mock_agent_config,
-        benchmark=mock_cube_benchmark,
+        benchmark_config=mock_cube_benchmark_config,
     )
     run_sequentially(exp)
 

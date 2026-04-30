@@ -1,4 +1,4 @@
-from workarena_cube.benchmark import WorkArenaBenchmark
+from workarena_cube.benchmark import WorkArenaBenchmark, WorkArenaBenchmarkConfig, WorkArenaSeedGenerator
 from workarena_cube.debug import CheatAgent, make_debug_agent, get_debug_benchmark
 from workarena_cube.task import WorkArenaTask, WorkArenaTaskConfig, WorkArenaTaskMetadata
 from workarena_cube.tools import (
@@ -12,6 +12,8 @@ from workarena_cube.tools import (
 
 __all__ = [
     "WorkArenaBenchmark",
+    "WorkArenaBenchmarkConfig",
+    "WorkArenaSeedGenerator",
     "WorkArenaTask",
     "WorkArenaTaskConfig",
     "WorkArenaTaskMetadata",

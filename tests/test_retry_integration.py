@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 import ray
 from cube.benchmark import Benchmark as CubeBenchmark
+from cube.benchmark import BenchmarkConfig as CubeBenchmarkConfig
 from cube.benchmark import BenchmarkMetadata
 from cube.core import Action, Observation
 from cube.task import Task as CubeTask
@@ -69,15 +70,25 @@ class DebugCubeTask(CubeTask):
 class DebugCubeTaskConfig(CubeTaskConfig):
     def make(self, runtime_context=None, container_backend=None) -> DebugCubeTask:
         return DebugCubeTask(
-            metadata=TaskMetadata(id=self.task_id),
+            metadata=self.metadata,
             tool_config=self.tool_config or MockToolConfig(),
         )
 
 
-def make_debug_benchmark(scenarios: dict[str, list[str]]) -> CubeBenchmark:
-    """Build a CubeBenchmark whose tasks match the keys of `scenarios`."""
+class _DebugBenchmark(CubeBenchmark):
+    """Live runtime pair for the retry-integration debug benchmark."""
 
-    class _DebugBenchmark(CubeBenchmark):
+    def _setup(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def make_debug_benchmark(scenarios: dict[str, list[str]]) -> CubeBenchmarkConfig:
+    """Build a CubeBenchmarkConfig whose tasks match the keys of `scenarios`."""
+
+    class _DebugBenchmarkConfig(CubeBenchmarkConfig):
         benchmark_metadata = BenchmarkMetadata(
             name="debug-retry",
             version="0.1.0",
@@ -85,14 +96,9 @@ def make_debug_benchmark(scenarios: dict[str, list[str]]) -> CubeBenchmark:
         )
         task_metadata = {tid: TaskMetadata(id=tid) for tid in scenarios}
         task_config_class = DebugCubeTaskConfig
+        benchmark_class = _DebugBenchmark
 
-        def _setup(self) -> None:
-            pass
-
-        def close(self) -> None:
-            pass
-
-    return _DebugBenchmark()
+    return _DebugBenchmarkConfig()
 
 
 # --- Debug agent ---
@@ -191,7 +197,7 @@ def test_retry_machinery_end_to_end(tmp_dir: Path) -> None:
         name="retry_integration",
         output_dir=tmp_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark,
         max_retries=3,
     )
 
@@ -283,12 +289,13 @@ def test_mixed_state_recovery_via_ray(tmp_dir: Path) -> None:
         name="mixed_state",
         output_dir=tmp_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark,
         max_retries=3,
     )
 
     # Materialise episode_config.json for all three (without running anything).
-    episodes = {ep.config.task_config.task_id: ep for ep in exp.get_episodes_to_run()}
+    with benchmark.make() as bm:
+        episodes = {ep.config.task_config.task_id: ep for ep in exp.get_episodes_to_run(bm)}
     storage = FileStorage(tmp_dir)
 
     # Hand-craft pre-existing state to mimic a crashed prior driver:
@@ -376,7 +383,7 @@ def test_run_sequentially_auto_retries_flaky_episode(tmp_dir: Path) -> None:
         name="seq_flaky",
         output_dir=tmp_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark,
         max_retries=3,
     )
 
@@ -419,7 +426,7 @@ def test_max_steps_terminates_with_forced_eval(tmp_dir: Path) -> None:
         name="max_steps",
         output_dir=tmp_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark,
         max_steps=2,
         max_retries=3,
     )
@@ -441,7 +448,8 @@ def test_max_steps_terminates_with_forced_eval(tmp_dir: Path) -> None:
 
     # MAX_STEPS_REACHED is not retriable: a fresh resume returns nothing.
     exp.resume = True
-    assert exp.get_episodes_to_run() == []
+    with benchmark.make() as bm:
+        assert exp.get_episodes_to_run(bm) == []
 
 
 def test_max_retries_zero_disables_auto_retry(tmp_dir: Path) -> None:
@@ -462,7 +470,7 @@ def test_max_retries_zero_disables_auto_retry(tmp_dir: Path) -> None:
         name="no_retry",
         output_dir=tmp_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark,
         max_retries=0,
     )
 

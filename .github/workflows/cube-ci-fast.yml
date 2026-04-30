@@ -15,16 +15,28 @@ on:
     branches: [main]
 
 jobs:
-  # Expose secret availability as a job output so downstream jobs can use it in
-  # their `if:` conditions. (The `secrets` context is not allowed in job-level
-  # `if:` expressions directly — only in step-level ones.)
-  check-secrets:
-    name: Check available secrets
+  # Detect which cubes changed and expose secret availability.
+  # Both are used as gate conditions for downstream jobs.
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
     outputs:
-      has-hf-token: ${{ steps.check.outputs.has-hf-token }}
+      miniwob: ${{ steps.filter.outputs.miniwob }}
+      workarena: ${{ steps.filter.outputs.workarena }}
+      has-hf-token: ${{ steps.secrets.outputs.has-hf-token }}
     steps:
-      - id: check
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36  # v3.0.2
+        id: filter
+        with:
+          filters: |
+            miniwob:
+              - 'cubes/miniwob/**'
+              - '.github/workflows/cube-ci-fast.yml'
+            workarena:
+              - 'cubes/workarena/**'
+              - '.github/workflows/cube-ci-fast.yml'
+      - id: secrets
         env:
           HF_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
         run: |
@@ -36,6 +48,8 @@ jobs:
 
   miniwob:
     name: MiniWob debug suite
+    needs: changes
+    if: needs.changes.outputs.miniwob == 'true' || github.event_name == 'push'
     runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
 
     steps:
@@ -64,9 +78,11 @@ jobs:
 
   workarena:
     name: WorkArena debug suite
-    needs: check-secrets
-    # Skip if HF token is not configured (e.g. external fork PRs)
-    if: needs.check-secrets.outputs.has-hf-token == 'true'
+    needs: changes
+    # Skip if HF token is not configured (e.g. external fork PRs) or workarena unchanged
+    if: >-
+      needs.changes.outputs.has-hf-token == 'true' &&
+      (needs.changes.outputs.workarena == 'true' || github.event_name == 'push')
     runs-on: ubuntu-22.04  # Pin to 22.04 — ubuntu-latest (24.04) has libasound2 issues with Playwright
 
     steps:

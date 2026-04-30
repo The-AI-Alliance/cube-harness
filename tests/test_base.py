@@ -1,11 +1,11 @@
 import json
 
-from cube.benchmark import Benchmark as CubeBenchmark
+from cube.benchmark import BenchmarkConfig as CubeBenchmarkConfig
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import TypedBaseModel
 from cube_harness.experiment import Experiment
-from tests.conftest import MockAgentConfig, MockCubeBenchmark
+from tests.conftest import MockAgentConfig, MockCubeBenchmarkConfig
 
 
 class TestAL2BaseModel:
@@ -47,13 +47,13 @@ class TestAL2BaseModel:
 
     def test_nested_polymorphic_deserialization(self):
         """Test that nested polymorphic models are correctly deserialized."""
-        original = MockCubeBenchmark()
+        original = MockCubeBenchmarkConfig()
         json_str = original.model_dump_json()
         data = json.loads(json_str)
 
-        restored = CubeBenchmark.model_validate(data)
+        restored = CubeBenchmarkConfig.model_validate(data)
 
-        assert type(restored) is MockCubeBenchmark
+        assert type(restored) is MockCubeBenchmarkConfig
 
     def test_experiment_roundtrip(self, tmp_dir):
         """Test full round-trip of Experiment with polymorphic fields."""
@@ -61,7 +61,7 @@ class TestAL2BaseModel:
             name="test_exp",
             output_dir=tmp_dir,
             agent_config=MockAgentConfig(name="test_agent"),
-            benchmark=MockCubeBenchmark(),
+            benchmark_config=MockCubeBenchmarkConfig(),
         )
 
         # serialize_as_any=True is needed to serialize subclass-specific fields
@@ -72,4 +72,4 @@ class TestAL2BaseModel:
         assert restored.name == "test_exp"
         assert type(restored.agent_config) is MockAgentConfig
         assert restored.agent_config.name == "test_agent"
-        assert type(restored.benchmark) is MockCubeBenchmark
+        assert type(restored.benchmark_config) is MockCubeBenchmarkConfig

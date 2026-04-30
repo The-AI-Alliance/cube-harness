@@ -1,10 +1,10 @@
 """WorkArena benchmark implementation for the CUBE framework."""
 
 import logging
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from browsergym.workarena import get_all_tasks_agents
-from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.seed import AbstractSeedGenerator
 from cube.task import TaskConfig, TaskMetadata
 from pydantic import PrivateAttr, model_validator
@@ -54,14 +54,26 @@ class WorkArenaSeedGenerator(AbstractSeedGenerator):
         return self._cache.get(task_metadata.id, [])
 
 
-class WorkArenaBenchmark(Benchmark):
-    """CUBE Benchmark for WorkArena ServiceNow tasks.
+class WorkArenaBenchmark(Benchmark["WorkArenaBenchmarkConfig"]):
+    """Runtime pair — WorkArena tasks connect to a remote ServiceNow instance,
+    so there is no shared infrastructure to provision in _setup().
+    """
+
+    def _setup(self) -> None:
+        logger.info(f"WorkArena benchmark ready with {self.config.num_tasks} tasks")
+
+    def close(self) -> None:
+        logger.info("WorkArena benchmark closed.")
+
+
+class WorkArenaBenchmarkConfig(BenchmarkConfig[WorkArenaTaskMetadata]):
+    """CUBE BenchmarkConfig for WorkArena ServiceNow tasks.
 
     By default loads all task types from all levels (l1, l2, l3).
     Use named_subset() or subset_from_glob() in user-land to filter:
 
-        bench.named_subset("l1")                                   # L1 only
-        bench.named_subset("l2").subset_from_glob("in_human_curriculum", "True")  # L2 human curriculum
+        cfg.named_subset("l1")                                                  # L1 only
+        cfg.named_subset("l2").subset_from_glob("in_human_curriculum", "True")  # L2 human curriculum
 
     Required environment variables:
         SNOW_INSTANCE_URL, SNOW_INSTANCE_UNAME, SNOW_INSTANCE_PWD
@@ -82,7 +94,7 @@ class WorkArenaBenchmark(Benchmark):
             "WorkArena ServiceNow benchmark tasks across three levels. "
             "By default all task types from all levels are loaded. "
             "Use named_subset('l1'/'l2'/'l3') to filter by level. "
-            "For human curriculum: bench.named_subset('l2').subset_from_glob('in_human_curriculum', 'True')."
+            "For human curriculum: cfg.named_subset('l2').subset_from_glob('in_human_curriculum', 'True')."
         ),
         tags=["browser", "web", "servicenow"],
         named_subsets={
@@ -92,34 +104,20 @@ class WorkArenaBenchmark(Benchmark):
         },
         num_tasks=333,
     )
-    task_metadata: ClassVar[dict[str, WorkArenaTaskMetadata]]  # type: ignore - populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = WorkArenaBenchmark
 
     meta_seed: int = 42
     n_seeds_l1: int = 10
     is_agent_curriculum: bool = True
 
     @model_validator(mode="after")
-    def _init_seed_generator(self) -> "WorkArenaBenchmark":
-        """Initialize seed_generator at construction time from benchmark fields."""
+    def _init_seed_generator(self) -> Self:
+        """Initialize seed_generator at construction time from config fields."""
         if self.seed_generator is None:
-            object.__setattr__(
-                self,
-                "seed_generator",
-                WorkArenaSeedGenerator(
-                    meta_seed=self.meta_seed,
-                    n_seeds_l1=self.n_seeds_l1,
-                    is_agent_curriculum=self.is_agent_curriculum,
-                ),
+            self.seed_generator = WorkArenaSeedGenerator(
+                meta_seed=self.meta_seed,
+                n_seeds_l1=self.n_seeds_l1,
+                is_agent_curriculum=self.is_agent_curriculum,
             )
         return self
-
-    # ── lifecycle ──────────────────────────────────────────────────
-
-    def _setup(self) -> None:
-        """No shared infrastructure needed — WorkArena tasks connect to a remote ServiceNow instance."""
-        logger.info(f"WorkArena benchmark ready with {len(self.task_metadata)} tasks")
-
-    def close(self) -> None:
-        """No-op: WorkArena has no server process to shut down."""
-        logger.info("WorkArena benchmark closed.")

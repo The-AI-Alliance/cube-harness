@@ -209,7 +209,7 @@ def global_report(
 
 def map_err_key(err_msg: str | None) -> str | None:
     if err_msg is None:
-        return err_msg
+        return None
     err_msg = err_msg[: err_msg.find("=== logs ===")] if "=== logs ===" in err_msg else err_msg
     err_msg = err_msg.rstrip()
     regex_replacements = [
@@ -224,7 +224,9 @@ def map_err_key(err_msg: str | None) -> str | None:
 def error_report(df: pd.DataFrame, max_stack_trace: int = 10) -> str:
     if "err_key" not in df.columns:
         df = df.copy()
-        df["err_key"] = df["err_msg"].map(map_err_key)
+        df["err_key"] = None
+        err_mask = df["err_msg"].notnull()
+        df.loc[err_mask, "err_key"] = df.loc[err_mask, "err_msg"].map(map_err_key)
 
     err_df = df[df["err_key"].notnull()]
     if err_df.empty:

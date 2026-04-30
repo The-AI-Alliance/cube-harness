@@ -6,7 +6,7 @@ the debug tasks.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_benchmark()              -> MiniWobBenchmark
+get_debug_benchmark()              -> MiniWobBenchmarkConfig
 make_debug_agent(task_id: str)     -> ClickButtonAgent | ClickCheckboxesAgent
 
 Usage:
@@ -24,7 +24,7 @@ from cube.testing import run_debug_suite
 
 from cube_browser_tool import PlaywrightConfig
 
-from miniwob_cube.benchmark import Benchmark, MiniWobBenchmark
+from miniwob_cube.benchmark import MiniWobBenchmarkConfig
 
 
 logger = logging.getLogger(__name__)
@@ -90,9 +90,9 @@ def make_debug_agent(task_id: str) -> ClickButtonAgent | ClickCheckboxesAgent:
     raise ValueError(f"No hardcoded agent for task: {task_id}")
 
 
-def get_debug_benchmark() -> Benchmark:
-    return MiniWobBenchmark(
-        default_tool_config=PlaywrightConfig(headless=True, use_html=True, use_axtree=False, use_screenshot=False),
+def get_debug_benchmark() -> MiniWobBenchmarkConfig:
+    return MiniWobBenchmarkConfig(
+        tool_config=PlaywrightConfig(headless=True, use_html=True, use_axtree=False, use_screenshot=False),
     ).subset_from_list(_DEBUG_TASK_IDS, benchmark_name_suffix="debug")
 
 
