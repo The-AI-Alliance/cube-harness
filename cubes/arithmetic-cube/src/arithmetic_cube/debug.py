@@ -2,7 +2,7 @@
 
 Public API
 ----------
-get_debug_benchmark()         → ArithmeticBenchmark
+get_debug_benchmark()         → ArithmeticBenchmarkConfig
 make_debug_agent(task_id)     → DebugAgent
 """
 
@@ -11,7 +11,8 @@ from __future__ import annotations
 import logging
 
 from cube.core import Action, ActionSchema, Observation
-from arithmetic_cube.benchmark import ArithmeticBenchmark, Benchmark
+
+from arithmetic_cube.benchmark import ArithmeticBenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +45,8 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> Benchmark:
-    return ArithmeticBenchmark().subset_from_list(list(_TASK_ACTIONS.keys()))
+def get_debug_benchmark() -> ArithmeticBenchmarkConfig:
+    return ArithmeticBenchmarkConfig().subset_from_list(list(_TASK_ACTIONS.keys()))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

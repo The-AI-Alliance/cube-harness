@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
@@ -7,31 +7,39 @@ from cube.task import Task, TaskConfig, TaskMetadata
 from arithmetic_cube.tool import ArithmeticTool, ArithmeticToolConfig
 
 
-class SolveArithmeticTask(Task):
-    """Task: solve a math problem by calling submit_answer() once with the correct integer."""
+class ArithmeticTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for arithmetic tasks — typed per-task fields
+    that previously lived in ``extra_info``.
+    """
 
-    @property
-    def _expected(self) -> int:
-        return self.metadata.extra_info["expected"]
+    a: int
+    b: int
+    op: Literal["+", "-", "*"]
+    expected: int
+
+
+class SolveArithmeticTask(Task[ArithmeticTaskMetadata]):
+    """Task: solve a math problem by calling submit_answer() once with the correct integer."""
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        ei = self.metadata.extra_info
-        question = f"What is {ei['a']} {ei['op']} {ei['b']}?"
-        return Observation.from_text(question), {"question": question, "expected": self._expected}
+        m = self.metadata
+        question = f"What is {m.a} {m.op} {m.b}?"
+        return Observation.from_text(question), {"question": question, "expected": m.expected}
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, ArithmeticTool)
         answer = self.tool.last_answer
-        correct = answer == self._expected
-        return (1.0 if correct else 0.0), {"answer": answer, "expected": self._expected, "correct": correct}
+        expected = self.metadata.expected
+        correct = answer == expected
+        return (1.0 if correct else 0.0), {"answer": answer, "expected": expected, "correct": correct}
 
     def finished(self, obs: Observation | None = None) -> bool:
         assert isinstance(self.tool, ArithmeticTool)
         return self.tool.last_answer is not None
 
 
-class ArithmeticTaskConfig(TaskConfig):
+class ArithmeticTaskConfig(TaskConfig[ArithmeticTaskMetadata]):
     """Serializable configuration that produces a SolveArithmeticTask."""
 
     def make(
@@ -39,13 +47,9 @@ class ArithmeticTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SolveArithmeticTask:
-        # Import here to avoid circular import (benchmark imports task)
-        from arithmetic_cube.benchmark import ArithmeticBenchmark
-
-        task_metadata: TaskMetadata = ArithmeticBenchmark.task_metadata[self.task_id]
         tool_cfg = self.tool_config or ArithmeticToolConfig()
         return SolveArithmeticTask(
-            metadata=task_metadata,
+            metadata=self.metadata,
             tool_config=tool_cfg,
             runtime_context=runtime_context,
             container_backend=container_backend,
