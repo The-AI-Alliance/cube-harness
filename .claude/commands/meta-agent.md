@@ -34,6 +34,22 @@ Targeted LLM guidance when the scaffolding is fine but the model needs a nudge. 
 - `GennyConfig.hint` — subset-wide
 - `system_prompt` change — only if the issue is truly general
 
+**Hint storage convention:** hints and clarifications are separate JSON files, each a flat `{"task_id": "text"}` object. Load them with helpers from the `hints` package (on `sys.path` when `meta_agent/` is in `sys.path`):
+
+```python
+from hints import load_hints, load_clarifications
+
+task_hints         = load_hints("swebench-verified")  # → GennyConfig.task_hints
+task_hints         = load_hints("workarena")
+task_clarification = load_clarifications("workarena")  # → GennyConfig.task_clarification
+```
+
+Files:
+- `meta_agent/hints/<benchmark>.json` — task-specific hints (injected as `## Task Hint`)
+- `meta_agent/clarifications/<benchmark>.json` — task clarifications (injected as `## Additional task details`)
+
+To add a hint: edit the relevant JSON file directly — no Python file to update.
+
 **5. Harness improvements**
 Improve how the harness stores, represents, or exposes information. Better telemetry, faster trace loading, richer step summaries — anything that makes debugging faster or cheaper.
 
@@ -185,6 +201,9 @@ Append one entry per iteration when committing the fix PR:
 | | |
 |---|---|
 | Recipe | `recipes/meta_agent_web_recipe.py` |
+| SWE recipe | `recipes/swe_agent_recipe.py` |
+| Hints | `meta_agent/hints/<benchmark>.json` + `load_hints(benchmark)` |
+| Clarifications | `meta_agent/clarifications/<benchmark>.json` + `load_clarifications(benchmark)` |
 | Journal | `experiments/meta_agent_log.md` |
 | Genny | `src/cube_harness/agents/genny.py` |
 | Results API | `src/cube_harness/results.py` |
