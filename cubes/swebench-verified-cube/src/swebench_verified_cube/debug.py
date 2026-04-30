@@ -15,7 +15,7 @@ from cube.core import Action, ActionSchema, Observation
 from cube.infra_local import LocalInfraConfig
 from cube.resource import InfraConfig
 
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
                Defaults to ``LocalInfraConfig()``. Override to target Daytona,
                Toolkit, etc.
     """
-    bench = SWEBenchVerifiedBenchmark(
-        infra=infra or LocalInfraConfig(),
+    config = SWEBenchVerifiedBenchmarkConfig(
         oracle_mode=True,
+        infra=infra or LocalInfraConfig(),
     )
-    bench.install()
-    bench.setup()
-    return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+    SWEBenchVerifiedBenchmarkConfig.install()
+    config = config.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+    return config.make()
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

@@ -236,12 +236,8 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
         if runtime_context is None or "infra" not in runtime_context:
             raise ValueError("SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra']")
 
-        # Import here to avoid circular import (benchmark imports task)
-        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
-
-        metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
-        exec_info = SWEBenchVerifiedBenchmark.load_task_execution_info(self.task_id)
-        metadata = metadata.model_copy(
+        exec_info = type(self).load_task_execution_info(self.task_id)
+        metadata = self.metadata.model_copy(
             update={
                 "extra_info": {
                     **exec_info,

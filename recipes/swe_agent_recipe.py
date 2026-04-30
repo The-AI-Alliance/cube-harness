@@ -131,16 +131,17 @@ def _make_benchmark(
             raise ValueError(
                 f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
             )
-        bench = get_debug_benchmark()
-        bench.infra = infra
-        if task_ids:
-            bench = bench.subset_from_list(task_ids)
-        return bench
+        return get_debug_benchmark(infra=infra)
 
     if benchmark_name == "swebench-verified":
-        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 
-        bench = SWEBenchVerifiedBenchmark(infra=infra)
+        config = SWEBenchVerifiedBenchmarkConfig(infra=infra)
+        if subset:
+            config = config.named_subset(subset)
+        if task_ids:
+            config = config.subset_from_list(task_ids)
+        return config.make()
     elif benchmark_name == "swebench-live":
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
