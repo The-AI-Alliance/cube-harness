@@ -45,6 +45,15 @@ if _docker_host.startswith("http+unix://"):
 if _docker_host:
     os.environ["DOCKER_HOST"] = _docker_host
 
+# Podman machine sets DOCKER_HOST=http+unix://... which the Docker CLI and Python SDK reject.
+# Normalize before load_dotenv so the shell-expanded value isn't overwritten by the raw
+# unexpanded expression that ~/.env stores (python-dotenv doesn't run $(...) substitutions).
+_docker_host = os.environ.get("DOCKER_HOST", "")
+if _docker_host.startswith("http+unix://"):
+    _docker_host = re.sub(r"^http\+unix://", "unix://", _docker_host)
+if _docker_host:
+    os.environ["DOCKER_HOST"] = _docker_host
+
 # Load .env so credentials are available even when the shell didn't source ~/.zshrc.
 # Ray workers inherit the parent process env, so this must run before ray.init().
 _project_env = Path(__file__).resolve().parent.parent / ".env"
@@ -156,7 +165,7 @@ def run_for_model(
     if debug:
         run_sequentially(exp)
     else:
-        run_with_ray(exp, n_cpus=n_parallel, episode_timeout=3600.0)
+        run_with_ray(exp, n_cpus=n_parallel)
 
 
 def main(
