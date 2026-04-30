@@ -61,11 +61,7 @@ def _decompress(path: Path) -> dict[str, Any]:
 
 
 def _context_line(obs_output: dict[str, Any]) -> str:
-    """Return a short context string for line 2.
-
-    Browser episodes: extract page title from AXTree "RootWebArea '<title>'" label.
-    Coding/terminal episodes: fall back to the first non-empty line of the tool result.
-    """
+    """Page title for browser episodes; first non-empty tool-result line for coding/terminal."""
     contents = obs_output.get("obs", {}).get("contents", [])
     for content in contents:
         if not isinstance(content, dict):
@@ -116,19 +112,24 @@ def _result_from_obs(obs_output: dict[str, Any]) -> str:
     return ""
 
 
-def render_trace(ep_dir: Path, console: Console) -> None:
-    """Render a compact two-line-per-turn trace for a single episode directory."""
+def _load_steps(ep_dir: Path, console: Console) -> list[dict[str, Any]] | None:
+    """Load all step files from ep_dir/steps/; print error and return None on failure."""
     steps_dir = ep_dir / "steps"
     if not steps_dir.exists():
         console.print(f"[red]No steps/ directory in {ep_dir}[/red]")
-        return
-
+        return None
     step_files = sorted(steps_dir.glob("*.msgpack.zst"))
     if not step_files:
         console.print(f"[red]No step files in {steps_dir}[/red]")
-        return
+        return None
+    return [_decompress(f) for f in step_files]
 
-    steps: list[dict[str, Any]] = [_decompress(f) for f in step_files]
+
+def render_trace(ep_dir: Path, console: Console) -> None:
+    """Render a compact two-line-per-turn trace for a single episode directory."""
+    steps = _load_steps(ep_dir, console)
+    if steps is None:
+        return
 
     meta_file = ep_dir / "episode.metadata.json"
     task_id = ep_dir.name
@@ -194,17 +195,10 @@ def render_trace(ep_dir: Path, console: Console) -> None:
 
 def render_eval(ep_dir: Path, console: Console) -> None:
     """Dump all fields from the last EnvironmentOutput step's info dict."""
-    steps_dir = ep_dir / "steps"
-    if not steps_dir.exists():
-        console.print(f"[red]No steps/ directory in {ep_dir}[/red]")
+    steps = _load_steps(ep_dir, console)
+    if steps is None:
         return
 
-    step_files = sorted(steps_dir.glob("*.msgpack.zst"))
-    if not step_files:
-        console.print(f"[red]No step files in {steps_dir}[/red]")
-        return
-
-    steps: list[dict[str, Any]] = [_decompress(f) for f in step_files]
 
     info: dict[str, Any] = {}
     for step in reversed(steps):
