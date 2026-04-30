@@ -111,18 +111,19 @@ def _make_infra(
     return LocalInfraConfig()
 
 
-def _make_benchmark(
+def _make_benchmark_config(
     benchmark_name: str,
     debug: bool,
     task_ids: list[str] | None,
     subset: str | None,
     infra: object,
 ) -> object:
-    """Instantiate and filter the requested benchmark. Imports are lazy so only
-    the installed cube is required."""
+    """Return a BenchmarkConfig (not a live Benchmark). Imports are lazy so only
+    the installed cube is required. The Experiment runner calls .make(infra)."""
     if debug:
         if benchmark_name == "swebench-verified":
             from swebench_verified_cube.debug import get_debug_benchmark
+            return get_debug_benchmark(infra=infra)
         elif benchmark_name == "swebench-live":
             from swebench_live_cube.debug import get_debug_benchmark
         elif benchmark_name == "terminalbench":
@@ -131,7 +132,9 @@ def _make_benchmark(
             raise ValueError(
                 f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
             )
-        return get_debug_benchmark(infra=infra)
+        bench = get_debug_benchmark()
+        bench.infra = infra
+        return bench
 
     if benchmark_name == "swebench-verified":
         from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
@@ -141,7 +144,7 @@ def _make_benchmark(
             config = config.named_subset(subset)
         if task_ids:
             config = config.subset_from_list(task_ids)
-        return config.make()
+        return config
     elif benchmark_name == "swebench-live":
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
@@ -203,14 +206,15 @@ def run(
         resume = False
 
     infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
-    benchmark = _make_benchmark(benchmark_name, debug, task_ids, subset, infra)
+    benchmark_config = _make_benchmark_config(benchmark_name, debug, task_ids, subset, infra)
 
     infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
     exp = Experiment(
         name=f"genny-{benchmark_name}-{infra_label}",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
+        infra=infra,
         max_steps=30,
         resume=resume,
     )

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 
-from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
 from cube.infra_local import LocalInfraConfig
 from cube.resource import InfraConfig
@@ -52,21 +51,24 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
-    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks.
+def get_debug_benchmark(infra: InfraConfig | None = None) -> SWEBenchVerifiedBenchmarkConfig:
+    """Return a SWEBenchVerifiedBenchmarkConfig scoped to the debug tasks.
+
+    Installs the execution cache if needed and returns a config narrowed to the
+    two canonical debug tasks. The caller (or the Experiment runner) is
+    responsible for calling ``.make(infra)`` to get a live Benchmark.
 
     Args:
         infra: InfraConfig that provisions and launches per-task containers.
                Defaults to ``LocalInfraConfig()``. Override to target Daytona,
                Toolkit, etc.
     """
+    SWEBenchVerifiedBenchmarkConfig.install()
     config = SWEBenchVerifiedBenchmarkConfig(
         oracle_mode=True,
         infra=infra or LocalInfraConfig(),
     )
-    SWEBenchVerifiedBenchmarkConfig.install()
-    config = config.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
-    return config.make()
+    return config.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
