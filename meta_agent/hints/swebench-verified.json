@@ -39,5 +39,15 @@
 
   "sphinx-doc__sphinx-8551": "The bug is in PyXrefMixin.make_xref() in sphinx/domains/python.py. The cross-reference node should carry the current py:module and py:class context from env.ref_context so that relative type names resolve correctly. Verify with: conda run -n testbed python -m pytest tests/test_domain_py.py::test_info_field_list -xvs",
 
-  "sympy__sympy-14531": "The bug is in sympy/printing/str.py. Several print methods format sub-expressions directly with str() instead of routing through self._print(). Look for print methods that reference expression attributes without calling self._print(). Verify with: conda run -n testbed python -m pytest sympy/printing/tests/test_str.py -x -q -k 'relational or Rational'"
+  "sympy__sympy-14531": "The bug is in sympy/printing/str.py. Several print methods format sub-expressions directly with str() instead of routing through self._print(). Look for print methods that reference expression attributes without calling self._print(). Verify with: conda run -n testbed python -m pytest sympy/printing/tests/test_str.py -x -q -k 'relational or Rational'",
+
+  "django__django-10914": "The fix has two parts. First, in django/conf/global_settings.py change FILE_UPLOAD_PERMISSIONS to 0o644 (from None). Second, in django/core/files/storage.py the _save() method calls os.chmod — check whether it guards the call with 'if FILE_UPLOAD_PERMISSIONS is not None' and update that guard to also apply the default. Do NOT modify test files. Verify with: conda run -n testbed python -m pytest tests/file_storage/tests.py -x -q -k upload_permissions",
+
+  "pallets__flask-5014": "The fix is in the Blueprint.__init__() method in src/flask/blueprints.py. After the existing check for '.' in name, add a check that name is non-empty and raise ValueError if it is. Do NOT modify test files. Verify with: conda run -n testbed python -m pytest tests/test_blueprints.py -x -q -k name",
+
+  "django__django-11087": "The bug is in the Collector.delete() method in django/db/models/deletion.py. After collecting all related objects to delete, the actual DELETE query fetches more fields than needed. Look at how the queryset is built before the DELETE — it should restrict to only the primary key using .only('pk') to minimize the query. Do NOT modify test files. Verify with: conda run -n testbed python -m pytest tests/delete/tests.py -x -q",
+
+  "django__django-13023": "The bug is in DecimalField.to_python() in django/db/models/fields/__init__.py. When the input value is a dict or other non-string type, Python's decimal.Decimal() raises TypeError instead of InvalidOperation. Add a try-except that catches TypeError as well as InvalidOperation and raises ValidationError. Do NOT modify test files. Verify with: conda run -n testbed python -m pytest tests/model_fields/test_decimalfield.py -x -q",
+
+  "matplotlib__matplotlib-14623": "The bug is in how log-scale axes handle inverted limits. When set_xlim() or set_ylim() is called with (high, low) to invert the axis, the log scale transform may flip the limits back. Look in lib/matplotlib/axes/_base.py at how set_xlim/set_ylim applies transforms, or in lib/matplotlib/scale.py LogScale — the issue is that the limit-setting path should preserve the inverted order. Verify with: conda run -n testbed python -m pytest lib/matplotlib/tests/test_axes.py -x -q -k log"
 }
