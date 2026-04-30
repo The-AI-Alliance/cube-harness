@@ -41,27 +41,41 @@ class EpisodeConfig(TypedBaseModel):
 
 
 def upload_artifact_to_gcs(source: Path, dst_bucket: str, dst_object: str) -> None:
-    logger.info("Uploading %s to GCS at gs://%s/%s", source, dst_bucket, dst_object)
-    logger.info("Uploaded %s to GCS at gs://%s/%s", source, dst_bucket, dst_object)
+    from google.cloud import storage
+
+    logger.info("Uploading %s to gs://%s/%s", source, dst_bucket, dst_object)
+    client = storage.Client()
+    bucket = client.bucket(dst_bucket)
+    blob = bucket.blob(dst_object)
+    blob.upload_from_filename(str(source))
+    logger.info("Uploaded %s to gs://%s/%s", source, dst_bucket, dst_object)
 
 
 def _store_episode_artifacts_for_otel(episode_span: Span, artifacts: list[Artifact]) -> None:
+    from google.api_core.exceptions import GoogleAPIError
+    from google.auth.exceptions import GoogleAuthError
+
+    logger.info("Storing %d artifacts for episode span", len(artifacts))
     out_artifacts: list[Artifact] = []
     for a in artifacts:
         if a.blob.type == "file":
             episode_id = baggage.get_baggage(CH_EPISODE)
             if episode_id is not None:
-                logging.info("Storing artifact %s for episode %s", a.id, episode_id)
+                logger.info("Storing artifact %s for episode %s", a.id, episode_id)
             else:
                 episode_id = str(uuid4())
-                logging.info("Storing artifact %s for unknown episode, will use episode ID %s", episode_id)
+                logger.info("Storing artifact %s for unknown episode, will use episode ID %s", a.id, episode_id)
             buck = "ss-traces"
             obj = f"{episode_id}/{a.id}"
-            upload_artifact_to_gcs(a.blob.path, buck, obj)
+            try:
+                upload_artifact_to_gcs(a.blob.path, buck, obj)
+            except (GoogleAuthError, GoogleAPIError):
+                logger.warning("Failed to upload artifact %s to GCS, skipping", a.id, exc_info=True)
+                continue
             out_artifacts.append(Artifact(blob=FileArtifactBlob(path=Path(f"gs://{buck}/{obj}")), mime=a.mime, id=a.id))
         else:
             out_artifacts.append(a)
-    episode_span.set_attribute(CH_ARTIFACTS, TypeAdapter(list[Artifact]).dump_json(out_artifacts))
+    episode_span.set_attribute(CH_ARTIFACTS, TypeAdapter(list[Artifact]).dump_json(out_artifacts).decode())
 
 class Episode:
     """Manages the execution of an agent on a specific task in an environment."""
@@ -163,7 +177,7 @@ class Episode:
         # action_schemas is read by eval_log.AgentInfo (feat/atlas-eval-log) to populate
         # the tool list in structured evaluation records without re-instantiating the task.
         extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
-        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, artifacts_fn, agent, extra_metadata=extra_metadata)
+        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, task.artifacts, agent, extra_metadata=extra_metadata)
 
     def _open_status(self, trajectory_id: str) -> EpisodeStatus:
         """Initialise `status.json` for this attempt.
@@ -211,8 +225,8 @@ class Episode:
         ep_status = self._open_status(trajectory_id)
 
         trajectory: Trajectory | None = None
-        try:
-            with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
+        with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
+            try:
                 start_time = ep_status.started_at
                 env_output = setup_fn()
                 agent_name = self.config.agent_config.agent_name
@@ -351,23 +365,23 @@ class Episode:
                 if "task_result" in env_output.info:
                     episode_span.set_attribute("task_result", json.dumps(env_output.info["task_result"]))
                 episode_span.set_attribute("reward", final_reward)
+                ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
+            except Exception as e:
+                logger.exception(f"Error during agent run: {e}")
+                ep_status.status = "FAILED"
+                ep_status.error_type = type(e).__name__
+                ep_status.error_message = str(e)[:500]
+                raise e
+            finally:
+                ep_status.ended_at = time.time()
+                ep_status.last_heartbeat_at = ep_status.ended_at
+                try:
+                    self.storage.write_episode_status(trajectory_id, ep_status)
+                except Exception:
+                    logger.exception("Failed to write final episode status")
+                close_fn()
                 _store_episode_artifacts_for_otel(episode_span, artifacts_fn())
-            ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
-        except Exception as e:
-            logger.exception(f"Error during agent run: {e}")
-            ep_status.status = "FAILED"
-            ep_status.error_type = type(e).__name__
-            ep_status.error_message = str(e)[:500]
-            raise e
-        finally:
-            ep_status.ended_at = time.time()
-            ep_status.last_heartbeat_at = ep_status.ended_at
-            try:
-                self.storage.write_episode_status(trajectory_id, ep_status)
-            except Exception:
-                logger.exception("Failed to write final episode status")
-            close_fn()
-            tracer.shutdown()
+                tracer.shutdown()
         return trajectory
 
     def log_agent_output(self, turns: int, agent_output: AgentOutput) -> None:

@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cube-harness",
     "miniwob-cube",
+    "cube-browser-tool",
 ]
 
 [tool.uv]

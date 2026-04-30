@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, override
 
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
