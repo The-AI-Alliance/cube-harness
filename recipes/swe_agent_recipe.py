@@ -64,9 +64,9 @@ The existing test suite will pass before your fix — that is expected. \
 Do NOT call final_step just because existing tests pass. \
 Only call final_step after you have actually modified the source code to resolve the issue.
 
-Before calling final_step, verify your fix by running the specific test(s) that cover \
-the reported behavior — not just the full suite. Seeing only unrelated tests pass is not \
-sufficient confirmation.
+Before calling final_step, verify your fix by running a targeted test — ideally a single \
+test class or test function that exercises the reported behavior. Run `grep -r "def test_" \
+tests/ | grep <keyword>` to find the relevant test if you don't know it.
 IMPORTANT: All test dependencies are in the conda 'testbed' environment — always prefix with
 `conda run -n testbed` or activate first: `. /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed`
 - Django projects: cd /testbed && conda run -n testbed python -m pytest tests/<module> -x -q
@@ -200,7 +200,7 @@ def run(
         llm_config=llm_config,
         system_prompt=SWE_SYSTEM_PROMPT,
         max_actions=30,
-        render_last_n_obs=3,
+        render_last_n_obs=2,
         task_hints=task_hints,
     )
 
