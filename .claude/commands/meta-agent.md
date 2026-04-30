@@ -83,6 +83,11 @@ benchmark = MiniWobSubset(default_tool_config=tool_config, task_ids=task_ids)
 ```
 Empty list = all 125 tasks. List all IDs: `MiniWobBenchmark.task_metadata.keys()`.
 
+> **Footgun — `max_actions` vs `max_steps`**: `ReactAgentConfig.max_actions` (default 10) is
+> checked *agent-side* before `Experiment.max_steps`. If you raise `max_steps` in the recipe
+> without also raising `max_actions`, the agent will stop at turn 10 with reward 0 and no
+> eval call. Always set both to the same value when raising above the default.
+
 ---
 
 ## Reading Traces
@@ -91,8 +96,14 @@ Empty list = all 125 tasks. List all IDs: `MiniWobBenchmark.task_metadata.keys()
 ```bash
 ch-trace <episode_dir>
 # e.g. ch-trace ~/cube_harness_results/.../episodes/workarena.servicenow.create-incident_ep0
+
+# Also dump eval fields from the last environment step:
+ch-trace <episode_dir> --eval
 ```
-Two lines per turn: action + result on line 1, page title + reward on line 2. Fast way to see what the agent did without opening a browser.
+Two lines per turn: action + result on line 1, context + reward on line 2. For browser tasks
+the context is the page title; for coding/terminal tasks it's the first non-empty line of the
+tool result (e.g. a pytest summary line). `--eval` additionally prints eval fields from the
+last environment step — useful for test-based benchmarks.
 
 **Step 2 — experiment-level summary:**
 ```python
