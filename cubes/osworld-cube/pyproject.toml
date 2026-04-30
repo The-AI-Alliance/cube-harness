@@ -78,10 +78,13 @@ markers = [
 override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool" }
-cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend" }
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }
-cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }
+# Pinned to the same cube-standard rev as webarena-verified-cube so the lock
+# file resolves a single consistent cube-standard source across all cubes.
+# TODO: drop rev pins once cube-standard 0.1.0rc7 ships to PyPI.
+cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
 
 [tool.ruff]
 fix = true

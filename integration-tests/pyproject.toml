@@ -87,16 +87,16 @@ markers = [
 ]
 
 [tool.uv.sources]
-# cube-standard comes from PyPI via the version pin in [project].dependencies.
-# The cube-infra-* and cube-vm-backend packages are not yet on PyPI, so we pull
-# them from the cube-standard repo (default branch: main). Drop each entry here
-# once the corresponding package is published to PyPI.
-cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-aws" }
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-azure" }
-cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-daytona" }
-cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-toolkit" }
-cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-modal" }
-cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-vm-backend" }
+# cube-standard and cube-infra-* are pinned to the same git rev so uv sees a
+# single consistent URL for cube-standard across all workspace members.
+# TODO: drop these git overrides once cube-standard 0.1.0rc7 ships to PyPI.
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-daytona", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-toolkit", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-modal", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
 terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
