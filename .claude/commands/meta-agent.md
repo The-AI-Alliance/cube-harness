@@ -42,25 +42,6 @@ Token cost, wall-clock time, parallelism, benchmark setup overhead. Worth fixing
 
 ---
 
-## Task Scouting (do this before picking tasks)
-
-Before running anything, check the signal quality of candidate tasks. A task with 400 noisy tests will score 0.0 even on a correct fix. Prefer tasks with 1–5 `fail_to_pass` tests — they give clean pass/fail signal.
-
-For **SWE-bench Verified** specifically:
-```python
-# Print task IDs sorted by fail_to_pass count (ascending = easier signal)
-uv run --with-editable cubes/swebench-verified-cube python3 - <<'EOF'
-import json
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
-b = SWEBenchVerifiedBenchmark()
-rows = [(tid, len(json.loads(b.load_task_execution_info(tid)["fail_to_pass"]))) for tid in list(b.task_metadata)[:50]]
-for tid, n in sorted(rows, key=lambda x: x[1])[:10]:
-    print(n, tid)
-EOF
-```
-
----
-
 ## Debugging Strategy
 
 **Pick tasks that fail but should succeed.** Avoid tasks with fundamental ambiguity or that require capabilities the agent fundamentally lacks. A task that sometimes passes is a better target than one that never passes.
@@ -105,7 +86,7 @@ Empty list = all 125 tasks. List all IDs: `MiniWobBenchmark.task_metadata.keys()
 > **Footgun — `max_actions` vs `max_steps`**: `ReactAgentConfig.max_actions` (default 10) is
 > checked *agent-side* before `Experiment.max_steps`. If you raise `max_steps` in the recipe
 > without also raising `max_actions`, the agent will stop at turn 10 with reward 0 and no
-> eval call. Always set both to the same value for SWE-bench style tasks (30+ recommended).
+> eval call. Always set both to the same value when raising above the default.
 
 ---
 
@@ -116,13 +97,13 @@ Empty list = all 125 tasks. List all IDs: `MiniWobBenchmark.task_metadata.keys()
 ch-trace <episode_dir>
 # e.g. ch-trace ~/cube_harness_results/.../episodes/workarena.servicenow.create-incident_ep0
 
-# For coding benchmarks (SWE-bench etc.) also dump the test eval output:
+# Also dump eval fields from the last environment step:
 ch-trace <episode_dir> --eval
 ```
 Two lines per turn: action + result on line 1, context + reward on line 2. For browser tasks
-the context is the page title; for coding tasks it's the first non-empty line of the tool
-result (e.g. a pytest summary line). `--eval` additionally prints the `resolved` flag and
-full `fail_to_pass_output` from the last environment step.
+the context is the page title; for coding/terminal tasks it's the first non-empty line of the
+tool result (e.g. a pytest summary line). `--eval` additionally prints eval fields from the
+last environment step — useful for test-based benchmarks.
 
 **Step 2 — experiment-level summary:**
 ```python
