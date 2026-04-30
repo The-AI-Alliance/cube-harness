@@ -231,7 +231,7 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
+        container_backend=None,
     ) -> SWEBenchVerifiedTask:
         if runtime_context is None or "infra" not in runtime_context:
             raise ValueError("SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra']")
