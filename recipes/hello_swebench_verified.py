@@ -10,30 +10,37 @@
 # swebench-verified-cube = { path = "../cubes/swebench-verified-cube", editable = true }
 # ///
 
-"""Run swebench-verified-cube with the ReactAgent.
+"""Run swebench-verified-cube with the Genny agent.
 
 Usage:
-    uv run recipes/hello_swebench_verified.py                          # 2 debug tasks, sequential
-    uv run recipes/hello_swebench_verified.py --debug --tasks psf__requests-1142,pallets__flask-5014
-    uv run recipes/hello_swebench_verified.py --model azure/gpt-4.1 --n-parallel 5
-    uv run recipes/hello_swebench_verified.py --repo django/django --model azure/gpt-4.1
+    .venv/bin/python recipes/hello_swebench_verified.py                         # 2 debug tasks, sequential
+    .venv/bin/python recipes/hello_swebench_verified.py gpt-5.4                 # gpt-5.4, no hints
+    .venv/bin/python recipes/hello_swebench_verified.py gpt-5.4 hints           # with task hints
+    .venv/bin/python recipes/hello_swebench_verified.py debug                   # sequential, 2 tasks
+    .venv/bin/python recipes/hello_swebench_verified.py retry /path/to/exp      # retry crashed episodes
+
+Task filtering:
+    .venv/bin/python recipes/hello_swebench_verified.py --tasks psf__requests-1142,pallets__flask-5014
+    .venv/bin/python recipes/hello_swebench_verified.py --repo django/django
 
 Infrastructure:
-    The benchmark defaults to LocalInfraConfig (local Docker/Podman).
-    To use Daytona or another cloud backend, pass infra=<InfraConfig>()
+    Defaults to LocalInfraConfig (local Docker/Podman).
+    To use Daytona, install cube-infra-daytona and pass infra=DaytonaInfraConfig()
     to SWEBenchVerifiedBenchmark.
-
-Prerequisites:
-    - Docker or Podman running locally (default)
-    - Model API key in environment (e.g. AZURE_API_KEY, OPENAI_API_KEY)
 """
 
-import argparse
 import logging
 import os
 import re
+import sys
+from pathlib import Path
 
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+from dotenv import load_dotenv
+
+# Load .env so credentials are available even when the shell didn't source ~/.zshrc.
+# Ray workers inherit the parent process env, so this must run before ray.init().
+_project_env = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
 # Podman machine sets DOCKER_HOST=http+unix://... which the Docker CLI and Python SDK reject.
 # Normalize to unix:// so both tools can connect to the same socket.
@@ -41,30 +48,35 @@ _docker_host = os.environ.get("DOCKER_HOST", "")
 if _docker_host.startswith("http+unix://"):
     os.environ["DOCKER_HOST"] = re.sub(r"^http\+unix://", "unix://", _docker_host)
 
-from cube_harness import make_experiment_output_dir
-from cube_harness.agents.react import ReactAgentConfig
-from cube_harness.exp_runner import run_sequentially, run_with_ray
-from cube_harness.experiment import Experiment
-from cube_harness.llm import LLMConfig
+from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark  # noqa: E402
+
+from cube_harness import make_experiment_output_dir  # noqa: E402
+from cube_harness.agents.genny import GennyConfig  # noqa: E402
+from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
+from cube_harness.experiment import Experiment  # noqa: E402
+from cube_harness.llm import LLMConfig  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
-# Default debug tasks: clean signal, 1 fail_to_pass test each, simple pytest setup.
+MODEL_CONFIGS: dict[str, LLMConfig] = {
+    "gpt-5.4-mini": LLMConfig(model_name="azure/gpt-5.4-mini"),
+    "gpt-5.4": LLMConfig(model_name="azure/gpt-5.4"),
+}
+
+# Default tasks for debug runs: clean signal, simple pytest setup.
 # psf__requests-1142: don't send Content-Length on GET; 1 f2p, 5 p2p.
 # pallets__flask-5014: raise ValueError on empty Blueprint name; 1 f2p, 59 p2p.
 DEBUG_TASKS = ["psf__requests-1142", "pallets__flask-5014"]
 
-# Per-task hints injected into the problem statement.
-# Key: task_id (e.g. "psf__requests-1142"), Value: hint text appended after the problem statement.
-# Hints serialize into the episode config so Ray workers receive them correctly.
-# Leave empty for a clean run; add entries when the agent consistently finds the right
-# location but makes a subtle mistake (wrong escape, missing step, incorrect method name).
+# Per-task hints passed to GennyConfig.task_hints.
+# Key: instance_id, Value: hint injected as a ## Task Hint block after the goal.
 TASK_HINTS: dict[str, str] = {}
 
 SWE_SYSTEM_PROMPT = """\
-You are an autonomous coding agent. You have access to a Linux sandbox with the repository already cloned at /testbed.
-Your task is to resolve the GitHub issue described below. Use the provided tools to explore the codebase, \
-understand the problem, and implement a fix.
+You are an autonomous coding agent. You have access to a Linux sandbox with the repository \
+already cloned at /testbed.
+Your task is to resolve the GitHub issue described below. Use the provided tools to explore \
+the codebase, understand the problem, and implement a fix.
 Start by exploring the repository structure and reading relevant files before making changes.
 
 IMPORTANT — the issue requires you to ADD or CHANGE behavior in the source code. \
@@ -88,68 +100,94 @@ Only modify source code files to fix the bug.
 IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 
 
-def main(
+def run_for_model(
+    model_key: str,
+    llm_config: LLMConfig,
     debug: bool,
-    model: str = "gpt-4.1-mini",
-    repo: str | None = None,
-    task_ids: list[str] | None = None,
-    n_parallel: int = 5,
+    use_hints: bool,
+    task_ids: list[str] | None,
+    repo: str | None,
+    n_parallel: int,
+    retry_dir: Path | None,
 ) -> None:
-    model_short = model.split("/")[-1]
-    output_dir = make_experiment_output_dir("react", "swebench-verified", llm_name=model_short)
-
     benchmark = SWEBenchVerifiedBenchmark()
-
     if debug:
-        tasks = task_ids or DEBUG_TASKS
-        benchmark = benchmark.subset_from_list(tasks)
+        benchmark = benchmark.subset_from_list(task_ids or DEBUG_TASKS)
     elif task_ids is not None:
         benchmark = benchmark.subset_from_list(task_ids)
     elif repo is not None:
         benchmark = benchmark.subset_from_glob("repo", repo)
 
-    # Inject per-task hints via SWEBenchVerifiedTaskConfig.hint so they serialize
-    # into each episode config and reach Ray worker processes correctly.
-    # object.__setattr__ is used because Pydantic v2 rejects direct attribute assignment
-    # on model instances.
-    if TASK_HINTS:
-        _orig_get_task_configs = benchmark.get_task_configs
-
-        def _get_task_configs_with_hints():
-            for tc in _orig_get_task_configs():
-                if tc.task_id in TASK_HINTS:
-                    tc = tc.model_copy(update={"hint": TASK_HINTS[tc.task_id]})
-                yield tc
-
-        object.__setattr__(benchmark, "get_task_configs", _get_task_configs_with_hints)
-
-    agent_config = ReactAgentConfig(
-        llm_config=LLMConfig(model_name=model),
+    suffix = "hints" if use_hints else "nohints"
+    agent_config = GennyConfig(
+        llm_config=llm_config,
         system_prompt=SWE_SYSTEM_PROMPT,
         max_actions=30,
+        render_last_n_obs=2,
+        task_hints=TASK_HINTS if use_hints else {},
     )
 
+    if retry_dir is not None:
+        output_dir = retry_dir
+        retry_failed = True
+        resume = True
+    else:
+        output_dir = make_experiment_output_dir("genny", f"swebench-verified-{suffix}-{model_key}")
+        retry_failed = False
+        resume = False
+
     exp = Experiment(
-        name="swebench-verified",
+        name=f"swebench-verified-{suffix}-{model_key}",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
         max_steps=30,
+        retry_failed=retry_failed,
+        resume=resume,
     )
 
     if debug:
         run_sequentially(exp)
     else:
-        run_with_ray(exp, n_cpus=n_parallel, step_timeout_s=1800.0)
+        run_with_ray(exp, n_cpus=n_parallel, episode_timeout=3600.0)
+
+
+def main(
+    debug: bool,
+    models: list[str],
+    use_hints: bool,
+    task_ids: list[str] | None,
+    repo: str | None,
+    n_parallel: int,
+    retry_dir: Path | None,
+) -> None:
+    for model_key in models:
+        llm_config = MODEL_CONFIGS[model_key]
+        hint_label = "WITH hints" if use_hints else "NO hints"
+        label = f"RETRY {retry_dir}" if retry_dir else hint_label
+        print(f"\n=== {model_key} | {label} ===")
+        run_for_model(model_key, llm_config, debug, use_hints, task_ids, repo, n_parallel, retry_dir)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run SWE-bench Verified experiments")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run SWE-bench Verified with Genny")
+    parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS), help="Model key")
     parser.add_argument("--debug", action="store_true", help="Run 2 debug tasks sequentially")
-    parser.add_argument("--model", default="gpt-4.1-mini")
-    parser.add_argument("--repo", default=None, help="Filter by repository glob, e.g. 'django/django'")
+    parser.add_argument("--hints", action="store_true", help="Inject per-task hints via GennyConfig.task_hints")
     parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
-    parser.add_argument("--n-parallel", type=int, default=5, help="Ray workers for parallel run (default: 5)")
+    parser.add_argument("--repo", default=None, help="Filter by repo glob, e.g. 'django/django'")
+    parser.add_argument("--n-parallel", type=int, default=5, help="Ray workers (default: 5)")
+    parser.add_argument("--retry", metavar="DIR", default=None, help="Retry crashed episodes from output dir")
     args = parser.parse_args()
-    task_ids = [t.strip() for t in args.tasks.split(",")] if args.tasks else None
-    main(args.debug, model=args.model, repo=args.repo, task_ids=task_ids, n_parallel=args.n_parallel)
+
+    main(
+        debug=args.debug,
+        models=[args.model],
+        use_hints=args.hints,
+        task_ids=[t.strip() for t in args.tasks.split(",")] if args.tasks else None,
+        repo=args.repo,
+        n_parallel=args.n_parallel,
+        retry_dir=Path(args.retry) if args.retry else None,
+    )
