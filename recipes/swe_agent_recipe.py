@@ -111,42 +111,28 @@ def _make_benchmark(
         from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
         bench = SWEBenchVerifiedBenchmark()
-        if debug:
-            bench = bench.subset_from_list(task_ids or DEBUG_TASKS)
-        elif task_ids:
-            bench = bench.subset_from_list(task_ids)
-        elif subset:
-            bench = bench.named_subset(subset)
-        return bench
-
-    if benchmark_name == "swebench-live":
+        default_debug = DEBUG_TASKS
+    elif benchmark_name == "swebench-live":
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
         bench = SWEBenchLiveBenchmark()
-        if subset:
-            bench = bench.named_subset(subset)
-        if debug:
-            tasks = list(bench.task_metadata.keys())[:2]
-            bench = bench.subset_from_list(task_ids or tasks)
-        elif task_ids:
-            bench = bench.subset_from_list(task_ids)
-        return bench
-
-    if benchmark_name == "terminalbench":
+        default_debug = list(bench.task_metadata.keys())[:2]
+    elif benchmark_name == "terminalbench":
         from terminalbench_cube import TerminalBenchBenchmark
 
         TerminalBenchBenchmark.install()
         bench = TerminalBenchBenchmark()
-        if subset:
-            bench = bench.named_subset(subset)
-        if debug:
-            tasks = list(bench.task_metadata.keys())[:1]
-            bench = bench.subset_from_list(task_ids or tasks)
-        elif task_ids:
-            bench = bench.subset_from_list(task_ids)
-        return bench
+        default_debug = list(bench.task_metadata.keys())[:1]
+    else:
+        raise ValueError(f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench")
 
-    raise ValueError(f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench")
+    if subset:
+        bench = bench.named_subset(subset)
+    if debug:
+        bench = bench.subset_from_list(task_ids or default_debug)
+    elif task_ids:
+        bench = bench.subset_from_list(task_ids)
+    return bench
 
 
 # ---------------------------------------------------------------------------
