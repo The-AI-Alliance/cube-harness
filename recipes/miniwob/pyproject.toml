@@ -14,6 +14,3 @@ package = false
 [tool.uv.sources]
 cube-harness = { path = "../..", editable = true }
 miniwob-cube = { path = "../../cubes/miniwob", editable = true }
-#cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
-cube-standard = { path = "../../../cube-standard/", editable = true}
-cube-browser-tool = { path = "../../../cube-standard/cube-tools/cube-browser-tool/", editable = true }

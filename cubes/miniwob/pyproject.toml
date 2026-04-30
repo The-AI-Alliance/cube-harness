@@ -23,6 +23,7 @@ include = ["src/miniwob_cube/task_metadata.json"]
 # TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
 cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts" }
 #cube-standard = { path = "../../../cube-standard/", editable = true}
+cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts", subdirectory = "cube-tools/cube-browser-tool" }
 
 [tool.ruff]
 fix = true
