@@ -499,6 +499,7 @@ class Genny(Agent):
         api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
         logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}")
+        logger.debug("Act prompt:\n%s", prompt.debug())
         try:
             response = self.llm(prompt)
         except Exception as e:

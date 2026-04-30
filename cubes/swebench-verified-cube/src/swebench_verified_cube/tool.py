@@ -11,6 +11,7 @@ from cube.tool import Tool, ToolConfig, tool_action
 logger = logging.getLogger(__name__)
 
 MAX_OUTPUT_BYTES = 100_000
+_VIEW_WINDOW = 100  # lines shown by default in view()
 
 
 class SWEBenchToolConfig(ToolConfig):
@@ -65,7 +66,7 @@ class SWEBenchTool(Tool):
         Args:
             command: Shell command to run. The working directory is /testbed
                 (the cloned repo). Use absolute paths or assume cwd=/testbed.
-            timeout: Wall-clock seconds (NOT milliseconds). Default 120s, capped at 300s.
+            timeout: Wall-clock seconds (NOT milliseconds). Default 120s, capped at 600s.
         """
         timeout = min(timeout, self._MAX_BASH_TIMEOUT)
         output = self._run_bash(command, timeout=timeout)
@@ -93,8 +94,54 @@ class SWEBenchTool(Tool):
         return "\n".join(parts) if parts else "(no output)"
 
     @tool_action
+    def view(self, path: str, line_start: int = 1, window: int = _VIEW_WINDOW) -> str:
+        """View a file with line numbers in a scrollable window.
+
+        Shows up to `window` lines starting at `line_start`, each prefixed with its
+        line number. Reports how many lines exist above and below the window so you
+        know where to scroll next. Prefer this over `bash cat` for source files —
+        it keeps context manageable for large files.
+
+        Args:
+            path: File path. Relative paths resolve against /testbed.
+            line_start: First line to show (1-indexed). Default 1. Use grep output
+                to find the right starting line, then scroll with line_start.
+            window: Number of lines to show. Default 100.
+        """
+        # Count total lines
+        wc_result = self._exec(f"wc -l < {shlex.quote(path)}")
+        if wc_result.exit_code != 0:
+            return f"Error reading {path}: {wc_result.stderr or wc_result.stdout}"
+        try:
+            total = int(wc_result.stdout.strip())
+        except ValueError:
+            total = 0
+
+        start = max(1, line_start)
+        end = min(start + window - 1, total)
+
+        # Read lines with awk to get line numbers
+        cmd = f"awk 'NR>={start} && NR<={end} {{printf \"%6d\\t%s\\n\", NR, $0}}' {shlex.quote(path)}"
+        result = self._exec(cmd)
+        if result.exit_code != 0:
+            return f"Error reading {path}: {result.stderr or result.stdout}"
+
+        above = start - 1
+        below = max(0, total - end)
+        header = f"[{path}] lines {start}-{end} of {total}"
+        if above:
+            header += f"  ({above} lines above)"
+        if below:
+            header += f"  ({below} lines below — use line_start={end + 1} to continue)"
+        return f"{header}\n{result.stdout}"
+
+    @tool_action
     def read_file(self, path: str, line_start: int | None = None, line_end: int | None = None) -> str:
-        """Read the contents of a file in the sandbox.
+        """Read the contents of a file in the sandbox (no line numbers).
+
+        For navigating large files use `view` instead — it shows line numbers and
+        window context. Use `read_file` when you need the raw text for copy-paste
+        into `str_replace`.
 
         Args:
             path: Path to the file. Relative paths resolve against /testbed
@@ -113,9 +160,21 @@ class SWEBenchTool(Tool):
             return f"Error reading {path}: {result.stderr or result.stdout}"
         return result.stdout
 
+    def _lint_python(self, path: str) -> str | None:
+        """Run py_compile on a .py file; return error string or None if clean."""
+        if not path.endswith(".py"):
+            return None
+        result = self._exec(f"python -m py_compile {shlex.quote(path)} 2>&1")
+        if result.exit_code != 0:
+            output = (result.stderr or result.stdout or "").strip()
+            return f"[syntax error] {output}"
+        return None
+
     @tool_action
     def write_file(self, path: str, content: str) -> str:
         """Write content to a file in the sandbox (overwrites any existing file).
+
+        For .py files, runs a syntax check after writing and reports any errors.
 
         Args:
             path: Destination path. Parent directories are created as needed.
@@ -127,15 +186,17 @@ class SWEBenchTool(Tool):
         self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
         escaped = content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
-        return f"Wrote {len(content)} bytes to {path}"
+        msg = f"Wrote {len(content)} bytes to {path}"
+        lint_error = self._lint_python(path)
+        return f"{msg}\n{lint_error}" if lint_error else msg
 
     @tool_action
     def str_replace(self, path: str, old_str: str, new_str: str) -> str:
         """Replace an exact string in a file (safer than sed for targeted edits).
 
         Fails clearly if old_str is not found or appears more than once, so you
-        always know whether the edit landed. Prefer this over bash+sed for source
-        code changes.
+        always know whether the edit landed. For .py files, runs a syntax check
+        after the replacement. Prefer this over bash+sed for source code changes.
 
         Args:
             path: File to edit. Relative paths resolve against /testbed.
@@ -160,4 +221,6 @@ class SWEBenchTool(Tool):
         new_content = content.replace(old_str, new_str, 1)
         escaped = new_content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
-        return f"Replaced 1 occurrence in {path}"
+        msg = f"Replaced 1 occurrence in {path}"
+        lint_error = self._lint_python(path)
+        return f"{msg}\n{lint_error}" if lint_error else msg

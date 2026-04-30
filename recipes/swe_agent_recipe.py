@@ -79,9 +79,14 @@ IMPORTANT: Do NOT modify test files (files under tests/ or with test_ prefix). \
 The evaluation framework applies its own test patch during evaluation. \
 Only modify source code files to fix the bug.
 
+IMPORTANT: For navigating source files use `view` — it shows line numbers and tells you \
+how many lines are above/below so you can scroll efficiently. Use `bash grep -n` to find \
+the right line number, then `view(path, line_start=<N>)` to read context around it. \
+Only use `read_file` when you need raw text for `str_replace` (no line numbers needed).
+
 IMPORTANT: For targeted code changes prefer str_replace over bash+sed. \
-str_replace fails clearly if the text is not found or is ambiguous — \
-sed silently succeeds even when it edits the wrong location.
+str_replace fails clearly if the text is not found or is ambiguous, and runs a syntax check \
+on .py files after the edit — sed silently succeeds even when it edits the wrong location.
 
 IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 
