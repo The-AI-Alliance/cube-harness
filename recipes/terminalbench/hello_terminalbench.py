@@ -1,21 +1,9 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "cube-harness",
-#     "terminalbench-cube",
-# ]
-#
-# [tool.uv.sources]
-# cube-harness = { path = "..", editable = true }
-# terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
-# ///
-
 """Run terminalbench-cube with AgentLab2.
 
 Usage:
-    uv run recipes/hello_terminalbench.py debug              # 1 task, sequential
-    uv run recipes/hello_terminalbench.py easy               # 4 easy tasks, sequential
-    uv run recipes/hello_terminalbench.py full --model openai/gpt-4o
+    uv run --project recipes/terminalbench recipes/terminalbench/hello_terminalbench.py debug              # 1 task, sequential
+    uv run --project recipes/terminalbench recipes/terminalbench/hello_terminalbench.py easy               # 4 easy tasks, sequential
+    uv run --project recipes/terminalbench recipes/terminalbench/hello_terminalbench.py full --model openai/gpt-4o
 """
 
 import argparse

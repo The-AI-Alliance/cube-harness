@@ -1,15 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "cube-harness",
-#     "webarena-verified-cube",
-# ]
-#
-# [tool.uv.sources]
-# cube-harness = { path = "..", editable = true }
-# webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
-# ///
-
 import sys
 
 from cube.infra_local import LocalInfraConfig

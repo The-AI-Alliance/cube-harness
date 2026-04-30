@@ -111,7 +111,7 @@ make debug              # small end-to-end run
 make xray               # open the trajectory viewer
 make lint
 make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency
-uv run recipes/hello_miniwob.py   # example run
+uv run --project recipes/miniwob recipes/miniwob/hello_miniwob.py   # example run
 ```
 
 Environment vars go in `.env` (loaded by pyproject). `OPENAI_API_KEY`

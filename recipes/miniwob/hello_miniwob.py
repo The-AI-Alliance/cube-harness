@@ -1,15 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "cube-harness",
-#     "miniwob-cube",
-# ]
-#
-# [tool.uv.sources]
-# cube-harness = { path = "..", editable = true }
-# miniwob-cube = { path = "../cubes/miniwob", editable = true }
-# ///
-
 import sys
 
 from cube_browser_tool import PlaywrightConfig

@@ -15,13 +15,11 @@ help:
 
 hello:
 	@echo "🤖 Running hello_miniwob recipe"
-	uv pip install -e "cubes/miniwob[debug]"
-	uv run recipes/hello_miniwob.py
+	uv run --project recipes/miniwob recipes/miniwob/hello_miniwob.py
 
 debug:
 	@echo "🤖 Running hello_miniwob recipe in debug mode"
-	uv pip install -e "cubes/miniwob[debug]"
-	uv run recipes/hello_miniwob.py debug
+	uv run --project recipes/miniwob recipes/miniwob/hello_miniwob.py debug
 
 xray:
 	uv run ch-xray --debug

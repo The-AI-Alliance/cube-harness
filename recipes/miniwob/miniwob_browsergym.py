@@ -1,15 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "cube-harness",
-#     "miniwob-cube",
-# ]
-#
-# [tool.uv.sources]
-# cube-harness = { path = "..", editable = true }
-# miniwob-cube = { path = "../cubes/miniwob", editable = true }
-# ///
-
 """
 Run MiniWoB benchmark using BrowserGym tool.
 
@@ -17,8 +5,8 @@ This recipe demonstrates using the BrowserGym tool wrapper instead of the
 direct Playwright tool for running MiniWoB tasks.
 
 Usage:
-    uv run recipes/hello_miniwob_bgym.py        # Full run with Ray
-    uv run recipes/hello_miniwob_bgym.py debug  # Debug mode (2 tasks, sequential)
+    uv run --project recipes/miniwob recipes/miniwob/miniwob_browsergym.py        # Full run with Ray
+    uv run --project recipes/miniwob recipes/miniwob/miniwob_browsergym.py debug  # Debug mode (2 tasks, sequential)
 """
 
 import sys
