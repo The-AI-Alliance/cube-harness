@@ -1,5 +1,6 @@
 import json
 import logging
+import mimetypes
 import time
 import warnings
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, ImageContent, StepError, TypedBaseModel, Artifact, FileArtifactBlob
+from cube.core import EnvironmentOutput, ImageContent, StepError, TypedBaseModel, Artifact, RemoteFileArtifactBlob
 from cube.task import TaskConfig
 from opentelemetry.trace import StatusCode, Span
 from opentelemetry import baggage
@@ -55,6 +56,7 @@ def _store_episode_artifacts_for_otel(episode_span: Span, artifacts: list[Artifa
     from google.api_core.exceptions import GoogleAPIError
     from google.auth.exceptions import GoogleAuthError
 
+    logging.info("ARTIFACTS!! IS %s", TypeAdapter(list[Artifact]).dump_json(artifacts))
     logger.info("Storing %d artifacts for episode span", len(artifacts))
     out_artifacts: list[Artifact] = []
     for a in artifacts:
@@ -65,14 +67,17 @@ def _store_episode_artifacts_for_otel(episode_span: Span, artifacts: list[Artifa
             else:
                 episode_id = str(uuid4())
                 logger.info("Storing artifact %s for unknown episode, will use episode ID %s", a.id, episode_id)
-            buck = "ss-traces"
-            obj = f"{episode_id}/{a.id}"
+            ext = mimetypes.guess_extension(a.mime)
+            if ext is None:
+                ext = ""
+            buck = "ss-quail-playwright-traces"
+            obj = f"{episode_id}/{a.id}{ext}"
             try:
                 upload_artifact_to_gcs(a.blob.path, buck, obj)
             except (GoogleAuthError, GoogleAPIError):
                 logger.warning("Failed to upload artifact %s to GCS, skipping", a.id, exc_info=True)
                 continue
-            out_artifacts.append(Artifact(blob=FileArtifactBlob(path=Path(f"gs://{buck}/{obj}")), mime=a.mime, id=a.id))
+            out_artifacts.append(Artifact(blob=RemoteFileArtifactBlob(url=f"gs://{buck}/{obj}"), mime=a.mime, id=a.id))
         else:
             out_artifacts.append(a)
     episode_span.set_attribute(CH_ARTIFACTS, TypeAdapter(list[Artifact]).dump_json(out_artifacts).decode())
@@ -225,7 +230,8 @@ class Episode:
         ep_status = self._open_status(trajectory_id)
 
         trajectory: Trajectory | None = None
-        with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
+        try:
+          with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
             try:
                 start_time = ep_status.started_at
                 env_output = setup_fn()
@@ -380,8 +386,12 @@ class Episode:
                 except Exception:
                     logger.exception("Failed to write final episode status")
                 close_fn()
-                _store_episode_artifacts_for_otel(episode_span, artifacts_fn())
-                tracer.shutdown()
+                try:
+                    _store_episode_artifacts_for_otel(episode_span, artifacts_fn())
+                except Exception:
+                    logger.exception("Failed to store episode artifacts")
+        finally:
+            tracer.shutdown()
         return trajectory
 
     def log_agent_output(self, turns: int, agent_output: AgentOutput) -> None:
