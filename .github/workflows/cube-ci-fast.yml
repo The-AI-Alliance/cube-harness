@@ -23,14 +23,16 @@ jobs:
 
       - id: discover
         run: |
+          all_cubes=$(find cubes/ -mindepth 1 -maxdepth 1 -type d -exec test -f {}/Makefile \; -print | xargs -I{} basename {} | sort)
           if [ "${{ github.event_name }}" = "push" ]; then
-            cubes=$(ls cubes/ | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            cubes=$(echo "$all_cubes" | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
             harness_changed=$(git diff --name-only origin/main... | grep -cE '^src/|^\.github/workflows/cube-ci-fast\.yml' || true)
             if [ "$harness_changed" -gt 0 ]; then
-              cubes=$(ls cubes/ | jq -R -s -c 'split("\n") | map(select(length > 0))')
+              cubes=$(echo "$all_cubes" | jq -R -s -c 'split("\n") | map(select(length > 0))')
             else
-              cubes=$(git diff --name-only origin/main... | grep '^cubes/' | cut -d/ -f2 | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+              changed=$(git diff --name-only origin/main... | grep '^cubes/' | cut -d/ -f2 | sort -u)
+              cubes=$(comm -12 <(echo "$all_cubes") <(echo "$changed") | jq -R -s -c 'split("\n") | map(select(length > 0))')
             fi
           fi
           echo "cubes=$cubes" >> "$GITHUB_OUTPUT"
