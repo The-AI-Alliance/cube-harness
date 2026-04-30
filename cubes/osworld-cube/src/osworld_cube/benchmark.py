@@ -363,6 +363,7 @@ class OSWorldBenchmarkConfig(BenchmarkConfig[OSWorldTaskMetadata]):
         VM launches. Provisioning is mirrored from the base implementation.
         """
         from cube import LocalInfraConfig
+
         resolved_infra = infra or LocalInfraConfig()
         if self.resources:
             for resource in self.resources:
