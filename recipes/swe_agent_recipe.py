@@ -24,15 +24,17 @@ import logging
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # meta_agent/ is not a Python package — add it to sys.path so we can import hints.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "meta_agent"))
 
-from cube_harness import make_experiment_output_dir, setup_env  # noqa: E402
-
-setup_env()
+_project_env = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
 from hints import load_hints  # noqa: E402
 
+from cube_harness import make_experiment_output_dir  # noqa: E402
 from cube_harness.agents.genny import GennyConfig  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
