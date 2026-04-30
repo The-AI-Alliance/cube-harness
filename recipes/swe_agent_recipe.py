@@ -13,6 +13,13 @@ Options:
     --subset NAME        Named subset: lite/verified/full (swebench-live), easy (terminalbench)
     --n-parallel N       Ray workers (default: 5)
     --retry DIR          Resume / retry from an existing output directory
+    --toolkit            Use ToolkitInfraConfig — submit each task as an eai job (no local Docker needed)
+    --eai-profile PROF   Toolkit profile (default: yul101)
+    --eai-path PATH      Path to the eai binary (default: eai; use /bin/eai inside a toolkit job)
+    --preemptable        Submit task jobs as preemptable (cheaper; may be interrupted)
+
+Toolkit workflow (from an interactive job):
+    uv run recipes/swe_agent_recipe.py --toolkit --eai-path /bin/eai --n-parallel 20 --debug
 
 Each cube must be installed in the active venv:
     uv pip install -e cubes/swebench-verified-cube
@@ -83,11 +90,33 @@ MODEL_CONFIGS: dict[str, LLMConfig] = {
 # ---------------------------------------------------------------------------
 
 
+def _make_infra(
+    toolkit: bool,
+    eai_profile: str,
+    eai_path: str,
+    preemptable: bool,
+) -> object:
+    """Return the appropriate InfraConfig. Lazy import so cube_infra_toolkit is optional."""
+    if toolkit:
+        from cube_infra_toolkit import ToolkitInfraConfig
+
+        return ToolkitInfraConfig(
+            profile=eai_profile,
+            eai_path=eai_path,
+            preemptable=preemptable,
+            launch_timeout_seconds=300,
+        )
+    from cube.infra_local import LocalInfraConfig
+
+    return LocalInfraConfig()
+
+
 def _make_benchmark(
     benchmark_name: str,
     debug: bool,
     task_ids: list[str] | None,
     subset: str | None,
+    infra: object,
 ) -> object:
     """Instantiate and filter the requested benchmark. Imports are lazy so only
     the installed cube is required."""
@@ -103,6 +132,7 @@ def _make_benchmark(
                 f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
             )
         bench = get_debug_benchmark()
+        bench.infra = infra
         if task_ids:
             bench = bench.subset_from_list(task_ids)
         return bench
@@ -110,16 +140,16 @@ def _make_benchmark(
     if benchmark_name == "swebench-verified":
         from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
 
-        bench = SWEBenchVerifiedBenchmark()
+        bench = SWEBenchVerifiedBenchmark(infra=infra)
     elif benchmark_name == "swebench-live":
         from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
 
-        bench = SWEBenchLiveBenchmark()
+        bench = SWEBenchLiveBenchmark(infra=infra)
     elif benchmark_name == "terminalbench":
         from terminalbench_cube import TerminalBenchBenchmark
 
         TerminalBenchBenchmark.install()
-        bench = TerminalBenchBenchmark()
+        bench = TerminalBenchBenchmark(infra=infra)
     else:
         raise ValueError(
             f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
@@ -147,6 +177,10 @@ def run(
     subset: str | None,
     n_parallel: int,
     retry_dir: Path | None,
+    toolkit: bool,
+    eai_profile: str,
+    eai_path: str,
+    preemptable: bool,
 ) -> None:
     llm_config = MODEL_CONFIGS[model_key]
 
@@ -167,10 +201,12 @@ def run(
         output_dir = None
         resume = False
 
-    benchmark = _make_benchmark(benchmark_name, debug, task_ids, subset)
+    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
+    benchmark = _make_benchmark(benchmark_name, debug, task_ids, subset, infra)
 
+    infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
     exp = Experiment(
-        name=f"genny-{benchmark_name}",
+        name=f"genny-{benchmark_name}-{infra_label}",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark=benchmark,
@@ -181,7 +217,7 @@ def run(
     label = (
         f"RETRY {retry_dir}" if retry_dir else (f"hints={use_hints}" if benchmark_name == "swebench-verified" else "")
     )
-    print(f"\n=== {benchmark_name} | {model_key} | {label or 'no hints'} ===")
+    print(f"\n=== {benchmark_name} | {model_key} | {infra_label} | {label or 'no hints'} ===")
 
     if debug:
         run_sequentially(exp)
@@ -210,6 +246,10 @@ if __name__ == "__main__":
     parser.add_argument("--subset", default=None, help="Named subset (e.g. lite, easy)")
     parser.add_argument("--n-parallel", type=int, default=5, help="Ray workers (default: 5)")
     parser.add_argument("--retry", metavar="DIR", default=None, help="Resume/retry from output dir")
+    parser.add_argument("--toolkit", action="store_true", help="Use ToolkitInfraConfig (submit each task as an eai job)")
+    parser.add_argument("--eai-profile", default="yul101", help="Toolkit profile (default: yul101)")
+    parser.add_argument("--eai-path", default="eai", help="Path to eai binary (default: eai; use /bin/eai inside a toolkit job)")
+    parser.add_argument("--preemptable", action="store_true", help="Submit task jobs as preemptable")
     args = parser.parse_args()
 
     run(
@@ -221,4 +261,8 @@ if __name__ == "__main__":
         subset=args.subset,
         n_parallel=args.n_parallel,
         retry_dir=Path(args.retry) if args.retry else None,
+        toolkit=args.toolkit,
+        eai_profile=args.eai_profile,
+        eai_path=args.eai_path,
+        preemptable=args.preemptable,
     )
