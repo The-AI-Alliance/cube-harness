@@ -63,8 +63,9 @@ def make_agents(model: str) -> dict[str, GennyConfig | ReactAgentConfig]:
     }
 
 
-def main(debug: bool, agent: str, level: int, model: str) -> None:
+def main(debug: bool, agent: str, level: int, model: str, name: str | None) -> None:
     agent_config = make_agents(model)[agent]
+    exp_name = name if name is not None else f"workarena_{agent}"
     output_dir = make_experiment_output_dir(agent, "workarena", tag=f"l{level}")
 
     tools_configs = [
@@ -85,7 +86,7 @@ def main(debug: bool, agent: str, level: int, model: str) -> None:
     benchmark_config = WorkArenaBenchmarkConfig(tool_config=tool_config, n_seeds_l1=1).named_subset(f"l{level}")
 
     exp = Experiment(
-        name=f"workarena_{agent}",
+        name=exp_name,
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
@@ -95,7 +96,11 @@ def main(debug: bool, agent: str, level: int, model: str) -> None:
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_with_ray(
+            exp,
+            n_cpus=4,
+            otlp_endpoint="http://localhost:8080/traces/collector/9ccd3233-ead7-4d26-8053-bca98b170764/v1/traces",
+        )
 
 
 if __name__ == "__main__":
@@ -104,5 +109,6 @@ if __name__ == "__main__":
     parser.add_argument("--agent", choices=("genny", "react"), default="genny", help="Agent to use (default: genny)")
     parser.add_argument("--level", type=int, choices=[1, 2, 3], default=1, help="Level to run (default: 1)")
     parser.add_argument("--model", default=_DEFAULT_MODEL, help=f"LLM model (default: {_DEFAULT_MODEL})")
+    parser.add_argument("--name", default=None, help="Experiment name tag (default: l{level})")
     args = parser.parse_args()
-    main(debug=args.debug, agent=args.agent, level=args.level, model=args.model)
+    main(debug=args.debug, agent=args.agent, level=args.level, model=args.model, name=args.name)

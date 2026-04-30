@@ -229,7 +229,7 @@ def get_tracer(
     os.environ[RAY_ENV_OTLP_ENDPOINT] = otlp_endpoint
     provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 
-    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    #provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
 
     trace.set_tracer_provider(provider)
 
