@@ -50,6 +50,7 @@ class SWEBenchVerifiedTask(Task):
     accept_agent_stop: bool = True
 
     def _build_tool(self) -> None:
+        """Copy /testbed to a writable location if the container mounts it read-only."""
         new_wd = relocate_if_readonly(
             self._container,
             self.tool_config.working_dir,
