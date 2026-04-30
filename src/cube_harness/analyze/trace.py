@@ -5,7 +5,7 @@ did step by step without opening a browser.
 
 Usage:
     ch-trace <episode_dir>
-    ch-trace <episode_dir> --eval        # also dump eval output (e.g. SWE-bench test results)
+    ch-trace <episode_dir> --eval        # also dump eval fields from last environment step
     ch-trace experiments/workarena-l1/workarena.servicenow.create-incident_ep0
 
 Output: two lines per turn —
@@ -34,8 +34,7 @@ the tool result is shown instead.
 Episode-level outcome (final reward, done, validation message) is read from
 episode.metadata.json, written by the harness after the episode ends.
 
---eval prints eval fields (resolved, fail_to_pass_passed, test output) from the last
-EnvironmentOutput step — useful for SWE-bench and other test-based evaluations.
+--eval prints all fields from the last EnvironmentOutput's info dict.
 """
 
 from __future__ import annotations
@@ -68,8 +67,6 @@ def _context_line(obs_output: dict[str, Any]) -> str:
     Coding/terminal episodes: fall back to the first non-empty line of the tool result.
     """
     contents = obs_output.get("obs", {}).get("contents", [])
-
-    # Browser path: look for AXTree root label
     for content in contents:
         if not isinstance(content, dict):
             continue
@@ -78,11 +75,8 @@ def _context_line(obs_output: dict[str, Any]) -> str:
             continue
         m = re.search(r"RootWebArea '([^']+)'", text)
         if m:
-            title = m.group(1)
-            title = re.sub(r"\s*\|\s*ServiceNow$", "", title)
+            title = re.sub(r"\s*\|\s*ServiceNow$", "", m.group(1))
             return title[:60]
-
-    # Coding/terminal path: first non-empty line of any tool result
     for c in contents:
         if isinstance(c, dict) and c.get("tool_call_id"):
             data = c.get("data", "") or ""
@@ -199,11 +193,7 @@ def render_trace(ep_dir: Path, console: Console) -> None:
 
 
 def render_eval(ep_dir: Path, console: Console) -> None:
-    """Dump eval fields from the last EnvironmentOutput step (SWE-bench and similar).
-
-    Prints resolved, fail_to_pass_passed, pass_to_pass_passed flags and the full
-    test output captured during evaluation.
-    """
+    """Dump all fields from the last EnvironmentOutput step's info dict."""
     steps_dir = ep_dir / "steps"
     if not steps_dir.exists():
         console.print(f"[red]No steps/ directory in {ep_dir}[/red]")
@@ -216,7 +206,6 @@ def render_eval(ep_dir: Path, console: Console) -> None:
 
     steps: list[dict[str, Any]] = [_decompress(f) for f in step_files]
 
-    # Walk from the end — eval info lands in the last EnvironmentOutput
     info: dict[str, Any] = {}
     for step in reversed(steps):
         output = step.get("output", {})
@@ -226,36 +215,22 @@ def render_eval(ep_dir: Path, console: Console) -> None:
                 break
 
     if not info:
-        console.print("[yellow]No eval info found in episode steps.[/yellow]")
+        console.print("[yellow]No eval fields found in last environment step.[/yellow]")
         return
 
-    resolved = info.get("resolved")
-    f2p_passed = info.get("fail_to_pass_passed")
-    p2p_passed = info.get("pass_to_pass_passed")
-
-    if resolved is None and f2p_passed is None:
-        console.print("[yellow]No eval fields in last step info (not a test-based task?).[/yellow]")
-        return
-
-    console.print("\n[bold]Eval result:[/bold]")
-    for label, val in [
-        ("resolved            ", resolved),
-        ("fail_to_pass_passed ", f2p_passed),
-        ("pass_to_pass_passed ", p2p_passed),
-    ]:
-        if val is not None:
+    console.print("\n[bold]Eval info:[/bold]")
+    blocks: list[tuple[str, str]] = []
+    for key, val in info.items():
+        if isinstance(val, bool):
             style = "green" if val else "red"
-            console.print(f"  {label} [{style}]{val}[/{style}]")
-
-    f2p_output = info.get("fail_to_pass_output", "")
-    if f2p_output:
-        console.print("\n[bold]fail_to_pass output:[/bold]")
-        console.print(f2p_output)
-
-    p2p_output = info.get("pass_to_pass_output", "")
-    if p2p_output:
-        console.print("\n[bold]pass_to_pass output:[/bold]")
-        console.print(p2p_output)
+            console.print(f"  {key:<30} [{style}]{val}[/{style}]")
+        elif isinstance(val, str) and ("\n" in val or len(val) > 80):
+            blocks.append((key, val))
+        else:
+            console.print(f"  {key:<30} {val!r}")
+    for key, val in blocks:
+        console.print(f"\n[bold]{key}:[/bold]")
+        console.print(val)
 
 
 def main() -> None:
@@ -270,7 +245,7 @@ def main() -> None:
     parser.add_argument(
         "--eval",
         action="store_true",
-        help="Also dump eval fields (resolved, test output) from the last environment step",
+        help="Also dump eval fields from the last environment step's info dict",
     )
     args = parser.parse_args()
 
