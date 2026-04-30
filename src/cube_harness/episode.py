@@ -1,24 +1,28 @@
+import json
 import logging
 import time
 import warnings
 from pathlib import Path
+from uuid import uuid4
 from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.core import EnvironmentOutput, ImageContent, StepError, TypedBaseModel, Artifact, FileArtifactBlob
 from cube.task import TaskConfig
-from opentelemetry.trace import StatusCode
+from opentelemetry.trace import StatusCode, Span
+from opentelemetry import baggage
 from termcolor import colored
 
 from cube_harness.agent import AgentConfig
-from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep,
+from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.eval_log import EpisodeRecord
-from cube_harness.metrics.tracer import get_tracer
+from cube_harness.metrics.tracer import get_tracer, CH_EPISODE, CH_ARTIFACTS
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
+from pydantic import TypeAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,29 @@ class EpisodeConfig(TypedBaseModel):
     max_steps: int
     task_config: TaskConfig
 
+
+def upload_artifact_to_gcs(source: Path, dst_bucket: str, dst_object: str) -> None:
+    logger.info("Uploading %s to GCS at gs://%s/%s", source, dst_bucket, dst_object)
+    logger.info("Uploaded %s to GCS at gs://%s/%s", source, dst_bucket, dst_object)
+
+
+def _store_episode_artifacts_for_otel(episode_span: Span, artifacts: list[Artifact]) -> None:
+    out_artifacts: list[Artifact] = []
+    for a in artifacts:
+        if a.blob.type == "file":
+            episode_id = baggage.get_baggage(CH_EPISODE)
+            if episode_id is not None:
+                logging.info("Storing artifact %s for episode %s", a.id, episode_id)
+            else:
+                episode_id = str(uuid4())
+                logging.info("Storing artifact %s for unknown episode, will use episode ID %s", episode_id)
+            buck = "ss-traces"
+            obj = f"{episode_id}/{a.id}"
+            upload_artifact_to_gcs(a.blob.path, buck, obj)
+            out_artifacts.append(Artifact(blob=FileArtifactBlob(path=Path(f"gs://{buck}/{obj}")), mime=a.mime, id=a.id))
+        else:
+            out_artifacts.append(a)
+    episode_span.set_attribute(CH_ARTIFACTS, TypeAdapter(list[Artifact]).dump_json(out_artifacts))
 
 class Episode:
     """Manages the execution of an agent on a specific task in an environment."""
@@ -136,7 +163,7 @@ class Episode:
         # action_schemas is read by eval_log.AgentInfo (feat/atlas-eval-log) to populate
         # the tool list in structured evaluation records without re-instantiating the task.
         extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
-        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, task.artifacts, agent, extra_metadata=extra_metadata)
+        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, artifacts_fn, agent, extra_metadata=extra_metadata)
 
     def _open_status(self, trajectory_id: str) -> EpisodeStatus:
         """Initialise `status.json` for this attempt.
@@ -207,6 +234,15 @@ class Episode:
                 )
                 summary_proc = SummaryProcessor(ep_dir)
                 summary_proc.on_step(0, trajectory.steps[0])
+                prompt_parts = []
+                for c in env_output.obs.contents:
+                    if isinstance(c, ImageContent):
+                        prompt_parts.append("<inline image>")
+                    else:
+                        prompt_parts.append(c.to_markdown())
+                prompt_text = "\n".join(prompt_parts)
+                if len(prompt_text) > 0:
+                    episode_span.set_attribute("prompt", prompt_text)
                 logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
@@ -265,6 +301,8 @@ class Episode:
                         trajectory.steps.append(env_step)
                         if env_output.error is not None:
                             ep_status.had_step_errors = True
+                        span.set_attribute("agent_output", agent_output.model_dump_json())
+                        span.set_attribute("env_output", env_output.model_dump_json())
                         span.set_attribute("done", env_output.done)
                         span.set_attribute("reward", env_output.reward)
                         turns += 1
@@ -310,7 +348,10 @@ class Episode:
                 ep_status.reward = final_reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
-                episode_span.set_attribute("artifacts", task_id
+                if "task_result" in env_output.info:
+                    episode_span.set_attribute("task_result", json.dumps(env_output.info["task_result"]))
+                episode_span.set_attribute("reward", final_reward)
+                _store_episode_artifacts_for_otel(episode_span, artifacts_fn())
             ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
