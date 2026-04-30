@@ -54,11 +54,6 @@ class SWEBenchVerifiedBenchmark(Benchmark):
     include_hints: bool = False
     oracle_mode: bool = False
     infra: InfraConfig = Field(default_factory=LocalInfraConfig)
-    """Infra that launches one Docker container per task.  Defaults to LocalInfraConfig.
-
-    Passed to each Task via ``self._runtime_context["infra"]`` so
-    ``TaskConfig.make()`` can call ``infra.launch()`` for the per-task resource.
-    """
 
     # ── Benchmark lifecycle ────────────────────────────────────────
 
