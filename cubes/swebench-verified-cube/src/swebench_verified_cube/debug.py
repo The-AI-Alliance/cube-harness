@@ -52,21 +52,17 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark(infra: InfraConfig | None = None, *, oracle_mode: bool = True) -> Benchmark:
+def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
     """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks.
 
     Args:
         infra: InfraConfig that provisions and launches per-task containers.
                Defaults to ``LocalInfraConfig()``. Override to target Daytona,
                Toolkit, etc.
-        oracle_mode: If True (default), the gold patch is written to
-                     /tmp/gold_patch.diff on reset — used by the deterministic
-                     DebugAgent for ``cube test``. Pass False for LLM recipe
-                     debug runs where the agent should solve the task itself.
     """
     bench = SWEBenchVerifiedBenchmark(
         infra=infra or LocalInfraConfig(),
-        oracle_mode=oracle_mode,
+        oracle_mode=True,
     )
     bench.install()
     bench.setup()

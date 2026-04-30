@@ -77,7 +77,7 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark(infra: InfraConfig | None = None, *, oracle_mode: bool = True) -> "Benchmark":
+def get_debug_benchmark(infra: InfraConfig | None = None) -> "Benchmark":
     """Return a TerminalBenchBenchmark scoped to the debug tasks.
 
     Args:
@@ -85,13 +85,10 @@ def get_debug_benchmark(infra: InfraConfig | None = None, *, oracle_mode: bool =
                to ``LocalInfraConfig()`` — suitable for local development / CI with
                a running Docker daemon. Integration tests override this to target
                Toolkit, Daytona, etc.
-        oracle_mode: If True (default), the solution is uploaded to /tmp/solution on
-                     reset — used by the deterministic DebugAgent for ``cube test``.
-                     Pass False for LLM recipe debug runs.
     """
     bench = TerminalBenchBenchmark(
         infra=infra or LocalInfraConfig(),
-        oracle_mode=oracle_mode,
+        oracle_mode=True,
     )
     bench.install()
     bench.setup()

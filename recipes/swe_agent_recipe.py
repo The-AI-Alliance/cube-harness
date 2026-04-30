@@ -101,7 +101,7 @@ def _make_benchmark(
             raise ValueError(
                 f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
             )
-        bench = get_debug_benchmark(oracle_mode=False)
+        bench = get_debug_benchmark()
         if task_ids:
             bench = bench.subset_from_list(task_ids)
         return bench
@@ -164,7 +164,7 @@ def run(
         output_dir = retry_dir
         resume = True
     else:
-        output_dir = make_experiment_output_dir("genny", benchmark_name, llm_name=model_key, tag=tag)
+        output_dir = None
         resume = False
 
     benchmark = _make_benchmark(benchmark_name, debug, task_ids, subset)
