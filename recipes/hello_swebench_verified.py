@@ -145,11 +145,9 @@ def run_for_model(
 
     if retry_dir is not None:
         output_dir = retry_dir
-        retry_failed = True
         resume = True
     else:
         output_dir = make_experiment_output_dir("genny", f"swebench-verified-{suffix}-{model_key}")
-        retry_failed = False
         resume = False
 
     exp = Experiment(
@@ -158,7 +156,6 @@ def run_for_model(
         agent_config=agent_config,
         benchmark=benchmark,
         max_steps=30,
-        retry_failed=retry_failed,
         resume=resume,
     )
 
