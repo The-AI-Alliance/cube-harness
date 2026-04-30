@@ -56,6 +56,8 @@ class SWEBenchTool(Tool):
             parts.append(f"[exit_code: {result.exit_code}]")
         return "\n".join(parts) if parts else "(no output)"
 
+    _MAX_BASH_TIMEOUT: int = 300
+
     @tool_action
     def bash(self, command: str, timeout: int = 120) -> str:
         """Execute a bash command in the sandbox and return its output.
@@ -63,9 +65,9 @@ class SWEBenchTool(Tool):
         Args:
             command: Shell command to run. The working directory is /testbed
                 (the cloned repo). Use absolute paths or assume cwd=/testbed.
-            timeout: Wall-clock seconds (NOT milliseconds). Default 120s.
-                Use larger values (600-1800) for test suites.
+            timeout: Wall-clock seconds (NOT milliseconds). Default 120s, capped at 300s.
         """
+        timeout = min(timeout, self._MAX_BASH_TIMEOUT)
         output = self._run_bash(command, timeout=timeout)
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:
@@ -118,11 +120,42 @@ class SWEBenchTool(Tool):
         Args:
             path: Destination path. Parent directories are created as needed.
                 Relative paths resolve against /testbed.
-            content: Full file contents to write. Pass the entire new file body —
-                this is not a patch tool. For incremental edits, use bash with
-                sed / patch / git apply.
+            content: Full file contents to write. Pass the entire new file body.
+                For targeted edits prefer str_replace — it is safer than overwriting
+                the whole file.
         """
         self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
         escaped = content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
         return f"Wrote {len(content)} bytes to {path}"
+
+    @tool_action
+    def str_replace(self, path: str, old_str: str, new_str: str) -> str:
+        """Replace an exact string in a file (safer than sed for targeted edits).
+
+        Fails clearly if old_str is not found or appears more than once, so you
+        always know whether the edit landed. Prefer this over bash+sed for source
+        code changes.
+
+        Args:
+            path: File to edit. Relative paths resolve against /testbed.
+            old_str: The exact text to find (including surrounding context to make
+                it unique). Must appear exactly once in the file.
+            new_str: Replacement text. Use an empty string to delete old_str.
+        """
+        result = self._exec(f"cat {shlex.quote(path)}")
+        if result.exit_code != 0:
+            return f"Error reading {path}: {result.stderr or result.stdout}"
+        content = result.stdout
+        count = content.count(old_str)
+        if count == 0:
+            return f"Error: old_str not found in {path}. No changes made."
+        if count > 1:
+            return (
+                f"Error: old_str appears {count} times in {path} — add more surrounding "
+                "context to make it unique. No changes made."
+            )
+        new_content = content.replace(old_str, new_str, 1)
+        escaped = new_content.replace("'", "'\\''")
+        self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
+        return f"Replaced 1 occurrence in {path}"

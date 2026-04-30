@@ -64,7 +64,9 @@ The existing test suite will pass before your fix — that is expected. \
 Do NOT call final_step just because existing tests pass. \
 Only call final_step after you have actually modified the source code to resolve the issue.
 
-Before calling final_step, verify your fix by running the relevant tests.
+Before calling final_step, verify your fix by running the specific test(s) that cover \
+the reported behavior — not just the full suite. Seeing only unrelated tests pass is not \
+sufficient confirmation.
 IMPORTANT: All test dependencies are in the conda 'testbed' environment — always prefix with
 `conda run -n testbed` or activate first: `. /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed`
 - Django projects: cd /testbed && conda run -n testbed python -m pytest tests/<module> -x -q
@@ -76,6 +78,10 @@ Never use bare `python -m pytest` — the base Python lacks test dependencies.
 IMPORTANT: Do NOT modify test files (files under tests/ or with test_ prefix). \
 The evaluation framework applies its own test patch during evaluation. \
 Only modify source code files to fix the bug.
+
+IMPORTANT: For targeted code changes prefer str_replace over bash+sed. \
+str_replace fails clearly if the text is not found or is ambiguous — \
+sed silently succeeds even when it edits the wrong location.
 
 IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 
@@ -194,7 +200,7 @@ def run(
         llm_config=llm_config,
         system_prompt=SWE_SYSTEM_PROMPT,
         max_actions=30,
-        render_last_n_obs=2,
+        render_last_n_obs=3,
         task_hints=task_hints,
     )
 
