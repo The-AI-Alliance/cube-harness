@@ -141,14 +141,37 @@ Secondary: Loop warning was `_loop_warning: str | None` — subsequent repeated 
 **Tasks**: 20
 
 **Changes from iter4**:
-- SWEBenchTool: added `view()` — windowed file viewer with line numbers (like SWE-agent's open tool)
-- SWEBenchTool: lint feedback on `str_replace`/`write_file` for .py files (py_compile check)
-- System prompt: guide agents to use `view` instead of `cat` for large files
-- System prompt: "Once str_replace reports Replaced 1 occurrence, do NOT follow with write_file"
-- Hints: added `psf__requests-1142` (prepare_content_length early return when body is None)
+- SWEBenchTool: added `view()` — windowed file viewer with line numbers
+- SWEBenchTool: lint feedback on `str_replace`/`write_file` for .py files
+- System prompt: guide agents to use `view` instead of `cat`; warn against write_file after str_replace
+- Hints: added `psf__requests-1142`
 
-**Hypothesis**: view tool reduces wasted steps on large files; lint catches immediate syntax errors;
-write_file guard prevents astropy-13453-style overwrites. Expecting 6-10/20.
+**Result**: 2/20 = 10% — REGRESSION from iter4 (4/20)
+
+**Root cause found**: `printf '%s' '<content>' > path` silently exits with code 2 for large files
+(blueprints.py is 621 lines; the multi-line heredoc in a single exec call fails). The tool returned
+"Replaced 1 occurrence" but never wrote the file. Agents looped indefinitely re-applying str_replace.
+The 2 passes (astropy-13453, pylint-7080) must have used bash+sed fallback or small-file str_replace.
+This bug was present in ALL previous iterations — iter4 4/20 was only possible because agents fell
+back to bash+sed after str_replace "succeeded" but didn't write.
+
+**Fix**: Replace printf with base64 encode → pipe → base64 -d → file. Base64 content is safe for
+any shell context.
+
+---
+
+## Iteration 7 — base64 write fix + all tools (2026-05-01)
+
+**Model**: gpt-5.4, with hints
+**Tasks**: 20
+
+**Changes from iter6**:
+- CRITICAL FIX: `_write_content()` now uses `base64 -d` pipeline instead of printf
+- Both `str_replace()` and `write_file()` use `_write_content()`
+- All other iter6 changes kept (view, lint, system prompt, hints)
+
+**Hypothesis**: str_replace will now reliably write files. Agents should land fixes in 1-3 attempts
+rather than looping. Expecting large improvement — potentially 8-12/20.
 
 **Result**: TBD
 
