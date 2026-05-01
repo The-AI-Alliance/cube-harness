@@ -139,22 +139,10 @@ _STATUS_LABEL: dict[str, str] = {
 }
 
 # Bare symbols for inline use (agent table status cell).
-_STATUS_SYMBOL: dict[str, str] = {
-    "queued":       "🕐",
-    "running":      "▶️",
-    "success":      "✓",
-    "fail":         "✓",
-    "max_steps":    "🎬",
-    "failed":       "⛔",
-    "stale":        "👻",
-    "cancelled":    "🚫",
-    "system_error": "✕",
-}
-
-# Terminal-outcome statuses collapsed to ✓ in the agent-level aggregate view.
+# Terminal-outcome statuses collapsed to ✔ in the agent-level aggregate view.
 # success + fail + max_steps are all "ran to completion"; avg_reward captures the breakdown.
 _TERMINAL_OUTCOME_STATUSES = frozenset({"success", "fail", "max_steps"})
-_COMPLETED_AGGREGATE_HTML = '<span style="color:#888">✓</span>'
+_COMPLETED_AGGREGATE_HTML = "<span title='Terminal — success, fail, or max steps' style='color:#888'>✔</span>"
 
 
 def _build_status_cell(statuses: list[str]) -> str:
@@ -177,7 +165,7 @@ def _build_status_cell(statuses: list[str]) -> str:
     for key in order:
         n = counts.get(key, 0)
         if n:
-            parts.append(f"{n}{_STATUS_SYMBOL.get(key, key)}")
+            parts.append(f"{n}{_STATUS_HTML.get(key, key)}")
 
     total = len(statuses)
     inner = " + ".join(parts)

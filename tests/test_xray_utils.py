@@ -228,7 +228,7 @@ class TestGetExperimentsTableRows:
             (ep_dir / "status.json").write_text(f'{{"status": "{status}"}}')
         rows = xray_utils.get_experiments_table_rows(tmp_path)
         row = next(r for r in rows if r["experiment"] == "exp_b")
-        assert "✓" in row["status"]
+        assert "✔" in row["status"]
         assert "▶️" in row["status"]
         assert "/ 2" in row["status"]
 
@@ -744,7 +744,7 @@ class TestBuildAgentTable:
         rows = xray_utils.build_agent_table(multi_agent_trajectories)
         agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
         # fixture has 2 success + 2 fail per agent — collapsed to one ✓ count
-        assert "✓" in agent_a_row["status"]
+        assert "✔" in agent_a_row["status"]
         assert "🟢" not in agent_a_row["status"]
         assert "⚫" not in agent_a_row["status"]
 
@@ -1243,7 +1243,7 @@ class TestGetChatBranchesWithMessageObjects:
 class TestBuildStatusCell:
     def test_all_completed_shows_check_and_total(self) -> None:
         cell = xray_utils._build_status_cell(["success", "success", "fail"])
-        assert "✓" in cell
+        assert "✔" in cell
         assert "/ 3" in cell
 
     def test_mixed_statuses_shows_each_symbol(self) -> None:
@@ -1267,7 +1267,7 @@ class TestBuildStatusCell:
     def test_max_steps_folds_into_completed(self) -> None:
         # max_steps is a terminal outcome — collapses to ✓ at agent level like success/fail
         cell = xray_utils._build_status_cell(["max_steps"])
-        assert "✓" in cell
+        assert "✔" in cell
         assert "🎬" not in cell
 
     def test_cancelled_symbol(self) -> None:

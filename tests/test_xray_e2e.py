@@ -188,7 +188,7 @@ class TestXRayStatusUI:
         if screenshots:
             page.screenshot(path=str(SCREENSHOT_DIR / "02_agents_tab.png"))
         table_html = self._table_text(page, "agent_table")
-        assert "✓" in table_html
+        assert "✔" in table_html
 
     def test_agents_tab_has_no_n_err_column(self, page_with_exp: tuple) -> None:
         page, _ = page_with_exp
