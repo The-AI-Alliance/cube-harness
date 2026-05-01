@@ -355,6 +355,8 @@ class Genny(Agent):
         self.summaries: list[str] = []
         self.history: list[list[dict | Message]] = []  # groups: one per obs or asst turn
         self._actions_cnt: int = 0
+        self._action_repeat_count: dict[str, int] = {}  # key → times this action was attempted
+        self._loop_warnings: list[str] = []  # all accumulated loop violations this episode
 
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
@@ -379,6 +381,22 @@ class Genny(Agent):
         with profiler("act"):
             response, act_call = self._act()
         actions = self.tool_adapter.decode(response)
+
+        # Loop detection: track repeated identical action calls and accumulate warnings.
+        for action in actions:
+            if action.name == STOP_ACTION.name:
+                continue
+            try:
+                key = f"{action.name}({json.dumps(action.arguments, sort_keys=True)})"
+            except (TypeError, ValueError):
+                key = f"{action.name}({action.arguments!r})"
+            count = self._action_repeat_count.get(key, 0) + 1
+            self._action_repeat_count[key] = count
+            if count == 2:
+                self._loop_warnings.append(
+                    f"[LOOP] You already tried `{action.name}` with the same arguments and it "
+                    "had no effect. Do NOT repeat it — try a completely different approach."
+                )
 
         if self.config.enable_summarize:
             # Append the decided action to the current step's summary so the
@@ -444,6 +462,10 @@ class Genny(Agent):
         if windowed:
             messages.append({"role": "user", "content": _obs_section_header(self.config.render_last_n_obs)})
             messages.extend(windowed)
+        if self._loop_warnings:
+            warning_block = "\n".join(self._loop_warnings)
+            messages.append({"role": "user", "content": warning_block})
+            messages.append({"role": "assistant", "content": "Understood. I will not repeat those exact calls."})
         return messages
 
     def _summarize_past(self) -> tuple[str, LLMCall]:
@@ -477,6 +499,7 @@ class Genny(Agent):
         api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
         logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}")
+        logger.debug("Act prompt:\n%s", prompt)
         try:
             response = self.llm(prompt)
         except Exception as e:
@@ -500,11 +523,17 @@ class Genny(Agent):
 
         When enable_summarize=False, all summaries (COT extracted from prior act passes)
         go into the collapsed block; react_prompt instructs the LLM to reason inline.
+
+        The step counter [Step X/N] is prepended to the final user message only — all
+        preceding messages are byte-for-byte identical across steps, preserving cache hits
+        on the system prompt, goal, hints, and summaries prefix.
         """
         messages = self._build_base_prompt(exclude_last_summary=self.config.enable_summarize)
         if self.config.enable_summarize and self.summaries:
             messages.append({"role": "assistant", "content": self.summaries[-1]})
         final_prompt = self.config.act_prompt if self.config.enable_summarize else self.config.react_prompt
+        if self.config.max_actions is not None:
+            final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
         messages.append({"role": "user", "content": final_prompt})
         return messages
 

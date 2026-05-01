@@ -52,6 +52,7 @@ class SWEBenchVerifiedBenchmark(Benchmark["SWEBenchVerifiedBenchmarkConfig"]):
     container launches flow through ``Task.runtime_context``.
     """
 
+
     def _setup(self) -> None:
         """Publish the shared InfraConfig to runtime_context; containers are launched per-task."""
         if self._infra is not None:
@@ -151,6 +152,7 @@ class SWEBenchVerifiedBenchmarkConfig(BenchmarkConfig[SWEBenchVerifiedTaskMetada
         delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
         """
         return cast(SWEBenchVerifiedBenchmark, super().make(infra=infra or LocalInfraConfig()))
+
 
     def get_task_configs(self) -> Generator[SWEBenchVerifiedTaskConfig, None, None]:
         """Yield TaskConfigs with include_hints and oracle_mode forwarded from benchmark settings."""
