@@ -19,6 +19,64 @@ logger = logging.getLogger(__name__)
 
 _DATASET_NAME = "princeton-nlp/SWE-bench_Verified"
 
+# Fixed 50-task subset used by the Princeton HAL leaderboard (25 django + 25 sphinx).
+# Source: https://github.com/princeton-pli/hal-harness/blob/main/hal/benchmarks/swebench_verified_mini_task_ids.txt
+# Use via: config.subset_from_list(list(HAL_MINI_TASK_IDS))
+HAL_MINI_TASK_IDS: frozenset[str] = frozenset(
+    [
+        "django__django-11790",
+        "django__django-11815",
+        "django__django-11848",
+        "django__django-11880",
+        "django__django-11885",
+        "django__django-11951",
+        "django__django-11964",
+        "django__django-11999",
+        "django__django-12039",
+        "django__django-12050",
+        "django__django-12143",
+        "django__django-12155",
+        "django__django-12193",
+        "django__django-12209",
+        "django__django-12262",
+        "django__django-12273",
+        "django__django-12276",
+        "django__django-12304",
+        "django__django-12308",
+        "django__django-12325",
+        "django__django-12406",
+        "django__django-12708",
+        "django__django-12713",
+        "django__django-12774",
+        "django__django-9296",
+        "sphinx-doc__sphinx-10323",
+        "sphinx-doc__sphinx-10435",
+        "sphinx-doc__sphinx-10466",
+        "sphinx-doc__sphinx-10673",
+        "sphinx-doc__sphinx-11510",
+        "sphinx-doc__sphinx-7590",
+        "sphinx-doc__sphinx-7748",
+        "sphinx-doc__sphinx-7757",
+        "sphinx-doc__sphinx-7985",
+        "sphinx-doc__sphinx-8035",
+        "sphinx-doc__sphinx-8056",
+        "sphinx-doc__sphinx-8265",
+        "sphinx-doc__sphinx-8269",
+        "sphinx-doc__sphinx-8475",
+        "sphinx-doc__sphinx-8548",
+        "sphinx-doc__sphinx-8551",
+        "sphinx-doc__sphinx-8638",
+        "sphinx-doc__sphinx-8721",
+        "sphinx-doc__sphinx-9229",
+        "sphinx-doc__sphinx-9230",
+        "sphinx-doc__sphinx-9281",
+        "sphinx-doc__sphinx-9320",
+        "sphinx-doc__sphinx-9367",
+        "sphinx-doc__sphinx-9461",
+        "sphinx-doc__sphinx-9698",
+    ]
+)
+
 
 def _build_execution_info(row: dict[str, Any]) -> dict[str, Any]:
     """Extract execution-only fields from a HuggingFace dataset row.
