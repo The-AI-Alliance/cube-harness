@@ -1590,7 +1590,8 @@ def run_xray(
         # Populate experiment table on page load and auto-select the first experiment
         def _init_exp_table() -> tuple[list[list[Any]], Any]:
             table = _exp_table_rows(auto_select_first=True)
-            hierarchy = on_experiments_change(table)
+            # on_experiments_change expects a DataFrame (uses .iloc); wrap before calling.
+            hierarchy = on_experiments_change(pd.DataFrame(table))
             return (table, *hierarchy)
 
         demo.load(fn=_init_exp_table, outputs=[exp_table, *_hierarchy_outputs])
