@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from typing import List, Union
 
 import cv2
@@ -589,15 +590,13 @@ def check_image_size(src_path, rule):
         return 0.0
 
 
+logger = logging.getLogger(__name__)
+
+
 def safe_open_image_with_retry(file_path, max_retries=3, retry_delay=0.5):
     """
     Safely open an image file with retry mechanism for handling truncated files
     """
-    import logging
-    import os
-    import time
-
-    logger = logging.getLogger(__name__)
 
     if not file_path or not os.path.exists(file_path):
         logger.error(f"File does not exist: {file_path}")
@@ -649,10 +648,6 @@ def check_palette_and_structure_sim(src_path, tgt_path):
     Enhanced with robust error handling for file format issues and truncated files
     gimp:06ca5602-62ca-47f6-ad4f-da151cde54cc
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     logger.info(f"Evaluating palette and structure similarity: src={src_path}, tgt={tgt_path}")
 
     if src_path is None or tgt_path is None:

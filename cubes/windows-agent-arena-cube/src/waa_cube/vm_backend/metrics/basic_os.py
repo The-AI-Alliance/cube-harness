@@ -55,11 +55,13 @@ def check_moved_jpgs(directory_list, rule):
         return 0
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def is_in_vm_clickboard(config, terminal_output):
-    print("terminal_output: ")
-    print(terminal_output)
-    print("config: ")
-    print(config)
+    logger.debug("is_in_vm_clickboard: config=%s terminal_output=%s", config, terminal_output)
     expected_results = config["expected"]
     # check if terminal_output has expected results
     if not isinstance(expected_results, list):

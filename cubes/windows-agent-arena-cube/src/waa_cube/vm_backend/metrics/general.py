@@ -28,7 +28,7 @@ def check_include_exclude(result: str, rules: Dict[str, List[str]]) -> float:
     if result is None:
         return 0.0
 
-    print(result, rules)
+    logger.debug("check_include_exclude: result=%s rules=%s", result, rules)
     include = rules.get("include", [])
     exclude = rules.get("exclude", [])
     if all(r in result for r in include) and all(r not in result for r in exclude):
@@ -39,7 +39,7 @@ def check_include_exclude(result: str, rules: Dict[str, List[str]]) -> float:
 
 def exact_match(result, rules) -> float:
     expect = rules["expected"]
-    print(result, expect)
+    logger.debug("exact_match: result=%s expect=%s", result, expect)
 
     if result == expect:
         return 1.0
@@ -49,7 +49,7 @@ def exact_match(result, rules) -> float:
 
 def match_in_list(result, rules) -> float:
     expect = rules["expected"]
-    print(result, expect)
+    logger.debug("match_in_list: result=%s expect=%s", result, expect)
 
     if result in expect:
         return 1.0
@@ -516,10 +516,7 @@ def is_included_all_json_objects(gold_file_path, result_file_path):
     if not gold_file_path or not result_file_path:
         return 0
 
-    print("gold_file_path: ")
-    print(gold_file_path)
-    print("result_file_path: ")
-    print(result_file_path)
+    logger.debug("is_included_all_json_objects: gold=%s result=%s", gold_file_path, result_file_path)
     # two json file, check if all the key-value pair in gold_file_path is included in result_file_path
     with open(gold_file_path, "r") as f:
         gold_json = json.load(f)
@@ -535,10 +532,7 @@ def is_gold_text_included_in_pdf(pdf_file_path, gold_text_path):
     if not gold_text_path or not pdf_file_path:
         return 0
 
-    print("gold_text_path: ")
-    print(gold_text_path)
-    print("pdf_file_path: ")
-    print(pdf_file_path)
+    logger.debug("is_gold_text_included_in_pdf: gold=%s pdf=%s", gold_text_path, pdf_file_path)
     # gold file is a json file, we need to check all the value in json are included in pdf file.
     with open(gold_text_path, "r") as f:
         gold_json = json.load(f)
@@ -551,8 +545,7 @@ def is_gold_text_included_in_pdf(pdf_file_path, gold_text_path):
         if gold_json[key] not in text:
             false_list.append(key)
     if len(false_list) > 0:
-        print("false_list: ")
-        print(false_list)
+        logger.debug("is_gold_text_included_in_pdf: missing keys=%s", false_list)
         return 0
     else:
         return 1

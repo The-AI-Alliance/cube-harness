@@ -13,6 +13,7 @@ from typing import Any, Callable
 from cube_computer_tool.guest_agent import GuestAgent
 
 from waa_cube.vm_backend import getters, metrics
+from waa_cube.vm_backend.setup_controller import SetupController
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +126,6 @@ class Evaluator:
         # Postconfig: run any cleanup setup steps before evaluation
         postconfig = evaluator_cfg.get("postconfig", [])
         if postconfig:
-            from waa_cube.vm_backend.setup_controller import SetupController
-
             setup_ctrl = SetupController(
                 guest=self._guest,
                 chromium_port=self._chromium_port,

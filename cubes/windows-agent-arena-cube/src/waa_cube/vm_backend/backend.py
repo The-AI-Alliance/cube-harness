@@ -465,7 +465,7 @@ class WAADockerManager:
                 except Exception:
                     pass
             time.sleep(_VM_READY_POLL_INTERVAL)
-        raise TimeoutError(f"WAA VM did not become ready within {_VM_READY_TIMEOUT}s")
+        raise TimeoutError(f"WAA VM did not become ready within {timeout}s")
 
     def restore_snapshot(self, name: str) -> None:
         """Reset VM state by closing all open applications via the guest HTTP API.

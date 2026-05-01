@@ -4,6 +4,7 @@ import os
 import platform
 import sqlite3
 import time
+import urllib.request
 from typing import Any, Dict
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -1994,8 +1995,6 @@ def get_gotoRecreationPage_and_get_html_content(env, config: Dict[str, Any]):
     # Test basic connectivity first
     logger.info("[RECREATION_PAGE] Testing basic network connectivity...")
     try:
-        import urllib.request
-
         urllib.request.urlopen("http://www.google.com", timeout=10)
         logger.info("[RECREATION_PAGE] Basic connectivity test passed (Google accessible)")
     except Exception as e:

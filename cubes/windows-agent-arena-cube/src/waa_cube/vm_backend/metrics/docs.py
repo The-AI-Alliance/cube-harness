@@ -220,7 +220,7 @@ def compare_docx_files(file1, file2, **options):
             doc2_paragraphs = [p for p in doc2_paragraphs if p.strip()]
     else:
         # Unsupported file types or mismatch
-        print("Unsupported file types or mismatch between file types.")
+        logger.debug("compare_docx_files: unsupported file types or mismatch: %s vs %s", file1, file2)
         return 0
 
     if content_only:
@@ -247,10 +247,11 @@ def compare_docx_files(file1, file2, **options):
                 return 0
     else:
         if len(doc1_paragraphs) != len(doc2_paragraphs):
-            print(doc1_paragraphs)
-            print(doc2_paragraphs)
-            print(len(doc1_paragraphs))
-            print(len(doc2_paragraphs))
+            logger.debug(
+                "compare_docx_files: paragraph count mismatch: %d vs %d",
+                len(doc1_paragraphs),
+                len(doc2_paragraphs),
+            )
             return 0
 
         if fuzzy_match:
@@ -273,12 +274,7 @@ def compare_docx_files(file1, file2, **options):
                 if ignore_case:
                     p1, p2 = p1.lower(), p2.lower()
                 if p1 != p2:
-                    # show the difference
-                    print("=== First Paragraph ===")
-                    print(f"\033[92m{repr(p1)}\033[0m")  # Green color for p1, repr() shows hidden chars
-                    print("=== Second Paragraph ===")
-                    print(f"\033[91m{repr(p2)}\033[0m")  # Red color for p2, repr() shows hidden chars
-                    print("=" * 50)  # Clear boundary
+                    logger.debug("compare_docx_files: paragraph mismatch: %r vs %r", p1, p2)
                     return 0
 
     return 1
@@ -1011,7 +1007,7 @@ def compare_docx_files_and_ignore_new_lines(file1, file2, **options):
         doc2_paragraphs = [p.text for p in doc2]
     else:
         # Unsupported file types or mismatch
-        print("Unsupported file types or mismatch between file types.")
+        logger.debug("compare_docx_files_and_ignore_new_lines: unsupported file types or mismatch: %s vs %s", file1, file2)
         return 0
 
     # Process and compare documents
@@ -1093,7 +1089,7 @@ def compare_references(file1, file2, **options):
         doc2_paragraphs = [p.text for p in doc2.paragraphs]
     else:
         # Unsupported file types or mismatch
-        print("Unsupported file types or mismatch between file types.")
+        logger.debug("compare_references: unsupported file types or mismatch: %s vs %s", file1, file2)
         return 0
 
     # Find the references section in the paragraphs, find the idx of the last reference_indicator in the paragraph list

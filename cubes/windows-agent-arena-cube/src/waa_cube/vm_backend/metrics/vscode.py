@@ -1,10 +1,18 @@
 import importlib.util
 import json
+import logging
+import os
 import re
 import sys
+import uuid
 import zipfile
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Dict
+
+from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 import PyPDF2
 
@@ -218,12 +226,6 @@ def check_python_file_by_test_suite(actual_files, test_file, **options) -> float
     - Proper resource cleanup
     - Working directory management
     """
-    import logging
-    import os
-    import uuid
-    from pathlib import Path
-
-    logger = logging.getLogger(__name__)
     test_function_name = options.get("test_function_name", "test")
 
     # Validate inputs
@@ -367,8 +369,6 @@ def check_html_background_image(src_path: str, rule: Dict = None) -> float:
     """
     if not src_path:
         return 0.0
-
-    from bs4 import BeautifulSoup
 
     with open(src_path, "r") as f:
         html_content = f.read()
