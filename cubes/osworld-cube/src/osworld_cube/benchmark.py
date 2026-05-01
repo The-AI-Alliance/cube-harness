@@ -35,6 +35,7 @@ from dotenv import load_dotenv
 
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.container import ContainerBackend
+from cube.infra_local import LocalInfraConfig
 from cube.resource import InfraConfig, ResourceConfig
 from cube.task import RuntimeContext, TaskConfig, TaskMetadata
 
@@ -354,8 +355,6 @@ class OSWorldBenchmarkConfig(BenchmarkConfig[OSWorldTaskMetadata]):
         """Resolve a default infra of ``LocalInfraConfig`` if none provided, then
         delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
         """
-        from cube import LocalInfraConfig
-
         return cast(OSWorldBenchmark, super().make(infra=infra or LocalInfraConfig()))
 
     def get_task_configs(self) -> Generator[OSWorldTaskConfig, None, None]:
