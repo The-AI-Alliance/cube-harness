@@ -6,7 +6,7 @@
 
 Each task asks a hard, deliberately hard-to-find factual question (e.g. *"In what year did a particular obscure paper appear in NeurIPS?"*). The agent must browse the web, gather evidence, and submit an `Exact Answer`. An LLM judge (`[scorer_model](src/browsercomp_cube/benchmark.py)`) compares the agent's answer to the ground truth using the official BrowseComp grader prompt and emits `correct: yes|no`.
 
-The dataset is shipped encrypted (XOR + Base64, per-row canary) by OpenAI. `BrowseCompBenchmark.install()` downloads the encrypted CSV once and splits it into a per-task execution cache; ciphertext is only decrypted in `BrowseCompTaskConfig.make()`, so cleartext never lands on disk.
+The dataset is shipped encrypted (XOR + Base64, per-row canary) by OpenAI. `BrowseCompBenchmarkConfig.install()` downloads the encrypted CSV once and splits it into a per-task execution cache; ciphertext is only decrypted in `BrowseCompTaskConfig.make()`, so cleartext never lands on disk.
 
 ## Prerequisites
 
@@ -32,23 +32,24 @@ uv run recipes/browsercomp.py           # full 1,266-task Ray run
 ### Programmatic
 
 ```python
-from browsercomp_cube import BrowseCompBenchmark, SubmitAnswerToolConfig
+from browsercomp_cube import BrowseCompBenchmarkConfig, SubmitAnswerToolConfig
 from cube.tool import ToolboxConfig
 from cube_web_tool import BraveWebSearchToolConfig, WebFetchToolConfig
 
-bench = BrowseCompBenchmark(
-    default_tool_config=ToolboxConfig(
+cfg = BrowseCompBenchmarkConfig(
+    tool_config=ToolboxConfig(
         tool_configs=[BraveWebSearchToolConfig(), WebFetchToolConfig(), SubmitAnswerToolConfig()]
     ),
     scorer_model="gpt-5.4-mini",
 )
-bench.install()  # one-time: download + split encrypted dataset
-bench.setup()
-for cfg in bench.get_task_configs():
-    task = cfg.make()
+cfg.install()  # one-time: download + split encrypted dataset
+bench = cfg.make()
+for task_cfg in cfg.get_task_configs():
+    task = bench.spawn(task_cfg)
     obs, _ = task.reset()
     # ... agent loop ...
     task.close()
+bench.close()
 ```
 
 ## Tools
@@ -103,11 +104,11 @@ uv run python -m browsercomp_cube.debug
 ```python
 from browsercomp_cube.debug import get_debug_benchmark, make_debug_agent
 
-bench = get_debug_benchmark()
-bench.setup()
-for cfg in bench.get_task_configs():
-    task = cfg.make()
-    agent = make_debug_agent(cfg.task_id)
+cfg = get_debug_benchmark()
+bench = cfg.make()
+for task_cfg in cfg.get_task_configs():
+    task = bench.spawn(task_cfg)
+    agent = make_debug_agent(task_cfg.task_id)
     obs, _ = task.reset()
     done = False
     while not done:
@@ -115,6 +116,7 @@ for cfg in bench.get_task_configs():
         env_out = task.step(action)
         obs, done = env_out.obs, env_out.done
     task.close()
+bench.close()
 ```
 
 Smoke tests cover benchmark construction, the grader regex, and the crypto round-trip:
@@ -131,7 +133,7 @@ uv run pytest tests/
 | Source         | [openai/simple-evals — `browsecomp_eval.py](https://github.com/openai/simple-evals/blob/main/browsecomp_eval.py)` |
 | Dataset        | `https://openaipublic.blob.core.windows.net/simple-evals/browse_comp_test_set.csv`                                |
 | Tasks          | 1,266                                                                                                             |
-| Default scorer | `gpt-5.4-mini` (override via `BrowseCompBenchmark(scorer_model=...)`)                                             |
+| Default scorer | `gpt-5.4-mini` (override via `BrowseCompBenchmarkConfig(scorer_model=...)`)                                       |
 | Grader retries | 3 (set on `BrowseCompTask.grader_retries`)                                                                        |
 | Encryption     | XOR with `SHA256(canary)`-derived key, Base64-wrapped (see `[crypto.py](src/browsercomp_cube/crypto.py)`)         |
 
@@ -147,11 +149,10 @@ uv run python scripts/generate_task_metadata.py --force
 ```
 src/browsercomp_cube/
 ├── __init__.py            # Public exports
-├── benchmark.py           # BrowseCompBenchmark — install() / get_task_configs()
+├── benchmark.py           # BrowseCompBenchmarkConfig / BrowseCompBenchmark
 ├── task.py                # BrowseCompTask, BrowseCompTaskConfig, BrowseCompTaskMetadata, grader prompt
 ├── tool.py                # SubmitAnswerTool, SubmitAnswerToolConfig
 ├── crypto.py              # XOR + Base64 helpers ported from openai/simple-evals
 ├── debug.py               # DebugBrowseCompBenchmark, DebugAgent (no LLM, no network)
 └── task_metadata.json     # Shipped public-field metadata for all 1,266 tasks
 ```
-

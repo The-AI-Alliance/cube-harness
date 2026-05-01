@@ -6,14 +6,16 @@ from typing import Any
 
 import pytest
 
-from browsercomp_cube import BrowseCompBenchmark
+from browsercomp_cube import BrowseCompBenchmarkConfig
 from browsercomp_cube.crypto import decrypt, derive_key, encrypt
-from browsercomp_cube.debug import DebugBrowseCompBenchmark, get_debug_benchmark
-from browsercomp_cube.task import BrowseCompTask, BrowseCompTaskMetadata
+from browsercomp_cube.debug import DebugBrowseCompBenchmark, DebugBrowseCompBenchmarkConfig, get_debug_benchmark
+from browsercomp_cube.task import BrowseCompExecutionInfo, BrowseCompTask, BrowseCompTaskConfig, BrowseCompTaskMetadata
+from browsercomp_cube.tool import SubmitAnswerToolConfig
+from cube.tool import ToolboxConfig
 
 
-def test_browsecomp_benchmark_constructs() -> None:
-    bench = BrowseCompBenchmark(scorer_model="gpt-5.4-mini")
+def test_browsecomp_benchmark_config_constructs() -> None:
+    bench = BrowseCompBenchmarkConfig(scorer_model="gpt-5.4-mini")
     assert bench.name == "browsercomp-cube"
     assert bench.benchmark_metadata.num_tasks == 1266
     assert len(bench.task_metadata) == 1266
@@ -22,12 +24,36 @@ def test_browsecomp_benchmark_constructs() -> None:
     assert bench.scorer_model == "gpt-5.4-mini"
 
 
+def test_browsecomp_benchmark_config_round_trip() -> None:
+    cfg = BrowseCompBenchmarkConfig(scorer_model="gpt-5.4-mini")
+    rehydrated = BrowseCompBenchmarkConfig.model_validate_json(cfg.model_dump_json())
+    assert rehydrated == cfg
+
+
+def test_browsecomp_task_config_round_trip() -> None:
+    metadata = BrowseCompTaskMetadata(id="browsecomp-test", topic="debug")
+    cfg = BrowseCompTaskConfig(metadata=metadata, scorer_model="gpt-5.4-mini")
+    rehydrated = BrowseCompTaskConfig.model_validate_json(cfg.model_dump_json())
+    assert rehydrated == cfg
+    assert isinstance(rehydrated.metadata, BrowseCompTaskMetadata)
+    assert rehydrated.metadata.topic == "debug"
+
+
 def test_debug_benchmark_constructs() -> None:
-    bench = get_debug_benchmark()
-    assert isinstance(bench, DebugBrowseCompBenchmark)
-    assert len(bench.task_metadata) == 2
-    configs = list(bench.get_task_configs())
+    cfg = get_debug_benchmark()
+    assert isinstance(cfg, DebugBrowseCompBenchmarkConfig)
+    assert len(cfg.task_metadata) == 2
+    configs = list(cfg.get_task_configs())
     assert {c.task_id for c in configs} == {"browsecomp-debug-0000", "browsecomp-debug-0001"}
+    bench = cfg.make()
+    assert isinstance(bench, DebugBrowseCompBenchmark)
+    bench.close()
+
+
+def test_debug_benchmark_config_round_trip() -> None:
+    cfg = DebugBrowseCompBenchmarkConfig()
+    rehydrated = DebugBrowseCompBenchmarkConfig.model_validate_json(cfg.model_dump_json())
+    assert rehydrated == cfg
 
 
 class _FakeMessage:
@@ -47,15 +73,10 @@ class _FakeCompletion:
 
 def _make_task() -> BrowseCompTask:
     """Build a minimal BrowseCompTask without going through Benchmark.install()."""
-    from cube.tool import ToolboxConfig
-
-    from browsercomp_cube.tool import SubmitAnswerToolConfig
-
     return BrowseCompTask(
         metadata=BrowseCompTaskMetadata(id="browsecomp-test"),
         tool_config=ToolboxConfig(tool_configs=[SubmitAnswerToolConfig()]),
-        problem="ignored",
-        answer="ignored",
+        execution_info=BrowseCompExecutionInfo(problem="ignored", answer="ignored"),
         scorer_model="any-model",
     )
 

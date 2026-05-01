@@ -10,7 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import ClassVar
 
-from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.task import TaskConfig
 
 from browsercomp_cube.task import BrowseCompTaskConfig, BrowseCompTaskMetadata
@@ -24,6 +24,16 @@ _CSV_FILENAME = "browse_comp_test_set.csv"
 class BrowseCompBenchmark(Benchmark):
     """BrowseComp benchmark: 1,266 hard web information-retrieval tasks."""
 
+    def _setup(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+class BrowseCompBenchmarkConfig(BenchmarkConfig[BrowseCompTaskMetadata]):
+    """Serializable BrowseComp benchmark configuration."""
+
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
         name="browsercomp-cube",
         version="0.1.0",
@@ -34,6 +44,7 @@ class BrowseCompBenchmark(Benchmark):
     # Auto-loaded from task_metadata.json by Benchmark.__init_subclass__.
     task_metadata: ClassVar[dict[str, BrowseCompTaskMetadata]]
     task_config_class: ClassVar[type[TaskConfig]] = BrowseCompTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = BrowseCompBenchmark
 
     scorer_model: str
 
@@ -51,7 +62,7 @@ class BrowseCompBenchmark(Benchmark):
         To regenerate task_metadata.json (developer use only), run
         ``scripts/generate_task_metadata.py``.
         """
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists() and any(exec_cache_dir.iterdir()):
             logger.info("Execution cache already populated, skipping installation")
             return
@@ -71,7 +82,7 @@ class BrowseCompBenchmark(Benchmark):
     @classmethod
     def uninstall(cls) -> None:
         """Remove the per-task execution cache and the cached source CSV."""
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists():
             shutil.rmtree(exec_cache_dir)
             logger.info("Removed execution cache at %s", exec_cache_dir)
@@ -90,16 +101,10 @@ class BrowseCompBenchmark(Benchmark):
             urllib.request.urlretrieve(_DATASET_URL, csv_path)
         return csv_path
 
-    def _setup(self) -> None:
-        pass
-
-    def close(self) -> None:
-        pass
-
     def get_task_configs(self) -> Generator[BrowseCompTaskConfig, None, None]:
-        for tm in self.task_metadata.values():
+        for tm in self.tasks().values():
             yield BrowseCompTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
+                metadata=tm,
+                tool_config=self.tool_config,
                 scorer_model=self.scorer_model,
             )

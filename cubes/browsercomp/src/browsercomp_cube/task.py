@@ -8,7 +8,7 @@ import litellm
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.task import Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 from cube.tool import Toolbox, ToolboxConfig
 
 from browsercomp_cube.crypto import decrypt
@@ -55,19 +55,25 @@ class BrowseCompTaskMetadata(TaskMetadata):
 
     Lightweight public fields shipped in task_metadata.json. The encrypted
     problem/answer payload lives in the per-task execution cache populated by
-    BrowseCompBenchmark.install() and is decrypted at make() time.
+    BrowseCompBenchmarkConfig.install() and is decrypted at make() time.
     """
 
     topic: str = ""
     """Coarse subject area (e.g. 'Art', 'Sports'). Mirrored into abstract_description."""
 
 
+class BrowseCompExecutionInfo(TaskExecutionInfo):
+    """Heavy decrypted BrowseComp payload, populated in TaskConfig.make()."""
+
+    problem: str
+    answer: str
+
+
 class BrowseCompTask(Task):
     """A single BrowseComp information-retrieval task."""
 
     metadata: BrowseCompTaskMetadata  # type: ignore[assignment]
-    problem: str
-    answer: str
+    execution_info: BrowseCompExecutionInfo  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
@@ -76,8 +82,8 @@ class BrowseCompTask(Task):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        prompt = self.problem + _FORMAT_INSTRUCTIONS
-        return Observation.from_text(prompt), {"problem": self.problem}
+        prompt = self.execution_info.problem + _FORMAT_INSTRUCTIONS
+        return Observation.from_text(prompt), {"problem": self.execution_info.problem}
 
     def _call_grader(self, prompt: str, scorer_model: str) -> tuple[bool, str]:
         completion = litellm.completion(
@@ -102,9 +108,9 @@ class BrowseCompTask(Task):
             return 0.0, {"correct": False, "submitted": None, "reason": "No answer submitted"}
 
         prompt = _GRADER_TEMPLATE.format(
-            question=self.problem,
+            question=self.execution_info.problem,
             response=submitted,
-            correct_answer=self.answer,
+            correct_answer=self.execution_info.answer,
         )
 
         last_error: Exception | None = None
@@ -125,7 +131,7 @@ class BrowseCompTask(Task):
         return self._submit_tool().last_answer is not None
 
 
-class BrowseCompTaskConfig(TaskConfig):
+class BrowseCompTaskConfig(TaskConfig[BrowseCompTaskMetadata]):
     """Serializable configuration that produces a BrowseCompTask.
 
     The encrypted record (problem, answer, canary) for ``task_id`` is loaded
@@ -140,22 +146,22 @@ class BrowseCompTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> BrowseCompTask:
-        from browsercomp_cube.benchmark import BrowseCompBenchmark
-
-        metadata = BrowseCompBenchmark.task_metadata[self.task_id]
-        encrypted = BrowseCompBenchmark.load_task_execution_info(self.task_id)
+        type(self).verify_installed()
+        encrypted = self.load_task_execution_info(self.task_id)
         canary = encrypted["canary"]
-        problem = decrypt(encrypted["problem"], canary)
-        answer = decrypt(encrypted["answer"], canary)
+        execution_info = BrowseCompExecutionInfo(
+            problem=decrypt(encrypted["problem"], canary),
+            answer=decrypt(encrypted["answer"], canary),
+        )
 
         tool_cfg = self.tool_config or ToolboxConfig(
             tool_configs=[BraveWebSearchToolConfig(), WebFetchToolConfig(), SubmitAnswerToolConfig()]
         )
         return BrowseCompTask(
-            metadata=metadata,
+            metadata=self.metadata,
+            execution_info=execution_info,
             tool_config=tool_cfg,
-            problem=problem,
-            answer=answer,
             scorer_model=self.scorer_model,
+            runtime_context=runtime_context,
             container_backend=container_backend,
         )

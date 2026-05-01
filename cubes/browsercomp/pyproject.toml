@@ -16,13 +16,13 @@ authors = [
     { name = "Mia Glaese" },
 ]
 dependencies = [
-    "cube-standard",
+    "cube-standard>=0.1.0rc7",
     "cube-web-tool",
     "litellm",
 ]
 
 [project.entry-points."cube.benchmarks"]
-browsercomp-cube = "browsercomp_cube.benchmark:BrowseCompBenchmark"
+browsercomp-cube = "browsercomp_cube.benchmark:BrowseCompBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]

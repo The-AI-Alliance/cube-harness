@@ -8,7 +8,7 @@ users never need to run this script.
 Only lightweight public fields are written (id, abstract_description,
 recommended_max_steps, topic). The encrypted ``problem`` and ``answer`` columns
 remain encrypted and are decrypted at task make() time from the per-task
-execution cache populated by ``BrowseCompBenchmark.install()``.
+execution cache populated by ``BrowseCompBenchmarkConfig.install()``.
 
 Usage:
     python scripts/generate_task_metadata.py [--output PATH] [--force]
@@ -28,7 +28,7 @@ import logging
 from pathlib import Path
 
 import browsercomp_cube
-from browsercomp_cube.benchmark import BrowseCompBenchmark
+from browsercomp_cube.benchmark import BrowseCompBenchmarkConfig
 from browsercomp_cube.task import BrowseCompTaskMetadata
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def generate_task_metadata(output_path: Path = _DEFAULT_OUTPUT, *, force: bool =
         )
         return 0
 
-    csv_path = BrowseCompBenchmark._download_dataset()
+    csv_path = BrowseCompBenchmarkConfig._download_dataset()
     text = csv_path.read_text(encoding="utf-8")
     rows = list(csv.DictReader(io.StringIO(text)))
     logger.info("Loaded %d rows from %s", len(rows), csv_path)

@@ -14,11 +14,17 @@ from typing import ClassVar, Generator
 from cube.benchmark import Benchmark, BenchmarkMetadata, RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Action, ActionSchema, Observation
+from cube.resource import InfraConfig
 from cube.task import TaskConfig
 from cube.tool import ToolboxConfig
 
-from browsercomp_cube.benchmark import BrowseCompBenchmark
-from browsercomp_cube.task import BrowseCompTask, BrowseCompTaskConfig, BrowseCompTaskMetadata
+from browsercomp_cube.benchmark import BrowseCompBenchmark, BrowseCompBenchmarkConfig
+from browsercomp_cube.task import (
+    BrowseCompExecutionInfo,
+    BrowseCompTask,
+    BrowseCompTaskConfig,
+    BrowseCompTaskMetadata,
+)
 from browsercomp_cube.tool import SubmitAnswerToolConfig
 
 logger = logging.getLogger(__name__)
@@ -65,7 +71,7 @@ class DebugBrowseCompTask(BrowseCompTask):
 
     def _call_grader(self, prompt: str, scorer_model: str) -> tuple[bool, str]:
         submitted = self._submit_tool().last_answer or ""
-        is_correct = self.answer.lower() in submitted.lower()
+        is_correct = self.execution_info.answer.lower() in submitted.lower()
         return is_correct, f"correct: {'yes' if is_correct else 'no'} (debug grader)"
 
 
@@ -77,17 +83,16 @@ class DebugBrowseCompTaskConfig(BrowseCompTaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> DebugBrowseCompTask:
-        idx = int(self.task_id.rsplit("-", 1)[-1])
+        idx = int(self.metadata.id.rsplit("-", 1)[-1])
         record = _DEBUG_RECORDS[idx]
 
-        metadata = DebugBrowseCompBenchmark.task_metadata[self.task_id]
         tool_cfg = self.tool_config or ToolboxConfig(tool_configs=[SubmitAnswerToolConfig()])
         return DebugBrowseCompTask(
-            metadata=metadata,
+            metadata=self.metadata,
+            execution_info=BrowseCompExecutionInfo(problem=record["problem"], answer=record["answer"]),
             tool_config=tool_cfg,
-            problem=record["problem"],
-            answer=record["answer"],
             scorer_model=self.scorer_model,
+            runtime_context=runtime_context,
             container_backend=container_backend,
         )
 
@@ -95,9 +100,14 @@ class DebugBrowseCompTaskConfig(BrowseCompTaskConfig):
 class DebugBrowseCompBenchmark(BrowseCompBenchmark):
     """Lightweight debug benchmark — 2 tasks, no network calls."""
 
-    benchmark_metadata: ClassVar[BenchmarkMetadata] = BrowseCompBenchmark.benchmark_metadata
+
+class DebugBrowseCompBenchmarkConfig(BrowseCompBenchmarkConfig):
+    """Serializable debug benchmark configuration."""
+
+    benchmark_metadata: ClassVar[BenchmarkMetadata] = BrowseCompBenchmarkConfig.benchmark_metadata
     task_metadata: ClassVar[dict[str, BrowseCompTaskMetadata]] = _debug_task_metadata()
     task_config_class: ClassVar[type[TaskConfig]] = DebugBrowseCompTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = DebugBrowseCompBenchmark
 
     scorer_model: str = "debug-grader-unused"
 
@@ -111,9 +121,9 @@ class DebugBrowseCompBenchmark(BrowseCompBenchmark):
         return
 
     def get_task_configs(self) -> Generator[DebugBrowseCompTaskConfig, None, None]:
-        for tm in self.task_metadata.values():
+        for tm in self.tasks().values():
             yield DebugBrowseCompTaskConfig(
-                task_id=tm.id,
+                metadata=tm,
                 tool_config=ToolboxConfig(tool_configs=[SubmitAnswerToolConfig()]),
                 scorer_model=self.scorer_model,
             )
@@ -140,8 +150,8 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> Benchmark:
-    return DebugBrowseCompBenchmark()
+def get_debug_benchmark(infra: InfraConfig | None = None) -> DebugBrowseCompBenchmarkConfig:
+    return DebugBrowseCompBenchmarkConfig()
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
