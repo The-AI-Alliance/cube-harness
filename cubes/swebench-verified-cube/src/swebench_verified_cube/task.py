@@ -73,9 +73,6 @@ class SWEBenchVerifiedExecutionInfo(TaskExecutionInfo):
     eval_timeout: int = 1800
     """Wall-clock seconds allowed for the evaluation test commands."""
 
-    # SWE-bench HuggingFace data ships these as JSON-encoded strings in some
-    # versions of the execution cache (e.g. '["tests/test_foo.py::test_bar"]').
-    # Normalise to list[str] regardless of which cache format was written.
     @field_validator("fail_to_pass", "pass_to_pass", mode="before")
     @classmethod
     def _parse_json_list(cls, v: Any) -> Any:
