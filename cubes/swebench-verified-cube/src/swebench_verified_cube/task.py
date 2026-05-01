@@ -1,14 +1,16 @@
 """Task and TaskConfig for swebench-verified-cube."""
 
+from __future__ import annotations
+
 import base64
-import json
 import logging
+import re
 import shlex
 from typing import Any
 
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -23,8 +25,9 @@ class SWEBenchVerifiedTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for SWE-bench Verified tasks.
 
     Public fields shipped in task_metadata.json (available at import time).
-    Heavy execution data (problem_statement, patch, test_patch, etc.) lives in
-    the per-task execution cache and is loaded lazily by SWEBenchVerifiedTaskConfig.make().
+    Heavy execution data (problem_statement, patch, test_patch, etc.) lives on
+    ``SWEBenchVerifiedExecutionInfo`` and is loaded lazily by
+    ``SWEBenchVerifiedTaskConfig.make()``.
     """
 
     repo: str
@@ -40,15 +43,60 @@ class SWEBenchVerifiedTaskMetadata(TaskMetadata):
     """Git SHA of the base commit the agent starts from."""
 
 
-class SWEBenchVerifiedTask(Task):
-    """A single SWE-bench Verified task with test-based validation."""
+class SWEBenchVerifiedExecutionInfo(TaskExecutionInfo):
+    """Heavy per-task execution data for SWE-bench Verified — populated on the worker.
 
-    metadata: SWEBenchVerifiedTaskMetadata  # type: ignore[assignment]
+    Loaded by ``SWEBenchVerifiedTaskConfig.make()`` from the per-task execution cache
+    written by ``SWEBenchVerifiedBenchmarkConfig.install()``.
+    """
+
+    problem_statement: str
+    """The agent-facing GitHub issue text."""
+
+    hints_text: str = ""
+    """Optional hint text (only surfaced when ``SWEBenchVerifiedTaskConfig.include_hints`` is True)."""
+
+    patch: str
+    """Gold patch — written to /tmp/gold_patch.diff in oracle_mode."""
+
+    test_patch: str
+    """Test patch applied during evaluation."""
+
+    fail_to_pass: list[str]
+    """Test directives that must pass after the fix."""
+
+    pass_to_pass: list[str]
+    """Test directives that must remain passing after the fix."""
+
+    eval_timeout: int = 1800
+    """Wall-clock seconds allowed for the evaluation test commands."""
+
+
+class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
+    """A single SWE-bench Verified task with test-based validation."""
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
 
+    include_hints: bool = False
+    """If True, append hints_text to the problem statement in reset()."""
+
+    oracle_mode: bool = False
+    """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
+
+    @property
+    def _exec(self) -> SWEBenchVerifiedExecutionInfo:
+        """Typed view on execution_info — fails fast if it was not populated."""
+        if not isinstance(self.execution_info, SWEBenchVerifiedExecutionInfo):
+            raise RuntimeError(
+                f"SWEBenchVerifiedTask {self.metadata.id!r}: execution_info is "
+                f"{type(self.execution_info).__name__}, expected SWEBenchVerifiedExecutionInfo. "
+                f"Construct via SWEBenchVerifiedTaskConfig.make() so it is populated."
+            )
+        return self.execution_info
+
     def _build_tool(self) -> None:
+        """Copy /testbed to a writable location if the container mounts it read-only."""
         new_wd = relocate_if_readonly(
             self._container,
             self.tool_config.working_dir,
@@ -59,17 +107,16 @@ class SWEBenchVerifiedTask(Task):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        extra = self.metadata.extra_info
 
         # Oracle mode: write gold patch for debug/baseline use
-        if extra.get("oracle_mode") and extra.get("patch"):
+        if self.oracle_mode and self._exec.patch:
             assert isinstance(self.tool, SWEBenchTool)
-            b64 = base64.b64encode(extra["patch"].encode()).decode()
+            b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
-        instruction = extra["problem_statement"]
-        if extra.get("include_hints") and extra.get("hints_text"):
-            instruction += f"\n\n## Hints\n{extra['hints_text']}"
+        instruction = self._exec.problem_statement
+        if self.include_hints and self._exec.hints_text:
+            instruction += f"\n\n## Hints\n{self._exec.hints_text}"
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
@@ -79,24 +126,26 @@ class SWEBenchVerifiedTask(Task):
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, SWEBenchTool)
-        extra = self.metadata.extra_info
 
         # Apply test patch
-        self._apply_patch(extra["test_patch"])
+        self._apply_patch(self._exec.test_patch)
 
-        # Parse test lists
-        fail_to_pass = json.loads(extra["fail_to_pass"])
-        pass_to_pass = json.loads(extra["pass_to_pass"])
-        eval_timeout = extra.get("eval_timeout", 1800)
+        fail_to_pass = self._exec.fail_to_pass
+        pass_to_pass = self._exec.pass_to_pass
+        eval_timeout = self._exec.eval_timeout
 
         # Run FAIL_TO_PASS tests — these must all pass for resolution
         f2p_passed, f2p_output = self._run_tests(self.metadata.repo, fail_to_pass, timeout=eval_timeout)
 
-        # Run PASS_TO_PASS tests — these must remain passing
+        # Run PASS_TO_PASS tests — these must remain passing.
+        # strict=False: exit-4 "no tests collected" treated as passed (truncated test IDs
+        # in SWE-bench data cannot be collected; agent is not responsible for that).
         p2p_passed = True
         p2p_output = ""
         if pass_to_pass:
-            p2p_passed, p2p_output = self._run_tests(self.metadata.repo, pass_to_pass, timeout=eval_timeout)
+            p2p_passed, p2p_output = self._run_tests(
+                self.metadata.repo, pass_to_pass, timeout=eval_timeout, strict=False
+            )
 
         resolved = f2p_passed and p2p_passed
         reward = 1.0 if resolved else 0.0
@@ -106,8 +155,8 @@ class SWEBenchVerifiedTask(Task):
             "resolved": resolved,
             "fail_to_pass_passed": f2p_passed,
             "pass_to_pass_passed": p2p_passed,
-            "fail_to_pass_output": f2p_output[:2000],
-            "pass_to_pass_output": p2p_output[:2000],
+            "fail_to_pass_output": f2p_output,
+            "pass_to_pass_output": p2p_output,
         }
 
     # ── Private helpers ────────────────────────────────────────────
@@ -131,21 +180,54 @@ class SWEBenchVerifiedTask(Task):
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
-        # Final fallback: patch
-        return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        # Final fallback: patch --forward prevents reversing an already-applied patch
+        # (patch --batch otherwise treats "content already present" as a reversed patch
+        # and removes it, causing test_empty_name_not_allowed-style evaluation failures
+        # when the agent proactively added test content that the test_patch also adds).
+        result = self.tool.bash_unlimited("patch --batch --forward --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        if "[exit_code:" in result or "[error]" in result:
+            logger.warning("_apply_patch: all methods failed.\npatch output:\n%s", result)
+        return result
 
-    def _run_tests(self, repo: str, test_directives: list[str], timeout: int = 1800) -> tuple[bool, str]:
-        """Run test directives and return (all_passed, output)."""
+    def _run_tests(
+        self,
+        repo: str,
+        test_directives: list[str],
+        timeout: int = 1800,
+        strict: bool = True,
+    ) -> tuple[bool, str]:
+        """Run test directives; return (all_passed, last-200-lines-of-output).
+
+        Output is trimmed to the last 200 lines because some repos (Django) print
+        tens of thousands of lines of DB-setup preamble before test results appear.
+
+        strict=False is used for pass_to_pass checks and relaxes two edge cases
+        that are not the agent's fault:
+        - exit 4: pytest found no tests (SWE-bench stores some truncated test IDs
+          that pytest cannot parse — the benchmark data is malformed for these).
+        - non-zero exit but zero failures: old sympy containers emit import-level
+          deprecation errors that inflate the exit code even when all tests passed.
+        """
         assert isinstance(self.tool, SWEBenchTool)
         if not test_directives:
             return True, ""
 
-        test_cmd = self._build_test_cmd(repo, test_directives)
-        cmd = f"{CONDA_ACTIVATE} && {test_cmd}"  # tool.working_dir is already the testbed
-        output = self.tool.bash_unlimited(cmd, timeout=timeout)
+        test_cmd = f"{CONDA_ACTIVATE} && {self._build_test_cmd(repo, test_directives)}"
+        result = self.tool._container.exec(test_cmd, timeout=timeout, workdir=self.tool._config.working_dir)
 
-        all_passed = "[exit_code:" not in output and "[error]" not in output
-        return all_passed, output
+        raw = (result.stdout or "") + (result.stderr or "")
+        output = "\n".join(raw.splitlines()[-200:])
+
+        if result.exit_code == 124:  # shell timeout
+            return False, output + "\n[timed out]"
+        if result.exit_code == 4 and not strict:
+            return True, output
+        if result.exit_code != 0 and not strict:
+            tests_ran = bool(re.search(r"\b\d+\s+passed\b", output, re.IGNORECASE))
+            no_failures = not bool(re.search(r"\b\d+\s+failed\b", output, re.IGNORECASE))
+            if tests_ran and no_failures:
+                return True, output
+        return result.exit_code == 0, output
 
     @staticmethod
     def _normalize_django_directive(directive: str) -> str:
@@ -156,8 +238,6 @@ class SWEBenchVerifiedTask(Task):
         Django's runtests.py expects:
             "module.path.ClassName.test_method"
         """
-        import re
-
         m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive.strip())
         if m:
             method, class_path = m.group(1), m.group(2)
@@ -170,54 +250,59 @@ class SWEBenchVerifiedTask(Task):
         if "django" in repo:
             normalized = [SWEBenchVerifiedTask._normalize_django_directive(t) for t in test_directives]
             tests = " ".join(shlex.quote(t) for t in normalized)
-            return f"./tests/runtests.py --verbosity 2 {tests}"
+            # PYTHONIOENCODING=utf-8: Django's test runner emits Unicode characters
+            # (e.g. U+2026 ellipsis) that fail when the container locale is ASCII-only.
+            return f"PYTHONIOENCODING=utf-8 ./tests/runtests.py --verbosity 2 {tests}"
         if "sympy" in repo:
             tests = " ".join(shlex.quote(t) for t in test_directives)
             return f"bin/test -C --verbose {tests}"
         tests = " ".join(shlex.quote(t) for t in test_directives)
-        return f"python -m pytest --no-header -rN -p no:cacheprovider {tests}"
+        # --no-header requires pytest>=6.0; many SWE-bench containers ship older versions.
+        return f"python -m pytest -rN -p no:cacheprovider {tests}"
 
 
-class SWEBenchVerifiedTaskConfig(TaskConfig):
+class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
     """Serializable factory that produces a SWEBenchVerifiedTask.
 
     Loads heavy execution data (problem_statement, patch, test_patch, etc.) from
-    the per-task execution cache in make(), so it works correctly in Ray workers.
+    the per-task execution cache populated by ``SWEBenchVerifiedBenchmarkConfig.install()``.
     """
 
     include_hints: bool = False
     oracle_mode: bool = False
+
+    @classmethod
+    def verify_installed(cls) -> None:
+        """Fail fast if the per-task execution cache is empty."""
+        cache_dir = cls.task_execution_cache_dir()
+        if not cache_dir.exists() or not any(cache_dir.iterdir()):
+            raise RuntimeError(
+                f"SWE-bench Verified per-task execution cache is empty at {cache_dir}. "
+                f"Run `cube install swebench-verified-cube` (or "
+                f"`SWEBenchVerifiedBenchmarkConfig.install()`) on this worker first."
+            )
 
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchVerifiedTask:
-        has_infra = runtime_context is not None and "infra" in runtime_context
-        if not has_infra and container_backend is None:
-            raise ValueError(
-                "SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'] "
-                "(preferred) or a legacy container_backend."
-            )
+        if runtime_context is None or "infra" not in runtime_context:
+            if container_backend is None:
+                raise ValueError(
+                    "SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'] "
+                    "(preferred) or a legacy container_backend."
+                )
 
-        # Import here to avoid circular import (benchmark imports task)
-        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
-
-        metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
-        exec_info = SWEBenchVerifiedBenchmark.load_task_execution_info(self.task_id)
-        metadata = metadata.model_copy(
-            update={
-                "extra_info": {
-                    **exec_info,
-                    "include_hints": self.include_hints,
-                    "oracle_mode": self.oracle_mode,
-                }
-            }
-        )
+        type(self).verify_installed()
+        execution_info = SWEBenchVerifiedExecutionInfo.model_validate(type(self).load_task_execution_info(self.task_id))
 
         return SWEBenchVerifiedTask(
-            metadata=metadata,
+            metadata=self.metadata,
+            execution_info=execution_info,
             tool_config=self.tool_config or SWEBenchToolConfig(),
             runtime_context=runtime_context,
             container_backend=container_backend,
+            include_hints=self.include_hints,
+            oracle_mode=self.oracle_mode,
         )

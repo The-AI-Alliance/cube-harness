@@ -21,6 +21,7 @@ breaking changes), see [cube-standard's openspec/README.md](https://github.com/T
 | Metrics / OTel | `src/cube_harness/metrics/` | [metrics/spec.md](specs/metrics/spec.md) |
 | XRay / Analyze | `src/cube_harness/analyze/` | [analyze/spec.md](specs/analyze/spec.md) |
 | MCP server | `src/cube_harness/mcp/` | [mcp/spec.md](specs/mcp/spec.md) |
+| EvalLog | `src/cube_harness/eval_log.py` | [eval_log/spec.md](specs/eval_log/spec.md) |
 
 Cross-repo: cube-harness consumes cube-standard's contracts (`Task`, `Benchmark`, `Tool`,
 `Resource`). When your change touches the base protocol, check cube-standard's spec first.

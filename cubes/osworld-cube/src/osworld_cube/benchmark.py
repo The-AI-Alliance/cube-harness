@@ -1,17 +1,21 @@
 """
-OSWorldBenchmark and OSWorldTaskConfig — CUBE benchmark for the OSWorld desktop-automation suite.
+OSWorldBenchmarkConfig / OSWorldBenchmark — CUBE benchmark for the OSWorld
+desktop-automation suite.
 
-Entry point:
-    bench = OSWorldBenchmark(default_tool_config=ComputerConfig())
-    bench.setup()
-    for task_config in bench.get_task_configs():
-        task = task_config.make()
+Entry point::
+
+    config = OSWorldBenchmarkConfig(tool_config=ComputerConfig())
+    benchmark = config.make(infra=AWSInfraConfig())  # provisions VM image, publishes infra into runtime_context
+    for tc in config.get_task_configs():
+        task = tc.make(runtime_context=benchmark._runtime_context)
         obs, info = task.reset()
         ...
         task.close()
+    benchmark.close()
 
-Filter by domain or other metadata field after setup():
-    chrome_bench = bench.subset_from_glob("domain", "chrome")
+Filter by domain or other metadata field::
+
+    chrome_config = config.subset_from_glob("domain", "chrome")
 """
 
 from __future__ import annotations
@@ -28,23 +32,26 @@ from pathlib import Path
 from typing import ClassVar
 
 from dotenv import load_dotenv
-from pydantic import Field
 
-from cube import LocalInfraConfig
-from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.container import ContainerBackend
 from cube.resource import InfraConfig, ResourceConfig
-from cube.task import TaskConfig
+from cube.task import RuntimeContext, TaskConfig, TaskMetadata
 
 from osworld_cube._paths import OSWORLD_BASE_DIR, OSWORLD_REPO_DIR, OSWORLD_VM_DIR
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.task import OSWORLD_UBUNTU_RESOURCE, OSWorldTask, OSWorldTaskMetadata
+from osworld_cube.task import (
+    OSWORLD_UBUNTU_RESOURCE,
+    OSWorldExecutionInfo,
+    OSWorldTask,
+    OSWorldTaskMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
 
 # Pinned OSWorld commit for reproducibility
-OSWORLD_COMMIT = "e695a10"
+OSWORLD_COMMIT = "cb834f7"
 
 
 # ---------------------------------------------------------------------------
@@ -73,12 +80,26 @@ def ensure_proxy_config_in_env(env_path: Path = Path(".env")) -> None:
     logger.info(f"Appended {key} to {env_path}")
 
 
+def _fix_config_paths(config: list[dict]) -> list[dict]:
+    """
+    Prepend OSWorld repo path to settings_file paths in config items.
+
+    Keeps relative paths working regardless of CWD.
+    """
+    result = deepcopy(config)
+    for config_item in result:
+        params = config_item.get("parameters", {})
+        if "settings_file" in params:
+            params["settings_file"] = str(OSWORLD_REPO_DIR / params["settings_file"])
+    return result
+
+
 def _build_task_execution_info_from_repo() -> dict[str, dict]:
     """
     Build heavy per-task execution info from the OSWorld repo.
     """
     assert OSWORLD_REPO_DIR.exists(), (
-        f"OSWorld repo not found at {OSWORLD_REPO_DIR}. Run OSWorldBenchmark.install() to clone it first."
+        f"OSWorld repo not found at {OSWORLD_REPO_DIR}. Run OSWorldBenchmarkConfig.install() to clone it first."
     )
     eval_examples_dir = OSWORLD_REPO_DIR / "evaluation_examples"
     exec_info_by_id: dict[str, dict] = {}
@@ -111,13 +132,28 @@ def _build_task_execution_info_from_repo() -> dict[str, dict]:
     # Convert relative paths in config to absolute paths pointing to the repo.
     exec_info_by_id_abs = {
         task_id: {
-            "config": OSWorldBenchmark._fix_config_paths(raw["config"]),
+            "config": _fix_config_paths(raw["config"]),
             "evaluator": raw["evaluator"],
         }
         for task_id, raw in exec_info_by_id.items()
     }
     logger.info("Built %d task execution info entries from OSWorld repo", len(exec_info_by_id_abs))
     return exec_info_by_id_abs
+
+
+def _clone_osworld_repo() -> None:
+    """Clone and pin the OSWorld repository to OSWORLD_COMMIT."""
+    OSWORLD_BASE_DIR.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "https://github.com/xlang-ai/OSWorld", str(OSWORLD_REPO_DIR)],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "checkout", OSWORLD_COMMIT],
+        cwd=str(OSWORLD_REPO_DIR),
+        check=True,
+    )
+    OSWORLD_VM_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -139,39 +175,63 @@ class OSWorldTestSet(str, enum.Enum):
 # ---------------------------------------------------------------------------
 
 
-class OSWorldTaskConfig(TaskConfig):
+class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
     """
     Serialisable config for a single OSWorld task.
 
-    Fields:
-        task_id:     inherited from TaskConfig
-        tool_config: inherited from TaskConfig
-        seed:        inherited (ignored for OSWorld — tasks are deterministic)
-        use_som:     Passed by OSWorldBenchmark
-        infra:       InfraConfig to use for this task.
+    Heavy execution data (setup config, evaluator) is loaded lazily on the
+    worker by ``make()`` from the per-task execution cache populated by
+    ``OSWorldBenchmarkConfig.install()``.
     """
 
     use_som: bool = False
-    infra: InfraConfig | None = None
+    """Set-of-Marks observation post-processing toggle, propagated from the benchmark config."""
+
+    @classmethod
+    def task_execution_cache_dir(cls) -> Path:
+        """Override the default ``~/.cube/<package>/tasks_execution_info`` location.
+
+        OSWorld co-locates the per-task execution cache under ``OSWORLD_BASE_DIR``
+        alongside the cloned repo, so ``install()`` and ``uninstall()`` work on a
+        single directory tree.
+        """
+        return OSWORLD_BASE_DIR / "tasks_execution_info"
+
+    @classmethod
+    def verify_installed(cls) -> None:
+        """Fail fast if the per-task cache or the OSWorld repo are missing."""
+        cache_dir = cls.task_execution_cache_dir()
+        if not cache_dir.exists() or not any(cache_dir.iterdir()):
+            raise RuntimeError(
+                f"OSWorld per-task execution cache is empty at {cache_dir}. "
+                f"Run `cube install osworld-cube` (or `OSWorldBenchmarkConfig.install()`) "
+                f"on this worker first."
+            )
+        if not OSWORLD_REPO_DIR.exists():
+            raise RuntimeError(
+                f"OSWorld repo not found at {OSWORLD_REPO_DIR}. "
+                f"Run `cube install osworld-cube` (or `OSWorldBenchmarkConfig.install()`) "
+                f"on this worker first."
+            )
 
     def make(
         self,
-        runtime_context: dict | None = None,
+        runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> OSWorldTask:
         """Instantiate OSWorldTask from this config.
 
-        Loads per-task execution data (config, evaluator) from the local cache,
-        fixes machine-specific settings_file paths, and merges into metadata.extra_info.
+        Loads typed execution info from the per-task cache populated by
+        ``OSWorldBenchmarkConfig.install()`` and surfaces it via
+        ``OSWorldTask.execution_info``.
         """
-        metadata = OSWorldBenchmark.task_metadata[self.task_id]
-        exec_info = OSWorldBenchmark.load_task_execution_info(self.task_id)
-        metadata = metadata.model_copy(update={"extra_info": exec_info})
-
+        type(self).verify_installed()
+        raw = type(self).load_task_execution_info(self.task_id)
+        execution_info = OSWorldExecutionInfo.model_validate(raw)
         return OSWorldTask(
-            metadata=metadata,
+            metadata=self.metadata,
+            execution_info=execution_info,
             tool_config=self.tool_config or ComputerConfig(),
-            infra=self.infra,
             runtime_context=runtime_context,
             container_backend=container_backend,
             use_som=self.use_som,
@@ -179,28 +239,61 @@ class OSWorldTaskConfig(TaskConfig):
 
 
 # ---------------------------------------------------------------------------
-# OSWorldBenchmark
+# OSWorldBenchmark (runtime pair)
 # ---------------------------------------------------------------------------
 
 
-class OSWorldBenchmark(Benchmark):
+class OSWorldBenchmark(Benchmark["OSWorldBenchmarkConfig"]):
+    """Runtime pair — owns the infra reference passed to ``make(infra)`` and
+    publishes it into ``runtime_context["infra"]`` so per-task VM launches
+    flow naturally through ``Task.runtime_context``.
     """
-    CUBE benchmark wrapping the OSWorld desktop-automation evaluation suite.
+
+    def __init__(self, config: "OSWorldBenchmarkConfig", infra: InfraConfig | None = None) -> None:
+        super().__init__(config)
+        self._infra = infra
+
+    def _setup(self) -> None:
+        provider = type(self._infra).__name__ if self._infra is not None else "<none>"
+        logger.info(f"Setting up OSWorldBenchmark (provider={provider})...")
+
+        self._runtime_context["osworld"] = True
+        if self._infra is not None:
+            self._runtime_context["infra"] = self._infra
+
+        logger.info("OSWorldBenchmark ready with %d tasks", self.config.num_tasks)
+
+    def close(self) -> None:
+        """No global VM resources to release here — VM lifecycle is per-task."""
+        logger.info("Closing OSWorldBenchmark — no global resources to release")
+
+
+# ---------------------------------------------------------------------------
+# OSWorldBenchmarkConfig
+# ---------------------------------------------------------------------------
+
+
+class OSWorldBenchmarkConfig(BenchmarkConfig[OSWorldTaskMetadata]):
+    """
+    CUBE BenchmarkConfig wrapping the OSWorld desktop-automation evaluation suite.
 
     Reference: https://github.com/xlang-ai/OSWorld
 
-    Class-level attributes (required by cube.benchmark.Benchmark):
+    Class-level attributes (required by cube.benchmark.BenchmarkConfig):
         benchmark_metadata:  ClassVar[BenchmarkMetadata]
-        task_metadata:       ClassVar[dict[str, OSWorldTaskMetadata]]
+        task_metadata:       ClassVar[dict[str, OSWorldTaskMetadata]]  (auto-loaded from task_metadata.json)
         task_config_class:   type[TaskConfig] = OSWorldTaskConfig
+        benchmark_class:     type[Benchmark]  = OSWorldBenchmark
 
-    Constructor params (set by benchmark users):
-        default_tool_config:  ComputerConfig  — how to connect to the VM (action_space selects variant)
-        use_som:              bool            — Set-of-Marks mode for all tasks
+    Instance fields:
+        tool_config:  ComputerConfig (action_space selects variant)
+        use_som:      bool — Set-of-Marks mode for all tasks
+        resources:    by default declares OSWORLD_UBUNTU_RESOURCE so make(infra)
+                      provisions the VM image idempotently.
 
-    To filter by domain or any other metadata field, call subset_from_glob() after setup():
-        bench.setup()
-        chrome_bench = bench.subset_from_glob("domain", "chrome")
+    Filter by any metadata field::
+
+        cfg = OSWorldBenchmarkConfig().subset_from_glob("domain", "chrome")
     """
 
     # ------------------------------------------------------------------
@@ -227,20 +320,23 @@ class OSWorldBenchmark(Benchmark):
             "test_infeasible": ("test_sets", "*'test_infeasible'*"),
         },
     )
-    task_metadata: ClassVar[dict[str, OSWorldTaskMetadata]]  # type: ignore[assignment] - narrowed subtype
+    task_metadata: ClassVar[dict[str, TaskMetadata]]
+    """Auto-loaded from task_metadata.json shipped next to this module. Values are
+    ``OSWorldTaskMetadata`` instances by way of the ``_type`` discriminator;
+    ``self.tasks()`` narrows the read view to ``Mapping[str, OSWorldTaskMetadata]``."""
+
     task_config_class: ClassVar[type[TaskConfig]] = OSWorldTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = OSWorldBenchmark
 
     # ------------------------------------------------------------------
     # Instance fields
     # ------------------------------------------------------------------
-    default_tool_config: ComputerConfig = ComputerConfig()  # type: ignore[assignment] - narrowed subtype
+
+    tool_config: ComputerConfig = ComputerConfig()  # type: ignore[assignment]
+    """Default computer-tool config; overridden per-construction."""
 
     use_som: bool = False
     """Enable Set-of-Marks annotation for all tasks in this benchmark run."""
-
-    infra: InfraConfig = Field(default_factory=LocalInfraConfig)
-    """InfraConfig (AWSInfraConfig, AzureInfraConfig, LocalInfraConfig).
-    Each task gets a fresh VM launched from the provisioned image."""
 
     resources: list[ResourceConfig] = [OSWORLD_UBUNTU_RESOURCE]
     """VM image required to run OSWorld tasks (declared for the harness resource lifecycle)."""
@@ -248,84 +344,46 @@ class OSWorldBenchmark(Benchmark):
     # ------------------------------------------------------------------
     # overrides
     # ------------------------------------------------------------------
+
     @classmethod
     def cache_dir(cls) -> Path:
-        """set to OSWORLD_BASE_DIR so that task execution info and repo clone are stored under the same directory"""
+        """OSWORLD_BASE_DIR — the OSWorld repo clone lives here. The per-task
+        execution cache is reachable via
+        ``OSWorldTaskConfig.task_execution_cache_dir()`` which returns
+        ``OSWORLD_BASE_DIR / 'tasks_execution_info'`` (also under this tree).
+        """
         return OSWORLD_BASE_DIR
 
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
-        """Yield OSWorldTaskConfig objects, injecting infra and use_som from the benchmark."""
-        tc_cls = self.task_config_class
-        assert issubclass(tc_cls, OSWorldTaskConfig)
-        for tm in self.task_metadata.values():
-            yield tc_cls(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
-                seed=None,
+    def make(self, infra: InfraConfig | None = None) -> OSWorldBenchmark:
+        """Override to forward ``infra`` into the runtime constructor.
+
+        Per-cube override — cube-standard's base ``make(infra)`` only passes
+        ``config`` to the runtime, but OSWorld needs ``infra`` on the runtime so
+        ``_setup()`` can publish it into ``runtime_context["infra"]`` for per-task
+        VM launches. Provisioning is mirrored from the base implementation.
+        """
+        from cube import LocalInfraConfig
+
+        resolved_infra = infra or LocalInfraConfig()
+        if self.resources:
+            for resource in self.resources:
+                if resolved_infra.provision_status(resource) == "ready":
+                    logger.info("Resource %s already provisioned on %s", resource.name, resolved_infra.fingerprint())
+                    continue
+                logger.info("Provisioning resource %s on %s...", resource.name, resolved_infra.fingerprint())
+                resolved_infra.provision(resource)
+        bench = OSWorldBenchmark(config=self, infra=resolved_infra)
+        bench.setup()
+        return bench
+
+    def get_task_configs(self) -> Generator[OSWorldTaskConfig, None, None]:
+        """Yield OSWorldTaskConfig objects, propagating use_som from the benchmark."""
+        for tm in self.tasks().values():
+            yield OSWorldTaskConfig(
+                metadata=tm,
+                tool_config=self.tool_config,
                 use_som=self.use_som,
-                infra=self.infra,
             )
-
-    # ------------------------------------------------------------------
-    # _setup()
-    # ------------------------------------------------------------------
-
-    def _setup(self) -> None:
-        """Prepare benchmark for task execution. Essentially a no-op in this case."""
-        provider = type(self.infra).__name__
-        logger.info(f"Setting up OSWorldBenchmark (provider={provider})...")
-
-        # Setting up infrastructure (provisioning VM images)
-        for resource in self.resources:
-            if self.infra.provision_status(resource) == "ready":
-                logger.info("Resource %s already provisioned", resource.name)
-                continue
-            logger.info("Provisioning resource %s...", resource.name)
-            self.infra.provision(resource)
-
-        # OSWorld manages its own VM lifecycle via desktop_env — no shared runtime
-        # infrastructure is needed. Populate _runtime_context to suppress the
-        # Benchmark.setup() warning that fires when it is left empty.
-        self._runtime_context = {"osworld": True}
-        logger.info(f"OSWorldBenchmark ready with {len(self.task_metadata)} tasks")
-
-    def close(self) -> None:
-        """
-        Clean up benchmark resources.
-
-        VM teardown is handled per-task by Computer.close() / OSWorldTask.close().
-        No global VM resources to release here.
-        """
-        logger.info("Closing OSWorldBenchmark — no global resources to release")
-
-    @staticmethod
-    def _fix_config_paths(config: list[dict]) -> list[dict]:
-        """
-        Prepend OSWorld repo path to settings_file paths in config items.
-
-        Keeps relative paths working regardless of CWD.
-        """
-        result = deepcopy(config)
-        for config_item in result:
-            params = config_item.get("parameters", {})
-            if "settings_file" in params:
-                params["settings_file"] = str(OSWORLD_REPO_DIR / params["settings_file"])
-        return result
-
-    @staticmethod
-    def _clone_osworld_repo() -> None:
-        """Clone and pin the OSWorld repository to OSWORLD_COMMIT."""
-        OSWORLD_BASE_DIR.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["git", "clone", "https://github.com/xlang-ai/OSWorld", str(OSWORLD_REPO_DIR)],
-            check=True,
-        )
-        subprocess.run(
-            ["git", "checkout", OSWORLD_COMMIT],
-            cwd=str(OSWORLD_REPO_DIR),
-            check=True,
-        )
-        OSWORLD_VM_DIR.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
     # install() / uninstall()
@@ -347,7 +405,7 @@ class OSWorldBenchmark(Benchmark):
         logger.info("Installing OSWorld benchmark...")
         # Repo is needed at task execution time; always ensure it is present.
         if not OSWORLD_REPO_DIR.exists():
-            OSWorldBenchmark._clone_osworld_repo()
+            _clone_osworld_repo()
             logger.info(f"OSWorld repo cloned to {OSWORLD_REPO_DIR}")
         else:
             logger.info(f"OSWorld repo already present at {OSWORLD_REPO_DIR}")
@@ -357,7 +415,7 @@ class OSWorldBenchmark(Benchmark):
 
         exec_info_by_id_abs = _build_task_execution_info_from_repo()
 
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         exec_cache_dir.mkdir(parents=True, exist_ok=True)
         written = 0
         for task_id, exec_info in exec_info_by_id_abs.items():
@@ -374,12 +432,12 @@ class OSWorldBenchmark(Benchmark):
             written += 1
 
         logger.info(f"Wrote {written} execution cache files to {exec_cache_dir}")
-        logger.info("OSWorldBenchmark.install() done")
+        logger.info("OSWorldBenchmarkConfig.install() done")
 
     @classmethod
     def uninstall(cls) -> None:
         """Remove the execution cache and the cloned OSWorld repo."""
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists():
             shutil.rmtree(exec_cache_dir)
             logger.info(f"Removed execution cache at {exec_cache_dir}")

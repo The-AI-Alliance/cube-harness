@@ -1,6 +1,6 @@
 # See https://pre-commit.com for more information
 # Install locally:
-#   pre-commit install --hook-type pre-commit --hook-type commit-msg
+#   pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg
 # Run manually:
 #   pre-commit run --all-files
 
@@ -27,6 +27,20 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-local-path-sources
+        name: Block local path = "..." in pyproject.toml
+        entry: .githooks/check-no-local-path.sh
+        language: script
+        stages: [pre-commit]
+        pass_filenames: false
+
+      - id: dco-auto-signoff
+        name: Auto-add DCO Signed-off-by line
+        entry: .githooks/auto-signoff.sh
+        language: script
+        stages: [prepare-commit-msg]
+        pass_filenames: true
+
       - id: dco-signoff
         name: Require DCO Signed-off-by line
         entry: python .github/scripts/check_dco_signoff.py

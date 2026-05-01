@@ -10,6 +10,11 @@ from cube_harness.core import AgentOutput
 class AgentConfig(TypedBaseModel, ABC):
     """Configuration for creating an Agent."""
 
+    @property
+    def agent_name(self) -> str:
+        """Human-readable name for this agent configuration, used in xray and logging."""
+        return type(self).__name__
+
     @abstractmethod
     def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> "Agent":
         pass

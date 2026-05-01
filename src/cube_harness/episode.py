@@ -1,5 +1,6 @@
 import logging
 import time
+import warnings
 from pathlib import Path
 from typing import Callable, Self
 
@@ -12,6 +13,9 @@ from termcolor import colored
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
+from cube_harness.episode_logs import trajectory_log_id
+from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
+from cube_harness.eval_log import EpisodeRecord
 from cube_harness.metrics.tracer import get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -41,11 +45,11 @@ class Episode:
         output_dir: Path,
         agent_config: AgentConfig,
         task_config: TaskConfig,
-        exp_name: str = "default",
-        max_steps: int = MAX_STEPS,
-        storage: Storage | None = None,
-        runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
+        exp_name: str,
+        max_steps: int,
+        storage: Storage | None,
+        runtime_context: RuntimeContext | None,
+        container_backend: ContainerBackend | None,
     ) -> None:
         self.config = EpisodeConfig(
             id=id,
@@ -90,7 +94,14 @@ class Episode:
         if benchmark is not None and not isinstance(benchmark, Benchmark):
             raise ValueError(f"benchmark must be a cube.benchmark.Benchmark instance or None, got {type(benchmark)}")
         runtime_context = benchmark._runtime_context if benchmark is not None else None
-        container_backend = benchmark.container_backend if benchmark is not None else None
+        # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
+        # reading it raises a DeprecationWarning. Forward it for backwards
+        # compatibility until cube-standard removes it.
+        container_backend = None
+        if benchmark is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                container_backend = benchmark.config.container_backend
         return cls(
             id=episode_config.id,
             output_dir=episode_config.output_dir,
@@ -115,36 +126,76 @@ class Episode:
         action_set = task.action_set
         step_fn = task.step
         close_fn = task.close
+        evaluate_fn = task.evaluate
 
         def setup_fn() -> EnvironmentOutput:
             obs, info = task.reset()
             return EnvironmentOutput(obs=obs, info=info)
 
         agent = self.config.agent_config.make(action_set, task_id=self.config.task_config.task_id)
-        return self._run_loop(setup_fn, step_fn, close_fn, agent)
+        # action_schemas is read by eval_log.AgentInfo (feat/atlas-eval-log) to populate
+        # the tool list in structured evaluation records without re-instantiating the task.
+        extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
+        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, agent, extra_metadata=extra_metadata)
+
+    def _open_status(self, trajectory_id: str) -> EpisodeStatus:
+        """Initialise `status.json` for this attempt.
+
+        If the prior status is terminal and this Episode opted in to overwrite
+        (a legitimate retry), archive the prior directory so its terminal
+        `status.json` survives. Without `allow_overwrite`, `save_trajectory`
+        will later raise — preserving the safety guard against accidental
+        double-runs.
+        """
+        prior = self.storage.read_episode_status(trajectory_id)
+        if prior is not None and prior.status in TERMINAL_STATUSES and self.allow_overwrite:
+            ep_dir = self.storage._episode_dir(trajectory_id)
+            if ep_dir.exists():
+                self.storage._archive_episode(ep_dir)
+        now = time.time()
+        ep_status = EpisodeStatus(
+            status="RUNNING",
+            task_id=self.config.task_config.task_id,
+            episode_id=self.config.id,
+            started_at=now,
+            last_heartbeat_at=now,
+            current_step=0,
+            retry_count=next_retry_count(prior),
+        )
+        self.storage.write_episode_status(trajectory_id, ep_status)
+        return ep_status
 
     def _run_loop(
         self,
         setup_fn: Callable[[], EnvironmentOutput],
         step_fn: Callable,
+        evaluate_fn: Callable,
         close_fn: Callable,
         agent,
+        extra_metadata: dict | None = None,
     ) -> Trajectory:
         """Run loop for the agent on the task."""
         task_id = self.config.task_config.task_id
+        trajectory_id = trajectory_log_id(task_id, self.config.id)
         tracer = get_tracer(self.config.exp_name)
+
+        # Heartbeat 1: covers stuck setup_fn (env reset, container boot).
+        ep_status = self._open_status(trajectory_id)
+
+        trajectory: Trajectory | None = None
         try:
             with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
-                start_time = time.time()
+                start_time = ep_status.started_at
                 env_output = setup_fn()
-                agent_name = type(self.config.agent_config).__name__
+                agent_name = self.config.agent_config.agent_name
                 trajectory = Trajectory(
-                    id=f"{task_id}_ep{self.config.id}",
+                    id=trajectory_id,
                     steps=[TrajectoryStep(output=env_output, start_time=start_time, end_time=time.time())],
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
                         **env_output.info,
+                        **(extra_metadata or {}),
                     },
                     start_time=start_time,
                 )
@@ -158,6 +209,11 @@ class Episode:
                 logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
+                    # Heartbeat 2: start of each turn, before agent.step() and step_fn().
+                    ep_status.last_heartbeat_at = time.time()
+                    ep_status.current_step = turns + 1
+                    self.storage.write_episode_status(trajectory_id, ep_status)
+
                     with tracer.step(f"turn_{turns}") as span:
                         ts = time.time()
                         try:
@@ -169,6 +225,7 @@ class Episode:
                             self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                             summary_proc.on_step(len(trajectory.steps), agent_step)
                             trajectory.steps.append(agent_step)
+                            ep_status.had_step_errors = True
                             raise e
 
                         self.log_agent_output(turns, agent_output)
@@ -176,6 +233,8 @@ class Episode:
                         self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), agent_step)
                         trajectory.steps.append(agent_step)
+                        if agent_output.error is not None:
+                            ep_status.had_step_errors = True
 
                         if not agent_output.actions and not agent_output.error:
                             logger.info(colored("Agent returned no actions — stopping episode.", "yellow"))
@@ -191,6 +250,7 @@ class Episode:
                             self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                             summary_proc.on_step(len(trajectory.steps), env_step)
                             trajectory.steps.append(env_step)
+                            ep_status.had_step_errors = True
                             raise e
 
                         logger.info(
@@ -202,22 +262,67 @@ class Episode:
                         self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
                         summary_proc.on_step(len(trajectory.steps), env_step)
                         trajectory.steps.append(env_step)
+                        if env_output.error is not None:
+                            ep_status.had_step_errors = True
                         span.set_attribute("done", env_output.done)
                         span.set_attribute("reward", env_output.reward)
                         turns += 1
+                # Loop exited without `done=True` — either max_steps fired or the agent
+                # gave up. cube's task.step only calls evaluate() when done or
+                # validate_per_step, so we'd otherwise return reward=0.0. Force one
+                # final evaluation and save it as a synthetic env step so the
+                # trajectory's last_env_step carries the real reward.
+                max_steps_reached = turns >= self.config.max_steps and not env_output.done
+                if not env_output.done:
+                    try:
+                        eval_ts = time.time()
+                        forced_reward, forced_info = evaluate_fn(env_output.obs)
+                        env_output = EnvironmentOutput(
+                            obs=env_output.obs,
+                            reward=forced_reward,
+                            done=env_output.done,
+                            info={**env_output.info, **forced_info},
+                            error=env_output.error,
+                        )
+                        forced_step = TrajectoryStep(output=env_output, start_time=eval_ts, end_time=time.time())
+                        self.storage.save_step(forced_step, trajectory.id, len(trajectory.steps))
+                        summary_proc.on_step(len(trajectory.steps), forced_step)
+                        trajectory.steps.append(forced_step)
+                    except Exception:
+                        logger.exception("Final evaluate() raised; trajectory keeps last step's reward")
                 trajectory.end_time = time.time()
                 trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
                 trajectory.summary_stats = _compute_summary_stats(trajectory)
                 self.storage.save_trajectory(trajectory)
                 summary_proc.on_episode_complete(trajectory, self.storage)
+                try:
+                    ep_record = EpisodeRecord.from_trajectory(
+                        trajectory,
+                        evaluation_id=self.config.output_dir.name,
+                        task_config=self.config.task_config,
+                    )
+                    ep_record.write(self.config.output_dir)
+                except Exception:
+                    logger.warning("Failed to write episode record", exc_info=True)
                 logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
                 final_reward = trajectory.last_env_step().reward
+                ep_status.reward = final_reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
+            ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
+            ep_status.status = "FAILED"
+            ep_status.error_type = type(e).__name__
+            ep_status.error_message = str(e)[:500]
             raise e
         finally:
+            ep_status.ended_at = time.time()
+            ep_status.last_heartbeat_at = ep_status.ended_at
+            try:
+                self.storage.write_episode_status(trajectory_id, ep_status)
+            except Exception:
+                logger.exception("Failed to write final episode status")
             close_fn()
             tracer.shutdown()
         return trajectory

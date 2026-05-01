@@ -8,7 +8,7 @@ from typing import Any, List, Literal, override
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import Action, ActionSchema, EnvironmentOutput, Observation
+from cube.core import Action, EnvironmentOutput, Observation
 from cube.task import Task, TaskConfig, TaskMetadata
 from cube.tool import Toolbox
 from cube.tools.browser import BrowserTool
@@ -169,14 +169,6 @@ class WorkArenaTask(Task):
         _reward, done, _user_message, _task_info = self._validate()
         return done
 
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        """Filter actions based on available tools."""
-        if self._chat_tool is None:
-            actions = [a for a in actions if a.name != "send_message"]
-        if self._infeasible_tool is None:
-            actions = [a for a in actions if a.name != "report_infeasible"]
-        return actions
-
     def close(self) -> None:
         """Teardown the WorkArena task and close the tool."""
         if self._workarena_task is not None:
@@ -189,7 +181,7 @@ class WorkArenaTask(Task):
         super().close()
 
 
-class WorkArenaTaskConfig(TaskConfig):
+class WorkArenaTaskConfig(TaskConfig[WorkArenaTaskMetadata]):
     """Serializable configuration for a single WorkArena task."""
 
     def make(
@@ -197,14 +189,10 @@ class WorkArenaTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> WorkArenaTask:
-        # Import here to avoid circular import (benchmark imports task)
-        from workarena_cube.benchmark import WorkArenaBenchmark
-
         _ = runtime_context, container_backend
-        meta = WorkArenaBenchmark.task_metadata[self.task_id]
         assert self.tool_config, f"WorkArenaTaskConfig requires a tool_config, got {self.tool_config}"
         return WorkArenaTask(
-            metadata=meta,
+            metadata=self.metadata,
             tool_config=self.tool_config,
             seed=self.seed if self.seed is not None else 42,
         )

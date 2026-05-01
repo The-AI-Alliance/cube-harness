@@ -13,7 +13,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "4.3",
@@ -34,7 +33,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "4.3",
@@ -55,7 +53,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -76,7 +73,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "1-4 hours",
     "version": "5.0",
@@ -97,7 +93,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -118,7 +113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "1-4 hours",
     "version": "5.0",
@@ -139,7 +133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -160,7 +153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -181,7 +173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -202,7 +193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "<15 min fix",
     "version": "5.1",
@@ -223,7 +213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -244,7 +233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "1-4 hours",
     "version": "5.1",
@@ -265,7 +253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -286,7 +273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -307,7 +293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "5.2",
@@ -328,7 +313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "<15 min fix",
     "version": "5.2",
@@ -349,7 +333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "<15 min fix",
     "version": "1.3",
@@ -370,7 +353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "<15 min fix",
     "version": "1.3",
@@ -391,7 +373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "1.3",
@@ -412,7 +393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "1.3",
@@ -433,7 +413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -454,7 +433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "astropy/astropy",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -475,7 +453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "2.2",
@@ -496,7 +473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.0",
@@ -517,7 +493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -538,7 +513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -559,7 +533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -580,7 +553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -601,7 +573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -622,7 +593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -643,7 +613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -664,7 +633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -685,7 +653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -706,7 +673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -727,7 +693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.0",
@@ -748,7 +713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -769,7 +733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -790,7 +753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -811,7 +773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -832,7 +793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -853,7 +813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -874,7 +833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -895,7 +853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -916,7 +873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -937,7 +893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -958,7 +913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -979,7 +933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1000,7 +953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.0",
@@ -1021,7 +973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -1042,7 +993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -1063,7 +1013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1084,7 +1033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -1105,7 +1053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1126,7 +1073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1147,7 +1093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -1168,7 +1113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -1189,7 +1133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1210,7 +1153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1231,7 +1173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1252,7 +1193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.0",
@@ -1273,7 +1213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1294,7 +1233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1315,7 +1253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1336,7 +1273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1357,7 +1293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1378,7 +1313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.1",
@@ -1399,7 +1333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1420,7 +1353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1441,7 +1373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1462,7 +1393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1483,7 +1413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1504,7 +1433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1525,7 +1453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1546,7 +1473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1567,7 +1493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1588,7 +1513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1609,7 +1533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1630,7 +1553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1651,7 +1573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1672,7 +1593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1693,7 +1613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1714,7 +1633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.1",
@@ -1735,7 +1653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1756,7 +1673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1777,7 +1693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1798,7 +1713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.1",
@@ -1819,7 +1733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1840,7 +1753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -1861,7 +1773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -1882,7 +1793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1903,7 +1813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -1924,7 +1833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -1945,7 +1853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -1966,7 +1873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -1987,7 +1893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2008,7 +1913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2029,7 +1933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2050,7 +1953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2071,7 +1973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2092,7 +1993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2113,7 +2013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.2",
@@ -2134,7 +2033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2155,7 +2053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2176,7 +2073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.2",
@@ -2197,7 +2093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2218,7 +2113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2239,7 +2133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2260,7 +2153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2281,7 +2173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.2",
@@ -2302,7 +2193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2323,7 +2213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2344,7 +2233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2365,7 +2253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2386,7 +2273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2407,7 +2293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2428,7 +2313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.2",
@@ -2449,7 +2333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2470,7 +2353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2491,7 +2373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2512,7 +2393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2533,7 +2413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2554,7 +2433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2575,7 +2453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2596,7 +2473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2617,7 +2493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2638,7 +2513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2659,7 +2533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2680,7 +2553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2701,7 +2573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2722,7 +2593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -2743,7 +2613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2764,7 +2633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -2785,7 +2653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -2806,7 +2673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "3.2",
@@ -2827,7 +2693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -2848,7 +2713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -2869,7 +2733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -2890,7 +2753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.0",
@@ -2911,7 +2773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.0",
@@ -2932,7 +2793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -2953,7 +2813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -2974,7 +2833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -2995,7 +2853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3016,7 +2873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3037,7 +2893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3058,7 +2913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3079,7 +2933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3100,7 +2953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3121,7 +2973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3142,7 +2993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3163,7 +3013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3184,7 +3033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3205,7 +3053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3226,7 +3073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3247,7 +3093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3268,7 +3113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3289,7 +3133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3310,7 +3153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3331,7 +3173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3352,7 +3193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3373,7 +3213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3394,7 +3233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3415,7 +3253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3436,7 +3273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.0",
@@ -3457,7 +3293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -3478,7 +3313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3499,7 +3333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3520,7 +3353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3541,7 +3373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3562,7 +3393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3583,7 +3413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3604,7 +3433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.0",
@@ -3625,7 +3453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3646,7 +3473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3667,7 +3493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3688,7 +3513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3709,7 +3533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3730,7 +3553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3751,7 +3573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3772,7 +3593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3793,7 +3613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.1",
@@ -3814,7 +3633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3835,7 +3653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3856,7 +3673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.1",
@@ -3877,7 +3693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3898,7 +3713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3919,7 +3733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -3940,7 +3753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3961,7 +3773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -3982,7 +3793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4003,7 +3813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -4024,7 +3833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4045,7 +3853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -4066,7 +3873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -4087,7 +3893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.1",
@@ -4108,7 +3913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4129,7 +3933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4150,7 +3953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4171,7 +3973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4192,7 +3993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -4213,7 +4013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -4234,7 +4033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.1",
@@ -4255,7 +4053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.1",
@@ -4276,7 +4073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4297,7 +4093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4318,7 +4113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4339,7 +4133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4360,7 +4153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4381,7 +4173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4402,7 +4193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4423,7 +4213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4444,7 +4233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.2",
@@ -4465,7 +4253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4486,7 +4273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4507,7 +4293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4528,7 +4313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4549,7 +4333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4570,7 +4353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4591,7 +4373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4612,7 +4393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4633,7 +4413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4654,7 +4433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4675,7 +4453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4696,7 +4473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "4.2",
@@ -4717,7 +4493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -4738,7 +4513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4759,7 +4533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -4780,7 +4553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -4801,7 +4573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -4822,7 +4593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -4843,7 +4613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -4864,7 +4633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -4885,7 +4653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "5.0",
@@ -4906,7 +4673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -4927,7 +4693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -4948,7 +4713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -4969,7 +4733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "1-4 hours",
     "version": "5.0",
@@ -4990,7 +4753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -5011,7 +4773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5032,7 +4793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5053,7 +4813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5074,7 +4833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -5095,7 +4853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5116,7 +4873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5137,7 +4893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -5158,7 +4913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5179,7 +4933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5200,7 +4953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5221,7 +4973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -5242,7 +4993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -5263,7 +5013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -5284,7 +5033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "15 min - 1 hour",
     "version": "1.11",
@@ -5305,7 +5053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "django/django",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -5326,7 +5073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -5347,7 +5093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -5368,7 +5113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.4",
@@ -5389,7 +5133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.4",
@@ -5410,7 +5153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.4",
@@ -5431,7 +5173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.4",
@@ -5452,7 +5193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.4",
@@ -5473,7 +5213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.5",
@@ -5494,7 +5233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.5",
@@ -5515,7 +5253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.5",
@@ -5536,7 +5273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.5",
@@ -5557,7 +5293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.5",
@@ -5578,7 +5313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.5",
@@ -5599,7 +5333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.5",
@@ -5620,7 +5353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.6",
@@ -5641,7 +5373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.6",
@@ -5662,7 +5393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.6",
@@ -5683,7 +5413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.6",
@@ -5704,7 +5433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.6",
@@ -5725,7 +5453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.6",
@@ -5746,7 +5473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.6",
@@ -5767,7 +5493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.6",
@@ -5788,7 +5513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.6",
@@ -5809,7 +5533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.7",
@@ -5830,7 +5553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.7",
@@ -5851,7 +5573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.7",
@@ -5872,7 +5593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.7",
@@ -5893,7 +5613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.7",
@@ -5914,7 +5633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.7",
@@ -5935,7 +5653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.7",
@@ -5956,7 +5673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "<15 min fix",
     "version": "3.7",
@@ -5977,7 +5693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.7",
@@ -5998,7 +5713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.7",
@@ -6019,7 +5733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "matplotlib/matplotlib",
     "difficulty": "15 min - 1 hour",
     "version": "3.7",
@@ -6040,7 +5753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "mwaskom/seaborn",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6061,7 +5773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "mwaskom/seaborn",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6082,7 +5793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pallets/flask",
     "difficulty": "<15 min fix",
     "version": "2.3",
@@ -6103,7 +5813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "<15 min fix",
     "version": "1.1",
@@ -6124,7 +5833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "<15 min fix",
     "version": "2.0",
@@ -6145,7 +5853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "<15 min fix",
     "version": "2.0",
@@ -6166,7 +5873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "<15 min fix",
     "version": "2.3",
@@ -6187,7 +5893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "<15 min fix",
     "version": "2.4",
@@ -6208,7 +5913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "15 min - 1 hour",
     "version": "2.9",
@@ -6229,7 +5933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "<15 min fix",
     "version": "2.26",
@@ -6250,7 +5953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "psf/requests",
     "difficulty": "15 min - 1 hour",
     "version": "2.27",
@@ -6271,7 +5973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6292,7 +5993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6313,7 +6013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6334,7 +6033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6355,7 +6053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6376,7 +6073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "1-4 hours",
     "version": "0.12",
@@ -6397,7 +6093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "<15 min fix",
     "version": "0.12",
@@ -6418,7 +6113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "<15 min fix",
     "version": "0.12",
@@ -6439,7 +6133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "<15 min fix",
     "version": "0.12",
@@ -6460,7 +6153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "<15 min fix",
     "version": "0.12",
@@ -6481,7 +6173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6502,7 +6193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6523,7 +6213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "0.12",
@@ -6544,7 +6233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "<15 min fix",
     "version": "2022.03",
@@ -6565,7 +6253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.03",
@@ -6586,7 +6273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.06",
@@ -6607,7 +6293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.06",
@@ -6628,7 +6313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.06",
@@ -6649,7 +6333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": ">4 hours",
     "version": "2022.06",
@@ -6670,7 +6353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.09",
@@ -6691,7 +6373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.09",
@@ -6712,7 +6393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pydata/xarray",
     "difficulty": "15 min - 1 hour",
     "version": "2022.09",
@@ -6733,7 +6413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "1-4 hours",
     "version": "2.9",
@@ -6754,7 +6433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "15 min - 1 hour",
     "version": "2.9",
@@ -6775,7 +6453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "15 min - 1 hour",
     "version": "2.10",
@@ -6796,7 +6473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "<15 min fix",
     "version": "2.10",
@@ -6817,7 +6493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "15 min - 1 hour",
     "version": "2.14",
@@ -6838,7 +6513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "15 min - 1 hour",
     "version": "2.14",
@@ -6859,7 +6533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "<15 min fix",
     "version": "2.15",
@@ -6880,7 +6553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "15 min - 1 hour",
     "version": "2.15",
@@ -6901,7 +6573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "<15 min fix",
     "version": "2.15",
@@ -6922,7 +6593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pylint-dev/pylint",
     "difficulty": "1-4 hours",
     "version": "3.0",
@@ -6943,7 +6613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "7.2",
@@ -6964,7 +6633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "7.2",
@@ -6985,7 +6653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "1-4 hours",
     "version": "7.2",
@@ -7006,7 +6673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "4.5",
@@ -7027,7 +6693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -7048,7 +6713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "1-4 hours",
     "version": "5.1",
@@ -7069,7 +6733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "4.6",
@@ -7090,7 +6753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "5.1",
@@ -7111,7 +6773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "1-4 hours",
     "version": "5.2",
@@ -7132,7 +6793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "5.2",
@@ -7153,7 +6813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "5.4",
@@ -7174,7 +6833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "5.4",
@@ -7195,7 +6853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "5.4",
@@ -7216,7 +6873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "5.4",
@@ -7237,7 +6893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "6.0",
@@ -7258,7 +6913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "6.0",
@@ -7279,7 +6933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "6.0",
@@ -7300,7 +6953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "<15 min fix",
     "version": "6.2",
@@ -7321,7 +6973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "pytest-dev/pytest",
     "difficulty": "15 min - 1 hour",
     "version": "6.3",
@@ -7342,7 +6993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.20",
@@ -7363,7 +7013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.20",
@@ -7384,7 +7033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.20",
@@ -7405,7 +7053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.20",
@@ -7426,7 +7073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.20",
@@ -7447,7 +7093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.21",
@@ -7468,7 +7113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7489,7 +7133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.21",
@@ -7510,7 +7153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.21",
@@ -7531,7 +7173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.21",
@@ -7552,7 +7193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.21",
@@ -7573,7 +7213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.21",
@@ -7594,7 +7233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.21",
@@ -7615,7 +7253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.21",
@@ -7636,7 +7273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.22",
@@ -7657,7 +7293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7678,7 +7313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7699,7 +7333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.22",
@@ -7720,7 +7353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.22",
@@ -7741,7 +7373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7762,7 +7393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7783,7 +7413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7804,7 +7433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "0.22",
@@ -7825,7 +7453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -7846,7 +7473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "1-4 hours",
     "version": "1.3",
@@ -7867,7 +7493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "1.3",
@@ -7888,7 +7513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "1.3",
@@ -7909,7 +7533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "1.3",
@@ -7930,7 +7553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "<15 min fix",
     "version": "1.3",
@@ -7951,7 +7573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "1.3",
@@ -7972,7 +7593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "1.3",
@@ -7993,7 +7613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "scikit-learn/scikit-learn",
     "difficulty": "15 min - 1 hour",
     "version": "0.22",
@@ -8014,7 +7633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -8035,7 +7653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "5.0",
@@ -8056,7 +7673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "5.1",
@@ -8077,7 +7693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "5.0",
@@ -8098,7 +7713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "7.2",
@@ -8119,7 +7733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "5.2",
@@ -8140,7 +7753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "7.1",
@@ -8161,7 +7773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "1-4 hours",
     "version": "7.2",
@@ -8182,7 +7793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -8203,7 +7813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.0",
@@ -8224,7 +7833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.1",
@@ -8245,7 +7853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": ">4 hours",
     "version": "3.1",
@@ -8266,7 +7873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -8287,7 +7893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.1",
@@ -8308,7 +7913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -8329,7 +7933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.2",
@@ -8350,7 +7953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -8371,7 +7973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -8392,7 +7993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.2",
@@ -8413,7 +8013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.3",
@@ -8434,7 +8033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.3",
@@ -8455,7 +8053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.3",
@@ -8476,7 +8073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.4",
@@ -8497,7 +8093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.4",
@@ -8518,7 +8113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "1-4 hours",
     "version": "3.4",
@@ -8539,7 +8133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.4",
@@ -8560,7 +8153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "3.5",
@@ -8581,7 +8173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.5",
@@ -8602,7 +8193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.5",
@@ -8623,7 +8213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "4.0",
@@ -8644,7 +8233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "3.5",
@@ -8665,7 +8253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "1-4 hours",
     "version": "4.1",
@@ -8686,7 +8273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -8707,7 +8293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -8728,7 +8313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -8749,7 +8333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -8770,7 +8353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.1",
@@ -8791,7 +8373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "1-4 hours",
     "version": "4.2",
@@ -8812,7 +8393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.2",
@@ -8833,7 +8413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "4.2",
@@ -8854,7 +8433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "4.3",
@@ -8875,7 +8453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "15 min - 1 hour",
     "version": "4.3",
@@ -8896,7 +8473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.3",
@@ -8917,7 +8493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sphinx-doc/sphinx",
     "difficulty": "<15 min fix",
     "version": "4.3",
@@ -8938,7 +8513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.0",
@@ -8959,7 +8533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.0",
@@ -8980,7 +8553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.0",
@@ -9001,7 +8573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.0",
@@ -9022,7 +8593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "1-4 hours",
     "version": "1.0",
@@ -9043,7 +8613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9064,7 +8633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9085,7 +8653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.1",
@@ -9106,7 +8673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.1",
@@ -9127,7 +8693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9148,7 +8713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9169,7 +8733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9190,7 +8753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9211,7 +8773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9232,7 +8793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "1-4 hours",
     "version": "1.1",
@@ -9253,7 +8813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9274,7 +8833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": ">4 hours",
     "version": "1.1",
@@ -9295,7 +8853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9316,7 +8873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "1-4 hours",
     "version": "1.1",
@@ -9337,7 +8893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.1",
@@ -9358,7 +8913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.1",
@@ -9379,7 +8933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.2",
@@ -9400,7 +8953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.2",
@@ -9421,7 +8973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.4",
@@ -9442,7 +8993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.4",
@@ -9463,7 +9013,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.4",
@@ -9484,7 +9033,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.4",
@@ -9505,7 +9053,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.4",
@@ -9526,7 +9073,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.4",
@@ -9547,7 +9093,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.5",
@@ -9568,7 +9113,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "1-4 hours",
     "version": "1.5",
@@ -9589,7 +9133,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.5",
@@ -9610,7 +9153,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.5",
@@ -9631,7 +9173,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.5",
@@ -9652,7 +9193,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.5",
@@ -9673,7 +9213,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.5",
@@ -9694,7 +9233,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "1-4 hours",
     "version": "1.5",
@@ -9715,7 +9253,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.5",
@@ -9736,7 +9273,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.6",
@@ -9757,7 +9293,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "1-4 hours",
     "version": "1.6",
@@ -9778,7 +9313,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.6",
@@ -9799,7 +9333,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.6",
@@ -9820,7 +9353,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.5",
@@ -9841,7 +9373,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.6",
@@ -9862,7 +9393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.7",
@@ -9883,7 +9413,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.7",
@@ -9904,7 +9433,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.7",
@@ -9925,7 +9453,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.7",
@@ -9946,7 +9473,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.7",
@@ -9967,7 +9493,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.7",
@@ -9988,7 +9513,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.8",
@@ -10009,7 +9533,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.8",
@@ -10030,7 +9553,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.7",
@@ -10051,7 +9573,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.8",
@@ -10072,7 +9593,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.8",
@@ -10093,7 +9613,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.9",
@@ -10114,7 +9633,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.9",
@@ -10135,7 +9653,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.9",
@@ -10156,7 +9673,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.9",
@@ -10177,7 +9693,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.9",
@@ -10198,7 +9713,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.10",
@@ -10219,7 +9733,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.10",
@@ -10240,7 +9753,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.10",
@@ -10261,7 +9773,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.10",
@@ -10282,7 +9793,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.11",
@@ -10303,7 +9813,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.11",
@@ -10324,7 +9833,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.11",
@@ -10345,7 +9853,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.12",
@@ -10366,7 +9873,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.12",
@@ -10387,7 +9893,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.12",
@@ -10408,7 +9913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.12",
@@ -10429,7 +9933,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.12",
@@ -10450,7 +9953,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.12",
@@ -10471,7 +9973,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "<15 min fix",
     "version": "1.12",
@@ -10492,7 +9993,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "repo": "sympy/sympy",
     "difficulty": "15 min - 1 hour",
     "version": "1.12",

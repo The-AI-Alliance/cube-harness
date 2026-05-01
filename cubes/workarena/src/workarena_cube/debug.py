@@ -8,7 +8,7 @@ SNOW_INSTANCE_PWD) or HUGGING_FACE_HUB_TOKEN for the hosted instance pool.
 
 Public API (cube.testing protocol)
 -----------------------------------
-get_debug_benchmark()              -> WorkArenaBenchmark
+get_debug_benchmark()              -> WorkArenaBenchmarkConfig
 make_debug_agent(task_id: str)     -> CheatAgent
 
 Usage:
@@ -22,7 +22,7 @@ import sys
 from cube.core import Action, ActionSchema, Observation
 from cube.testing import run_debug_suite
 
-from workarena_cube.benchmark import WorkArenaBenchmark
+from workarena_cube.benchmark import WorkArenaBenchmarkConfig
 from workarena_cube.tools import WorkArenaCheatToolConfig
 
 logger = logging.getLogger(__name__)
@@ -48,14 +48,13 @@ def make_debug_agent(task_id: str) -> CheatAgent:
     return CheatAgent(task_id)
 
 
-def get_debug_benchmark() -> WorkArenaBenchmark:
-    bench = WorkArenaBenchmark(
+def get_debug_benchmark() -> WorkArenaBenchmarkConfig:
+    l1_cfg = WorkArenaBenchmarkConfig(
         n_seeds_l1=1,
-        default_tool_config=WorkArenaCheatToolConfig(),
-    )
-    l1_bench = bench.named_subset("l1")
-    task_ids = list(l1_bench.task_metadata.keys())[:_DEBUG_N_TASKS]
-    return l1_bench.subset_from_list(task_ids)  # type: ignore
+        tool_config=WorkArenaCheatToolConfig(),
+    ).named_subset("l1")
+    task_ids = list(l1_cfg.tasks().keys())[:_DEBUG_N_TASKS]
+    return l1_cfg.subset_from_list(task_ids, benchmark_name_suffix="debug")
 
 
 if __name__ == "__main__":

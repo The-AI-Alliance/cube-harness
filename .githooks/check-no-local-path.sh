@@ -1,7 +1,5 @@
 #!/bin/sh
 # Block commits that leave a local path = "..." source in any pyproject.toml.
-# Relative paths break for anyone with a different folder structure.
-# Use Depends-on: in the PR description and `make review PR=<n>` instead.
 if git diff --cached -- '*pyproject.toml' | grep -qE '^\+\s*path\s*=\s*"'; then
     echo "❌ A pyproject.toml contains a local path = \"...\" source."
     echo "   Local paths break for reviewers with a different folder structure."

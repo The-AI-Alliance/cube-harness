@@ -53,13 +53,13 @@ class Profiler:
 
 _DEFAULT_SYSTEM_PROMPT = """\
 You are an expert AI agent. Understand the goal, take targeted actions, and reason clearly about progress.
-Be concise and focused."""
+Verify that each action had the intended effect before proceeding. Be concise and focused."""
 
 _DEFAULT_REACT_PROMPT = """\
 Review the latest observation and produce the next action.
 Think step by step:
 1. What does the observation show?
-2. What was the effect of the last action?
+2. Did the last action have the intended effect? If the page state is unchanged or the action failed, do NOT repeat it — try a different element, method, or approach.
 3. What is the best next action?
 Then call the appropriate function."""
 
@@ -285,7 +285,7 @@ class GennyConfig(AgentConfig):
     # These are general or task-specific hints that help the LLM work better.
     task_hints: dict[str, str] = Field(default_factory=dict)
 
-    # Per-task clarifications: task_id -> text that clarifies the goal when the task description
+    # Per-task precision: task_id -> text that clarifies the goal when the task description
     # is under-defined (e.g. expected answer format, submission method). Injected as part of
     # the goal — not as a separate hint section.
     task_clarification: dict[str, str] = Field(default_factory=dict)
@@ -293,6 +293,13 @@ class GennyConfig(AgentConfig):
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
+
+    @property
+    def agent_name(self) -> str:
+        name = f"Genny-{self.llm_config.model_name}".replace("/", "_")
+        if self.summarize_llm_config and self.summarize_llm_config.model_name != self.llm_config.model_name:
+            name += f"+{self.summarize_llm_config.model_name}".replace("/", "_")
+        return name
 
     def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny":
         return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
@@ -508,6 +515,11 @@ class Genny(Agent):
         groups). Leading tool-role messages are stripped from each obs group so the prompt stays
         structurally valid — the paired tool_calls live in the dropped asst groups, but those
         actions are already captured in self.summaries, making the tool results redundant.
+
+        When an obs group is entirely tool messages (e.g. SWEBench bash results), stripping
+        would leave nothing and including them raw would orphan tool_call_id references (API
+        error). Instead they are re-wrapped as a single user message so the agent can see the
+        output.
         """
         if self.config.render_last_n_obs is None:
             return [msg for group in self.history for msg in group]
@@ -521,9 +533,22 @@ class Genny(Agent):
         selected = obs_groups[-n:] if n < len(obs_groups) else obs_groups
         result: list[dict | Message] = []
         for group in selected:
-            # Drop leading tool-role messages (their paired tool_calls are in dropped asst groups)
+            # Find first non-tool message index.
             start = next(
                 (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")), len(group)
             )
-            result.extend(group[start:])
+            if start < len(group):
+                # Mixed group: leading tool messages followed by user content (e.g. browser
+                # screenshot). Drop tool messages; their actions are captured in self.summaries.
+                result.extend(group[start:])
+            elif start > 0:
+                # Entire group is tool messages (e.g. SWEBench bash results). Re-wrap as a
+                # user message to keep the prompt structurally valid.
+                tool_text = "\n\n".join(
+                    m.get("content", "") if isinstance(m, dict) else (m.content or "") for m in group
+                )
+                result.append({"role": "user", "content": tool_text})
+            else:
+                # No tool messages — include group as-is.
+                result.extend(group)
         return result

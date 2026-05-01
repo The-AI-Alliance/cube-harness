@@ -2,12 +2,15 @@
 
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from cube.benchmark import Benchmark as CubeBenchmark
 from cube.benchmark import (  # noqa: F401 — needed for Pydantic to resolve Task's TYPE_CHECKING import
+    BenchmarkConfig as CubeBenchmarkConfig,
+)
+from cube.benchmark import (  # noqa: F401
     BenchmarkMetadata,
-    RuntimeContext,
 )
 from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observation
 from cube.task import Task as CubeTask
@@ -31,9 +34,15 @@ from cube_harness.tool import ToolWithTelemetry
 
 @pytest.fixture
 def tmp_dir():
-    """Temporary directory fixture for tests that need file I/O."""
+    """Temporary directory fixture for tests that need file I/O.
+
+    Yields a path ending in _{uuid8} so Experiment's uniqueness validator
+    recognises it as already unique and does not mutate the path.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
+        path = Path(tmpdir) / f"exp_{uuid4().hex[:8]}"
+        path.mkdir()
+        yield path
 
 
 @pytest.fixture
@@ -172,6 +181,7 @@ class MockToolConfig(ToolConfig):
     """Mock tool configuration for testing."""
 
     def make(self, container=None) -> MockTool:
+        _ = container
         return MockTool()
 
 
@@ -190,6 +200,7 @@ class MockAgentConfig(AgentConfig):
     name: str = "mock_agent"
 
     def make(self, action_set=None, **kwargs) -> "MockAgent":
+        _ = action_set, kwargs
         return MockAgent(config=self)
 
 
@@ -207,6 +218,7 @@ class MockAgent(Agent):
         self.actions_to_return: list[Action] = []
 
     def step(self, obs: Observation) -> AgentOutput:
+        _ = obs
         self.step_count += 1
         if self.actions_to_return:
             actions = self.actions_to_return
@@ -237,6 +249,7 @@ class MockCubeTask(CubeTask):
         return Observation.from_text("Cube task goal"), {}
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict]:
+        _ = obs
         return 1.0, {"success": True}
 
 
@@ -244,6 +257,7 @@ class MockCubeTaskConfig(CubeTaskConfig):
     """Cube TaskConfig that instantiates a MockCubeTask."""
 
     def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:
+        _ = runtime_context, container_backend
         return MockCubeTask(
             metadata=TaskMetadata(id=self.task_id),
             tool_config=self.tool_config or MockToolConfig(),
@@ -251,7 +265,17 @@ class MockCubeTaskConfig(CubeTaskConfig):
 
 
 class MockCubeBenchmark(CubeBenchmark):
-    """Cube Benchmark with two inline tasks for testing."""
+    """Live runtime pair for ``MockCubeBenchmarkConfig`` — no shared infrastructure."""
+
+    def _setup(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+class MockCubeBenchmarkConfig(CubeBenchmarkConfig):
+    """Cube BenchmarkConfig with two inline tasks for testing."""
 
     benchmark_metadata = BenchmarkMetadata(
         name="mock-cube",
@@ -263,24 +287,19 @@ class MockCubeBenchmark(CubeBenchmark):
         "mock_cube_task_2": TaskMetadata(id="mock_cube_task_2"),
     }
     task_config_class = MockCubeTaskConfig
-
-    def _setup(self) -> None:
-        pass
-
-    def close(self) -> None:
-        pass
+    benchmark_class = MockCubeBenchmark
 
 
 @pytest.fixture
 def mock_cube_task_config() -> MockCubeTaskConfig:
     """Cube task config for mock_cube_task_1."""
-    return MockCubeTaskConfig(task_id="mock_cube_task_1")
+    return MockCubeTaskConfig(metadata=TaskMetadata(id="mock_cube_task_1"))
 
 
 @pytest.fixture
-def mock_cube_benchmark() -> MockCubeBenchmark:
-    """Cube benchmark with two mock tasks."""
-    return MockCubeBenchmark()
+def mock_cube_benchmark_config() -> MockCubeBenchmarkConfig:
+    """Cube benchmark config with two mock tasks."""
+    return MockCubeBenchmarkConfig()
 
 
 @pytest.fixture
@@ -291,4 +310,9 @@ def mock_episode(tmp_dir, mock_agent_config, mock_cube_task_config) -> Episode:
         output_dir=tmp_dir,
         agent_config=mock_agent_config,
         task_config=mock_cube_task_config,
+        container_backend=None,
+        exp_name="mock-episode",
+        max_steps=5,
+        runtime_context=None,
+        storage=None,
     )

@@ -4,13 +4,13 @@ version = "1.0.0"
 description = "MiniWob++ benchmark for cube"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard",
+    "cube-standard>=0.1.0rc7",
     "miniwob>=1.0",
     "cube-browser-tool"
 ]
 
 [project.entry-points."cube.benchmarks"]
-miniwob-cube = "miniwob_cube.benchmark:MiniWobBenchmark"
+miniwob-cube = "miniwob_cube.benchmark:MiniWobBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
