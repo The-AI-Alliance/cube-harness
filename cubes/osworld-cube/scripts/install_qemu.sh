@@ -22,3 +22,9 @@ case "$(uname)" in
 esac
 
 echo "QEMU installed: $(qemu-system-x86_64 --version | head -1)"
+
+if [ -e /dev/kvm ]; then
+  echo "KVM: available — VMs will use hardware acceleration."
+else
+  echo "KVM: not available — VMs will run under TCG (software emulation, significantly slower)."
+fi
