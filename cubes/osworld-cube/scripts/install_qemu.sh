@@ -5,11 +5,15 @@ set -euo pipefail
 
 case "$(uname)" in
   Linux)
-    sudo apt-get update -qq
-    sudo apt-get install -y qemu-system-x86 qemu-utils
+    if ! command -v qemu-system-x86_64 &>/dev/null; then
+      sudo apt-get update -qq
+      sudo apt-get install -y qemu-system-x86 qemu-utils
+    fi
     ;;
   Darwin)
-    brew install qemu
+    if ! command -v qemu-system-x86_64 &>/dev/null; then
+      brew install qemu
+    fi
     ;;
   MINGW*|MSYS*|CYGWIN*)
     echo "Windows is not supported. Run osworld-cube under WSL2 (Linux)." >&2
