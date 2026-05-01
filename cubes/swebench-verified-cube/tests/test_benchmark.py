@@ -100,7 +100,6 @@ def test_execution_info_roundtrip():
     assert restored.eval_timeout == 1800  # default preserved
 
 
-
 def test_bash_only_tool_output_truncation() -> None:
     """bash() head+tail truncates large output without raising."""
     container = MagicMock()
