@@ -1,6 +1,7 @@
 .PHONY: install test unit-test debug-docker
 
 install:
+	@if [ "$$(uname)" = "Linux" ]; then sudo apt-get install -y qemu-utils; fi
 	uv sync --all-extras
 	uv pip install -e .
 	uv run python scripts/create_task_metadata.py
