@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def check_gnome_favorite_apps(apps_str: str, rule):
     # parse the string like "['thunderbird.desktop', 'vim.desktop', 'google-chrome.desktop']"
     # to a list of strings
@@ -53,11 +58,6 @@ def check_moved_jpgs(directory_list, rule):
         return 1
     else:
         return 0
-
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 def is_in_vm_clickboard(config, terminal_output):

@@ -45,36 +45,52 @@ _POST_SNAPSHOT_SLEEP = 10  # seconds to wait after QMP loadvm before taking obs
 # state pattern that distinguishes dead VMs from healthy ones.
 _DEAD_VM_DIAG_DIR = Path(os.environ.get("WAA_DEAD_VM_DIAG_DIR", "/tmp/dead-flask-eval-diag"))
 
-_SSH_KEY_PATH = os.path.expanduser(
-    os.environ.get("WAA_DEAD_VM_DIAG_SSH_KEY", "~/.ssh/id_ed25519")
-)
+_SSH_KEY_PATH = os.path.expanduser(os.environ.get("WAA_DEAD_VM_DIAG_SSH_KEY", "~/.ssh/id_ed25519"))
 _SSH_USER = "Docker"
 _SSH_OPTS = [
-    "-i", _SSH_KEY_PATH,
-    "-o", "IdentitiesOnly=yes",
-    "-o", "StrictHostKeyChecking=no",
-    "-o", "UserKnownHostsFile=/dev/null",
-    "-o", "BatchMode=yes",
-    "-o", "ConnectTimeout=10",
+    "-i",
+    _SSH_KEY_PATH,
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
 ]
 
 # All-cmd-shell battery — powershell -EncodedCommand fails on this image
 # because OpenSSH's default shell loads a profile that breaks on
 # ExecutionPolicy before our -NoProfile child can run. cmd-only sidesteps it.
 _DIAG_BATTERY: tuple[tuple[str, str], ...] = (
-    ("LISTENING_PORTS", 'netstat -ano | findstr LISTENING'),
+    ("LISTENING_PORTS", "netstat -ano | findstr LISTENING"),
     ("PYTHON_PROCS", 'tasklist /v /fi "imagename eq python.exe" /fo list'),
     ("CADDY_PROCS", 'tasklist /v /fi "imagename eq caddy.exe" /fo list'),
     ("CADDY_WIN_PROCS", 'tasklist /v /fi "imagename eq caddy_windows_amd64.exe" /fo list'),
-    ("PYTHON_CMDLINES", 'wmic process where "name=\'python.exe\'" get ProcessId,ParentProcessId,CommandLine /format:list'),
-    ("CADDY_CMDLINES", 'wmic process where "name like \'caddy%%\'" get ProcessId,ParentProcessId,Name,CommandLine /format:list'),
-    ("WINDOWSARENA_TASK", 'schtasks /query /tn WindowsArena_OnLogon /v /fo list 2>nul'),
-    ("WINDOWSARENA_LOG", 'if exist C:\\WindowsArena_OnLogon_Log.txt (type C:\\WindowsArena_OnLogon_Log.txt) else (echo NO_WINDOWSARENA_LOG_FILE)'),
-    ("FLASK_LOG_TAIL", 'if exist C:\\oem\\server\\server.log (more +0 C:\\oem\\server\\server.log) else if exist C:\\oem\\server.log (more +0 C:\\oem\\server.log) else (echo NO_FLASK_LOG_FILE)'),
+    (
+        "PYTHON_CMDLINES",
+        "wmic process where \"name='python.exe'\" get ProcessId,ParentProcessId,CommandLine /format:list",
+    ),
+    (
+        "CADDY_CMDLINES",
+        "wmic process where \"name like 'caddy%%'\" get ProcessId,ParentProcessId,Name,CommandLine /format:list",
+    ),
+    ("WINDOWSARENA_TASK", "schtasks /query /tn WindowsArena_OnLogon /v /fo list 2>nul"),
+    (
+        "WINDOWSARENA_LOG",
+        "if exist C:\\WindowsArena_OnLogon_Log.txt (type C:\\WindowsArena_OnLogon_Log.txt) else (echo NO_WINDOWSARENA_LOG_FILE)",
+    ),
+    (
+        "FLASK_LOG_TAIL",
+        "if exist C:\\oem\\server\\server.log (more +0 C:\\oem\\server\\server.log) else if exist C:\\oem\\server.log (more +0 C:\\oem\\server.log) else (echo NO_FLASK_LOG_FILE)",
+    ),
     ("SYSTEM_EVT_ERR", 'wevtutil qe System "/q:*[System[(Level=1 or Level=2)]]" /c:30 /rd:true /f:text'),
     ("APP_EVT_ERR", 'wevtutil qe Application "/q:*[System[(Level=1 or Level=2)]]" /c:30 /rd:true /f:text'),
-    ("RUN_HKLM", 'reg query HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 2>nul'),
-    ("RUN_HKCU", 'reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 2>nul'),
+    ("RUN_HKLM", "reg query HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 2>nul"),
+    ("RUN_HKCU", "reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 2>nul"),
     ("UPTIME", 'net statistics workstation | findstr /C:"Statistics since"'),
 )
 
@@ -228,7 +244,9 @@ class WAATask(Task):
             try:
                 r = subprocess.run(
                     ["ssh", *_SSH_OPTS, f"{_SSH_USER}@{public_ip}", "cmd", "/c", cmd],
-                    capture_output=True, text=True, timeout=30,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 body = r.stdout if r.returncode == 0 else f"[exit {r.returncode}]\n{r.stderr[:400]}"
             except Exception as exc:
@@ -423,7 +441,9 @@ class WAATask(Task):
             return reward, info
         except Exception as exc:
             logger.exception("Evaluation failed for %s", self.metadata.id)
-            return 0.0, {"evaluation_error": {"phase": "evaluator_top_level", "type": type(exc).__name__, "message": str(exc)}}
+            return 0.0, {
+                "evaluation_error": {"phase": "evaluator_top_level", "type": type(exc).__name__, "message": str(exc)}
+            }
 
     def _waa_execution_info(self) -> "WAATaskExecutionInfo":
         """Return self.execution_info coerced to WAATaskExecutionInfo.

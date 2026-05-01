@@ -10,11 +10,10 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Dict
 
+import PyPDF2
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
-
-import PyPDF2
 
 
 def check_json_keybindings(actual: str, expected: str, **options) -> float:
