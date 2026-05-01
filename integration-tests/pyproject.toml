@@ -87,17 +87,14 @@ markers = [
 ]
 
 [tool.uv.sources]
-# TODO: drop the cube-standard override (and the matching `branch = "nico_fix"`
-# pins below) once cube-standard 0.1.0rc7 ships to PyPI. Until then every
-# reference to the cube-standard repo MUST use the same URL+ref, otherwise uv
-# treats them as conflicting sources for the same package.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix" }
-cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix", subdirectory = "cube-resources/cube-infra-aws" }
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix", subdirectory = "cube-resources/cube-infra-azure" }
-cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix", subdirectory = "cube-resources/cube-infra-daytona" }
-cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix", subdirectory = "cube-resources/cube-infra-toolkit" }
-cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix", subdirectory = "cube-resources/cube-infra-modal" }
-cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix", subdirectory = "cube-resources/cube-vm-backend" }
+# Every reference to the cube-standard repo MUST use the same URL+ref,
+# otherwise uv treats them as conflicting sources for the same package.
+cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }
+cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }
+cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-daytona" }
+cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-toolkit" }
+cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-modal" }
+cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend" }
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
 terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }

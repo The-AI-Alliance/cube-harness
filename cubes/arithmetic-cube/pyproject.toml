@@ -18,6 +18,3 @@ build-backend = "uv_build"
 fix = true
 line-length = 120
 indent-width = 4
-
-[tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix" }

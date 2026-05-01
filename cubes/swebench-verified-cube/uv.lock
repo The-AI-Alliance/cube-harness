@@ -262,7 +262,7 @@ wheels = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc7"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=nico_fix#7711c73e67653eef05682f3caad067f636bf7596" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -274,6 +274,10 @@ dependencies = [
     { name = "rich" },
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/ae/7dd7a750a3bb84d90481cc6adace8f546157e975e47a8c5762707f9aa5cb/cube_standard-0.1.0rc7.tar.gz", hash = "sha256:84372b157d64bb0ffe6bcc5747206d0effa2fbb633a953fdda06eb679a24e2e6", size = 113221 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/44/3d8a4a106927c77771a9f113004f48e6713d79c7f7c602dc73f6457b2397/cube_standard-0.1.0rc7-py3-none-any.whl", hash = "sha256:b03191bc7264e4907106a0f436641275b87509f924545798f411a1dc42b4342f", size = 133279 },
 ]
 
 [package.optional-dependencies]
@@ -1350,7 +1354,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cube-standard", extras = ["docker"], git = "https://github.com/The-AI-Alliance/cube-standard?branch=nico_fix" },
+    { name = "cube-standard", extras = ["docker"], specifier = ">=0.1.0rc7" },
     { name = "datasets" },
 ]
 
