@@ -353,10 +353,9 @@ class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
     oracle_mode: bool = False
     """If True, upload the gold solution to /solution in reset()."""
 
-    @classmethod
-    def verify_installed(cls) -> None:
+    def verify_installed(self) -> None:
         """Fail fast if the per-task execution cache is empty."""
-        cache_dir = cls.task_execution_cache_dir()
+        cache_dir = type(self).task_execution_cache_dir()
         if not cache_dir.exists() or not any(cache_dir.iterdir()):
             raise RuntimeError(
                 f"TerminalBench per-task execution cache is empty at {cache_dir}. "
@@ -376,8 +375,9 @@ class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
                 "(preferred) or a legacy container_backend."
             )
 
-        type(self).verify_installed()
-        execution_info = TerminalBenchExecutionInfo.model_validate(type(self).load_task_execution_info(self.task_id))
+        self.verify_installed()
+        raw = self.load_task_execution_info()
+        execution_info = TerminalBenchExecutionInfo.model_validate(raw)
 
         return TerminalBenchTask(
             metadata=self.metadata,

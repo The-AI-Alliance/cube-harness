@@ -202,7 +202,7 @@ wheels = [
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc7"
+version = "0.1.0rc8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docstring-parser" },
@@ -216,9 +216,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/04/ae/7dd7a750a3bb84d90481cc6adace8f546157e975e47a8c5762707f9aa5cb/cube_standard-0.1.0rc7.tar.gz", hash = "sha256:84372b157d64bb0ffe6bcc5747206d0effa2fbb633a953fdda06eb679a24e2e6", size = 113221 }
+sdist = { url = "https://files.pythonhosted.org/packages/72/9d/d14afd70a745efd32b42b2ff6e1d586e4977b385ecbb49c3feb7c5bed6b9/cube_standard-0.1.0rc8.tar.gz", hash = "sha256:f30602b14a893801aa1d1015d5e09aa4d8606984802e9e642434f27ec9183fd1", size = 114284 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/44/3d8a4a106927c77771a9f113004f48e6713d79c7f7c602dc73f6457b2397/cube_standard-0.1.0rc7-py3-none-any.whl", hash = "sha256:b03191bc7264e4907106a0f436641275b87509f924545798f411a1dc42b4342f", size = 133279 },
+    { url = "https://files.pythonhosted.org/packages/7b/6c/0dbc1ae8737d6c0d3f97bf86a1331e9d13a629776f1eeff48c909272e8df/cube_standard-0.1.0rc8-py3-none-any.whl", hash = "sha256:d29be2e034ac369fdc1b2741e58ef780c04d6e1dbbe69cf0407852be2d4f1685", size = 134313 },
 ]
 
 [[package]]
@@ -1295,7 +1295,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cube-browser-tool", specifier = ">=0.2.0" },
-    { name = "cube-standard", specifier = ">=0.1.0rc7" },
+    { name = "cube-standard", specifier = ">=0.1.0rc8" },
     { name = "pillow" },
     { name = "webarena-verified" },
 ]

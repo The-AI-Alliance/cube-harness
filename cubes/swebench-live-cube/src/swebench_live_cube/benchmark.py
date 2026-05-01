@@ -6,7 +6,7 @@ import json
 import logging
 import shutil
 from collections.abc import Generator
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from cube import LocalInfraConfig
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
@@ -105,14 +105,10 @@ def _build_execution_info(row: dict[str, Any]) -> dict[str, Any]:
 
 
 class SWEBenchLiveBenchmark(Benchmark["SWEBenchLiveBenchmarkConfig"]):
-    """Runtime pair — owns the infra reference passed to ``make(infra)`` and
-    publishes it into ``runtime_context["infra"]`` so per-task container launches
-    flow through ``Task.runtime_context``.
+    """Runtime pair — publishes ``self._infra`` (stashed by the base
+    ``Benchmark.__init__``) into ``runtime_context["infra"]`` so per-task
+    container launches flow through ``Task.runtime_context``.
     """
-
-    def __init__(self, config: "SWEBenchLiveBenchmarkConfig", infra: InfraConfig | None = None) -> None:
-        super().__init__(config)
-        self._infra = infra
 
     def _setup(self) -> None:
         """Publish the shared InfraConfig to runtime_context; containers are launched per-task."""
@@ -234,29 +230,10 @@ class SWEBenchLiveBenchmarkConfig(BenchmarkConfig[SWEBenchLiveTaskMetadata]):
     # ------------------------------------------------------------------
 
     def make(self, infra: InfraConfig | None = None) -> SWEBenchLiveBenchmark:
-        """Override to forward ``infra`` into the runtime constructor.
-
-        SWE-bench Live launches one Docker container per task via
-        ``runtime_context["infra"]``; the runtime ``_setup()`` publishes
-        ``infra`` there. Defaults to ``LocalInfraConfig()`` so calls without
-        explicit infra still work.
+        """Resolve a default infra of ``LocalInfraConfig`` if none provided, then
+        delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
         """
-        resolved_infra = infra or LocalInfraConfig()
-        # Provision any declared resources idempotently (mirrors base impl).
-        if self.resources:
-            for resource in self.resources:
-                if resolved_infra.provision_status(resource) == "ready":
-                    logger.info(
-                        "Resource %s already provisioned on %s",
-                        resource.name,
-                        resolved_infra.fingerprint(),
-                    )
-                    continue
-                logger.info("Provisioning resource %s on %s...", resource.name, resolved_infra.fingerprint())
-                resolved_infra.provision(resource)
-        bench = SWEBenchLiveBenchmark(config=self, infra=resolved_infra)
-        bench.setup()
-        return bench
+        return cast(SWEBenchLiveBenchmark, super().make(infra=infra or LocalInfraConfig()))
 
     def get_task_configs(self) -> Generator[SWEBenchLiveTaskConfig, None, None]:
         """Yield TaskConfigs with include_hints and oracle_mode forwarded from benchmark settings."""

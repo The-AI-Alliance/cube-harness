@@ -956,6 +956,7 @@ class TestInstall:
         from osworld_cube.benchmark import OSWorldTaskConfig
 
         empty_cache = tmp_path / "cache"
+        cfg = OSWorldTaskConfig(metadata=_make_task_metadata())
         with patch.object(OSWorldTaskConfig, "task_execution_cache_dir", return_value=empty_cache):
             with pytest.raises(RuntimeError, match="execution cache is empty"):
-                OSWorldTaskConfig.verify_installed()
+                cfg.verify_installed()

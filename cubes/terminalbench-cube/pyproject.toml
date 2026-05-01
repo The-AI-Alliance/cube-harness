@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Terminal-Bench 2 — real-world terminal tasks with pytest-based validation"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard[docker]>=0.1.0rc7",
+    "cube-standard[docker]>=0.1.0rc8",
     "datasets",
 ]
 
