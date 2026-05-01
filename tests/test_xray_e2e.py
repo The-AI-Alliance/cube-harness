@@ -93,14 +93,13 @@ def page_with_exp(page, xray_server: str, request: pytest.FixtureRequest):
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(SCREENSHOT_DIR / "00_initial.png"))
 
-    # The page opens on the "Help" tab. Navigate to "Experiments".
+    # Navigate to Experiments tab and select the first experiment.
     page.get_by_role("tab", name="Experiments").click()
-
-    # Wait for the experiment table to populate (the demo.load event populates it).
     page.wait_for_selector("#exp_table tbody tr td", timeout=20000)
 
-    # Click the boolean checkbox cell (first data row, first column).
-    # Use data-row/data-col attributes to target the actual data cell, not Gradio's drop-zone row.
+    # Click the first checkbox cell to select the experiment.
+    # If auto-select already loaded the experiment, on_experiments_change returns
+    # gr.skip() and the hierarchy is unchanged — idempotent either way.
     page.locator("#exp_table td[data-row='0'][data-col='0']").click()
 
     # Wait for the Agents tab label to show a count e.g. "Agents (1)".
@@ -108,7 +107,7 @@ def page_with_exp(page, xray_server: str, request: pytest.FixtureRequest):
         "() => [...document.querySelectorAll('button[role=tab]')].some(b => /Agents \\(\\d+\\)/.test(b.textContent))",
         timeout=20000,
     )
-    page.wait_for_timeout(500)  # let Gradio finish building task/seed tables
+    page.wait_for_timeout(500)
 
     if take_screenshots:
         page.screenshot(path=str(SCREENSHOT_DIR / "01_exp_selected.png"))

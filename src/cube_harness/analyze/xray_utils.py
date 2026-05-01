@@ -70,24 +70,22 @@ def trajectory_status(traj: Trajectory) -> str:
     return _infer_status_legacy(traj)
 
 
+_RAW_STATUS_MAP: dict[str, str] = {
+    "QUEUED": "queued",
+    "RUNNING": "running",
+    "COMPLETED": "success",  # reward not available here; folds to ✓ either way
+    "MAX_STEPS_REACHED": "max_steps",
+    "FAILED": "failed",
+    "STALE": "stale",
+    "CANCELLED": "cancelled",
+}
+
+
 def _map_episode_status(raw: str, traj: Trajectory) -> str:
     """Map a raw Status string from status.json to an xray display status."""
-    if raw == "QUEUED":
-        return "queued"
-    if raw == "RUNNING":
-        return "running"
     if raw == "COMPLETED":
         return "success" if (traj.reward_info and traj.reward_info.get("reward", 0) > 0) else "fail"
-    if raw == "MAX_STEPS_REACHED":
-        return "max_steps"
-    if raw == "FAILED":
-        return "failed"
-    if raw == "STALE":
-        return "stale"
-    if raw == "CANCELLED":
-        return "cancelled"
-    # Unknown future status — fall back to legacy heuristic rather than KeyError.
-    return _infer_status_legacy(traj)
+    return _RAW_STATUS_MAP.get(raw) or _infer_status_legacy(traj)
 
 
 def _infer_status_legacy(traj: Trajectory) -> str:
@@ -338,40 +336,86 @@ def _parse_exp_date(dir_path: Path) -> str:
 
 
 def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
-    """Read experiment_config.json and return {agent, model, benchmark} strings.
+    """Return {agent, model, benchmark} from experiment_config.json.
 
-    Returns empty strings for any field that cannot be read or parsed.
+    Falls back to scanning the first episode.metadata.json for agent_name when
+    experiment_config.json is absent (e.g. synthetic test data).
     """
     config_path = exp_dir / "experiment_config.json"
-    if not config_path.exists():
-        return {"agent": "", "model": "", "benchmark": ""}
-    try:
-        with open(config_path) as f:
-            cfg = json.load(f)
-    except Exception:
-        return {"agent": "", "model": "", "benchmark": ""}
+    agent = model = benchmark = ""
 
-    agent_cfg = cfg.get("agent_config", {})
-    agent = agent_cfg.get("agent_name") or agent_cfg.get("name") or ""
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                cfg = json.load(f)
+            agent_cfg = cfg.get("agent_config", {})
+            agent = agent_cfg.get("agent_name") or agent_cfg.get("name") or ""
+            if not agent:
+                agent = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
+            model = (agent_cfg.get("llm_config") or {}).get("model_name") or ""
+            bm_meta = (cfg.get("benchmark_config") or {}).get("benchmark_metadata") or {}
+            benchmark = bm_meta.get("name") or ""
+        except Exception:
+            pass
+
     if not agent:
-        # Fall back to the class name suffix from _type, e.g. "cube_harness.agents.react.ReActAgent" → "ReActAgent"
-        agent = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
-
-    llm = agent_cfg.get("llm_config") or {}
-    model = llm.get("model_name") or ""
-
-    bm_cfg = cfg.get("benchmark_config", {})
-    bm_meta = bm_cfg.get("benchmark_metadata") or {}
-    benchmark = bm_meta.get("name") or ""
+        # Fallback: read agent_name from first episode metadata
+        episodes_dir = exp_dir / "episodes"
+        if episodes_dir.exists():
+            for ep_dir in episodes_dir.iterdir():
+                meta = ep_dir / "episode.metadata.json"
+                if meta.exists():
+                    try:
+                        with open(meta) as f:
+                            data = json.load(f)
+                        agent = data.get("metadata", {}).get("agent_name", "")
+                        if agent:
+                            break
+                    except Exception:
+                        pass
 
     return {"agent": agent, "model": model, "benchmark": benchmark}
+
+
+def _build_exp_status_cell(exp_dir: Path) -> str:
+    """Build a compact status cell for an experiment directory, same format as agent table.
+
+    Reads status.json from each episode directory (O(n_episodes) JSON reads).
+    Falls back to a plain count when no status files exist.
+    """
+    episodes_dir = exp_dir / "episodes"
+    if not episodes_dir.exists():
+        n = _count_episodes(exp_dir)
+        return f"? = {n}" if n > 0 else "—"
+
+    statuses: list[str] = []
+    for ep_dir in episodes_dir.iterdir():
+        if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
+            continue
+        status_file = ep_dir / "status.json"
+        if status_file.exists():
+            try:
+                with open(status_file) as f:
+                    raw = json.load(f).get("status", "")
+                statuses.append(_RAW_STATUS_MAP.get(raw, "system_error"))
+            except Exception:
+                statuses.append("system_error")
+        elif (ep_dir / "episode.metadata.json").exists():
+            statuses.append("success")  # completed without status.json (legacy)
+        else:
+            statuses.append("queued")
+
+    if not statuses:
+        return "—"
+    return _build_status_cell(statuses)
 
 
 def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     """Return one row per experiment directory for the Experiments selector table.
 
-    Columns: selected, experiment, date, agent, model, benchmark, n_trajs.
-    agent/model/benchmark come from experiment_config.json when present.
+    Columns: selected, experiment, date, agent, model, benchmark, status.
+    agent/model/benchmark from experiment_config.json (fallback: episode metadata).
+    status is a compact cell matching the agent-table format: ``2✓ + 1▶️ = 3``.
     Sorted most-recent first.
     """
     if not results_dir or not results_dir.exists():
@@ -381,7 +425,6 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = _count_episodes(dir_path)
         cfg_info = _parse_experiment_config(dir_path)
         rows.append(
             {
@@ -391,7 +434,7 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
                 "agent": cfg_info["agent"],
                 "model": cfg_info["model"],
                 "benchmark": cfg_info["benchmark"],
-                "n_trajs": n_trajs,
+                "status": _build_exp_status_cell(dir_path),
             }
         )
     rows.sort(key=lambda r: r["date"], reverse=True)
@@ -1113,24 +1156,23 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         total_cost += stats["cost"]
 
     n_finished = len(finished_rewards)
-    n_total = n_finished + n_in_flight + n_max_steps + n_stale + n_cancelled + n_errored
+    n_completed = n_finished + n_max_steps  # all terminal outcomes
+    n_total = n_completed + n_in_flight + n_stale + n_cancelled + n_errored
 
     stats_parts = [f"📊 **{n_total}** trajectories"]
-    summary_parts = [f"✓ Completed: **{n_finished}**"]
+    summary_parts = []
+    if n_completed > 0:
+        summary_parts.append(f"✓ Completed: **{n_completed}**")
     if n_in_flight > 0:
         summary_parts.append(f"▶️ Running: **{n_in_flight}**")
-    if n_max_steps > 0:
-        summary_parts.append(f"🎬 Max steps: **{n_max_steps}**")
     if n_stale > 0:
         summary_parts.append(f"👻 Stale: **{n_stale}**")
     if n_cancelled > 0:
         summary_parts.append(f"🚫 Cancelled: **{n_cancelled}**")
     if n_errored > 0:
         summary_parts.append(f"⛔ Failed: **{n_errored}**")
-    if n_in_flight > 0 or n_max_steps > 0 or n_stale > 0 or n_cancelled > 0 or n_errored > 0:
+    if summary_parts:
         stats_parts.append("│ " + " │ ".join(summary_parts))
-    else:
-        stats_parts.append(f"│ ✓ All completed: **{n_finished}**")
 
     if n_finished > 0:
         avg_reward = sum(finished_rewards) / n_finished

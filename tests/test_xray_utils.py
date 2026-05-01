@@ -193,23 +193,44 @@ class TestGetDirectoryContents:
 
 
 class TestGetExperimentsTableRows:
-    def test_flat_layout_n_trajs_matches_metadata_count(self, tmp_path: Path) -> None:
+    def test_flat_layout_status_cell_shows_total(self, tmp_path: Path) -> None:
         exp_dir = tmp_path / "flat_exp"
         exp_dir.mkdir()
         (exp_dir / "a.metadata.json").write_text("{}")
         (exp_dir / "b.metadata.json").write_text("{}")
         rows = xray_utils.get_experiments_table_rows(tmp_path)
         flat = next(r for r in rows if r["experiment"] == "flat_exp")
-        assert flat["n_trajs"] == 2
+        assert "status" in flat
+        # flat layout has no episodes/ dir — falls back to "? = N" format
+        assert "2" in flat["status"]
 
-    def test_legacy_trajectories_subdir_n_trajs(self, tmp_path: Path) -> None:
+    def test_legacy_trajectories_subdir_has_status(self, tmp_path: Path) -> None:
         exp_dir = tmp_path / "legacy_exp"
         traj_dir = exp_dir / "trajectories"
         traj_dir.mkdir(parents=True)
         (traj_dir / "x.metadata.json").write_text("{}")
         rows = xray_utils.get_experiments_table_rows(tmp_path)
         leg = next(r for r in rows if r["experiment"] == "legacy_exp")
-        assert leg["n_trajs"] == 1
+        assert "status" in leg
+
+    def test_agent_populated_from_episode_metadata(self, tmp_path: Path) -> None:
+        ep_dir = tmp_path / "exp_a" / "episodes" / "task_1_ep0"
+        ep_dir.mkdir(parents=True)
+        (ep_dir / "episode.metadata.json").write_text('{"metadata": {"agent_name": "react_agent"}}')
+        rows = xray_utils.get_experiments_table_rows(tmp_path)
+        row = next(r for r in rows if r["experiment"] == "exp_a")
+        assert row["agent"] == "react_agent"
+
+    def test_status_cell_from_status_json(self, tmp_path: Path) -> None:
+        for ep_name, status in [("ep0", "COMPLETED"), ("ep1", "RUNNING")]:
+            ep_dir = tmp_path / "exp_b" / "episodes" / ep_name
+            ep_dir.mkdir(parents=True)
+            (ep_dir / "status.json").write_text(f'{{"status": "{status}"}}')
+        rows = xray_utils.get_experiments_table_rows(tmp_path)
+        row = next(r for r in rows if r["experiment"] == "exp_b")
+        assert "✓" in row["status"]
+        assert "▶️" in row["status"]
+        assert "= 2" in row["status"]
 
 
 # ---------------------------------------------------------------------------

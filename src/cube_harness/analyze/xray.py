@@ -1252,6 +1252,19 @@ def run_xray(
 - **Task Error**: environment and agent errors for this step.
 - **Logs**: full episode log file (all logger output from the run).
 - **Debug**: raw JSON for the env step, LLM calls, and tool schemas.
+
+### Status icons
+
+| Icon | Meaning |
+|------|---------|
+| ✓ | Completed — success, fail, or max-steps (all terminal outcomes) |
+| ▶️ | Running — episode in progress |
+| 🕐 | Queued — not yet started |
+| 🎬 | Max steps reached (shown in Tasks/Seeds tabs) |
+| ⛔ | Failed — episode errored |
+| 👻 | Stale — no activity for too long |
+| 🚫 | Cancelled |
+| ✕ | System error — crashed before trajectory was written |
 """,
                     elem_classes="help-content",
                 )
@@ -1260,8 +1273,8 @@ def run_xray(
                     exp_refresh_btn = gr.Button("↺ Refresh", scale=0, size="sm")
                     exp_archive_btn = gr.Button("🗃 Archive selected", scale=0, size="sm", variant="secondary")
                 exp_table = gr.DataFrame(
-                    headers=["☑", "experiment", "date", "agent", "model", "benchmark", "n_trajs"],
-                    datatype=["bool", "str", "str", "str", "str", "str", "number"],
+                    headers=["☑", "experiment", "date", "agent", "model", "benchmark", "status"],
+                    datatype=["bool", "str", "str", "str", "str", "str", "html"],
                     col_count=(7, "fixed"),
                     interactive=True,
                     static_columns=[1, 2, 3, 4, 5, 6],
@@ -1418,20 +1431,6 @@ def run_xray(
                     with gr.Tab("LLM Tools"):
                         llm_tools_code = gr.Code(language="json", show_label=False)
 
-        gr.HTML(
-            "<div style='font-size:11px;color:#888;padding:4px 8px;border-top:1px solid #e5e7eb;margin-top:4px;'>"
-            "<b>Status icons:</b>&nbsp;"
-            "✓ Completed (success / fail / max-steps reached) &nbsp;|&nbsp; "
-            "▶️ Running &nbsp;|&nbsp; "
-            "🕐 Queued &nbsp;|&nbsp; "
-            "🎬 Max steps reached &nbsp;|&nbsp; "
-            "⛔ Failed (error) &nbsp;|&nbsp; "
-            "👻 Stale &nbsp;|&nbsp; "
-            "🚫 Cancelled &nbsp;|&nbsp; "
-            "✕ System error"
-            "</div>"
-        )
-
         # ------------------------------------------------------------------
         # Event wiring
         # ------------------------------------------------------------------
@@ -1441,7 +1440,7 @@ def run_xray(
             if auto_select_first and rows:
                 rows[0]["selected"] = True
             return [
-                [r["selected"], r["experiment"], r["date"], r["agent"], r["model"], r["benchmark"], r["n_trajs"]]
+                [r["selected"], r["experiment"], r["date"], r["agent"], r["model"], r["benchmark"], r["status"]]
                 for r in rows
             ]
 
@@ -1587,14 +1586,22 @@ def run_xray(
         report_tab.select(fn=_render_global_report, outputs=report_table)
         err_report_tab.select(fn=_render_error_report, outputs=err_report_md)
 
-        # Populate experiment table on page load and auto-select the first experiment
-        def _init_exp_table() -> tuple[list[list[Any]], Any]:
-            table = _exp_table_rows(auto_select_first=True)
-            # on_experiments_change expects a DataFrame (uses .iloc); wrap before calling.
-            hierarchy = on_experiments_change(pd.DataFrame(table))
-            return (table, *hierarchy)
+        def _auto_load_first_experiment() -> tuple:
+            rows = xray_utils.get_experiments_table_rows(state.results_dir)
+            if not rows:
+                return (
+                    "", None, None, None, StepId(),
+                    gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)"),
+                    "", "", gr.Timer(active=False),
+                )
+            state.load_experiments([state.results_dir / rows[0]["experiment"]])
+            hierarchy = _load_and_build_hierarchy()
+            return (*hierarchy, gr.Timer(active=not state._bg_loading_done))
 
-        demo.load(fn=_init_exp_table, outputs=[exp_table, *_hierarchy_outputs])
+        # Two independent demo.load calls: one populates the exp table,
+        # the other pre-loads the first experiment so the viewer is immediately usable.
+        demo.load(fn=_exp_table_value, outputs=exp_table)
+        demo.load(fn=_auto_load_first_experiment, outputs=_hierarchy_outputs)
 
     demo.queue()
     demo.launch(server_port=port, share=share, debug=debug)
