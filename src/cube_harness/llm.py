@@ -40,6 +40,7 @@ class LLMConfig(TypedBaseModel):
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     tool_choice: Literal["auto", "none", "required"] = "auto"
     parallel_tool_calls: bool = False
+    drop_params: bool = False
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
     timeout: float | None = 120.0  # seconds per attempt; None = no timeout
@@ -90,6 +91,8 @@ class LLM:
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.drop_params:
+            kwargs["drop_params"] = True
         response = completion_with_retries(**kwargs)
         usage = self._extract_usage(response)
         return LLMResponse(message=response.choices[0].message, usage=usage)

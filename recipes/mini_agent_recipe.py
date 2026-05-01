@@ -1,6 +1,7 @@
 """MiniAgent recipe — faithful port of mini-SWE-agent for SWE-bench Verified/Live.
 
-Runs MiniAgent (flat message list, bash-only, 250 steps, temp=0) on a benchmark.
+Runs MiniAgent (flat message list, bash-only, 250 steps) on a benchmark.
+Note: upstream mini-SWE-agent uses temp=0 but GPT-5 models only support temp=1.
 Default subset is the 50-task HAL leaderboard set (django + sphinx); compare results
 against published GPT-5-medium baseline of 46% on that subset.
 
@@ -36,19 +37,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(na
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(
         model_name="azure/gpt-5.4-mini",
-        temperature=0.0,
+        # GPT-5 models only support temperature=1; upstream mini-SWE-agent uses 0 (GPT-4 era).
+        temperature=1.0,
+        drop_params=True,
         # NOTE: parallel_tool_calls=False (default). Upstream uses True.
         # Enabling it may improve performance; requires testing.
         parallel_tool_calls=False,
     ),
     "gpt-5.4": LLMConfig(
         model_name="azure/gpt-5.4",
-        temperature=0.0,
+        temperature=1.0,
+        drop_params=True,
         parallel_tool_calls=False,
     ),
     "sonnet": LLMConfig(
         model_name="anthropic/claude-sonnet-4-6",
-        temperature=0.0,
+        temperature=1.0,
         parallel_tool_calls=False,
     ),
 }
