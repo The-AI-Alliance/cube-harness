@@ -149,13 +149,23 @@ class Evaluator:
             return self._evaluate_multiple(evaluator_cfg, env_proxy)
         return self._evaluate_single(evaluator_cfg, env_proxy)
 
-    def _evaluate_single(self, evaluator_cfg: dict[str, Any], env_proxy: GuestAgentProxy) -> tuple[float, dict[str, Any]]:
+    def _evaluate_single(
+        self, evaluator_cfg: dict[str, Any], env_proxy: GuestAgentProxy
+    ) -> tuple[float, dict[str, Any]]:
         func_name = evaluator_cfg["func"]
         info: dict[str, Any] = {"evaluator_func": func_name}
         try:
             metric_fn: Metric = getattr(metrics, func_name)
         except AttributeError as exc:
-            return 0.0, {**info, "evaluation_error": {"phase": "metric_lookup", "func": func_name, "type": "AttributeError", "message": str(exc)}}
+            return 0.0, {
+                **info,
+                "evaluation_error": {
+                    "phase": "metric_lookup",
+                    "func": func_name,
+                    "type": "AttributeError",
+                    "message": str(exc),
+                },
+            }
         result_getter_cfg = evaluator_cfg.get("result")
         expected_getter_cfg = evaluator_cfg.get("expected")
         options: dict = evaluator_cfg.get("options") or {}
@@ -164,10 +174,27 @@ class Evaluator:
             result_state = self._call_getter(result_getter_cfg, env_proxy) if result_getter_cfg else None
         except FileNotFoundError as exc:
             logger.error("File not found during evaluation: %s", exc)
-            return 0.0, {**info, "file_not_found": True, "evaluation_error": {"phase": "result_getter", "func": func_name, "type": "FileNotFoundError", "message": str(exc)}}
+            return 0.0, {
+                **info,
+                "file_not_found": True,
+                "evaluation_error": {
+                    "phase": "result_getter",
+                    "func": func_name,
+                    "type": "FileNotFoundError",
+                    "message": str(exc),
+                },
+            }
         except Exception as exc:
             logger.exception("Unexpected error during result getter for %s", func_name)
-            return 0.0, {**info, "evaluation_error": {"phase": "result_getter", "func": func_name, "type": type(exc).__name__, "message": str(exc)}}
+            return 0.0, {
+                **info,
+                "evaluation_error": {
+                    "phase": "result_getter",
+                    "func": func_name,
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            }
 
         try:
             if expected_getter_cfg:
@@ -177,10 +204,20 @@ class Evaluator:
                 reward = float(metric_fn(result_state, **options))
         except Exception as exc:
             logger.exception("Unexpected error during metric/expected for %s", func_name)
-            return 0.0, {**info, "evaluation_error": {"phase": "metric_or_expected", "func": func_name, "type": type(exc).__name__, "message": str(exc)}}
+            return 0.0, {
+                **info,
+                "evaluation_error": {
+                    "phase": "metric_or_expected",
+                    "func": func_name,
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            }
         return reward, info
 
-    def _evaluate_multiple(self, evaluator_cfg: dict[str, Any], env_proxy: GuestAgentProxy) -> tuple[float, dict[str, Any]]:
+    def _evaluate_multiple(
+        self, evaluator_cfg: dict[str, Any], env_proxy: GuestAgentProxy
+    ) -> tuple[float, dict[str, Any]]:
         conj: str = evaluator_cfg.get("conj", "and")
         func_names: list[str] = evaluator_cfg["func"]
         info: dict[str, Any] = {"evaluator_func": func_names, "conj": conj}
@@ -198,7 +235,9 @@ class Evaluator:
             try:
                 metric_fn: Metric = getattr(metrics, func_name)
             except AttributeError as exc:
-                sub_errors.append({"phase": "metric_lookup", "func": func_name, "type": "AttributeError", "message": str(exc)})
+                sub_errors.append(
+                    {"phase": "metric_lookup", "func": func_name, "type": "AttributeError", "message": str(exc)}
+                )
                 if conj == "and":
                     return 0.0, {**info, "evaluation_error": sub_errors[-1], "sub_errors": sub_errors}
                 results.append(0.0)
@@ -207,14 +246,23 @@ class Evaluator:
             try:
                 result_state = self._call_getter(result_cfg, env_proxy) if result_cfg else None
             except FileNotFoundError as exc:
-                sub_errors.append({"phase": "result_getter", "func": func_name, "type": "FileNotFoundError", "message": str(exc)})
+                sub_errors.append(
+                    {"phase": "result_getter", "func": func_name, "type": "FileNotFoundError", "message": str(exc)}
+                )
                 if conj == "and":
-                    return 0.0, {**info, "file_not_found": True, "evaluation_error": sub_errors[-1], "sub_errors": sub_errors}
+                    return 0.0, {
+                        **info,
+                        "file_not_found": True,
+                        "evaluation_error": sub_errors[-1],
+                        "sub_errors": sub_errors,
+                    }
                 results.append(0.0)
                 continue
             except Exception as exc:
                 logger.exception("Unexpected error during result getter for %s", func_name)
-                sub_errors.append({"phase": "result_getter", "func": func_name, "type": type(exc).__name__, "message": str(exc)})
+                sub_errors.append(
+                    {"phase": "result_getter", "func": func_name, "type": type(exc).__name__, "message": str(exc)}
+                )
                 if conj == "and":
                     return 0.0, {**info, "evaluation_error": sub_errors[-1], "sub_errors": sub_errors}
                 results.append(0.0)
@@ -228,7 +276,9 @@ class Evaluator:
                     score = float(metric_fn(result_state, **opts))
             except Exception as exc:
                 logger.exception("Unexpected error during metric/expected for %s", func_name)
-                sub_errors.append({"phase": "metric_or_expected", "func": func_name, "type": type(exc).__name__, "message": str(exc)})
+                sub_errors.append(
+                    {"phase": "metric_or_expected", "func": func_name, "type": type(exc).__name__, "message": str(exc)}
+                )
                 if conj == "and":
                     return 0.0, {**info, "evaluation_error": sub_errors[-1], "sub_errors": sub_errors}
                 results.append(0.0)

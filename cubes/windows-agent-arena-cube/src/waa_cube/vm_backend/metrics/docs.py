@@ -1007,7 +1007,9 @@ def compare_docx_files_and_ignore_new_lines(file1, file2, **options):
         doc2_paragraphs = [p.text for p in doc2]
     else:
         # Unsupported file types or mismatch
-        logger.debug("compare_docx_files_and_ignore_new_lines: unsupported file types or mismatch: %s vs %s", file1, file2)
+        logger.debug(
+            "compare_docx_files_and_ignore_new_lines: unsupported file types or mismatch: %s vs %s", file1, file2
+        )
         return 0
 
     # Process and compare documents
