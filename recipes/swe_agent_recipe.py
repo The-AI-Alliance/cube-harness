@@ -86,7 +86,9 @@ Only use `read_file` when you need raw text for `str_replace` (no line numbers n
 
 IMPORTANT: For targeted code changes prefer str_replace over bash+sed. \
 str_replace fails clearly if the text is not found or is ambiguous, and runs a syntax check \
-on .py files after the edit — sed silently succeeds even when it edits the wrong location.
+on .py files after the edit — sed silently succeeds even when it edits the wrong location. \
+Once str_replace reports "Replaced 1 occurrence", the fix is in place — do NOT follow it \
+with write_file, which would overwrite your edit with whatever you pass as content.
 
 IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 

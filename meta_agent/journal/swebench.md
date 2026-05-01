@@ -90,12 +90,65 @@ Secondary: need recursive-pattern str_replace fix and loop detection.
 **Tasks**: 20 (same as iter 2)
 
 **Changes from iteration 2**:
-- `str_replace`: added recursive-pattern guard (detect when old_str is prefix of new_str)
+- `str_replace`: added recursive-pattern guard (detect when `old_str` is a suffix of `new_str` — catches prepend pattern)
 - Genny: added loop detection — injects [LOOP WARNING] when same action repeated in episode
 - Model: gpt-5.4-mini → gpt-5.4
 
-**Hypothesis**: gpt-5.4 should produce correct fixes for most of these tasks. Loop detection prevents spinning.
-With hints + gpt-5.4, expecting 5-10/20 (25-50%).
+**Result**: 0/20 — REGRESSION (baseline 3/20 with same tasks)
+
+**Root cause**: Recursive-pattern guard blocked valid "prepend new code before old block" pattern.
+Agents using bash+sed in baseline (flask-5014, requests-1142, astropy-13453) all used this pattern. Our guard
+fired, str_replace returned an error, and agents spun without landing the fix.
+Secondary: Loop warning was `_loop_warning: str | None` — subsequent repeated actions overwrote the string.
+
+---
+
+## Iteration 4 — Remove guard, fix loop detection (2026-04-30)
+
+**Model**: gpt-5.4, with hints
+**Tasks**: 20
+
+**Changes from iteration 3**:
+- Removed recursive-pattern guard from str_replace (kept idempotency check)
+- Loop detection: `_loop_warning: str | None` → `_loop_warnings: list[str]` (persistent accumulation)
+
+**Result**: 4/20 = 20%
+- PASSED: astropy-14365, flask-5014, sphinx-8120, sympy-12419
+- Recovered flask-5014 (was baseline pass ✓)
+- NEW: astropy-14365, sphinx-8120, sympy-12419
+- STILL FAILING: requests-1142, astropy-13453 (were baseline passes — regression vs. iter0)
+
+**Failure analysis** [debug]:
+- astropy-13453: agent correctly applied str_replace fix (per hint), then called write_file on the whole file, overwriting the fix
+- requests-1142: no hint; agent explored prepare_content_length correctly but couldn't land the fix via str_replace
+
+---
+
+## Iteration 5 — gpt-5.4-mini sanity check (2026-05-01)
+
+**Model**: gpt-5.4-mini, with hints + view + lint
+**Tasks**: 20
+
+**Changes**: view tool, lint feedback on edits, prompt debug logging (fix: used wrong `.debug()` — fixed to str())
+
+**Result**: 0/20 — confirms gpt-5.4-mini is not useful signal for this task set (0/20 in iter2 also)
+
+---
+
+## Iteration 6 — view tool + lint + write_file guard (2026-05-01)
+
+**Model**: gpt-5.4, with hints
+**Tasks**: 20
+
+**Changes from iter4**:
+- SWEBenchTool: added `view()` — windowed file viewer with line numbers (like SWE-agent's open tool)
+- SWEBenchTool: lint feedback on `str_replace`/`write_file` for .py files (py_compile check)
+- System prompt: guide agents to use `view` instead of `cat` for large files
+- System prompt: "Once str_replace reports Replaced 1 occurrence, do NOT follow with write_file"
+- Hints: added `psf__requests-1142` (prepare_content_length early return when body is None)
+
+**Hypothesis**: view tool reduces wasted steps on large files; lint catches immediate syntax errors;
+write_file guard prevents astropy-13453-style overwrites. Expecting 6-10/20.
 
 **Result**: TBD
 

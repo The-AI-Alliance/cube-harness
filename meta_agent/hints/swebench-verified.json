@@ -1,4 +1,6 @@
 {
+  "psf__requests-1142": "The bug is in prepare_content_length() in requests/models.py. The method sets Content-Length to '0' when body is None — but for requests with no body (e.g. GET), Content-Length should not be sent at all. Add an early return when body is None. Verify with: conda run -n testbed python -m pytest test_requests.py -k 'content_length or prepared_request' -xq",
+
   "psf__requests-1921": "The bug is in how the session merges per-request headers with session-level headers. When a header value is explicitly set to None, it should be excluded from the merged result. Look at the merge_setting() function in requests/sessions.py — trace what happens to None values after the merge loop completes. Verify with: conda run -n testbed python -m pytest test_requests.py -k test_headers_on_session_with_None_are_not_sent -xq",
 
   "psf__requests-2317": "The bug involves how HTTP methods are coerced to strings in requests/sessions.py. There is a helper for converting to native strings in requests.compat or requests.utils — check whether it is imported and used correctly in the request() method. Verify with: conda run -n testbed python -m pytest test_requests.py -k test_encoded_methods -xq",
