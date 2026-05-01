@@ -1,11 +1,12 @@
-.PHONY: help install ci-install update format lint test coverage hello debug xray review
+.PHONY: help install ci-install update format lint lint-check test coverage hello debug xray review
 
 help:
 	@echo "make install       - Install dependencies in editable mode"
 	@echo "make ci-install    - Install dependencies with locked versions (for CI)"
 	@echo "make update        - Update dependencies"
 	@echo "make format        - Format code"
-	@echo "make lint          - Lint and auto-fix"
+	@echo "make lint          - Lint and auto-fix (modifies files)"
+	@echo "make lint-check    - Check lint without fixing (read-only, what CI runs)"
 	@echo "make test          - Run unit tests"
 	@echo "make coverage      - Run tests with coverage report"
 	@echo "make hello         - Run hello_miniwob recipe"
