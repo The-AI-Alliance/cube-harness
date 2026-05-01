@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from cube.benchmark import Benchmark as CubeBenchmark
@@ -33,9 +34,15 @@ from cube_harness.tool import ToolWithTelemetry
 
 @pytest.fixture
 def tmp_dir():
-    """Temporary directory fixture for tests that need file I/O."""
+    """Temporary directory fixture for tests that need file I/O.
+
+    Yields a path ending in _{uuid8} so Experiment's uniqueness validator
+    recognises it as already unique and does not mutate the path.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
+        path = Path(tmpdir) / f"exp_{uuid4().hex[:8]}"
+        path.mkdir()
+        yield path
 
 
 @pytest.fixture

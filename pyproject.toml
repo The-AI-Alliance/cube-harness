@@ -11,7 +11,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc6",
+    "cube-standard>=0.1.0rc8",
     "cube-computer-tool>=0.1.0",
     "cube-browser-playwright>=0.2.0",  # added back temporarily for browsergym.py, should be removed once browsergym.py is moved to cube-browser-tool package
     "pydantic~=2.0",
@@ -31,6 +31,7 @@ dependencies = [
     "mcp[cli]>=1.26",
     "msgpack>=1.0.0",
     "zstandard>=0.20.0",
+    "docker>=7.1.0",
 ]
 
 [project.optional-dependencies]

@@ -6,14 +6,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/adaptive-rejection-sampler:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "scientific-computing",
     "tags": [
@@ -32,14 +31,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/bn-fit-modify:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "scientific-computing",
     "tags": [
@@ -56,14 +54,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/break-filter-js-from-html:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "security",
     "tags": [
@@ -79,14 +76,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/build-cython-ext:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "debugging",
     "tags": [
@@ -104,14 +100,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/build-pmars:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -132,14 +127,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/build-pov-ray:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -160,14 +154,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/caffe-cifar-10:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "machine-learning",
     "tags": [
@@ -184,14 +177,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/cancel-async-tasks:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -209,14 +201,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/chess-best-move:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "games",
     "tags": [],
@@ -230,14 +221,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/circuit-fibsqrt:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -253,14 +243,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/cobol-modernization:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "easy",
     "category": "software-engineering",
     "tags": [
@@ -276,14 +265,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/code-from-image:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -306,7 +294,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -323,14 +310,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/configure-git-webserver:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "system-administration",
     "tags": [
@@ -348,14 +334,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/constraints-scheduling:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "personal-assistant",
     "tags": [
@@ -375,14 +360,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/count-dataset-tokens:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "model-training",
     "tags": [
@@ -409,7 +393,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "security",
     "tags": [
@@ -427,14 +410,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/custom-memory-heap-crash:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "debugging",
     "tags": [
@@ -452,14 +434,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/db-wal-recovery:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "file-operations",
     "tags": [
@@ -477,14 +458,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/distribution-search:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "machine-learning",
     "tags": [
@@ -502,14 +482,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/dna-assembly:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "scientific-computing",
     "tags": [
@@ -533,7 +512,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "scientific-computing",
     "tags": [
@@ -550,14 +528,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/extract-elf:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "file-operations",
     "tags": [],
@@ -571,14 +548,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/extract-moves-from-video:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "file-operations",
     "tags": [
@@ -596,14 +572,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/feal-differential-cryptanalysis:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "mathematics",
     "tags": [
@@ -619,14 +594,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/feal-linear-cryptanalysis:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "mathematics",
     "tags": [
@@ -649,7 +623,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "security",
     "tags": [
@@ -672,7 +645,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-processing",
     "tags": [
@@ -691,14 +663,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/fix-code-vulnerability:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "security",
     "tags": [
@@ -716,14 +687,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/fix-git:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "easy",
     "category": "software-engineering",
     "tags": [
@@ -740,14 +710,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/fix-ocaml-gc:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -763,14 +732,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/gcode-to-text:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "file-operations",
     "tags": [
@@ -786,14 +754,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/git-leak-recovery:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -810,14 +777,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/git-multibranch:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -842,7 +808,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [],
@@ -856,14 +821,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/headless-terminal:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -880,14 +844,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/hf-model-inference:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-science",
     "tags": [
@@ -913,7 +876,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "system-administration",
     "tags": [
@@ -934,14 +896,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/kv-store-grpc:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -959,14 +920,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/large-scale-text-editing:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "file-operations",
     "tags": [
@@ -985,14 +945,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/largest-eigenval:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "mathematics",
     "tags": [
@@ -1011,14 +970,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/llm-inference-batching-scheduler:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "machine-learning",
     "tags": [
@@ -1037,14 +995,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/log-summary-date-ranges:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-processing",
     "tags": [
@@ -1062,14 +1019,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/mailman:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -1086,14 +1042,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/make-doom-for-mips:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -1109,14 +1064,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/make-mips-interpreter:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -1132,14 +1086,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/mcmc-sampling-stan:20251031",
-      "ram_gb": 8.0,
+      "ram_gb": 4.0,
       "cpu_cores": 4.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "data-science",
     "tags": [
@@ -1165,7 +1118,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "debugging",
     "tags": [
@@ -1182,14 +1134,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/model-extraction-relu-logits:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "mathematics",
     "tags": [
@@ -1205,14 +1156,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/modernize-scientific-stack:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "scientific-computing",
     "tags": [
@@ -1239,7 +1189,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-science",
     "tags": [
@@ -1256,14 +1205,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/mteb-retrieve:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-science",
     "tags": [
@@ -1281,14 +1229,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/multi-source-data-merger:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-processing",
     "tags": [
@@ -1309,14 +1256,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/nginx-request-logging:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -1332,14 +1278,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/openssl-selfsigned-cert:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "security",
     "tags": [
@@ -1365,7 +1310,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "easy",
     "category": "debugging",
     "tags": [
@@ -1383,14 +1327,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/password-recovery:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "security",
     "tags": [
@@ -1408,14 +1351,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/path-tracing:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -1431,14 +1373,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/path-tracing-reverse:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -1454,14 +1395,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/polyglot-c-py:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -1477,14 +1417,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/polyglot-rust-c:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -1508,7 +1447,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "optimization",
     "tags": [
@@ -1533,7 +1471,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "scientific-computing",
     "tags": [
@@ -1551,14 +1488,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/prove-plus-comm:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "easy",
     "category": "software-engineering",
     "tags": [
@@ -1574,14 +1510,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/pypi-server:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -1598,14 +1533,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/pytorch-model-cli:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "model-training",
     "tags": [
@@ -1623,14 +1557,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/pytorch-model-recovery:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "model-training",
     "tags": [
@@ -1655,7 +1588,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -1678,7 +1610,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -1694,14 +1625,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/query-optimize:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-science",
     "tags": [
@@ -1718,14 +1648,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/raman-fitting:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "scientific-computing",
     "tags": [
@@ -1744,14 +1673,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/regex-chess:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -1767,14 +1695,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/regex-log:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-processing",
     "tags": [
@@ -1792,14 +1719,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/reshard-c4-data:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-science",
     "tags": [
@@ -1817,14 +1743,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/rstan-to-pystan:20251031",
-      "ram_gb": 8.0,
+      "ram_gb": 4.0,
       "cpu_cores": 4.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "data-science",
     "tags": [
@@ -1849,7 +1774,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "data-science",
     "tags": [
@@ -1867,14 +1791,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/sanitize-git-repo:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "security",
     "tags": [
@@ -1892,14 +1815,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/schemelike-metacircular-eval:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -1915,14 +1837,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/sparql-university:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "data-querying",
     "tags": [
@@ -1940,14 +1861,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/sqlite-db-truncate:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "debugging",
     "tags": [
@@ -1963,14 +1883,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/sqlite-with-gcov:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "system-administration",
     "tags": [
@@ -1994,7 +1913,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -2017,7 +1935,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [
@@ -2040,7 +1957,6 @@
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "model-training",
     "tags": [
@@ -2057,14 +1973,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/tune-mjcf:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "scientific-computing",
     "tags": [
@@ -2083,14 +1998,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/video-processing:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "video-processing",
     "tags": [
@@ -2106,14 +2020,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/vulnerable-secret:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "security",
     "tags": [
@@ -2130,14 +2043,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/winning-avg-corewars:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "medium",
     "category": "software-engineering",
     "tags": [
@@ -2155,14 +2067,13 @@
     "recommended_max_steps": null,
     "container_config": {
       "image": "alexgshaw/write-compressor:20251031",
-      "ram_gb": 2.0,
+      "ram_gb": 4.0,
       "cpu_cores": 1.0,
       "gpu": false,
       "disk_gb": 10.0,
       "ports": null,
       "_type": "cube.container.ContainerConfig"
     },
-    "extra_info": {},
     "difficulty": "hard",
     "category": "software-engineering",
     "tags": [

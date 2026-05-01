@@ -343,6 +343,24 @@ class TestWindowedHistory:
         assert all(m.get("role") != "tool" for m in flat)
         assert flat[0]["content"] == "current_axtree"
 
+    def test_all_tool_obs_rewrapped_as_user(self) -> None:
+        """SWEBench-style: obs group is entirely tool messages — must be re-wrapped as user."""
+        agent = _make_agent(render_last_n_obs=2)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        # Step 1: bash output (all tool messages, no trailing user message)
+        agent.history.append([{"role": "tool", "content": "total 84\ndrwxr-xr-x ...", "tool_call_id": "c1"}])
+        agent.history.append([{"role": "assistant", "content": "I ran ls", "tool_calls": [{"id": "c1"}]}])
+        # Step 2: another bash output
+        agent.history.append([{"role": "tool", "content": "src/\ntests/\n", "tool_call_id": "c2"}])
+        flat = agent._windowed_history()
+        # Both tool groups re-wrapped as user messages; no raw tool role in output
+        assert all(m.get("role") != "tool" for m in flat)
+        assert len(flat) == 2
+        assert flat[0]["role"] == "user"
+        assert "total 84" in flat[0]["content"]
+        assert flat[1]["role"] == "user"
+        assert "src/" in flat[1]["content"]
+
 
 class TestChooseContext:
     def test_always_starts_with_system(self) -> None:

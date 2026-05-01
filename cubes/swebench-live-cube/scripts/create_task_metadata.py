@@ -7,8 +7,8 @@ the repository — end users never need to run this script.
 
 Only lightweight public fields are written (repo, base_commit, splits,
 log_parser).  Heavy execution data (problem_statement, patch, test_patch, etc.)
-is written by SWEBenchLiveBenchmark.install() into the per-task execution cache
-and is never committed.
+is written by SWEBenchLiveBenchmarkConfig.install() into the per-task execution
+cache and is never committed.
 
 Usage:
     python scripts/create_task_metadata.py [--force] [--hf-cache DIR]
@@ -17,7 +17,7 @@ Options:
     --force          Overwrite task_metadata.json even if it already exists.
     --hf-cache DIR   Where to store the downloaded HF dataset.
                      Defaults to ~/.cube/swebench-live-cube/huggingface_cache
-                     (same as SWEBenchLiveBenchmark.install()).
+                     (same as SWEBenchLiveBenchmarkConfig.install()).
 """
 
 from __future__ import annotations
@@ -35,13 +35,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from cube.container import ContainerConfig
 from datasets import load_dataset
 
-from swebench_live_cube.benchmark import SWEBenchLiveBenchmark, _DATASET_NAME, _SPLIT_PRIORITY, _merge_rows_by_split
+from swebench_live_cube.benchmark import (
+    SWEBenchLiveBenchmarkConfig,
+    _DATASET_NAME,
+    _SPLIT_PRIORITY,
+    _merge_rows_by_split,
+)
 from swebench_live_cube.task import SWEBenchLiveTaskMetadata
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_OUTPUT = Path(__file__).parent.parent / "src" / "swebench_live_cube" / "task_metadata.json"
-_DEFAULT_HF_CACHE = SWEBenchLiveBenchmark.cache_dir() / "huggingface_cache"
+_DEFAULT_HF_CACHE = SWEBenchLiveBenchmarkConfig.cache_dir() / "huggingface_cache"
 
 _DOCKER_NAMESPACE = "starryzhang"
 _IMAGE_TAG = "latest"

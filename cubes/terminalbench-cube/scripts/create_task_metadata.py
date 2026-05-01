@@ -7,7 +7,7 @@ repository — end users never need to run this script.
 
 Only lightweight public fields are written (difficulty, category, tags,
 max_agent_timeout_sec, container_config). Heavy execution data (instruction,
-archive) is written by TerminalBenchBenchmark.install() into the per-task
+archive) is written by TerminalBenchBenchmarkConfig.install() into the per-task
 execution cache and is never committed.
 
 Usage:
@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cube.container import ContainerConfig
 
-from terminalbench_cube.benchmark import REPO_URL, TerminalBenchBenchmark
+from terminalbench_cube.benchmark import REPO_URL, TerminalBenchBenchmarkConfig
 from terminalbench_cube.task import TerminalBenchTaskMetadata
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ def _load_tasks_from_repo(repo_dir: Path) -> list[dict]:
     tasks = []
     for item in sorted(repo_dir.iterdir()):
         if item.is_dir() and (item / "task.toml").exists():
-            task = TerminalBenchBenchmark._load_task_from_repo(item)
+            task = TerminalBenchBenchmarkConfig._load_task_from_repo(item)
             if task:
                 tasks.append(task)
                 logger.info("  Loaded: %s (%s)", task["task_id"], task["difficulty"])

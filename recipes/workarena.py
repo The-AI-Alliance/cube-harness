@@ -42,7 +42,7 @@ import argparse
 from cube.tool import ToolboxConfig
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from cube_chat_tool import ChatToolConfig
-from workarena_cube.benchmark import WorkArenaBenchmark
+from workarena_cube.benchmark import WorkArenaBenchmarkConfig
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig
 
 from cube_harness import make_experiment_output_dir
@@ -89,14 +89,15 @@ def main(debug: bool, agent: str, level: int) -> None:
         tools_configs.append(WorkArenaInfeasibleToolConfig())
     tool_config = ToolboxConfig(tool_configs=tools_configs)
 
-    # Configure WorkArena benchmark — filter to the requested level via named_subset
-    benchmark = WorkArenaBenchmark(default_tool_config=tool_config, n_seeds_l1=1).named_subset(f"l{level}")
+    # Configure WorkArena benchmark: filter to the requested level via `.named_subset`,
+    # then start the runtime Benchmark via `.make()`
+    benchmark_config = WorkArenaBenchmarkConfig(tool_config=tool_config, n_seeds_l1=1).named_subset(f"l{level}")
 
     exp = Experiment(
         name=f"workarena_{agent}",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=15,
     )
 

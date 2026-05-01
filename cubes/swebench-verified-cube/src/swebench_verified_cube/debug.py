@@ -2,7 +2,7 @@
 
 Public API
 ----------
-get_debug_benchmark()         -> SWEBenchVerifiedBenchmark
+get_debug_benchmark()         -> SWEBenchVerifiedBenchmarkConfig
 make_debug_agent(task_id)     -> DebugAgent
 """
 
@@ -10,12 +10,9 @@ from __future__ import annotations
 
 import logging
 
-from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from cube.infra_local import LocalInfraConfig
-from cube.resource import InfraConfig
 
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
@@ -52,21 +49,14 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark(infra: InfraConfig | None = None) -> Benchmark:
-    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks.
+def get_debug_benchmark() -> SWEBenchVerifiedBenchmarkConfig:
+    """Return a ``SWEBenchVerifiedBenchmarkConfig`` scoped to the debug tasks.
 
-    Args:
-        infra: InfraConfig that provisions and launches per-task containers.
-               Defaults to ``LocalInfraConfig()``. Override to target Daytona,
-               Toolkit, etc.
+    Pure factory — the harness owns ``config.install()`` and ``config.make(infra)``.
+    Debug tasks run in ``oracle_mode`` so reset() writes the gold patch to
+    /tmp/gold_patch.diff.
     """
-    bench = SWEBenchVerifiedBenchmark(
-        infra=infra or LocalInfraConfig(),
-        oracle_mode=True,
-    )
-    bench.install()
-    bench.setup()
-    return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+    return SWEBenchVerifiedBenchmarkConfig(oracle_mode=True).subset_from_list(list(_TASK_ACTIONS))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

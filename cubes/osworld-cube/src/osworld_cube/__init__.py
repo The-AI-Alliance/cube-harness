@@ -5,8 +5,16 @@ from osworld_cube.computer import (
     ComputerConfig,
     PyAutoGUIComputer,
 )
-from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
+from osworld_cube.task import (
+    OSWorldExecutionInfo,
+    OSWorldTask,
+    OSWorldTaskMetadata,
+)
+from osworld_cube.benchmark import (
+    OSWorldBenchmark,
+    OSWorldBenchmarkConfig,
+    OSWorldTaskConfig,
+)
 from osworld_cube.debug import make_debug_agent, get_debug_benchmark
 
 __all__ = [
@@ -19,7 +27,9 @@ __all__ = [
     # Task / benchmark
     "OSWorldTask",
     "OSWorldTaskMetadata",
+    "OSWorldExecutionInfo",
     "OSWorldBenchmark",
+    "OSWorldBenchmarkConfig",
     "OSWorldTaskConfig",
     # Debug helpers
     "get_debug_benchmark",

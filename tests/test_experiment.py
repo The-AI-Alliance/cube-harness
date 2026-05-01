@@ -15,7 +15,7 @@ from cube_harness.core import Trajectory, TrajectoryStep
 from cube_harness.episode import Episode
 from cube_harness.episode_status import EpisodeStatus
 from cube_harness.exp_runner import _kill_stale_workers, run_sequentially
-from cube_harness.experiment import Experiment, ExpResult, sweep_stale_statuses
+from cube_harness.experiment import _UUID_SUFFIX_RE, Experiment, ExpResult, sweep_stale_statuses
 from cube_harness.storage import FileStorage
 from tests.conftest import (
     MockAgentConfig,
@@ -74,14 +74,17 @@ def _make_neverending_benchmark(max_steps: int) -> CubeBenchmarkConfig:
 
 
 def _make_benchmark(n: int) -> CubeBenchmarkConfig:
-    """Create a cube BenchmarkConfig with n tasks for testing."""
+    """Create a cube BenchmarkConfig with n tasks for testing.
+
+    Inherits ``benchmark_metadata``/``task_config_class``/``benchmark_class``
+    from ``MockCubeBenchmarkConfig`` so all calls share the same cache dir
+    and the back-stamp on ``MockCubeTaskConfig._benchmark_cache_dir`` stays
+    consistent — cube-standard rejects re-stamping with a different value.
+    """
     task_meta = {f"task_{i}": TaskMetadata(id=f"task_{i}") for i in range(n)}
 
     class _NTaskBenchmarkConfig(MockCubeBenchmarkConfig):
-        benchmark_metadata = BenchmarkMetadata(name=f"n{n}-task", version="0.1.0", description="test")
         task_metadata = task_meta
-        task_config_class = MockCubeTaskConfig
-        benchmark_class = MockCubeBenchmark
 
     return _NTaskBenchmarkConfig()
 
@@ -156,6 +159,20 @@ class TestExperiment:
         assert exp.output_dir == tmp_dir
         assert exp.agent_config == mock_agent_config
         assert exp.benchmark_config == mock_cube_benchmark_config
+
+    def test_experiment_auto_output_dir(self, mock_agent_config, mock_cube_benchmark_config):
+        """output_dir is auto-generated when omitted."""
+        exp = Experiment(
+            name="my_run",
+            agent_config=mock_agent_config,
+            benchmark_config=mock_cube_benchmark_config,
+        )
+
+        assert exp.output_dir is not None
+        assert exp.output_dir.exists()
+        assert _UUID_SUFFIX_RE.search(exp.output_dir.name)
+        assert "mock-cube" in exp.output_dir.name
+        assert mock_agent_config.agent_name in exp.output_dir.name
 
     def test_experiment_config_property(self, tmp_dir, mock_agent_config, mock_cube_benchmark_config):
         """Test Experiment config property."""
@@ -241,8 +258,8 @@ class TestExperiment:
 
         exp.save_config()
 
-        assert nested_dir.exists()
-        assert (nested_dir / "experiment_config.json").exists()
+        assert exp.output_dir.exists()
+        assert (exp.output_dir / "experiment_config.json").exists()
 
     def test_experiment_serialization(self, tmp_dir, mock_agent_config, mock_cube_benchmark_config):
         """Test Experiment JSON serialization."""

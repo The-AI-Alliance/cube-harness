@@ -1,23 +1,54 @@
 import json
 import logging
+import os
+import re
 import time
 import warnings
 from pathlib import Path
 from typing import Self
+from uuid import uuid4
 
 from cube.benchmark import Benchmark, BenchmarkConfig
 from cube.core import TypedBaseModel
 from cube.resource import InfraConfig
-from pydantic import Field, SerializeAsAny
+from pydantic import Field, SerializeAsAny, model_validator
 
 from cube_harness.agent import AgentConfig
 from cube_harness.core import Trajectory
 from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus
+from cube_harness.eval_log import EvalLog, ExperimentRecord
 from cube_harness.storage import FileStorage
 
 logger = logging.getLogger(__name__)
+
+EXP_DIR = Path(os.environ.get("CH_EXP_DIR", "~/cube_harness_results")).expanduser().resolve()
+_UUID_SUFFIX_RE = re.compile(r"_[0-9a-f]{8}$")
+
+
+def make_experiment_output_dir(
+    agent_name: str,
+    benchmark_name: str,
+    llm_name: str | None = None,
+    tag: str | None = None,
+    base_dir: Path | None = None,
+) -> Path:
+    """Create and return a unique output directory for an experiment run.
+
+    Directory name: {date}_{agent_name}_{benchmark_name}[_{llm_name}][_{tag}]_{uuid8}.
+    The directory is created before returning.
+    """
+    now = time.strftime("%Y%m%d_%H%M%S")
+    parts = [now, agent_name, benchmark_name]
+    if llm_name:
+        parts.append(llm_name)
+    if tag:
+        parts.append(tag)
+    parts.append(uuid4().hex[:8])
+    path = (base_dir or EXP_DIR) / "_".join(parts)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 class ExpResult(TypedBaseModel):
@@ -30,13 +61,30 @@ class ExpResult(TypedBaseModel):
 
 class Experiment(TypedBaseModel):
     name: str
-    output_dir: Path
+    output_dir: Path | None = None
     agent_config: AgentConfig
     benchmark_config: SerializeAsAny[BenchmarkConfig]
     infra: SerializeAsAny[InfraConfig] | None = None
     resume: bool = False
     max_steps: int = MAX_STEPS
     max_retries: int = 3
+    git_cwd: str | None = None
+
+    @model_validator(mode="after")
+    def _ensure_unique_output_dir(self) -> "Experiment":
+        if self.output_dir is None:
+            self.output_dir = make_experiment_output_dir(
+                agent_name=self.agent_config.agent_name,
+                benchmark_name=self.benchmark_config.benchmark_metadata.name,
+                tag=self.name,
+            )
+        elif not _UUID_SUFFIX_RE.search(self.output_dir.name):
+            self.output_dir = self.output_dir.parent / f"{self.output_dir.name}_{uuid4().hex[:8]}"
+        return self
+
+    @property
+    def evaluation_id(self) -> str:
+        return self.output_dir.name
 
     @property
     def config(self) -> dict:
@@ -152,6 +200,14 @@ class Experiment(TypedBaseModel):
         with open(config_path, "w") as f:
             f.write(self.model_dump_json(indent=2, serialize_as_any=True))
         logger.info(f"Saved experiment config to {config_path}")
+        exp_record = ExperimentRecord.from_experiment(
+            exp_name=self.name,
+            output_dir=self.output_dir,
+            agent_config=self.agent_config,
+            benchmark_config=self.benchmark_config,
+            git_cwd=self.git_cwd,
+        )
+        exp_record.write(output_path)
 
     @classmethod
     def load_config(cls, path: str) -> Self:
@@ -211,6 +267,22 @@ class Experiment(TypedBaseModel):
         logger.info(f"  Accuracy (avg. final reward): {accuracy:.4f}")
         logger.info(f"  Failed tasks: {len(results.failures)}")
         logger.info(f"Saved to: {self.output_dir}")
+
+    def export_eval_log(self, output_dir: Path | None = None) -> EvalLog:
+        """Load the EvalLog from per-trajectory records written during the run.
+
+        experiment_record.json is written at experiment start (save_config).
+        episode_record.json files are written by the runner after each episode.
+        This method simply reads those files and packages them.
+
+        Args:
+            output_dir: Directory to read from. Defaults to self.output_dir.
+
+        Returns:
+            EvalLog with ExperimentRecord and one EpisodeRecord per completed episode.
+        """
+        resolved_dir = output_dir if output_dir is not None else self.output_dir
+        return EvalLog.load(resolved_dir)
 
 
 def sweep_stale_statuses(

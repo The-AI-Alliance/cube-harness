@@ -515,6 +515,11 @@ class Genny(Agent):
         groups). Leading tool-role messages are stripped from each obs group so the prompt stays
         structurally valid — the paired tool_calls live in the dropped asst groups, but those
         actions are already captured in self.summaries, making the tool results redundant.
+
+        When an obs group is entirely tool messages (e.g. SWEBench bash results), stripping
+        would leave nothing and including them raw would orphan tool_call_id references (API
+        error). Instead they are re-wrapped as a single user message so the agent can see the
+        output.
         """
         if self.config.render_last_n_obs is None:
             return [msg for group in self.history for msg in group]
@@ -528,9 +533,22 @@ class Genny(Agent):
         selected = obs_groups[-n:] if n < len(obs_groups) else obs_groups
         result: list[dict | Message] = []
         for group in selected:
-            # Drop leading tool-role messages (their paired tool_calls are in dropped asst groups)
+            # Find first non-tool message index.
             start = next(
                 (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")), len(group)
             )
-            result.extend(group[start:])
+            if start < len(group):
+                # Mixed group: leading tool messages followed by user content (e.g. browser
+                # screenshot). Drop tool messages; their actions are captured in self.summaries.
+                result.extend(group[start:])
+            elif start > 0:
+                # Entire group is tool messages (e.g. SWEBench bash results). Re-wrap as a
+                # user message to keep the prompt structurally valid.
+                tool_text = "\n\n".join(
+                    m.get("content", "") if isinstance(m, dict) else (m.content or "") for m in group
+                )
+                result.append({"role": "user", "content": tool_text})
+            else:
+                # No tool messages — include group as-is.
+                result.extend(group)
         return result
