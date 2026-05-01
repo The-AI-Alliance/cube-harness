@@ -482,11 +482,14 @@ class TestGetStepLogsMarkdown:
 
 
 # ---------------------------------------------------------------------------
-# TestTrajectoryStatus
+# TestTrajectoryStatusLegacy — heuristic fallback (no _episode_status in metadata)
 # ---------------------------------------------------------------------------
 
 
-class TestTrajectoryStatus:
+class TestTrajectoryStatusLegacy:
+    """Tests for _infer_status_legacy(), exercised through trajectory_status() when
+    no _episode_status key is present (pre-PR#315 experiments without status.json)."""
+
     def test_missing_no_failure_is_queued(self) -> None:
         stub = Trajectory(id="t", metadata={"_missing": True})
         assert xray_utils.trajectory_status(stub) == "queued"
@@ -520,6 +523,73 @@ class TestTrajectoryStatus:
         """A completed trajectory with a stale failure.txt should not be system_error."""
         traj = Trajectory(
             id="t", start_time=1.0, end_time=2.0, reward_info={"reward": 1.0}, metadata={"_failure_text": "old error"}
+        )
+        assert xray_utils.trajectory_status(traj) == "success"
+
+
+# ---------------------------------------------------------------------------
+# TestTrajectoryStatusFromEpisodeStatus — canonical path (status.json present)
+# ---------------------------------------------------------------------------
+
+
+class TestTrajectoryStatusFromEpisodeStatus:
+    """trajectory_status() reads _episode_status injected by FileStorage from status.json."""
+
+    def test_queued(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "QUEUED"})
+        assert xray_utils.trajectory_status(traj) == "queued"
+
+    def test_running(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "RUNNING"})
+        assert xray_utils.trajectory_status(traj) == "running"
+
+    def test_completed_with_reward_is_success(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "COMPLETED"}, reward_info={"reward": 1.0})
+        assert xray_utils.trajectory_status(traj) == "success"
+
+    def test_completed_no_reward_is_fail(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "COMPLETED"}, reward_info={"reward": 0.0})
+        assert xray_utils.trajectory_status(traj) == "fail"
+
+    def test_completed_no_reward_info_is_fail(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "COMPLETED"})
+        assert xray_utils.trajectory_status(traj) == "fail"
+
+    def test_max_steps_reached(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "MAX_STEPS_REACHED"})
+        assert xray_utils.trajectory_status(traj) == "max_steps"
+
+    def test_failed(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "FAILED"})
+        assert xray_utils.trajectory_status(traj) == "failed"
+
+    def test_stale(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "STALE"})
+        assert xray_utils.trajectory_status(traj) == "stale"
+
+    def test_cancelled(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "CANCELLED"})
+        assert xray_utils.trajectory_status(traj) == "cancelled"
+
+    def test_episode_status_takes_priority_over_heuristic(self) -> None:
+        """_episode_status wins even when heuristics would say something different."""
+        traj = Trajectory(
+            id="t",
+            metadata={"_episode_status": "STALE", "_failure_text": "crash"},
+            start_time=1.0,
+            end_time=2.0,
+            reward_info={"reward": 1.0},
+        )
+        assert xray_utils.trajectory_status(traj) == "stale"
+
+    def test_unknown_status_falls_back_to_legacy(self) -> None:
+        """An unrecognised status string doesn't crash — falls back to legacy heuristic."""
+        traj = Trajectory(
+            id="t",
+            metadata={"_episode_status": "FUTURE_UNKNOWN_STATUS"},
+            start_time=1.0,
+            end_time=2.0,
+            reward_info={"reward": 1.0},
         )
         assert xray_utils.trajectory_status(traj) == "success"
 
@@ -575,7 +645,7 @@ class TestComputeExperimentStats:
     def test_single_finished_trajectory(self, timed_trajectory: Trajectory) -> None:
         result = xray_utils.compute_experiment_stats([timed_trajectory])
         assert "1" in result
-        assert "Finished" in result
+        assert "completed" in result.lower()
 
     def test_counts_system_error_trajectories(self) -> None:
         # A stub with _missing=True and _failure_text is a system_error → counted as errored
@@ -631,10 +701,34 @@ class TestBuildAgentTable:
         # fixture: 2 tasks × 2 seeds = 4 trajectories per agent
         assert agent_a_row["n_trajs"] == 4
 
-    def test_error_count_zero_for_clean_trajs(self, multi_agent_trajectories: list[Trajectory]) -> None:
+    def test_has_status_column_not_n_err_n_running(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """n_err and n_running replaced by the unified status cell."""
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        assert len(rows) > 0
+        assert "status" in rows[0]
+        assert "n_err" not in rows[0]
+        assert "n_running" not in rows[0]
+
+    def test_status_cell_contains_total(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """Status cell ends with '= N' showing the total trajectory count."""
         rows = xray_utils.build_agent_table(multi_agent_trajectories)
         agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
-        assert "0" in agent_a_row["n_err"]  # "0" with no red HTML span
+        assert "= 4" in agent_a_row["status"]
+
+    def test_status_cell_collapses_success_and_fail(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """Success and fail both show as ✓ in the agent table (avg_reward has the breakdown)."""
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
+        # fixture has 2 success + 2 fail per agent — collapsed to one ✓ count
+        assert "✓" in agent_a_row["status"]
+        assert "🟢" not in agent_a_row["status"]
+        assert "⚫" not in agent_a_row["status"]
+
+    def test_status_cell_shows_error_symbol_for_crashed_traj(self) -> None:
+        """⛔ appears in the status cell when a trajectory has FAILED status."""
+        traj = Trajectory(id="t", metadata={"agent_name": "agent_a", "_episode_status": "FAILED"})
+        rows = xray_utils.build_agent_table([traj])
+        assert "⛔" in rows[0]["status"]
 
     def test_total_cost_dash_for_unloaded_stubs(self, multi_agent_trajectories: list[Trajectory]) -> None:
         """total_cost shows '-' when no cost data is available (metadata stubs have steps=[])."""
@@ -1132,3 +1226,166 @@ class TestGetChatBranchesWithMessageObjects:
         assert "system" in html
         assert "System prompt from Message" in html
         assert "User dict message" in html
+
+
+# ---------------------------------------------------------------------------
+# TestBuildStatusCell
+# ---------------------------------------------------------------------------
+
+
+class TestBuildStatusCell:
+    def test_all_completed_shows_check_and_total(self) -> None:
+        cell = xray_utils._build_status_cell(["success", "success", "fail"])
+        assert "✓" in cell
+        assert "= 3" in cell
+
+    def test_mixed_statuses_shows_each_symbol(self) -> None:
+        cell = xray_utils._build_status_cell(["success", "running", "failed", "stale"])
+        assert "▶️" in cell
+        assert "⛔" in cell
+        assert "👻" in cell
+        assert "= 4" in cell
+
+    def test_success_and_fail_collapse_to_one_count(self) -> None:
+        cell = xray_utils._build_status_cell(["success", "success", "fail"])
+        # Should show "3✓" not "2✓ + 1⚫"
+        assert "3" in cell
+        assert "⚫" not in cell
+
+    def test_zero_counts_omitted(self) -> None:
+        cell = xray_utils._build_status_cell(["success"])
+        assert "▶️" not in cell
+        assert "⛔" not in cell
+
+    def test_max_steps_symbol(self) -> None:
+        cell = xray_utils._build_status_cell(["max_steps"])
+        assert "🎬" in cell
+
+    def test_cancelled_symbol(self) -> None:
+        cell = xray_utils._build_status_cell(["cancelled"])
+        assert "🚫" in cell
+
+
+# ---------------------------------------------------------------------------
+# TestBuildTaskTableStatusPriority
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTaskTableStatusPriority:
+    def _make_traj(self, agent: str, task: str, status: str) -> Trajectory:
+        return Trajectory(id=f"{task}_ep0", metadata={"agent_name": agent, "task_id": task, "_episode_status": status})
+
+    def test_failed_beats_stale(self) -> None:
+        trajs = [
+            self._make_traj("a", "t1", "FAILED"),
+            self._make_traj("a", "t1", "STALE"),
+        ]
+        rows = xray_utils.build_task_table(trajs, "a")
+        assert "⛔" in rows[0]["status"]
+
+    def test_stale_beats_cancelled(self) -> None:
+        trajs = [
+            self._make_traj("a", "t1", "STALE"),
+            self._make_traj("a", "t1", "CANCELLED"),
+        ]
+        rows = xray_utils.build_task_table(trajs, "a")
+        assert "👻" in rows[0]["status"]
+
+    def test_cancelled_beats_running(self) -> None:
+        trajs = [
+            self._make_traj("a", "t1", "CANCELLED"),
+            self._make_traj("a", "t1", "RUNNING"),
+        ]
+        rows = xray_utils.build_task_table(trajs, "a")
+        assert "🚫" in rows[0]["status"]
+
+    def test_max_steps_beats_success(self) -> None:
+        trajs = [
+            self._make_traj("a", "t1", "MAX_STEPS_REACHED"),
+            Trajectory(
+                id="t1_ep1",
+                metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
+                reward_info={"reward": 1.0},
+            ),
+        ]
+        rows = xray_utils.build_task_table(trajs, "a")
+        assert "🎬" in rows[0]["status"]
+
+    def test_all_success_shows_green(self) -> None:
+        trajs = [
+            Trajectory(
+                id=f"t1_ep{i}",
+                metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
+                reward_info={"reward": 1.0},
+            )
+            for i in range(3)
+        ]
+        rows = xray_utils.build_task_table(trajs, "a")
+        assert "🟢" in rows[0]["status"]
+
+
+# ---------------------------------------------------------------------------
+# TestBuildSeedTableRetryBadge
+# ---------------------------------------------------------------------------
+
+
+class TestBuildSeedTableRetryBadge:
+    def test_retry_badge_shown_when_retry_count_gt_0(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 2},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_seed_table([traj], "a", "t1")
+        assert "×2" in rows[0]["status"]
+
+    def test_no_retry_badge_when_retry_count_is_0(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 0},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_seed_table([traj], "a", "t1")
+        assert "×" not in rows[0]["status"]
+
+    def test_no_retry_badge_when_key_absent(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_seed_table([traj], "a", "t1")
+        assert "×" not in rows[0]["status"]
+
+
+# ---------------------------------------------------------------------------
+# TestGetLogsTabMarkdownEpisodeStatus
+# ---------------------------------------------------------------------------
+
+
+class TestGetLogsTabMarkdownEpisodeStatus:
+    def test_shows_retry_count_when_gt_0(self) -> None:
+        traj = Trajectory(id="t", metadata={"_retry_count": 3})
+        result = xray_utils.get_logs_tab_markdown(traj, "")
+        assert "Attempt" in result
+        assert "3" in result
+
+    def test_shows_error_type_and_message(self) -> None:
+        traj = Trajectory(
+            id="t",
+            metadata={"_error_type": "RuntimeError", "_error_message": "OOM on GPU"},
+        )
+        result = xray_utils.get_logs_tab_markdown(traj, "")
+        assert "RuntimeError" in result
+        assert "OOM on GPU" in result
+
+    def test_no_episode_status_section_when_all_absent(self) -> None:
+        traj = Trajectory(id="t", metadata={})
+        result = xray_utils.get_logs_tab_markdown(traj, "")
+        assert "Episode Status" not in result

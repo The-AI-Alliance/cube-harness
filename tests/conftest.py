@@ -316,3 +316,13 @@ def mock_episode(tmp_dir, mock_agent_config, mock_cube_task_config) -> Episode:
         runtime_context=None,
         storage=None,
     )
+
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--xray-screenshots",
+        action="store_true",
+        default=False,
+        help="Save xray e2e screenshots to /tmp/xray_screenshots/ for visual inspection.",
+    )

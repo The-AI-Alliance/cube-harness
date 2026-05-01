@@ -3,6 +3,8 @@ import time
 from pathlib import Path
 
 import pytest
+
+from cube_harness.episode_status import EpisodeStatus
 from cube.core import Action, Content, EnvironmentOutput, Observation
 from PIL import Image
 
@@ -1490,3 +1492,79 @@ class TestEpisodeStatusIO:
         """archive_episode on a non-existent trajectory_id does not raise."""
         storage = FileStorage(tmp_dir)
         storage.archive_episode("nonexistent_ep0")  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# TestInjectEpisodeStatus
+# ---------------------------------------------------------------------------
+
+
+class TestInjectEpisodeStatus:
+    """FileStorage injects _episode_status (and related fields) from status.json into metadata."""
+
+    def _write_episode(self, storage: FileStorage, traj_id: str, status: str, **kwargs: object) -> None:
+        traj = Trajectory(id=traj_id, metadata={"task_id": "task_1", "agent_name": "test_agent"})
+        storage.save_trajectory(traj)
+        ep_status = EpisodeStatus(
+            status=status,  # type: ignore[arg-type]
+            task_id="task_1",
+            episode_id=0,
+            started_at=1.0,
+            retry_count=kwargs.get("retry_count", 0),
+            error_type=kwargs.get("error_type"),
+            error_message=kwargs.get("error_message"),
+        )
+        storage.write_episode_status(traj_id, ep_status)
+
+    def test_load_all_metadata_injects_episode_status(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        self._write_episode(storage, "task_1_ep0", "COMPLETED")
+        trajs = storage.load_all_trajectory_metadata()
+        t = next(t for t in trajs if t.id == "task_1_ep0")
+        assert t.metadata.get("_episode_status") == "COMPLETED"
+
+    def test_load_trajectory_injects_episode_status(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        self._write_episode(storage, "task_1_ep0", "RUNNING")
+        traj = storage.load_trajectory("task_1_ep0")
+        assert traj.metadata.get("_episode_status") == "RUNNING"
+
+    def test_retry_count_injected(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        self._write_episode(storage, "task_1_ep0", "COMPLETED", retry_count=2)
+        trajs = storage.load_all_trajectory_metadata()
+        t = next(t for t in trajs if t.id == "task_1_ep0")
+        assert t.metadata.get("_retry_count") == 2
+
+    def test_error_fields_injected(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        self._write_episode(
+            storage, "task_1_ep0", "FAILED",
+            error_type="RuntimeError", error_message="OOM on GPU",
+        )
+        trajs = storage.load_all_trajectory_metadata()
+        t = next(t for t in trajs if t.id == "task_1_ep0")
+        assert t.metadata.get("_error_type") == "RuntimeError"
+        assert t.metadata.get("_error_message") == "OOM on GPU"
+
+    def test_no_injection_when_status_json_absent(self, tmp_dir: Path) -> None:
+        storage = FileStorage(tmp_dir)
+        traj = Trajectory(id="task_1_ep0", metadata={"task_id": "task_1"})
+        storage.save_trajectory(traj)
+        trajs = storage.load_all_trajectory_metadata()
+        t = next(t for t in trajs if t.id == "task_1_ep0")
+        assert "_episode_status" not in t.metadata
+
+    def test_episode_status_injected_into_missing_stubs(self, tmp_dir: Path) -> None:
+        """load_missing_trajectory_stubs also injects _episode_status from status.json."""
+        storage = FileStorage(tmp_dir)
+        # Write an episode_config.json but no trajectory (simulates a queued-but-unstarted episode).
+        ep_dir = tmp_dir / "episodes" / "task_1_ep0"
+        ep_dir.mkdir(parents=True)
+        (ep_dir / "episode_config.json").write_text('{"task_id": "task_1"}')
+        ep_status = EpisodeStatus(status="QUEUED", task_id="task_1", episode_id=0, started_at=1.0)
+        storage.write_episode_status("task_1_ep0", ep_status)
+
+        stubs = storage.load_missing_trajectory_stubs()
+        stub = next(s for s in stubs if s.id == "task_1_ep0")
+        assert stub.metadata.get("_episode_status") == "QUEUED"

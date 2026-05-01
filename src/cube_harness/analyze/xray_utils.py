@@ -44,18 +44,55 @@ def format_duration(seconds: float) -> str:
 
 
 def trajectory_status(traj: Trajectory) -> str:
-    """Return one of five lifecycle status strings for a trajectory.
+    """Return a lifecycle status string for a trajectory.
 
-    Values:
-      'queued'       — planned but not yet started (stub, no failure text)
-      'system_error' — crashed before completing: either stub with failure.txt, or
-                       real trajectory that started but has no end_time + has failure.txt
-      'running'      — in progress (real trajectory, no end_time, no failure.txt)
-      'success'      — completed with reward > 0
-      'fail'         — ran to completion, reward = 0
+    Reads ``_episode_status`` injected by :meth:`FileStorage._maybe_inject_episode_status`
+    when a ``status.json`` file exists alongside the trajectory (post-PR#315 experiments).
+    Falls back to :func:`_infer_status_legacy` for older experiments that pre-date the
+    episode-status RFC.
 
-    Step-level errors the agent recovered from are not surfaced here.
+    Values (canonical set — driven by status.json):
+      'queued'         — QUEUED: claimed but not yet started
+      'running'        — RUNNING: worker actively executing
+      'success'        — COMPLETED with reward > 0
+      'fail'           — COMPLETED with reward = 0
+      'max_steps'      — MAX_STEPS_REACHED: step budget exhausted
+      'failed'         — FAILED: worker crashed / abnormal termination
+      'stale'          — STALE: heartbeat timeout, dead worker
+      'cancelled'      — CANCELLED: deliberately stopped
+
+    Legacy values (heuristic fallback — no status.json):
+      'system_error'   — crashed before trajectory was written (legacy heuristic)
     """
+    raw = traj.metadata.get("_episode_status")
+    if raw is not None:
+        return _map_episode_status(raw, traj)
+    return _infer_status_legacy(traj)
+
+
+def _map_episode_status(raw: str, traj: Trajectory) -> str:
+    """Map a raw Status string from status.json to an xray display status."""
+    if raw == "QUEUED":
+        return "queued"
+    if raw == "RUNNING":
+        return "running"
+    if raw == "COMPLETED":
+        return "success" if (traj.reward_info and traj.reward_info.get("reward", 0) > 0) else "fail"
+    if raw == "MAX_STEPS_REACHED":
+        return "max_steps"
+    if raw == "FAILED":
+        return "failed"
+    if raw == "STALE":
+        return "stale"
+    if raw == "CANCELLED":
+        return "cancelled"
+    # Unknown future status — fall back to legacy heuristic rather than KeyError.
+    return _infer_status_legacy(traj)
+
+
+def _infer_status_legacy(traj: Trajectory) -> str:
+    # DEPRECATED: remove once status.json is guaranteed present for all loaded experiments.
+    # Used only when traj.metadata has no "_episode_status" key (pre-PR#315 experiments).
     if traj.metadata.get("_missing"):
         return "system_error" if traj.metadata.get("_failure_text") else "queued"
     if traj.end_time is None:
@@ -65,22 +102,85 @@ def trajectory_status(traj: Trajectory) -> str:
     return "fail"
 
 
+# Statuses that count as terminal outcomes for reward/step statistics.
+TERMINAL_OUTCOME_STATUSES: frozenset[str] = frozenset({"success", "fail", "max_steps"})
+
+# Statuses that represent in-flight work (not yet terminal).
+IN_FLIGHT_STATUSES: frozenset[str] = frozenset({"queued", "running"})
+
+# All statuses that are terminal (episode will not run again).
+TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {"success", "fail", "max_steps", "failed", "stale", "cancelled", "system_error"}
+)
+
 _STATUS_HTML: dict[str, str] = {
-    "queued": "<span title='Queued — not yet started'>🕐</span>",
-    "running": "<span title='Running'>⏳</span>",
-    "success": "<span title='Success'>✅</span>",
-    "fail": "<span title='Failed — ran to completion, no reward'>⬜</span>",
-    "system_error": "<span title='System error — crashed before trajectory was written' style='color:#dc3545;font-weight:bold;font-size:14px'>✕</span>",
+    # Canonical statuses (from status.json)
+    "queued":    "<span title='Queued — not yet started'>🕐</span>",
+    "running":   "<span title='Running'>▶️</span>",
+    "success":   "<span title='Completed — reward > 0'>🟢</span>",
+    "fail":      "<span title='Completed — no reward'>⚫</span>",
+    "max_steps": "<span title='Max steps reached — step budget exhausted'>🎬</span>",
+    "failed":    "<span title='Failed — worker crashed'>⛔</span>",
+    "stale":     "<span title='Stale — heartbeat lost, dead worker'>👻</span>",
+    "cancelled": "<span title='Cancelled'>🚫</span>",
+    # Legacy heuristic (no status.json — pre-PR#315 experiments)
+    "system_error": "<span title='System error — crashed (legacy inferred status)' style='color:#dc3545;font-weight:bold;font-size:14px'>✕</span>",
 }
 
-# Plain-text labels (icon + short description) for the header bar and other non-HTML contexts.
+# Plain-text labels for the header bar and other non-HTML contexts.
 _STATUS_LABEL: dict[str, str] = {
-    "queued": "🕐 Queued — not yet started",
-    "running": "⏳ Running",
-    "success": "✅ Success",
-    "fail": "⬜ Failed — no reward",
-    "system_error": "✕ System error — crashed",
+    "queued":       "🕐 Queued",
+    "running":      "▶️ Running",
+    "success":      "🟢 Success",
+    "fail":         "⚫ Completed (no reward)",
+    "max_steps":    "🎬 Max steps reached",
+    "failed":       "⛔ Failed",
+    "stale":        "👻 Stale",
+    "cancelled":    "🚫 Cancelled",
+    "system_error": "✕ System error (legacy)",
 }
+
+# Bare symbols for inline use (agent table status cell).
+_STATUS_SYMBOL: dict[str, str] = {
+    "queued":       "🕐",
+    "running":      "▶️",
+    "success":      "✓",
+    "fail":         "✓",
+    "max_steps":    "🎬",
+    "failed":       "⛔",
+    "stale":        "👻",
+    "cancelled":    "🚫",
+    "system_error": "✕",
+}
+
+# HTML for the collapsed "completed" symbol used in aggregate (agent table).
+# success + fail both fold into this — avg_reward already captures the breakdown.
+_COMPLETED_AGGREGATE_HTML = '<span style="color:#888">✓</span>'
+
+
+def _build_status_cell(statuses: list[str]) -> str:
+    """Build the agent-table status cell: ``15✓ + 4▶️ + 2🎬 = 21``.
+
+    success and fail both collapse to the gray ✓ aggregate symbol.
+    Only non-zero counts are included. The total is always appended.
+    """
+    counts: dict[str, int] = {}
+    for s in statuses:
+        key = "success" if s == "fail" else s  # collapse fail into success bucket
+        counts[key] = counts.get(key, 0) + 1
+
+    # Stable display order: completed first, then in-flight, then terminal failures.
+    order = ["success", "running", "queued", "max_steps", "stale", "cancelled", "failed", "system_error"]
+    parts = []
+    for key in order:
+        n = counts.get(key, 0)
+        if n == 0:
+            continue
+        symbol = _COMPLETED_AGGREGATE_HTML if key == "success" else _STATUS_SYMBOL.get(key, key)
+        parts.append(f"{n}{symbol}")
+
+    total = len(statuses)
+    return " + ".join(parts) + f" = {total}"
 
 
 def build_progress_html(
@@ -812,6 +912,19 @@ def get_logs_tab_markdown(traj: Trajectory | None, log_content: str) -> str:
 
     parts = []
 
+    retry_count = traj.metadata.get("_retry_count", 0)
+    error_type = traj.metadata.get("_error_type")
+    error_message = traj.metadata.get("_error_message")
+    if retry_count or error_type or error_message:
+        detail_parts = []
+        if retry_count:
+            detail_parts.append(f"**Attempt:** {retry_count + 1} (retried {retry_count}×)")
+        if error_type:
+            detail_parts.append(f"**Error type:** `{error_type}`")
+        if error_message:
+            detail_parts.append(f"**Error message:** `{error_message}`")
+        parts.append("### Episode Status\n" + "\n\n".join(detail_parts) + "\n")
+
     failure_text = traj.metadata.get("_failure_text", "")
     if failure_text:
         parts.append(f"### ❌ System Error\n```\n{failure_text}\n```\n")
@@ -908,9 +1021,14 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
 
 
 def _finished_rewards(trajectories: list[Trajectory]) -> list[float]:
-    """Return final rewards for trajectories that ran to completion (success or fail)."""
+    """Return final rewards for trajectories with a terminal outcome (COMPLETED episodes only).
+
+    MAX_STEPS_REACHED is excluded — the episode was truncated, not a fair completion.
+    """
     return [
-        compute_trajectory_stats(t)["final_reward"] for t in trajectories if trajectory_status(t) in ("success", "fail")
+        compute_trajectory_stats(t)["final_reward"]
+        for t in trajectories
+        if trajectory_status(t) in ("success", "fail")
     ]
 
 
@@ -922,7 +1040,10 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
     finished_rewards: list[float] = []
     finished_steps: list[int] = []
     finished_durations: list[float] = []
-    n_running = 0
+    n_in_flight = 0
+    n_max_steps = 0
+    n_stale = 0
+    n_cancelled = 0
     n_errored = 0
 
     total_prompt = 0
@@ -940,9 +1061,15 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
             finished_steps.append(stats["n_env_steps"])
             if stats["duration"] is not None:
                 finished_durations.append(stats["duration"])
-        elif status in ("running", "queued"):
-            n_running += 1
-        else:  # "system_error"
+        elif status in IN_FLIGHT_STATUSES:
+            n_in_flight += 1
+        elif status == "max_steps":
+            n_max_steps += 1
+        elif status == "stale":
+            n_stale += 1
+        elif status == "cancelled":
+            n_cancelled += 1
+        else:  # "failed" or legacy "system_error"
             n_errored += 1
 
         total_prompt += stats["prompt_tokens"]
@@ -952,18 +1079,24 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         total_cost += stats["cost"]
 
     n_finished = len(finished_rewards)
-    n_total = n_finished + n_running + n_errored
+    n_total = n_finished + n_in_flight + n_max_steps + n_stale + n_cancelled + n_errored
 
     stats_parts = [f"📊 **{n_total}** trajectories"]
-    if n_running > 0 or n_errored > 0:
-        parts = [f"✅ Finished: **{n_finished}**"]
-        if n_running > 0:
-            parts.append(f"⏳ Running: **{n_running}**")
-        if n_errored > 0:
-            parts.append(f"❌ Failed: **{n_errored}**")
-        stats_parts.append("│ " + " │ ".join(parts))
+    summary_parts = [f"✓ Completed: **{n_finished}**"]
+    if n_in_flight > 0:
+        summary_parts.append(f"▶️ Running: **{n_in_flight}**")
+    if n_max_steps > 0:
+        summary_parts.append(f"🎬 Max steps: **{n_max_steps}**")
+    if n_stale > 0:
+        summary_parts.append(f"👻 Stale: **{n_stale}**")
+    if n_cancelled > 0:
+        summary_parts.append(f"🚫 Cancelled: **{n_cancelled}**")
+    if n_errored > 0:
+        summary_parts.append(f"⛔ Failed: **{n_errored}**")
+    if n_in_flight > 0 or n_max_steps > 0 or n_stale > 0 or n_cancelled > 0 or n_errored > 0:
+        stats_parts.append("│ " + " │ ".join(summary_parts))
     else:
-        stats_parts.append(f"│ ✅ All Finished: **{n_finished}**")
+        stats_parts.append(f"│ ✓ All completed: **{n_finished}**")
 
     if n_finished > 0:
         avg_reward = sum(finished_rewards) / n_finished
@@ -1015,11 +1148,10 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     """Build one row per unique agent for the top-level agent table.
 
     Groups trajectories by metadata.get('agent_name', 'unknown').
-    Columns: agent_name, n_trajs, n_err, n_running, avg_reward, total_cost
+    Columns: agent_name, n_trajs, status, avg_reward, total_cost
 
-    n_trajs  — total trajectories for this agent.
-    n_err    — trajectories that ended with a system error (shown in red when > 0).
-    n_running — trajectories still in progress.
+    status — ``[count][symbol] + ... = total`` cell, e.g. ``15✓ + 4▶️ + 2🎬 = 21``.
+             success and fail both collapse to ✓ (avg_reward already captures the breakdown).
     total_cost shows "-" when no cost data is available (e.g. unloaded trajectory stubs).
     """
     groups: dict[str, list[Trajectory]] = {}
@@ -1036,17 +1168,12 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
         total_cost = sum(float(s["cost"]) for s in all_stats)
         avg_reward = sum(finished) / len(finished) if finished else 0.0
         cost_str = f"${total_cost:.4f}" if total_cost > 0 else "-"
-        n_err = sum(1 for s in statuses if s == "system_error")
-        n_running = sum(1 for s in statuses if s in ("running", "queued"))
-        n_err_str = f"<span style='color:#dc3545;font-weight:bold'>{n_err}</span>" if n_err > 0 else "0"
-        n_running_str = f"<span style='color:#fd7e14'>{n_running}</span>" if n_running > 0 else "0"
 
         rows.append(
             {
                 "agent_name": agent_key,
                 "n_trajs": len(agent_trajs),
-                "n_err": n_err_str,
-                "n_running": n_running_str,
+                "status": _build_status_cell(statuses),
                 "avg_reward": round(avg_reward, 3),
                 "total_cost": cost_str,
             }
@@ -1097,17 +1224,15 @@ def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dic
         avg_cost = sum(costs) / len(costs) if costs else 0.0
         avg_cost_str = f"${avg_cost:.4f}" if avg_cost > 0 else "-"
 
-        # Aggregate task status: worst-case wins
-        if any(s == "system_error" for s in statuses):
-            task_status = "system_error"
-        elif any(s == "running" for s in statuses):
-            task_status = "running"
-        elif any(s == "queued" for s in statuses):
-            task_status = "queued"
-        elif any(s == "success" for s in statuses):
-            task_status = "success"
-        else:
-            task_status = "fail"
+        # Aggregate task status: worst-case wins.
+        # Priority: failed > stale > cancelled > system_error > running > queued >
+        #           max_steps > success > fail
+        _TASK_STATUS_PRIORITY = [
+            "failed", "stale", "cancelled", "system_error",
+            "running", "queued", "max_steps", "success", "fail",
+        ]
+        status_set = set(statuses)
+        task_status = next((p for p in _TASK_STATUS_PRIORITY if p in status_set), "fail")
 
         err_style = "color:#dc3545;font-weight:bold" if task_status == "system_error" else ""
         task_id_html = (
@@ -1154,10 +1279,14 @@ def build_seed_table(
         cost_str = f"${float(stats['cost']):.4f}" if float(stats["cost"]) > 0 else "-"
         n_steps = stats["n_env_steps"]
         status = trajectory_status(traj)
+        retry_count = traj.metadata.get("_retry_count", 0)
+        retry_badge = (
+            f" <sup style='color:#888;font-size:9px'>×{retry_count}</sup>" if retry_count else ""
+        )
 
         rows.append(
             {
-                "status": _STATUS_HTML[status],
+                "status": _STATUS_HTML[status] + retry_badge,
                 "traj_id": traj.id,
                 "n_steps": n_steps,
                 "duration": duration_str,

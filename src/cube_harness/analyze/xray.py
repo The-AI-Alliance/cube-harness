@@ -321,10 +321,10 @@ class XRayState:
         return changed
 
     def is_experiment_complete(self) -> bool:
-        """Return True when every known trajectory has finished (end_time is set)."""
+        """Return True when every known trajectory has reached a terminal status."""
         if not self.trajectories:
             return False
-        return all(t.end_time is not None for t in self.trajectories)
+        return all(xray_utils.trajectory_status(t) in xray_utils.TERMINAL_STATUSES for t in self.trajectories)
 
     def is_experiment_stale(self, timeout_s: float = 1200.0) -> bool:
         """Return True if no file changes have been detected for timeout_s seconds.
@@ -925,10 +925,14 @@ def run_xray(
         seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
 
         n_total = len(state.trajectories)
-        # Use end_time directly (not _completed_ids) to avoid undercounting when multiple
-        # experiments share the same task/episode IDs (the set deduplicates colliding IDs).
-        n_completed = sum(1 for t in state.trajectories if t.end_time is not None)
-        n_running = sum(1 for t in state.trajectories if t.end_time is None)
+        n_completed = sum(
+            1 for t in state.trajectories
+            if xray_utils.trajectory_status(t) in xray_utils.TERMINAL_OUTCOME_STATUSES
+        )
+        n_running = sum(
+            1 for t in state.trajectories
+            if xray_utils.trajectory_status(t) in xray_utils.IN_FLIGHT_STATUSES
+        )
         # Per-agent breakdown (shown when > 1 agent loaded, e.g. multi-experiment)
         agent_names = sorted({t.metadata.get("agent_name", "unknown") for t in state.trajectories})
         per_agent: list[tuple[str, int, int, int]] | None = None
@@ -939,9 +943,9 @@ def run_xray(
                 per_agent.append(
                     (
                         aname,
-                        sum(1 for t in atrajs if t.end_time is not None),
+                        sum(1 for t in atrajs if xray_utils.trajectory_status(t) in xray_utils.TERMINAL_OUTCOME_STATUSES),
                         len(atrajs),
-                        sum(1 for t in atrajs if t.end_time is None),
+                        sum(1 for t in atrajs if xray_utils.trajectory_status(t) in xray_utils.IN_FLIGHT_STATUSES),
                     )
                 )
         progress_html = xray_utils.build_progress_html(
@@ -1270,11 +1274,12 @@ def run_xray(
                 experiment_stats = gr.Markdown("")
             with gr.Tab("Agents") as agents_tab:
                 agent_table = gr.DataFrame(
-                    headers=["agent_name", "n_trajs", "n_err", "n_running", "avg_reward", "total_cost"],
+                    headers=["agent_name", "n_trajs", "status", "avg_reward", "total_cost"],
                     datatype="html",
                     max_height=260,
                     show_label=False,
                     interactive=False,
+                    elem_id="agent_table",
                 )
             with gr.Tab("Tasks") as tasks_tab:
                 task_table = gr.DataFrame(
@@ -1292,6 +1297,7 @@ def run_xray(
                     max_height=260,
                     show_label=False,
                     interactive=False,
+                    elem_id="task_table",
                 )
             with gr.Tab("Seeds") as seeds_tab:
                 seed_table = gr.DataFrame(
@@ -1300,6 +1306,7 @@ def run_xray(
                     max_height=260,
                     show_label=False,
                     interactive=False,
+                    elem_id="seed_table",
                 )
             with gr.Tab("Agent Config"):
                 agent_config_code = gr.Code(language="json", show_label=False)
