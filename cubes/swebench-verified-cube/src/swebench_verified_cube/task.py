@@ -116,7 +116,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         """
         self._container.exec(
             f"find {self.tool_config.working_dir} -not -path '*/.git/*' -name '*.py' ! -writable"
-            f" -exec sh -c 'cp \"$1\" \"$1.tmp\" && mv \"$1.tmp\" \"$1\"' _ {{}} \\;"
+            f' -exec sh -c \'cp "$1" "$1.tmp" && mv "$1.tmp" "$1"\' _ {{}} \\;'
             f" 2>/dev/null || true",
             timeout=120,
         )

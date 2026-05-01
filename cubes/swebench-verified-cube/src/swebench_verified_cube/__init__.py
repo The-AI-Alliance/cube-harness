@@ -8,7 +8,12 @@ from swebench_verified_cube.task import (
     SWEBenchVerifiedTaskConfig,
     SWEBenchVerifiedTaskMetadata,
 )
-from swebench_verified_cube.tool import BashOnlySWEBenchTool, BashOnlySWEBenchToolConfig, SWEBenchTool, SWEBenchToolConfig
+from swebench_verified_cube.tool import (
+    BashOnlySWEBenchTool,
+    BashOnlySWEBenchToolConfig,
+    SWEBenchTool,
+    SWEBenchToolConfig,
+)
 
 __all__ = [
     "SWEBenchVerifiedBenchmark",
