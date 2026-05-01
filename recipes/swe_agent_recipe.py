@@ -13,13 +13,6 @@ Options:
     --subset NAME        Named subset: lite/verified/full (swebench-live), easy (terminalbench)
     --n-parallel N       Ray workers (default: 5)
     --retry DIR          Resume / retry from an existing output directory
-    --toolkit            Use ToolkitInfraConfig — submit each task as an eai job (no local Docker needed)
-    --eai-profile PROF   Toolkit profile (default: yul101)
-    --eai-path PATH      Path to the eai binary (default: eai; use /bin/eai inside a toolkit job)
-    --preemptable        Submit task jobs as preemptable (cheaper; may be interrupted)
-
-Toolkit workflow (from an interactive job):
-    uv run recipes/swe_agent_recipe.py --toolkit --eai-path /bin/eai --n-parallel 20 --debug
 
 Each cube must be installed in the active venv:
     uv pip install -e cubes/swebench-verified-cube
@@ -64,9 +57,7 @@ The existing test suite will pass before your fix — that is expected. \
 Do NOT call final_step just because existing tests pass. \
 Only call final_step after you have actually modified the source code to resolve the issue.
 
-Before calling final_step, verify your fix by running a targeted test — ideally a single \
-test class or test function that exercises the reported behavior. Run `grep -r "def test_" \
-tests/ | grep <keyword>` to find the relevant test if you don't know it.
+Before calling final_step, verify your fix by running the relevant tests.
 IMPORTANT: All test dependencies are in the conda 'testbed' environment — always prefix with
 `conda run -n testbed` or activate first: `. /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed`
 - Django projects: cd /testbed && conda run -n testbed python -m pytest tests/<module> -x -q
@@ -79,23 +70,7 @@ IMPORTANT: Do NOT modify test files (files under tests/ or with test_ prefix). \
 The evaluation framework applies its own test patch during evaluation. \
 Only modify source code files to fix the bug.
 
-IMPORTANT: For navigating source files use `view` — it shows line numbers and tells you \
-how many lines are above/below so you can scroll efficiently. Use `bash grep -n` to find \
-the right line number, then `view(path, line_start=<N>)` to read context around it. \
-Only use `read_file` when you need raw text for `str_replace` (no line numbers needed).
-
-IMPORTANT: For targeted code changes prefer str_replace over bash+sed. \
-str_replace fails clearly if the text is not found or is ambiguous, and runs a syntax check \
-on .py files after the edit — sed silently succeeds even when it edits the wrong location. \
-Once str_replace reports "Replaced 1 occurrence", the fix is in place — do NOT follow it \
-with write_file, which would overwrite your edit with whatever you pass as content.
-
-IMPORTANT: Every response must include a tool call — use `final_step` when done. \
-Each step is labeled [Step X/N] so you know your remaining budget. \
-If you are well past the halfway point and still have not located the root cause, \
-call `final_step` — do not spend the remaining steps re-exploring. \
-Evaluation runs on whatever file state exists when you stop, so leaving a partial \
-but correct change is better than burning steps and reverting to the original."""
+IMPORTANT: Every response must include a tool call — use `final_step` when done."""
 
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(model_name="azure/gpt-5.4-mini"),
@@ -108,40 +83,17 @@ MODEL_CONFIGS: dict[str, LLMConfig] = {
 # ---------------------------------------------------------------------------
 
 
-def _make_infra(
-    toolkit: bool,
-    eai_profile: str,
-    eai_path: str,
-    preemptable: bool,
-) -> object:
-    """Return the appropriate InfraConfig. Lazy import so cube_infra_toolkit is optional."""
-    if toolkit:
-        from cube_infra_toolkit import ToolkitInfraConfig
-
-        return ToolkitInfraConfig(
-            profile=eai_profile,
-            eai_path=eai_path,
-            preemptable=preemptable,
-            launch_timeout_seconds=300,
-        )
-    from cube.infra_local import LocalInfraConfig
-
-    return LocalInfraConfig()
-
-
-def _make_benchmark_config(
+def _make_benchmark(
     benchmark_name: str,
     debug: bool,
     task_ids: list[str] | None,
     subset: str | None,
-    infra: object,
 ) -> object:
-    """Return a BenchmarkConfig (not a live Benchmark). Imports are lazy so only
-    the installed cube is required. The Experiment runner calls .make(infra)."""
+    """Instantiate and filter the requested benchmark. Imports are lazy so only
+    the installed cube is required."""
     if debug:
         if benchmark_name == "swebench-verified":
             from swebench_verified_cube.debug import get_debug_benchmark
-            return get_debug_benchmark(infra=infra)
         elif benchmark_name == "swebench-live":
             from swebench_live_cube.debug import get_debug_benchmark
         elif benchmark_name == "terminalbench":
@@ -151,7 +103,8 @@ def _make_benchmark_config(
                 f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
             )
         bench = get_debug_benchmark()
-        bench.infra = infra
+        if task_ids:
+            bench = bench.subset_from_list(task_ids)
         return bench
 
     if benchmark_name == "swebench-verified":
@@ -193,11 +146,6 @@ def run(
     subset: str | None,
     n_parallel: int,
     retry_dir: Path | None,
-    toolkit: bool,
-    eai_profile: str,
-    eai_path: str,
-    preemptable: bool,
-    max_actions: int = 50,
 ) -> None:
     llm_config = MODEL_CONFIGS[model_key]
 
@@ -206,7 +154,7 @@ def run(
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=SWE_SYSTEM_PROMPT,
-        max_actions=max_actions,
+        max_actions=30,
         render_last_n_obs=2,
         task_hints=task_hints,
     )
@@ -218,23 +166,21 @@ def run(
         output_dir = None
         resume = False
 
-    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
-    benchmark_config = _make_benchmark_config(benchmark_name, debug, task_ids, subset, infra)
+    benchmark = _make_benchmark(benchmark_name, debug, task_ids, subset)
 
-    infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
     exp = Experiment(
-        name=f"genny-{benchmark_name}-{infra_label}",
+        name=f"genny-{benchmark_name}",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark_config=benchmark_config,
-        max_steps=max_actions,
+        benchmark_config=benchmark,
+        max_steps=30,
         resume=resume,
     )
 
     label = (
         f"RETRY {retry_dir}" if retry_dir else (f"hints={use_hints}" if benchmark_name == "swebench-verified" else "")
     )
-    print(f"\n=== {benchmark_name} | {model_key} | {infra_label} | {label or 'no hints'} ===")
+    print(f"\n=== {benchmark_name} | {model_key} | {label or 'no hints'} ===")
 
     if debug:
         run_sequentially(exp)
@@ -263,11 +209,6 @@ if __name__ == "__main__":
     parser.add_argument("--subset", default=None, help="Named subset (e.g. lite, easy)")
     parser.add_argument("--n-parallel", type=int, default=5, help="Ray workers (default: 5)")
     parser.add_argument("--retry", metavar="DIR", default=None, help="Resume/retry from output dir")
-    parser.add_argument("--toolkit", action="store_true", help="Use ToolkitInfraConfig (submit each task as an eai job)")
-    parser.add_argument("--eai-profile", default="yul101", help="Toolkit profile (default: yul101)")
-    parser.add_argument("--eai-path", default="eai", help="Path to eai binary (default: eai; use /bin/eai inside a toolkit job)")
-    parser.add_argument("--preemptable", action="store_true", help="Submit task jobs as preemptable")
-    parser.add_argument("--max-actions", type=int, default=50, help="Step budget per episode (default: 50)")
     args = parser.parse_args()
 
     run(
@@ -279,9 +220,4 @@ if __name__ == "__main__":
         subset=args.subset,
         n_parallel=args.n_parallel,
         retry_dir=Path(args.retry) if args.retry else None,
-        toolkit=args.toolkit,
-        eai_profile=args.eai_profile,
-        eai_path=args.eai_path,
-        preemptable=args.preemptable,
-        max_actions=args.max_actions,
     )
