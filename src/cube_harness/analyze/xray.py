@@ -809,7 +809,7 @@ def run_xray(
             "",
             gr.Timer(active=False),
         )
-        return (_exp_table_value(), *_empty_hierarchy)
+        return (_exp_table_rows(), *_empty_hierarchy)
 
     def on_select_agent(
         evt: gr.SelectData, agent_df: Any
@@ -1260,11 +1260,11 @@ def run_xray(
                     exp_refresh_btn = gr.Button("↺ Refresh", scale=0, size="sm")
                     exp_archive_btn = gr.Button("🗃 Archive selected", scale=0, size="sm", variant="secondary")
                 exp_table = gr.DataFrame(
-                    headers=["☑", "experiment", "date", "n_trajs"],
-                    datatype=["bool", "str", "str", "number"],
-                    col_count=(4, "fixed"),
+                    headers=["☑", "experiment", "date", "agent", "model", "benchmark", "n_trajs"],
+                    datatype=["bool", "str", "str", "str", "str", "str", "number"],
+                    col_count=(7, "fixed"),
                     interactive=True,
-                    static_columns=[1, 2, 3],
+                    static_columns=[1, 2, 3, 4, 5, 6],
                     max_height=260,
                     show_label=False,
                     elem_id="exp_table",
@@ -1418,13 +1418,35 @@ def run_xray(
                     with gr.Tab("LLM Tools"):
                         llm_tools_code = gr.Code(language="json", show_label=False)
 
+        gr.HTML(
+            "<div style='font-size:11px;color:#888;padding:4px 8px;border-top:1px solid #e5e7eb;margin-top:4px;'>"
+            "<b>Status icons:</b>&nbsp;"
+            "✓ Completed (success / fail / max-steps reached) &nbsp;|&nbsp; "
+            "▶️ Running &nbsp;|&nbsp; "
+            "🕐 Queued &nbsp;|&nbsp; "
+            "🎬 Max steps reached &nbsp;|&nbsp; "
+            "⛔ Failed (error) &nbsp;|&nbsp; "
+            "👻 Stale &nbsp;|&nbsp; "
+            "🚫 Cancelled &nbsp;|&nbsp; "
+            "✕ System error"
+            "</div>"
+        )
+
         # ------------------------------------------------------------------
         # Event wiring
         # ------------------------------------------------------------------
 
-        def _exp_table_value() -> list[list[Any]]:
+        def _exp_table_rows(auto_select_first: bool = False) -> list[list[Any]]:
             rows = xray_utils.get_experiments_table_rows(state.results_dir)
-            return [[r["selected"], r["experiment"], r["date"], r["n_trajs"]] for r in rows]
+            if auto_select_first and rows:
+                rows[0]["selected"] = True
+            return [
+                [r["selected"], r["experiment"], r["date"], r["agent"], r["model"], r["benchmark"], r["n_trajs"]]
+                for r in rows
+            ]
+
+        def _exp_table_value() -> list[list[Any]]:
+            return _exp_table_rows(auto_select_first=False)
 
         _hierarchy_outputs = [
             experiment_stats,
@@ -1565,8 +1587,13 @@ def run_xray(
         report_tab.select(fn=_render_global_report, outputs=report_table)
         err_report_tab.select(fn=_render_error_report, outputs=err_report_md)
 
-        # Populate experiment table on page load
-        demo.load(fn=_exp_table_value, outputs=exp_table)
+        # Populate experiment table on page load and auto-select the first experiment
+        def _init_exp_table() -> tuple[list[list[Any]], Any]:
+            table = _exp_table_rows(auto_select_first=True)
+            hierarchy = on_experiments_change(table)
+            return (table, *hierarchy)
+
+        demo.load(fn=_init_exp_table, outputs=[exp_table, *_hierarchy_outputs])
 
     demo.queue()
     demo.launch(server_port=port, share=share, debug=debug)

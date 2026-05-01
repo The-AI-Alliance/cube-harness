@@ -153,31 +153,33 @@ _STATUS_SYMBOL: dict[str, str] = {
     "system_error": "✕",
 }
 
-# HTML for the collapsed "completed" symbol used in aggregate (agent table).
-# success + fail both fold into this — avg_reward already captures the breakdown.
+# Terminal-outcome statuses collapsed to ✓ in the agent-level aggregate view.
+# success + fail + max_steps are all "ran to completion"; avg_reward captures the breakdown.
+_TERMINAL_OUTCOME_STATUSES = frozenset({"success", "fail", "max_steps"})
 _COMPLETED_AGGREGATE_HTML = '<span style="color:#888">✓</span>'
 
 
 def _build_status_cell(statuses: list[str]) -> str:
-    """Build the agent-table status cell: ``15✓ + 4▶️ + 2🎬 = 21``.
+    """Build the agent-table status cell: ``15✓ + 4▶️ + 2⛔ = 21``.
 
-    success and fail both collapse to the gray ✓ aggregate symbol.
-    Only non-zero counts are included. The total is always appended.
+    All terminal-outcome statuses (success, fail, max_steps) collapse to ✓ so the
+    agent row stays readable. Per-status detail lives in the Tasks/Seeds tabs.
+    Total always equals len(statuses).
     """
+    n_terminal = sum(1 for s in statuses if s in _TERMINAL_OUTCOME_STATUSES)
     counts: dict[str, int] = {}
     for s in statuses:
-        key = "success" if s == "fail" else s  # collapse fail into success bucket
-        counts[key] = counts.get(key, 0) + 1
+        if s not in _TERMINAL_OUTCOME_STATUSES:
+            counts[s] = counts.get(s, 0) + 1
 
-    # Stable display order: completed first, then in-flight, then terminal failures.
-    order = ["success", "running", "queued", "max_steps", "stale", "cancelled", "failed", "system_error"]
+    order = ["running", "queued", "stale", "cancelled", "failed", "system_error"]
     parts = []
+    if n_terminal:
+        parts.append(f"{n_terminal}{_COMPLETED_AGGREGATE_HTML}")
     for key in order:
         n = counts.get(key, 0)
-        if n == 0:
-            continue
-        symbol = _COMPLETED_AGGREGATE_HTML if key == "success" else _STATUS_SYMBOL.get(key, key)
-        parts.append(f"{n}{symbol}")
+        if n:
+            parts.append(f"{n}{_STATUS_SYMBOL.get(key, key)}")
 
     total = len(statuses)
     return " + ".join(parts) + f" = {total}"
@@ -335,14 +337,42 @@ def _parse_exp_date(dir_path: Path) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
+    """Read experiment_config.json and return {agent, model, benchmark} strings.
+
+    Returns empty strings for any field that cannot be read or parsed.
+    """
+    config_path = exp_dir / "experiment_config.json"
+    if not config_path.exists():
+        return {"agent": "", "model": "", "benchmark": ""}
+    try:
+        with open(config_path) as f:
+            cfg = json.load(f)
+    except Exception:
+        return {"agent": "", "model": "", "benchmark": ""}
+
+    agent_cfg = cfg.get("agent_config", {})
+    agent = agent_cfg.get("agent_name") or agent_cfg.get("name") or ""
+    if not agent:
+        # Fall back to the class name suffix from _type, e.g. "cube_harness.agents.react.ReActAgent" → "ReActAgent"
+        agent = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
+
+    llm = agent_cfg.get("llm_config") or {}
+    model = llm.get("model_name") or ""
+
+    bm_cfg = cfg.get("benchmark_config", {})
+    bm_meta = bm_cfg.get("benchmark_metadata") or {}
+    benchmark = bm_meta.get("name") or ""
+
+    return {"agent": agent, "model": model, "benchmark": benchmark}
+
+
 def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     """Return one row per experiment directory for the Experiments selector table.
 
-    Columns: selected (bool), experiment (str), date (str), n_trajs (int).
-    The date column contains "YYYY-MM-DD HH:MM" when a time is available.
-    Counts trajectories via ``*.metadata.json`` in the experiment dir (flat layout)
-    or under ``trajectories/`` (legacy), matching :func:`get_directory_contents`.
-    Sorted most-recent first (ISO datetime strings sort lexicographically).
+    Columns: selected, experiment, date, agent, model, benchmark, n_trajs.
+    agent/model/benchmark come from experiment_config.json when present.
+    Sorted most-recent first.
     """
     if not results_dir or not results_dir.exists():
         return []
@@ -352,11 +382,15 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
         if not _is_experiment_dir(dir_path):
             continue
         n_trajs = _count_episodes(dir_path)
+        cfg_info = _parse_experiment_config(dir_path)
         rows.append(
             {
                 "selected": False,
                 "experiment": dir_path.name,
                 "date": _parse_exp_date(dir_path),
+                "agent": cfg_info["agent"],
+                "model": cfg_info["model"],
+                "benchmark": cfg_info["benchmark"],
                 "n_trajs": n_trajs,
             }
         )

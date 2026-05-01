@@ -1260,9 +1260,11 @@ class TestBuildStatusCell:
         assert "▶️" not in cell
         assert "⛔" not in cell
 
-    def test_max_steps_symbol(self) -> None:
+    def test_max_steps_folds_into_completed(self) -> None:
+        # max_steps is a terminal outcome — collapses to ✓ at agent level like success/fail
         cell = xray_utils._build_status_cell(["max_steps"])
-        assert "🎬" in cell
+        assert "✓" in cell
+        assert "🎬" not in cell
 
     def test_cancelled_symbol(self) -> None:
         cell = xray_utils._build_status_cell(["cancelled"])
