@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import re
 import shlex
 from typing import Any
-
-from pydantic import field_validator
 
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
@@ -73,13 +70,6 @@ class SWEBenchVerifiedExecutionInfo(TaskExecutionInfo):
 
     eval_timeout: int = 1800
     """Wall-clock seconds allowed for the evaluation test commands."""
-
-    @field_validator("fail_to_pass", "pass_to_pass", mode="before")
-    @classmethod
-    def _parse_json_list(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            return json.loads(v)
-        return v
 
 
 class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):

@@ -100,22 +100,6 @@ def test_execution_info_roundtrip():
     assert restored.eval_timeout == 1800  # default preserved
 
 
-def test_execution_info_json_string_fields() -> None:
-    """field_validator normalises JSON-encoded strings to list[str].
-
-    Older execution cache versions serialise fail_to_pass / pass_to_pass as
-    JSON strings rather than real lists.
-    """
-    ei = SWEBenchVerifiedExecutionInfo(
-        problem_statement="p",
-        patch="",
-        test_patch="",
-        fail_to_pass='["tests/test_foo.py::test_bar"]',
-        pass_to_pass='["tests/test_baz.py::test_qux"]',
-    )
-    assert ei.fail_to_pass == ["tests/test_foo.py::test_bar"]
-    assert ei.pass_to_pass == ["tests/test_baz.py::test_qux"]
-
 
 def test_bash_only_tool_output_truncation() -> None:
     """bash() head+tail truncates large output without raising."""
