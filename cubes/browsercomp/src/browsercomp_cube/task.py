@@ -69,21 +69,29 @@ class BrowseCompExecutionInfo(TaskExecutionInfo):
     answer: str
 
 
-class BrowseCompTask(Task):
+class BrowseCompTask(Task[BrowseCompTaskMetadata]):
     """A single BrowseComp information-retrieval task."""
-
-    metadata: BrowseCompTaskMetadata  # type: ignore[assignment]
-    execution_info: BrowseCompExecutionInfo  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
     grader_retries: int = 3
     scorer_model: str
 
+    @property
+    def _exec(self) -> BrowseCompExecutionInfo:
+        """Typed view on execution_info — fails fast if it was not populated."""
+        if not isinstance(self.execution_info, BrowseCompExecutionInfo):
+            raise RuntimeError(
+                f"BrowseCompTask {self.metadata.id!r}: execution_info is "
+                f"{type(self.execution_info).__name__}, expected BrowseCompExecutionInfo. "
+                f"Construct via BrowseCompTaskConfig.make() so it is populated."
+            )
+        return self.execution_info
+
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        prompt = self.execution_info.problem + _FORMAT_INSTRUCTIONS
-        return Observation.from_text(prompt), {"problem": self.execution_info.problem}
+        prompt = self._exec.problem + _FORMAT_INSTRUCTIONS
+        return Observation.from_text(prompt), {"problem": self._exec.problem}
 
     def _call_grader(self, prompt: str, scorer_model: str) -> tuple[bool, str]:
         completion = litellm.completion(
@@ -108,9 +116,9 @@ class BrowseCompTask(Task):
             return 0.0, {"correct": False, "submitted": None, "reason": "No answer submitted"}
 
         prompt = _GRADER_TEMPLATE.format(
-            question=self.execution_info.problem,
+            question=self._exec.problem,
             response=submitted,
-            correct_answer=self.execution_info.answer,
+            correct_answer=self._exec.answer,
         )
 
         last_error: Exception | None = None
@@ -146,8 +154,8 @@ class BrowseCompTaskConfig(TaskConfig[BrowseCompTaskMetadata]):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> BrowseCompTask:
-        type(self).verify_installed()
-        encrypted = self.load_task_execution_info(self.task_id)
+        self.verify_installed()
+        encrypted = self.load_task_execution_info()
         canary = encrypted["canary"]
         execution_info = BrowseCompExecutionInfo(
             problem=decrypt(encrypted["problem"], canary),

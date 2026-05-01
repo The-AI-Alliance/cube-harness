@@ -21,7 +21,7 @@ _DATASET_URL = "https://openaipublic.blob.core.windows.net/simple-evals/browse_c
 _CSV_FILENAME = "browse_comp_test_set.csv"
 
 
-class BrowseCompBenchmark(Benchmark):
+class BrowseCompBenchmark(Benchmark["BrowseCompBenchmarkConfig"]):
     """BrowseComp benchmark: 1,266 hard web information-retrieval tasks."""
 
     def _setup(self) -> None:
@@ -41,8 +41,6 @@ class BrowseCompBenchmarkConfig(BenchmarkConfig[BrowseCompTaskMetadata]):
         num_tasks=1266,
         tags=["web", "browser", "reasoning", "nlp"],
     )
-    # Auto-loaded from task_metadata.json by Benchmark.__init_subclass__.
-    task_metadata: ClassVar[dict[str, BrowseCompTaskMetadata]]
     task_config_class: ClassVar[type[TaskConfig]] = BrowseCompTaskConfig
     benchmark_class: ClassVar[type[Benchmark]] = BrowseCompBenchmark
 

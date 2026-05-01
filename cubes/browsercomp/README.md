@@ -4,7 +4,7 @@
 
 ## Overview
 
-Each task asks a hard, deliberately hard-to-find factual question (e.g. *"In what year did a particular obscure paper appear in NeurIPS?"*). The agent must browse the web, gather evidence, and submit an `Exact Answer`. An LLM judge (`[scorer_model](src/browsercomp_cube/benchmark.py)`) compares the agent's answer to the ground truth using the official BrowseComp grader prompt and emits `correct: yes|no`.
+Each task asks a deliberately hard-to-find factual question (e.g. *"In what year did a particular obscure paper appear in NeurIPS?"*). The agent must browse the web, gather evidence, and submit an `Exact Answer`. An LLM judge ([`scorer_model`](src/browsercomp_cube/benchmark.py)) compares the agent's answer to the ground truth using the official BrowseComp grader prompt and emits `correct: yes|no`.
 
 The dataset is shipped encrypted (XOR + Base64, per-row canary) by OpenAI. `BrowseCompBenchmarkConfig.install()` downloads the encrypted CSV once and splits it into a per-task execution cache; ciphertext is only decrypted in `BrowseCompTaskConfig.make()`, so cleartext never lands on disk.
 
@@ -62,7 +62,7 @@ bench.close()
 | `SubmitAnswerTool`   | Submit the final `Explanation / Exact Answer / Confidence` block; sets `last_answer` and ends the episode |
 
 
-The expected agent answer format is enforced by the prompt suffix in `[task.py](src/browsercomp_cube/task.py)`:
+The expected agent answer format is enforced by the prompt suffix in [`task.py`](src/browsercomp_cube/task.py):
 
 ```
 Explanation: <your reasoning>
@@ -130,12 +130,12 @@ uv run pytest tests/
 
 | Item           | Value                                                                                                             |
 | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Source         | [openai/simple-evals — `browsecomp_eval.py](https://github.com/openai/simple-evals/blob/main/browsecomp_eval.py)` |
+| Source         | [openai/simple-evals — `browsecomp_eval.py`](https://github.com/openai/simple-evals/blob/main/browsecomp_eval.py) |
 | Dataset        | `https://openaipublic.blob.core.windows.net/simple-evals/browse_comp_test_set.csv`                                |
 | Tasks          | 1,266                                                                                                             |
 | Default scorer | `gpt-5.4-mini` (override via `BrowseCompBenchmarkConfig(scorer_model=...)`)                                       |
 | Grader retries | 3 (set on `BrowseCompTask.grader_retries`)                                                                        |
-| Encryption     | XOR with `SHA256(canary)`-derived key, Base64-wrapped (see `[crypto.py](src/browsercomp_cube/crypto.py)`)         |
+| Encryption     | XOR with `SHA256(canary)`-derived key, Base64-wrapped (see [`crypto.py`](src/browsercomp_cube/crypto.py))         |
 
 
 `task_metadata.json` is a shipped package resource containing only public fields (`id`, `recommended_max_steps`, `topic`). To regenerate it after a dataset refresh:

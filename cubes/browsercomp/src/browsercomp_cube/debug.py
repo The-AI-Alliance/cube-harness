@@ -15,7 +15,7 @@ from cube.benchmark import Benchmark, BenchmarkMetadata, RuntimeContext
 from cube.container import ContainerBackend
 from cube.core import Action, ActionSchema, Observation
 from cube.resource import InfraConfig
-from cube.task import TaskConfig
+from cube.task import TaskConfig, TaskMetadata
 from cube.tool import ToolboxConfig
 
 from browsercomp_cube.benchmark import BrowseCompBenchmark, BrowseCompBenchmarkConfig
@@ -39,7 +39,7 @@ def _debug_task_id(idx: int) -> str:
     return f"browsecomp-debug-{idx:04d}"
 
 
-def _debug_task_metadata() -> dict[str, BrowseCompTaskMetadata]:
+def _debug_task_metadata() -> dict[str, TaskMetadata]:
     return {
         _debug_task_id(i): BrowseCompTaskMetadata(
             id=_debug_task_id(i),
@@ -71,7 +71,7 @@ class DebugBrowseCompTask(BrowseCompTask):
 
     def _call_grader(self, prompt: str, scorer_model: str) -> tuple[bool, str]:
         submitted = self._submit_tool().last_answer or ""
-        is_correct = self.execution_info.answer.lower() in submitted.lower()
+        is_correct = self._exec.answer.lower() in submitted.lower()
         return is_correct, f"correct: {'yes' if is_correct else 'no'} (debug grader)"
 
 
@@ -105,7 +105,7 @@ class DebugBrowseCompBenchmarkConfig(BrowseCompBenchmarkConfig):
     """Serializable debug benchmark configuration."""
 
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BrowseCompBenchmarkConfig.benchmark_metadata
-    task_metadata: ClassVar[dict[str, BrowseCompTaskMetadata]] = _debug_task_metadata()
+    task_metadata = _debug_task_metadata()
     task_config_class: ClassVar[type[TaskConfig]] = DebugBrowseCompTaskConfig
     benchmark_class: ClassVar[type[Benchmark]] = DebugBrowseCompBenchmark
 

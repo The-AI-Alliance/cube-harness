@@ -12,7 +12,7 @@
 
 import argparse
 
-from browsercomp_cube.benchmark import BrowseCompBenchmark
+from browsercomp_cube.benchmark import BrowseCompBenchmarkConfig
 from browsercomp_cube.tool import SubmitAnswerToolConfig
 from cube.tool import ToolboxConfig
 from cube_web_tool import BraveWebSearchToolConfig, WebFetchToolConfig
@@ -37,14 +37,14 @@ def main(debug: bool) -> None:
             SubmitAnswerToolConfig(),
         ]
     )
-    benchmark = BrowseCompBenchmark(default_tool_config=tool_config, scorer_model="gpt-5.4-mini")
-    benchmark.install()
+    benchmark_config = BrowseCompBenchmarkConfig(tool_config=tool_config, scorer_model="gpt-5.4-mini")
+    BrowseCompBenchmarkConfig.install()
 
     exp = Experiment(
         name="browsercomp",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=50,
     )
 
