@@ -1,5 +1,6 @@
 """Tool layer — bash, read_file, write_file backed by a CUBE Container."""
 
+import base64
 import logging
 import shlex
 from pathlib import Path
@@ -160,6 +161,13 @@ class SWEBenchTool(Tool):
             return f"Error reading {path}: {result.stderr or result.stdout}"
         return result.stdout
 
+    def _write_content(self, path: str, content: str) -> None:
+        """Write content to path using base64 to avoid shell escaping issues."""
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
+        # base64 content is alphanumeric + +/= — safe to put in single quotes
+        self._exec(f"printf '%s' '{encoded}' | base64 -d > {shlex.quote(path)}")
+
     def _lint_python(self, path: str) -> str | None:
         """Run py_compile on a .py file; return error string or None if clean."""
         if not path.endswith(".py"):
@@ -183,9 +191,7 @@ class SWEBenchTool(Tool):
                 For targeted edits prefer str_replace — it is safer than overwriting
                 the whole file.
         """
-        self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
-        escaped = content.replace("'", "'\\''")
-        self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
+        self._write_content(path, content)
         msg = f"Wrote {len(content)} bytes to {path}"
         lint_error = self._lint_python(path)
         return f"{msg}\n{lint_error}" if lint_error else msg
@@ -219,8 +225,7 @@ class SWEBenchTool(Tool):
                 "context to make it unique. No changes made."
             )
         new_content = content.replace(old_str, new_str, 1)
-        escaped = new_content.replace("'", "'\\''")
-        self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
+        self._write_content(path, new_content)
         msg = f"Replaced 1 occurrence in {path}"
         lint_error = self._lint_python(path)
         return f"{msg}\n{lint_error}" if lint_error else msg
