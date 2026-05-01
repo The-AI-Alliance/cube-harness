@@ -1,5 +1,7 @@
 """Benchmark for terminalbench-cube — real-world terminal tasks with pytest-based validation."""
 
+from __future__ import annotations
+
 import base64
 import io
 import json
@@ -11,14 +13,13 @@ import tempfile
 import tomllib
 from collections.abc import Generator
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
-from pydantic import Field
-
-from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.infra_local import LocalInfraConfig
+from cube import LocalInfraConfig
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.resource import InfraConfig
 from cube.task import TaskConfig
+
 from terminalbench_cube.task import TerminalBenchTaskConfig, TerminalBenchTaskMetadata
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,29 @@ def _build_execution_info(task: dict) -> dict:
     }
 
 
-class TerminalBenchBenchmark(Benchmark):
+class TerminalBenchBenchmark(Benchmark["TerminalBenchBenchmarkConfig"]):
+    """Runtime pair — publishes ``self._infra`` (stashed by the base
+    ``Benchmark.__init__``) into ``runtime_context["infra"]`` so per-task
+    container launches flow through ``Task.runtime_context``.
+    """
+
+    def _setup(self) -> None:
+        """Publish the shared InfraConfig to runtime_context; per-task containers are launched per-task in make()."""
+        if self._infra is not None:
+            # GC orphans from earlier crashed runs so stale containers don't pile up.
+            self._infra.cleanup_stale()
+            self._runtime_context["infra"] = self._infra
+        logger.info(
+            "TerminalBenchBenchmark ready with %d tasks (infra=%s)",
+            self.config.num_tasks,
+            self._infra.fingerprint() if self._infra is not None else "<none>",
+        )
+
+    def close(self) -> None:
+        logger.info("Terminal-Bench benchmark closed")
+
+
+class TerminalBenchBenchmarkConfig(BenchmarkConfig[TerminalBenchTaskMetadata]):
     """Terminal-Bench 2 — real-world terminal tasks with pytest-based validation."""
 
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
@@ -83,17 +106,11 @@ class TerminalBenchBenchmark(Benchmark):
             "video-processing": ("category", "video-processing"),
         },
     )
-    task_metadata: ClassVar[dict[str, TerminalBenchTaskMetadata]]  # type: ignore - populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = TerminalBenchTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = TerminalBenchBenchmark
 
     # User-configurable fields
     oracle_mode: bool = False
-    infra: InfraConfig = Field(default_factory=LocalInfraConfig)
-    """Infra that launches one Docker container per task.  Defaults to LocalInfraConfig.
-
-    Passed to each Task via ``self._runtime_context["infra"]`` so ``TaskConfig.make()``
-    can call ``infra.launch()`` for the per-task resource.
-    """
 
     # ── Benchmark lifecycle ────────────────────────────────────────
 
@@ -109,7 +126,7 @@ class TerminalBenchBenchmark(Benchmark):
         To regenerate task_metadata.json (developer use only), run:
             scripts/create_task_metadata.py
         """
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists() and any(exec_cache_dir.iterdir()):
             logger.info("Execution cache already populated, skipping installation")
             return
@@ -142,29 +159,23 @@ class TerminalBenchBenchmark(Benchmark):
 
         The shipped task_metadata.json is not removed.
         """
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists():
             shutil.rmtree(exec_cache_dir)
             logger.info(f"Removed execution cache at {exec_cache_dir}")
 
-    def _setup(self) -> None:
-        """Publish the shared InfraConfig to runtime_context; per-task containers are launched per-task in make()."""
-        # GC orphans from earlier crashed runs so stale containers don't pile up.
-        self.infra.cleanup_stale()
-        self._runtime_context["infra"] = self.infra
-        logger.info(
-            f"TerminalBenchBenchmark ready with {len(self.task_metadata)} tasks (infra={self.infra.fingerprint()})"
-        )
+    def make(self, infra: InfraConfig | None = None) -> TerminalBenchBenchmark:
+        """Resolve a default infra of ``LocalInfraConfig`` if none provided, then
+        delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
+        """
+        return cast(TerminalBenchBenchmark, super().make(infra=infra or LocalInfraConfig()))
 
-    def close(self) -> None:
-        logger.info("Terminal-Bench benchmark closed")
-
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
+    def get_task_configs(self) -> Generator[TerminalBenchTaskConfig, None, None]:
         """Yield TaskConfigs with oracle_mode forwarded from benchmark settings."""
-        for tm in self.task_metadata.values():
+        for tm in self.tasks().values():
             yield TerminalBenchTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
+                metadata=tm,
+                tool_config=self.tool_config,
                 oracle_mode=self.oracle_mode,
             )
 

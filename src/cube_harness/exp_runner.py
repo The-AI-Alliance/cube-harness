@@ -1,6 +1,8 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
+import os
+import sys
 import time
 from uuid import uuid4
 
@@ -16,6 +18,29 @@ from cube_harness.storage import FileStorage, Storage
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+
+def _warn_if_ephemeral_venv() -> None:
+    """Warn when VIRTUAL_ENV is set but the interpreter lives elsewhere.
+
+    This happens when a recipe is launched with bare `uv run recipe.py` while VIRTUAL_ENV
+    already points to a project venv (e.g. inside a Claude worktree or after `source .venv/bin/activate`).
+    uv ignores the mismatch and creates an ephemeral env in ~/.cache/uv/environments-v2/ whose .pth
+    files can point to stale or deleted paths. Ray workers inherit that environment and may fail
+    with ImportError on any editable-installed cube package.
+
+    Fix: launch with `.venv/bin/python recipe.py`  or  `uv run --active recipe.py`.
+    """
+    venv = os.environ.get("VIRTUAL_ENV", "")
+    if venv and not sys.executable.startswith(venv):
+        logger.warning(
+            "VIRTUAL_ENV=%s but the interpreter is %s — uv may have created an ephemeral "
+            "environment whose .pth files point to stale paths. Ray workers will inherit "
+            "this environment and may raise ImportError. "
+            "Launch with:  .venv/bin/python <recipe>.py  or  uv run --active <recipe>.py",
+            venv,
+            sys.executable,
+        )
 
 
 def _extract_model(exp: Experiment) -> str | None:
@@ -176,6 +201,7 @@ def _run_with_ray_impl(
             return episode.run()
 
     if not ray.is_initialized():
+        _warn_if_ephemeral_venv()
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",

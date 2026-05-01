@@ -1,15 +1,16 @@
 """Task and TaskConfig for swebench-verified-cube."""
 
+from __future__ import annotations
+
 import base64
-import json
 import logging
 import re
 import shlex
 from typing import Any
 
-from cube.container import relocate_if_readonly
+from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
 from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -24,8 +25,9 @@ class SWEBenchVerifiedTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for SWE-bench Verified tasks.
 
     Public fields shipped in task_metadata.json (available at import time).
-    Heavy execution data (problem_statement, patch, test_patch, etc.) lives in
-    the per-task execution cache and is loaded lazily by SWEBenchVerifiedTaskConfig.make().
+    Heavy execution data (problem_statement, patch, test_patch, etc.) lives on
+    ``SWEBenchVerifiedExecutionInfo`` and is loaded lazily by
+    ``SWEBenchVerifiedTaskConfig.make()``.
     """
 
     repo: str
@@ -41,13 +43,57 @@ class SWEBenchVerifiedTaskMetadata(TaskMetadata):
     """Git SHA of the base commit the agent starts from."""
 
 
-class SWEBenchVerifiedTask(Task):
-    """A single SWE-bench Verified task with test-based validation."""
+class SWEBenchVerifiedExecutionInfo(TaskExecutionInfo):
+    """Heavy per-task execution data for SWE-bench Verified — populated on the worker.
 
-    metadata: SWEBenchVerifiedTaskMetadata  # type: ignore[assignment]
+    Loaded by ``SWEBenchVerifiedTaskConfig.make()`` from the per-task execution cache
+    written by ``SWEBenchVerifiedBenchmarkConfig.install()``.
+    """
+
+    problem_statement: str
+    """The agent-facing GitHub issue text."""
+
+    hints_text: str = ""
+    """Optional hint text (only surfaced when ``SWEBenchVerifiedTaskConfig.include_hints`` is True)."""
+
+    patch: str
+    """Gold patch — written to /tmp/gold_patch.diff in oracle_mode."""
+
+    test_patch: str
+    """Test patch applied during evaluation."""
+
+    fail_to_pass: list[str]
+    """Test directives that must pass after the fix."""
+
+    pass_to_pass: list[str]
+    """Test directives that must remain passing after the fix."""
+
+    eval_timeout: int = 1800
+    """Wall-clock seconds allowed for the evaluation test commands."""
+
+
+class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
+    """A single SWE-bench Verified task with test-based validation."""
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+
+    include_hints: bool = False
+    """If True, append hints_text to the problem statement in reset()."""
+
+    oracle_mode: bool = False
+    """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
+
+    @property
+    def _exec(self) -> SWEBenchVerifiedExecutionInfo:
+        """Typed view on execution_info — fails fast if it was not populated."""
+        if not isinstance(self.execution_info, SWEBenchVerifiedExecutionInfo):
+            raise RuntimeError(
+                f"SWEBenchVerifiedTask {self.metadata.id!r}: execution_info is "
+                f"{type(self.execution_info).__name__}, expected SWEBenchVerifiedExecutionInfo. "
+                f"Construct via SWEBenchVerifiedTaskConfig.make() so it is populated."
+            )
+        return self.execution_info
 
     def _build_tool(self) -> None:
         """Copy /testbed to a writable location if the container mounts it read-only."""
@@ -61,17 +107,16 @@ class SWEBenchVerifiedTask(Task):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        extra = self.metadata.extra_info
 
         # Oracle mode: write gold patch for debug/baseline use
-        if extra.get("oracle_mode") and extra.get("patch"):
+        if self.oracle_mode and self._exec.patch:
             assert isinstance(self.tool, SWEBenchTool)
-            b64 = base64.b64encode(extra["patch"].encode()).decode()
+            b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
-        instruction = extra["problem_statement"]
-        if extra.get("include_hints") and extra.get("hints_text"):
-            instruction += f"\n\n## Hints\n{extra['hints_text']}"
+        instruction = self._exec.problem_statement
+        if self.include_hints and self._exec.hints_text:
+            instruction += f"\n\n## Hints\n{self._exec.hints_text}"
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
@@ -81,15 +126,13 @@ class SWEBenchVerifiedTask(Task):
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, SWEBenchTool)
-        extra = self.metadata.extra_info
 
         # Apply test patch
-        self._apply_patch(extra["test_patch"])
+        self._apply_patch(self._exec.test_patch)
 
-        # Parse test lists
-        fail_to_pass = json.loads(extra["fail_to_pass"])
-        pass_to_pass = json.loads(extra["pass_to_pass"])
-        eval_timeout = extra.get("eval_timeout", 1800)
+        fail_to_pass = self._exec.fail_to_pass
+        pass_to_pass = self._exec.pass_to_pass
+        eval_timeout = self._exec.eval_timeout
 
         # Run FAIL_TO_PASS tests — these must all pass for resolution
         f2p_passed, f2p_output = self._run_tests(self.metadata.repo, fail_to_pass, timeout=eval_timeout)
@@ -218,15 +261,25 @@ class SWEBenchVerifiedTask(Task):
         return f"python -m pytest -rN -p no:cacheprovider {tests}"
 
 
-class SWEBenchVerifiedTaskConfig(TaskConfig):
+class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
     """Serializable factory that produces a SWEBenchVerifiedTask.
 
     Loads heavy execution data (problem_statement, patch, test_patch, etc.) from
-    the per-task execution cache in make(), so it works correctly in Ray workers.
+    the per-task execution cache populated by ``SWEBenchVerifiedBenchmarkConfig.install()``.
     """
 
     include_hints: bool = False
     oracle_mode: bool = False
+
+    def verify_installed(self) -> None:
+        """Fail fast if the per-task execution cache is empty."""
+        cache_dir = type(self).task_execution_cache_dir()
+        if not cache_dir.exists() or not any(cache_dir.iterdir()):
+            raise RuntimeError(
+                f"SWE-bench Verified per-task execution cache is empty at {cache_dir}. "
+                f"Run `cube install swebench-verified-cube` (or "
+                f"`SWEBenchVerifiedBenchmarkConfig.install()`) on this worker first."
+            )
 
     def make(
         self,
@@ -234,25 +287,22 @@ class SWEBenchVerifiedTaskConfig(TaskConfig):
         container_backend: ContainerBackend | None = None,
     ) -> SWEBenchVerifiedTask:
         if runtime_context is None or "infra" not in runtime_context:
-            raise ValueError("SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra']")
+            if container_backend is None:
+                raise ValueError(
+                    "SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'] "
+                    "(preferred) or a legacy container_backend."
+                )
 
-        # Import here to avoid circular import (benchmark imports task)
-        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
-
-        metadata = SWEBenchVerifiedBenchmark.task_metadata[self.task_id]
-        exec_info = SWEBenchVerifiedBenchmark.load_task_execution_info(self.task_id)
-        metadata = metadata.model_copy(
-            update={
-                "extra_info": {
-                    **exec_info,
-                    "include_hints": self.include_hints,
-                    "oracle_mode": self.oracle_mode,
-                }
-            }
-        )
+        self.verify_installed()
+        raw = self.load_task_execution_info()
+        execution_info = SWEBenchVerifiedExecutionInfo.model_validate(raw)
 
         return SWEBenchVerifiedTask(
-            metadata=metadata,
+            metadata=self.metadata,
+            execution_info=execution_info,
             tool_config=self.tool_config or SWEBenchToolConfig(),
             runtime_context=runtime_context,
+            container_backend=container_backend,
+            include_hints=self.include_hints,
+            oracle_mode=self.oracle_mode,
         )

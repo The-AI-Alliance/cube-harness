@@ -18,7 +18,7 @@ Usage:
 
 import sys
 
-from osworld_cube.benchmark import OSWorldBenchmark
+from osworld_cube.benchmark import OSWorldBenchmarkConfig
 from osworld_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
@@ -83,19 +83,18 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    benchmark = OSWorldBenchmark(
-        default_tool_config=tool_config,
+    benchmark_config = OSWorldBenchmarkConfig(
+        tool_config=tool_config,
         use_som=False,
     )
-    benchmark.install()
-    benchmark.setup()
-    benchmark = benchmark.named_subset("test_small")
+    OSWorldBenchmarkConfig.install()
+    benchmark_config = benchmark_config.named_subset("test_small")
 
     exp = Experiment(
         name="osworld_genny_gpt5",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=15,
     )
 

@@ -108,18 +108,17 @@ def _make_benchmark(
         return bench
 
     if benchmark_name == "swebench-verified":
-        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 
-        bench = SWEBenchVerifiedBenchmark()
+        bench = SWEBenchVerifiedBenchmarkConfig()
     elif benchmark_name == "swebench-live":
-        from swebench_live_cube.benchmark import SWEBenchLiveBenchmark
+        from swebench_live_cube.benchmark import SWEBenchLiveBenchmarkConfig
 
-        bench = SWEBenchLiveBenchmark()
+        bench = SWEBenchLiveBenchmarkConfig()
     elif benchmark_name == "terminalbench":
-        from terminalbench_cube import TerminalBenchBenchmark
+        from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
 
-        TerminalBenchBenchmark.install()
-        bench = TerminalBenchBenchmark()
+        bench = TerminalBenchBenchmarkConfig()
     else:
         raise ValueError(
             f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
@@ -173,7 +172,7 @@ def run(
         name=f"genny-{benchmark_name}",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark,
         max_steps=30,
         resume=resume,
     )
