@@ -17,7 +17,7 @@ requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
 
 [tool.uv-build]
-include = ["src/miniwob_cube/task_metadata.json"]
+include = ["src/miniwob_cube/task_metadata.json", "src/miniwob_cube/scripts/install.sh"]
 
 [tool.ruff]
 fix = true
