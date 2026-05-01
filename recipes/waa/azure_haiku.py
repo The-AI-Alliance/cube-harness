@@ -119,13 +119,29 @@ def main() -> None:
         observe_after_action=True,
     )
 
-    # Sweep any orphaned VMs/disks/NICs/IPs left over from a prior crashed run
-    # *before* launching this eval, so we start from a clean slate. Earlier we
-    # only swept on exit, which left the next run starting from whatever the
-    # previous run had stranded.
+    # Pre-run cleanup. Two phases:
+    #
+    #   1. (opt-in via WAA_CLEAN_START=1) cleanup_stale(60s) deletes any
+    #      cube-* VM older than 60s. Use ONLY when no other eval is running
+    #      in this resource group — it doesn't distinguish "stranded VM
+    #      from a prior crashed run" from "VM in active use by a parallel
+    #      eval", and at this account scale we sometimes intentionally
+    #      run two evals concurrently. Off by default to avoid friendly-fire.
+    #   2. cleanup_orphaned_resources() — always safe. Only sweeps NICs /
+    #      IPs / disks that aren't attached to a VM. Anything in active use
+    #      is by definition attached, so concurrent evals stay untouched.
+    #
+    # If killed runs are leaving stranded VMs, manually:
+    #   WAA_CLEAN_START=1 uv run recipes/waa/azure_haiku.py
+    print("--- pre-run cleanup ---")
+    if os.environ.get("WAA_CLEAN_START") == "1":
+        stale_vms = INFRA.cleanup_stale(max_age_seconds=60)
+        if stale_vms:
+            print(f"WAA_CLEAN_START=1: deleted {len(stale_vms)} stale VM(s) older than 60s")
     pre_deleted = INFRA.cleanup_orphaned_resources()
     if pre_deleted:
-        print(f"Cleaned up orphaned resources from prior run: {pre_deleted}")
+        n = sum(len(v) for v in pre_deleted.values())
+        print(f"Cleaned up {n} orphaned resource(s) from prior runs")
 
     bench_config = WAABenchmark(
         tool_config=tool_config,
@@ -146,11 +162,18 @@ def main() -> None:
 
     try:
         print(f"\nHAIKU FULL EVAL — output: {output_dir}")
-        run_with_ray(exp, n_cpus=10)
+        run_with_ray(exp, n_cpus=50)
     finally:
-        deleted = INFRA.cleanup_orphaned_resources()
-        if deleted:
-            print(f"Cleaned up orphaned resources: {deleted}")
+        # Post-run: same safety stance as pre-run. Don't unconditionally call
+        # cleanup_stale — concurrent evals' VMs would be in scope. Just sweep
+        # the unattached debris from this run's per-task handle.close() calls.
+        # If user wants total annihilation post-run they re-run with
+        # WAA_CLEAN_START=1 next time, or run cleanup_stale manually.
+        print("\n--- post-run cleanup ---")
+        leftover = INFRA.cleanup_orphaned_resources()
+        if leftover:
+            n = sum(len(v) for v in leftover.values())
+            print(f"Cleaned up {n} orphaned resource(s) from this run")
 
 
 if __name__ == "__main__":

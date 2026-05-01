@@ -312,12 +312,19 @@ class SetupController:
                     raise requests.RequestException(f"Failed to download {url} after 3 attempts")
 
             # Retry the upload — /setup/upload returns a transient 502 (empty body,
-            # Connection: close) on ~20% of VMs during the first 5-30s after tunnel
-            # open. Likely a Windows Defender / file-system race on the first write
-            # to C:\Users\Docker\Downloads\. Settled VMs are 100% reliable. Budget
-            # 5 retries with 2/4/8/16/32s backoff = 62s total, enough to outwait it.
+            # Connection: close) on a fraction of VMs after tunnel open. The
+            # diagnostic probes show /probe and /setup/execute also 502 during
+            # this window, so it's the whole Flask agent on the guest, not just
+            # /upload. Empirically (n=50 evals) the window can persist >30s, so
+            # 5 attempts with 2/4/8/16s backoff (= 30s total — the 32s sleep
+            # after attempt 5 is unreachable) is too short.
+            #
+            # 8 attempts with 2/4/8/16/32/64/128s backoff = 254s ≈ 4.2min. Adds
+            # jitter (±25%) so concurrent retries from a same-second cohort
+            # don't all hit the recovering Flask at the exact same instant and
+            # retry-storm it.
             last_exc: Exception | None = None
-            for attempt in range(5):
+            for attempt in range(8):
                 form = MultipartEncoder(
                     {"file_path": path, "file_data": (os.path.basename(path), open(cache_path, "rb"))}
                 )
@@ -362,9 +369,89 @@ class SetupController:
                 except requests.RequestException as exc:
                     last_exc = exc
                     logger.warning("Upload attempt %d failed: %s; retrying...", attempt + 1, exc)
-                time.sleep(2 ** (attempt + 1))  # 2, 4, 8, 16, 32 seconds
+                base_delay = 2 ** (attempt + 1)  # 2, 4, 8, 16, 32, 64, 128
+                jitter = random.uniform(0.75, 1.25)
+                time.sleep(base_delay * jitter)
             else:
-                raise last_exc or requests.RequestException("Upload failed after 5 attempts")
+                # Forensic dump before raising — capture everything we can learn
+                # about the VM's HTTP surface from the local tunnel side, since
+                # SSH-into-a-dead-Windows-VM is finicky. The retry loop above
+                # only probed two endpoints; here we sweep more endpoints,
+                # methods, and capture response headers + timing so we can
+                # tell what kind of 502 this is (Caddy-with-no-upstream vs
+                # Caddy-with-broken-upstream vs ConnectionRefused etc).
+                self._dump_dead_flask_diagnostics(reason=f"upload of {path!r} exhausted 8 retries")
+                raise last_exc or requests.RequestException("Upload failed after 8 attempts")
+
+    def _dump_dead_flask_diagnostics(self, reason: str) -> None:
+        """Best-effort forensic dump when /setup/upload retries exhaust.
+
+        Sweeps a wider set of endpoints + methods than the per-retry diag
+        block, captures response headers / timing / body-prefix, and writes
+        everything to ``cache_dir/dead_flask_diag.txt``. Lets us tell apart:
+
+          * Caddy with no upstream config (instant 502, server header = caddy)
+          * Caddy with broken upstream (slow 502 after upstream timeout)
+          * Tunnel/connectivity issue (ConnectionRefused / timeout instead)
+
+        SSH-into-a-Windows-VM is finicky enough that we deliberately stay
+        local-only here — every probe hits the existing localhost SSH tunnel.
+        Best-effort: failures inside this function are logged but never
+        re-raised; we're already on the failure path.
+        """
+        out_path = os.path.join(self.cache_dir, "dead_flask_diag.txt")
+        # Mix of GET and POST against endpoints we know exist, plus a few we
+        # don't — Caddy's response on an unknown path tells us if it's a
+        # bare reverse proxy or has any local handlers.
+        probes: list[tuple[str, str, str, dict | None]] = [
+            ("GET", self.http_server, "/", None),
+            ("GET", self.http_server, "/probe", None),
+            ("GET", self.http_server, "/screenshot", None),
+            ("GET", self.http_server, "/accessibility", None),
+            ("GET", self.http_server, "/health", None),
+            ("GET", self.http_server, "/version", None),
+            ("GET", self.http_server, "/__ping__", None),
+            ("POST", self.http_server_setup_root, "/execute", {"command": ["cmd", "/c", "echo", "hi"], "shell": False}),
+            ("POST", self.http_server_setup_root, "/launch", {"command": ["cmd", "/c", "echo", "hi"], "shell": False}),
+            ("POST", self.http_server_setup_root, "/open_file", {"path": "C:\\nope"}),
+        ]
+        try:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            with open(out_path, "w") as f:
+                f.write(f"# Dead-Flask forensic dump\n# Reason: {reason}\n")
+                f.write(f"# http_server: {self.http_server}\n")
+                f.write(f"# http_server_setup_root: {self.http_server_setup_root}\n")
+                f.write(f"# Captured at: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n\n")
+                for method, base, path_, body in probes:
+                    url = base + path_
+                    f.write(f"=== {method} {url} ===\n")
+                    t0 = time.time()
+                    try:
+                        if method == "GET":
+                            r = requests.get(url, timeout=10)
+                        else:
+                            r = requests.post(
+                                url,
+                                json=body,
+                                headers={"Content-Type": "application/json"},
+                                timeout=10,
+                            )
+                        elapsed_ms = (time.time() - t0) * 1000
+                        f.write(f"  status:  {r.status_code}\n")
+                        f.write(f"  elapsed: {elapsed_ms:.0f} ms\n")
+                        f.write("  headers:\n")
+                        for k, v in sorted(r.headers.items()):
+                            f.write(f"    {k}: {v}\n")
+                        body_preview = (r.text or "")[:200].replace("\n", "\\n")
+                        f.write(f"  body[:200]: {body_preview!r}\n")
+                    except requests.RequestException as exc:
+                        elapsed_ms = (time.time() - t0) * 1000
+                        f.write(f"  EXC after {elapsed_ms:.0f} ms: {type(exc).__name__}: {exc}\n")
+                    f.write("\n")
+            logger.warning("dead-flask diag written to %s", out_path)
+        except Exception as exc:
+            # Never let the diagnostic itself break the retry-failure path.
+            logger.warning("dead-flask diag failed (best-effort): %s", exc)
 
     def _execute_setup(
         self,
@@ -419,16 +506,21 @@ class SetupController:
         if not shell and isinstance(command, str) and len(command.split()) > 1:
             command = command.split()
         payload = json.dumps({"command": command, "shell": shell})
+        # Raise on non-200 — _launch_setup is a hard pre-req for downstream
+        # steps (e.g. _chrome_open_tabs_setup expects Chrome to actually be
+        # running). Swallowing the failure here makes the next step fail with
+        # a confusing "Chrome CDP returned 500/ECONNREFUSED" instead of the
+        # real cause ("WAA Flask agent returned 502 from /launch"), and burns
+        # ~3 minutes of CDP retries on a Chrome that was never launched.
         try:
             resp = requests.post(
                 self.http_server_setup_root + "/launch",
                 headers={"Content-Type": "application/json"},
                 data=payload,
             )
-            if resp.status_code != 200:
-                logger.error("Failed to launch: %s", resp.text)
+            resp.raise_for_status()
         except requests.RequestException as exc:
-            logger.error("launch error: %s", exc)
+            raise RuntimeError(f"Failed to launch {command!r}: {exc}") from exc
 
     def _open_setup(self, path: str) -> None:
         if not path:

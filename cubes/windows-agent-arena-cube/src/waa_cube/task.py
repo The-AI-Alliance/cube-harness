@@ -13,11 +13,14 @@ from __future__ import annotations
 
 import io
 import logging
+import os
+import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+import requests
 from cube.benchmark import RuntimeContext  # noqa: F401 — triggers WAATask.model_rebuild()
 from cube.core import Observation
 from cube.resource import InfraConfig, ResourceHandle
@@ -36,6 +39,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _POST_SNAPSHOT_SLEEP = 10  # seconds to wait after QMP loadvm before taking obs
+
+# Per-VM dump dir for dead-Flask diagnostics. Written by _health_gate_or_raise
+# when the gate fast-fails or times out. Inspect after a real eval to find the
+# state pattern that distinguishes dead VMs from healthy ones.
+_DEAD_VM_DIAG_DIR = Path(os.environ.get("WAA_DEAD_VM_DIAG_DIR", "/tmp/dead-flask-eval-diag"))
+
+_SSH_KEY_PATH = os.path.expanduser(
+    os.environ.get("WAA_DEAD_VM_DIAG_SSH_KEY", "~/.ssh/id_ed25519")
+)
+_SSH_USER = "Docker"
+_SSH_OPTS = [
+    "-i", _SSH_KEY_PATH,
+    "-o", "IdentitiesOnly=yes",
+    "-o", "StrictHostKeyChecking=no",
+    "-o", "UserKnownHostsFile=/dev/null",
+    "-o", "BatchMode=yes",
+    "-o", "ConnectTimeout=10",
+]
+
+# All-cmd-shell battery — powershell -EncodedCommand fails on this image
+# because OpenSSH's default shell loads a profile that breaks on
+# ExecutionPolicy before our -NoProfile child can run. cmd-only sidesteps it.
+_DIAG_BATTERY: tuple[tuple[str, str], ...] = (
+    ("LISTENING_PORTS", 'netstat -ano | findstr LISTENING'),
+    ("PYTHON_PROCS", 'tasklist /v /fi "imagename eq python.exe" /fo list'),
+    ("CADDY_PROCS", 'tasklist /v /fi "imagename eq caddy.exe" /fo list'),
+    ("CADDY_WIN_PROCS", 'tasklist /v /fi "imagename eq caddy_windows_amd64.exe" /fo list'),
+    ("PYTHON_CMDLINES", 'wmic process where "name=\'python.exe\'" get ProcessId,ParentProcessId,CommandLine /format:list'),
+    ("CADDY_CMDLINES", 'wmic process where "name like \'caddy%%\'" get ProcessId,ParentProcessId,Name,CommandLine /format:list'),
+    ("WINDOWSARENA_TASK", 'schtasks /query /tn WindowsArena_OnLogon /v /fo list 2>nul'),
+    ("WINDOWSARENA_LOG", 'if exist C:\\WindowsArena_OnLogon_Log.txt (type C:\\WindowsArena_OnLogon_Log.txt) else (echo NO_WINDOWSARENA_LOG_FILE)'),
+    ("FLASK_LOG_TAIL", 'if exist C:\\oem\\server\\server.log (more +0 C:\\oem\\server\\server.log) else if exist C:\\oem\\server.log (more +0 C:\\oem\\server.log) else (echo NO_FLASK_LOG_FILE)'),
+    ("SYSTEM_EVT_ERR", 'wevtutil qe System "/q:*[System[(Level=1 or Level=2)]]" /c:30 /rd:true /f:text'),
+    ("APP_EVT_ERR", 'wevtutil qe Application "/q:*[System[(Level=1 or Level=2)]]" /c:30 /rd:true /f:text'),
+    ("RUN_HKLM", 'reg query HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 2>nul'),
+    ("RUN_HKCU", 'reg query HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run 2>nul'),
+    ("UPTIME", 'net statistics workstation | findstr /C:"Statistics since"'),
+)
 
 # Actual VM resolution after snapshot restore.  The QEMU display adapter is
 # initialised at 1920×1080 (required for the Windows accessibility API), but the
@@ -142,9 +183,157 @@ class WAATask(Task):
 
         logger.info("Launching VM via %s", type(self.infra).__name__)
         self._resource_handle = self.infra.launch(WAA_WINDOWS_RESOURCE)
+        # Health-gate before handing off to the agent loop. A fraction of
+        # freshly-booted VMs come up with Caddy bound to port 5000 instead
+        # of the WAA Flask agent (root cause TBD; investigating in parallel).
+        # These are dead-on-arrival — they 502 every endpoint forever, and
+        # without this gate we'd burn ~4min of in-task retries before
+        # failing the episode. Fail fast so Ray re-queues on a fresh VM.
+        self._health_gate_or_raise()
         # ComputerBase.attach_vm() takes any object with an `.endpoint` str
         # attribute; the cube-infra handle satisfies that protocol.
         self._computer.attach_vm(self._resource_handle)
+
+    def _extract_public_ip(self) -> str:
+        """Pull the VM's public IP out of the resource handle's SSH tunnel argv.
+        Best-effort — returns empty string if the handle structure changes."""
+        if self._resource_handle is None:
+            return ""
+        for proc in getattr(self._resource_handle, "_tunnels", []) or []:
+            argv = getattr(proc, "args", []) or []
+            if isinstance(argv, list):
+                for a in argv:
+                    if isinstance(a, str) and "@" in a and a.split("@", 1)[0] == _SSH_USER:
+                        return a.split("@", 1)[1]
+        return ""
+
+    def _dump_dead_vm_diagnostics(self, public_ip: str, reason: str) -> None:
+        """Write a per-VM diagnostic dump to ``_DEAD_VM_DIAG_DIR`` so post-eval
+        analysis can find the pattern that distinguishes dead VMs from healthy
+        ones. Best-effort: any failure here is logged and swallowed so the
+        health gate's own teardown still runs.
+        """
+        if not public_ip:
+            logger.warning("dead-vm diag: no public IP for %s — skipping dump", self.metadata.id)
+            return
+        try:
+            _DEAD_VM_DIAG_DIR.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            logger.warning("dead-vm diag: mkdir failed: %s", exc)
+            return
+        vm_name = getattr(self._resource_handle, "_vm_name", "unknown") if self._resource_handle else "unknown"
+        out_path = _DEAD_VM_DIAG_DIR / f"{self.metadata.id}_{vm_name}.txt"
+        sections: list[tuple[str, str]] = []
+        for label, cmd in _DIAG_BATTERY:
+            try:
+                r = subprocess.run(
+                    ["ssh", *_SSH_OPTS, f"{_SSH_USER}@{public_ip}", "cmd", "/c", cmd],
+                    capture_output=True, text=True, timeout=30,
+                )
+                body = r.stdout if r.returncode == 0 else f"[exit {r.returncode}]\n{r.stderr[:400]}"
+            except Exception as exc:
+                body = f"[ssh exception: {type(exc).__name__}: {exc}]"
+            sections.append((label, body))
+        try:
+            with open(out_path, "w") as f:
+                f.write(f"# Dead-VM diagnostic dump\n")
+                f.write(f"# Task: {self.metadata.id}\n")
+                f.write(f"# VM: {vm_name}\n")
+                f.write(f"# Public IP: {public_ip}\n")
+                f.write(f"# Reason: {reason}\n")
+                f.write(f"# Captured: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n\n")
+                for label, body in sections:
+                    f.write("=" * 72 + f"\n== {label}\n" + "=" * 72 + "\n")
+                    f.write(body or "[empty]")
+                    f.write("\n\n")
+            logger.warning("dead-vm diag: wrote %s", out_path)
+        except Exception as exc:
+            logger.warning("dead-vm diag: write failed: %s", exc)
+
+    def _health_gate_or_raise(self) -> None:
+        """Probe ``/probe`` until 200, or fail-fast on the dead-Flask signature.
+
+        Two distinct failure modes show up in the wild and this gate handles
+        them differently:
+
+          * **Dead Flask** — Caddy is up on :5000 returning ``502`` with
+            ``Server: Caddy`` (Flask never bound the port). Stays that way
+            indefinitely; no point waiting. **Bail after 3 consecutive
+            502+Caddy responses (~6s)** and let Ray retry on a fresh VM.
+
+          * **Slow-warming Flask** — port 5000 isn't bound yet so the SSH
+            tunnel can't reach upstream and we get ``ConnectionRefused``.
+            This is benign cold-boot variance and resolves on its own once
+            Flask binds. **Wait the full 5-minute budget** before giving up.
+
+        Net behaviour: dead VMs get killed in 6 s (vs 4 min of in-task
+        retries we'd otherwise burn), slow VMs aren't aborted prematurely.
+        """
+        if self._resource_handle is None or not self._resource_handle.endpoint:
+            return  # not our problem — let downstream call sites surface this
+        endpoint = self._resource_handle.endpoint
+        deadline = time.time() + 300  # 5 min budget for slow Flask warmup
+        caddy_502_strike_limit = 3  # 502+Caddy this many times in a row → dead
+        last_status: int | str = "no-response"
+        last_server: str = ""
+        last_exc: Exception | None = None
+        attempts = 0
+        consecutive_caddy_502 = 0
+        while time.time() < deadline:
+            attempts += 1
+            try:
+                resp = requests.get(endpoint + "/probe", timeout=5)
+                last_status = resp.status_code
+                last_server = resp.headers.get("Server", "")
+                if resp.status_code == 200:
+                    logger.info(
+                        "Health gate passed for %s after %d attempt(s) (server=%s)",
+                        self.metadata.id,
+                        attempts,
+                        last_server,
+                    )
+                    return
+                # Dead-Flask signature: 502 + Server: Caddy. Streak-count so we
+                # don't overreact to a single transient 502 from a recovering
+                # upstream — but bail quickly on a sustained pattern.
+                if resp.status_code == 502 and "caddy" in last_server.lower():
+                    consecutive_caddy_502 += 1
+                    if consecutive_caddy_502 >= caddy_502_strike_limit:
+                        logger.warning(
+                            "Health gate FAST-FAIL for %s: %d consecutive 502+Caddy responses "
+                            "→ Flask never bound :5000, no point waiting %ds",
+                            self.metadata.id,
+                            consecutive_caddy_502,
+                            int(deadline - time.time()),
+                        )
+                        break
+                else:
+                    consecutive_caddy_502 = 0
+            except requests.RequestException as exc:
+                last_exc = exc
+                last_status = "exc"
+                consecutive_caddy_502 = 0  # connection error resets the streak
+            time.sleep(2)
+        # Loop exited without 200 — either deadline or fast-fail break
+        msg = (
+            f"Health gate FAILED for {self.metadata.id} after {attempts} attempts: "
+            f"last_status={last_status} server={last_server!r} exc={last_exc}"
+        )
+        logger.warning("%s — capturing diag, then closing handle so episode retries on fresh VM", msg)
+        # Capture VM state BEFORE closing the handle — handle.close() deletes
+        # the Azure VM. Diagnostic dump is best-effort and never raises.
+        public_ip = self._extract_public_ip()
+        self._dump_dead_vm_diagnostics(
+            public_ip,
+            reason=f"last_status={last_status} server={last_server!r}",
+        )
+        try:
+            self._resource_handle.close()
+        except Exception as close_exc:
+            logger.warning("close() during health-gate teardown failed: %s", close_exc)
+        finally:
+            self._resource_handle = None
+        raise RuntimeError(msg)
 
     def _get_vm_ports(self) -> tuple[int, int, int]:
         """Return (chromium_port, vlc_port, server_port) from the current handle.
