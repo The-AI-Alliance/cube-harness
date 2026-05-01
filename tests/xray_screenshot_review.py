@@ -5,9 +5,9 @@ and saves labeled screenshots to /tmp/xray_screenshots/ for agent analysis.
 
 Modes
 -----
-  status    — Agents → Tasks → Seeds: all status symbols + retry badge
+  status    — Agents → Trajectories: all status symbols + retry badge
   dashboard — Dashboard tab: experiment stats, progress bar
-  episode   — Drill into a FAILED episode: Seeds tab → Logs tab (episode status)
+  episode   — Drill into a FAILED episode: Trajectories tab → Logs tab
   all       — Runs all three modes in sequence
 
 Usage
@@ -96,8 +96,8 @@ def click_row(locator, timeout: int = 5_000) -> None:
     locator.click(force=True, timeout=timeout)
 
 
-def click_task(page: Page, task_id: str) -> None:
-    row = page.locator("#task_table tr").filter(has_text=re.compile(rf"\b{task_id}\b")).first
+def click_traj(page: Page, traj_id: str) -> None:
+    row = page.locator("#traj_table tr").filter(has_text=re.compile(rf"\b{traj_id}\b")).first
     click_row(row)
     page.wait_for_timeout(400)
 
@@ -115,7 +115,7 @@ def shot(page: Page, name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def run_status(page: Page, url: str) -> None:
-    """Agents → Tasks → Seeds for each interesting task."""
+    """Agents → Trajectories: all status symbols + retry badge."""
     print("\n[status] navigating status views…")
     load_experiment(page, url)
     shot(page, "status_01_experiments")
@@ -124,21 +124,16 @@ def run_status(page: Page, url: str) -> None:
     wait_rows(page, "agent_table")
     shot(page, "status_02_agents")
 
-    page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-    wait_rows(page, "task_table", min_rows=4)
-    shot(page, "status_03_tasks_all")
+    page.get_by_role("tab", name=re.compile(r"Trajectories")).click()
+    wait_rows(page, "traj_table", min_rows=5)
+    shot(page, "status_03_trajectories_all")
 
-    for task_id, label in [("task_2", "max_steps_retry"), ("task_3", "failed"), ("task_4", "stale")]:
-        page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-        wait_rows(page, "task_table", min_rows=4)
-        click_task(page, task_id)
-        page.get_by_role("tab", name=re.compile(r"Seeds")).click()
-        page.wait_for_function(
-            f"() => {{ const el = document.querySelector('#seed_table'); "
-            f"return el && el.innerText.includes('{task_id}_ep0'); }}",
-            timeout=8_000,
-        )
-        shot(page, f"status_04_seeds_{label}")
+    for traj_id, label in [("task_2_ep0", "max_steps_retry"), ("task_3_ep0", "failed"), ("task_4_ep0", "stale")]:
+        page.get_by_role("tab", name=re.compile(r"Trajectories")).click()
+        wait_rows(page, "traj_table", min_rows=5)
+        click_traj(page, traj_id)
+        page.wait_for_timeout(600)
+        shot(page, f"status_04_traj_{label}")
 
 
 def run_dashboard(page: Page, url: str) -> None:
@@ -160,30 +155,19 @@ def run_episode(page: Page, url: str) -> None:
     print("\n[episode] drilling into failed episode…")
     load_experiment(page, url)
 
-    # Select task_3 (FAILED with error info)
-    page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-    wait_rows(page, "task_table", min_rows=4)
-    click_task(page, "task_3")
-    shot(page, "episode_01_task3_selected")
+    # Navigate to Trajectories tab and select task_3_ep0 (FAILED)
+    page.get_by_role("tab", name=re.compile(r"Trajectories")).click()
+    wait_rows(page, "traj_table", min_rows=5)
+    shot(page, "episode_01_trajectories")
 
-    page.get_by_role("tab", name=re.compile(r"Seeds")).click()
-    page.wait_for_function(
-        "() => { const el = document.querySelector('#seed_table'); "
-        "return el && el.innerText.includes('task_3_ep0'); }",
-        timeout=8_000,
-    )
-    shot(page, "episode_02_seeds_failed")
-
-    # Click the seed row to load the episode detail area
-    seed_row = page.locator("#seed_table tr").filter(has_text="task_3_ep0").first
-    click_row(seed_row)
+    click_traj(page, "task_3_ep0")
     page.wait_for_timeout(600)
-    shot(page, "episode_03_seed_selected")
+    shot(page, "episode_02_task3_selected")
 
     # Navigate to Logs tab in the bottom panel
     page.get_by_role("tab", name="Logs").click()
     page.wait_for_timeout(800)
-    shot(page, "episode_04_logs_tab")
+    shot(page, "episode_03_logs_tab")
 
 
 # ---------------------------------------------------------------------------
