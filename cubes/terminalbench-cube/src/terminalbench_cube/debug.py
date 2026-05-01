@@ -2,7 +2,7 @@
 
 Public API
 ----------
-get_debug_benchmark()         → TerminalBenchBenchmark
+get_debug_benchmark()         → TerminalBenchBenchmarkConfig
 make_debug_agent(task_id)     → DebugAgent
 """
 
@@ -10,11 +10,8 @@ from __future__ import annotations
 
 import logging
 
-from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from cube.infra_local import LocalInfraConfig
-from cube.resource import InfraConfig
-from terminalbench_cube.benchmark import TerminalBenchBenchmark
+from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
@@ -77,22 +74,13 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark(infra: InfraConfig | None = None) -> "Benchmark":
-    """Return a TerminalBenchBenchmark scoped to the debug tasks.
+def get_debug_benchmark() -> TerminalBenchBenchmarkConfig:
+    """Return a ``TerminalBenchBenchmarkConfig`` scoped to the debug tasks.
 
-    Args:
-        infra: InfraConfig that provisions and launches per-task containers. Defaults
-               to ``LocalInfraConfig()`` — suitable for local development / CI with
-               a running Docker daemon. Integration tests override this to target
-               Toolkit, Daytona, etc.
+    Pure factory — the harness owns ``config.install()`` and ``config.make(infra)``.
+    Debug tasks run in ``oracle_mode`` so reset() uploads the gold solution.
     """
-    bench = TerminalBenchBenchmark(
-        infra=infra or LocalInfraConfig(),
-        oracle_mode=True,
-    )
-    bench.install()
-    bench.setup()
-    return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+    return TerminalBenchBenchmarkConfig(oracle_mode=True).subset_from_list(list(_TASK_ACTIONS))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

@@ -1,15 +1,15 @@
 """Benchmark for swebench-verified-cube — SWE-bench Verified with test-based validation."""
 
+from __future__ import annotations
+
 import json
 import logging
 import shutil
 from collections.abc import Generator
 from typing import Any, ClassVar
 
-from pydantic import Field
-
-from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.infra_local import LocalInfraConfig
+from cube import LocalInfraConfig
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.resource import InfraConfig
 from cube.task import TaskConfig
 
@@ -31,13 +31,52 @@ def _build_execution_info(row: dict[str, Any]) -> dict[str, Any]:
         "hints_text": row.get("hints_text", ""),
         "patch": row["patch"],
         "test_patch": row["test_patch"],
-        "fail_to_pass": row["FAIL_TO_PASS"],
-        "pass_to_pass": row["PASS_TO_PASS"],
+        "fail_to_pass": json.loads(row["FAIL_TO_PASS"])
+        if isinstance(row["FAIL_TO_PASS"], str)
+        else row["FAIL_TO_PASS"],
+        "pass_to_pass": json.loads(row["PASS_TO_PASS"])
+        if isinstance(row["PASS_TO_PASS"], str)
+        else row["PASS_TO_PASS"],
         "eval_timeout": 1800,
     }
 
 
-class SWEBenchVerifiedBenchmark(Benchmark):
+# ---------------------------------------------------------------------------
+# SWEBenchVerifiedBenchmark (runtime pair)
+# ---------------------------------------------------------------------------
+
+
+class SWEBenchVerifiedBenchmark(Benchmark["SWEBenchVerifiedBenchmarkConfig"]):
+    """Runtime pair — owns the infra reference passed to ``make(infra)`` and
+    publishes it into ``runtime_context["infra"]`` so per-task container launches
+    flow through ``Task.runtime_context``.
+    """
+
+    def __init__(self, config: "SWEBenchVerifiedBenchmarkConfig", infra: InfraConfig | None = None) -> None:
+        super().__init__(config)
+        self._infra = infra
+
+    def _setup(self) -> None:
+        """Publish the shared InfraConfig to runtime_context; containers are launched per-task."""
+        if self._infra is not None:
+            self._infra.cleanup_stale()
+            self._runtime_context["infra"] = self._infra
+        logger.info(
+            "SWEBenchVerifiedBenchmark ready with %d tasks (infra=%s)",
+            self.config.num_tasks,
+            self._infra.fingerprint() if self._infra is not None else "<none>",
+        )
+
+    def close(self) -> None:
+        logger.info("SWE-bench Verified benchmark closed")
+
+
+# ---------------------------------------------------------------------------
+# SWEBenchVerifiedBenchmarkConfig
+# ---------------------------------------------------------------------------
+
+
+class SWEBenchVerifiedBenchmarkConfig(BenchmarkConfig[SWEBenchVerifiedTaskMetadata]):
     """SWE-bench Verified — 500 real-world GitHub issues with test-based validation."""
 
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
@@ -47,30 +86,28 @@ class SWEBenchVerifiedBenchmark(Benchmark):
         num_tasks=500,
         tags=["swe", "github", "docker"],
     )
-    task_metadata: ClassVar[dict[str, SWEBenchVerifiedTaskMetadata]]  # type: ignore - populated automatically at import time in Benchmark.__init_subclass__
     task_config_class: ClassVar[type[TaskConfig]] = SWEBenchVerifiedTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = SWEBenchVerifiedBenchmark
 
     # User-configurable fields
     include_hints: bool = False
     oracle_mode: bool = False
-    infra: InfraConfig = Field(default_factory=LocalInfraConfig)
 
-    # ── Benchmark lifecycle ────────────────────────────────────────
+    # ------------------------------------------------------------------
+    # Data lifecycle
+    # ------------------------------------------------------------------
 
     @classmethod
     def install(cls) -> None:
         """Populate the per-task execution cache from HuggingFace.
 
         Downloads heavy fields (problem_statement, patch, test_patch, etc.) and writes
-        one JSON file per task into task_execution_cache_dir(). Idempotent: skips if the
-        cache directory already exists and is non-empty. If the HuggingFace data has not
-        been downloaded yet, it is fetched into cache_dir()/huggingface_cache/.
-
-        The shipped task_metadata.json is a package resource and is not modified here.
-        To regenerate task_metadata.json (developer use only), run:
-            scripts/generate_task_metadata.py
+        one JSON file per task into ``task_config_class.task_execution_cache_dir()``.
+        Idempotent: skips if the cache directory already exists and is non-empty. If
+        the HuggingFace data has not been downloaded yet, it is fetched into
+        ``cache_dir()/huggingface_cache/``.
         """
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists() and any(exec_cache_dir.iterdir()):
             logger.info("Execution cache already populated, skipping installation")
             return
@@ -99,7 +136,7 @@ class SWEBenchVerifiedBenchmark(Benchmark):
 
         The shipped task_metadata.json is not removed.
         """
-        exec_cache_dir = cls.task_execution_cache_dir()
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
         if exec_cache_dir.exists():
             shutil.rmtree(exec_cache_dir)
             logger.info(f"Removed execution cache at {exec_cache_dir}")
@@ -109,24 +146,41 @@ class SWEBenchVerifiedBenchmark(Benchmark):
             shutil.rmtree(hf_cache)
             logger.info(f"Removed HuggingFace dataset cache at {hf_cache}")
 
-    def _setup(self) -> None:
-        """Publish the shared InfraConfig to runtime_context; containers are launched per-task."""
-        self.infra.cleanup_stale()
-        self._runtime_context["infra"] = self.infra
-        logger.info(
-            f"SWEBenchVerifiedBenchmark ready with {len(self.task_metadata)} tasks (infra={self.infra.fingerprint()})"
-        )
+    # ------------------------------------------------------------------
+    # Factory / task generation
+    # ------------------------------------------------------------------
 
-    def close(self) -> None:
-        logger.info("SWE-bench Verified benchmark closed")
+    def make(self, infra: InfraConfig | None = None) -> SWEBenchVerifiedBenchmark:
+        """Override to forward ``infra`` into the runtime constructor.
 
-    def get_task_configs(self) -> Generator[TaskConfig, None, None]:
+        SWE-bench launches one Docker container per task via
+        ``runtime_context["infra"]``; the runtime ``_setup()`` publishes
+        ``infra`` there. Defaults to ``LocalInfraConfig()`` so calls without
+        explicit infra still work.
+        """
+        resolved_infra = infra or LocalInfraConfig()
+        # Provision any declared resources idempotently (mirrors base impl).
+        if self.resources:
+            for resource in self.resources:
+                if resolved_infra.provision_status(resource) == "ready":
+                    logger.info(
+                        "Resource %s already provisioned on %s",
+                        resource.name,
+                        resolved_infra.fingerprint(),
+                    )
+                    continue
+                logger.info("Provisioning resource %s on %s...", resource.name, resolved_infra.fingerprint())
+                resolved_infra.provision(resource)
+        bench = SWEBenchVerifiedBenchmark(config=self, infra=resolved_infra)
+        bench.setup()
+        return bench
+
+    def get_task_configs(self) -> Generator[SWEBenchVerifiedTaskConfig, None, None]:
         """Yield TaskConfigs with include_hints and oracle_mode forwarded from benchmark settings."""
-        for tm in self.task_metadata.values():
+        for tm in self.tasks().values():
             yield SWEBenchVerifiedTaskConfig(
-                task_id=tm.id,
-                tool_config=self.default_tool_config,
-                seed=None,
+                metadata=tm,
+                tool_config=self.tool_config,
                 include_hints=self.include_hints,
                 oracle_mode=self.oracle_mode,
             )

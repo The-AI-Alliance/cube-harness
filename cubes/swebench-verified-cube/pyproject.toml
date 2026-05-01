@@ -4,12 +4,12 @@ version = "0.1.0"
 description = "SWE-bench Verified — 500 real-world GitHub issues with test-based validation"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard[docker]>=0.1.0rc6",
+    "cube-standard[docker]>=0.1.0rc7",
     "datasets",
 ]
 
 [project.entry-points."cube.benchmarks"]
-swebench-verified-cube = "swebench_verified_cube.benchmark:SWEBenchVerifiedBenchmark"
+swebench-verified-cube = "swebench_verified_cube.benchmark:SWEBenchVerifiedBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]

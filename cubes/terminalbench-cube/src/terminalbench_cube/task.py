@@ -13,7 +13,7 @@ from pydantic import PrivateAttr
 
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import RuntimeContext, Task, TaskConfig, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
@@ -41,19 +41,39 @@ class TerminalBenchTaskMetadata(TaskMetadata):
     """Maximum wall-clock seconds the agent is allowed to run (from task.toml)."""
 
 
-class TerminalBenchTask(Task):
+class TerminalBenchExecutionInfo(TaskExecutionInfo):
+    """Heavy per-task execution data for TerminalBench — populated on the worker."""
+
+    instruction: str
+    archive: str
+    max_test_timeout_sec: int = 900
+
+
+class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
     """A single Terminal-Bench task with pytest-based validation."""
 
     metadata: TerminalBenchTaskMetadata  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
+    oracle_mode: bool = False
 
     # Container-side paths — always under /tmp so logic works uniformly on root
     # and non-root backends (EAI Toolkit images have /tmp mode 1777).
     _solution_dir: str = PrivateAttr(default="/tmp/solution")
     _tests_dir: str = PrivateAttr(default="/tmp/tests")
     _logs_verifier_dir: str = PrivateAttr(default="/tmp/logs/verifier")
+
+    @property
+    def _exec(self) -> TerminalBenchExecutionInfo:
+        """Typed view on execution_info — fails fast if it was not populated."""
+        if not isinstance(self.execution_info, TerminalBenchExecutionInfo):
+            raise RuntimeError(
+                f"TerminalBenchTask {self.metadata.id!r}: execution_info is "
+                f"{type(self.execution_info).__name__}, expected TerminalBenchExecutionInfo. "
+                f"Construct via TerminalBenchTaskConfig.make() so it is populated."
+            )
+        return self.execution_info
 
     def _build_tool(self) -> None:
         new_wd = relocate_if_readonly(
@@ -74,13 +94,12 @@ class TerminalBenchTask(Task):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
-        extra = self.metadata.extra_info
 
         # Extract task archive to a temp dir (kept alive until close())
         self._temp_dir = tempfile.TemporaryDirectory()
         task_path = Path(self._temp_dir.name) / self.metadata.id
         task_path.mkdir(parents=True, exist_ok=True)
-        archive = extra["archive"]
+        archive = self._exec.archive
         if isinstance(archive, str):
             archive = base64.b64decode(archive)
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
@@ -88,7 +107,7 @@ class TerminalBenchTask(Task):
         self._task_path = task_path
 
         # Oracle mode: upload solution for debugging/baselines
-        if extra.get("oracle_mode") and (task_path / "solution").exists():
+        if self.oracle_mode and (task_path / "solution").exists():
             assert isinstance(self.tool, TerminalBenchTool)
             app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
             solution_dir = task_path / "solution"
@@ -101,7 +120,7 @@ class TerminalBenchTask(Task):
             # runs the agent installs its own deps; we don't add overhead there.
             self._ensure_uv_preinstalled()
 
-        return Observation.from_text(extra["instruction"]), {
+        return Observation.from_text(self._exec.instruction), {
             "task_id": self.metadata.id,
             "difficulty": self.metadata.difficulty,
             "category": self.metadata.category,
@@ -109,7 +128,6 @@ class TerminalBenchTask(Task):
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, TerminalBenchTool)
-        extra = self.metadata.extra_info
 
         # Upload test harness to the sandbox
         if self._task_path is not None:
@@ -149,7 +167,7 @@ class TerminalBenchTask(Task):
         # Tool's working_dir is already set (may be /tmp/app after relocation).
         output = self.tool.bash(
             f"export HOME=/tmp/fakehome && bash {self._tests_dir}/test.sh",
-            timeout=extra.get("max_test_timeout_sec", 900),
+            timeout=self._exec.max_test_timeout_sec,
         )
         test_results = self._parse_pytest_output(output)
 
@@ -325,7 +343,7 @@ class TerminalBenchTask(Task):
         return results
 
 
-class TerminalBenchTaskConfig(TaskConfig):
+class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
     """Serializable factory that produces a TerminalBenchTask.
 
     Loads heavy execution data (instruction, archive) from the per-task execution
@@ -335,14 +353,22 @@ class TerminalBenchTaskConfig(TaskConfig):
     oracle_mode: bool = False
     """If True, upload the gold solution to /solution in reset()."""
 
+    @classmethod
+    def verify_installed(cls) -> None:
+        """Fail fast if the per-task execution cache is empty."""
+        cache_dir = cls.task_execution_cache_dir()
+        if not cache_dir.exists() or not any(cache_dir.iterdir()):
+            raise RuntimeError(
+                f"TerminalBench per-task execution cache is empty at {cache_dir}. "
+                f"Run `cube install terminalbench-cube` (or "
+                f"`TerminalBenchBenchmarkConfig.install()`) on this worker first."
+            )
+
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> TerminalBenchTask:
-        # Import here to avoid circular import (benchmark imports task)
-        from terminalbench_cube.benchmark import TerminalBenchBenchmark
-
         has_infra = runtime_context is not None and "infra" in runtime_context
         if not has_infra and container_backend is None:
             raise ValueError(
@@ -350,14 +376,14 @@ class TerminalBenchTaskConfig(TaskConfig):
                 "(preferred) or a legacy container_backend."
             )
 
-        metadata = TerminalBenchBenchmark.task_metadata[self.task_id]
-        exec_info = TerminalBenchBenchmark.load_task_execution_info(self.task_id)
-        exec_info["oracle_mode"] = self.oracle_mode
-        metadata = metadata.model_copy(update={"extra_info": exec_info})
+        type(self).verify_installed()
+        execution_info = TerminalBenchExecutionInfo.model_validate(type(self).load_task_execution_info(self.task_id))
 
         return TerminalBenchTask(
-            metadata=metadata,
+            metadata=self.metadata,
+            execution_info=execution_info,
             tool_config=self.tool_config or TerminalBenchToolConfig(),
             runtime_context=runtime_context,
             container_backend=container_backend,
+            oracle_mode=self.oracle_mode,
         )

@@ -146,16 +146,16 @@ wheels = [
 
 [[package]]
 name = "azure-mgmt-compute"
-version = "38.0.0"
+version = "37.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "azure-mgmt-core" },
     { name = "isodate" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/ee/a143c8395267aea8d735c5336519ef94eeaa45f235c89c06f417d1d2ce60/azure_mgmt_compute-38.0.0.tar.gz", hash = "sha256:46cb0864f943b88463ed50ad006738023120cf7e53f50f7e4a740ccd5337abaf", size = 468888 }
+sdist = { url = "https://files.pythonhosted.org/packages/e2/e3/c887e27260754014dc63fc33bf612f1c7f1751f74e80d1aaa32491af3ffa/azure_mgmt_compute-37.2.0.tar.gz", hash = "sha256:23499d4d5ad2b2bf40a4c59df2684cc4c9cef0f9672a4e842bb9a1cf6b62f628", size = 534068 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/fc/b048242e79b14dd58a1dbede501ea2bfd3a43cac4aad4c0d76a81416a6e8/azure_mgmt_compute-38.0.0-py3-none-any.whl", hash = "sha256:6307edc4d1dabb540dadf11204be7663565d3108e16bcd253494457300cb3609", size = 438192 },
+    { url = "https://files.pythonhosted.org/packages/be/78/8dcdb92dd9f716d08a3ac6b31c31a12cfcf8c430b2c312cbf9cc6e4695e8/azure_mgmt_compute-37.2.0-py3-none-any.whl", hash = "sha256:70741c26ac94c30408a3b20f4fdfe93e6481e308b3c14a6dbefdfd4794028616", size = 686212 },
 ]
 
 [[package]]
@@ -479,7 +479,7 @@ wheels = [
 [[package]]
 name = "cube-computer-tool"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&branch=nico_fix#afde103fd18c754319219da8eaa8986065b41193" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool#5e058a475b30fce130ea91bad01a33a63391ce15" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
@@ -491,7 +491,7 @@ dependencies = [
 [[package]]
 name = "cube-infra-aws"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws&branch=nico_fix#afde103fd18c754319219da8eaa8986065b41193" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws#5e058a475b30fce130ea91bad01a33a63391ce15" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
@@ -502,7 +502,7 @@ dependencies = [
 [[package]]
 name = "cube-infra-azure"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&branch=nico_fix#afde103fd18c754319219da8eaa8986065b41193" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure#5e058a475b30fce130ea91bad01a33a63391ce15" }
 dependencies = [
     { name = "azure-identity" },
     { name = "azure-mgmt-compute" },
@@ -517,7 +517,7 @@ dependencies = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc7"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=nico_fix#afde103fd18c754319219da8eaa8986065b41193" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard#5e058a475b30fce130ea91bad01a33a63391ce15" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -534,7 +534,7 @@ dependencies = [
 [[package]]
 name = "cube-vm-backend"
 version = "0.2.1"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend&branch=nico_fix#afde103fd18c754319219da8eaa8986065b41193" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend#5e058a475b30fce130ea91bad01a33a63391ce15" }
 dependencies = [
     { name = "cube-standard" },
     { name = "requests" },
@@ -1358,11 +1358,11 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "cssselect", specifier = ">=1.2" },
-    { name = "cube-computer-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&branch=nico_fix" },
-    { name = "cube-infra-aws", marker = "extra == 'aws'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws&branch=nico_fix" },
-    { name = "cube-infra-azure", marker = "extra == 'azure'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&branch=nico_fix" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=nico_fix" },
-    { name = "cube-vm-backend", extras = ["docker"], git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend&branch=nico_fix" },
+    { name = "cube-computer-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool" },
+    { name = "cube-infra-aws", marker = "extra == 'aws'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws" },
+    { name = "cube-infra-azure", marker = "extra == 'azure'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure" },
+    { name = "cube-standard", specifier = ">=0.1.0rc7" },
+    { name = "cube-vm-backend", extras = ["docker"], git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend" },
     { name = "fastdtw", specifier = ">=0.3" },
     { name = "formulas", specifier = ">=1.2" },
     { name = "imagehash", specifier = ">=4.3" },

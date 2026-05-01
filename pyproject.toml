@@ -89,7 +89,3 @@ markers = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.uv.sources]
-# TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "nico_fix" }

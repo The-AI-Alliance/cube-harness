@@ -87,16 +87,14 @@ markers = [
 ]
 
 [tool.uv.sources]
-# cube-standard comes from PyPI via the version pin in [project].dependencies.
-# The cube-infra-* and cube-vm-backend packages are not yet on PyPI, so we pull
-# them from the cube-standard repo (default branch: main). Drop each entry here
-# once the corresponding package is published to PyPI.
-cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-aws" }
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-azure" }
-cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-daytona" }
-cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-toolkit" }
-cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-infra-modal" }
-cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard.git", subdirectory = "cube-resources/cube-vm-backend" }
+# Every reference to the cube-standard repo MUST use the same URL+ref,
+# otherwise uv treats them as conflicting sources for the same package.
+cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }
+cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }
+cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-daytona" }
+cube-infra-toolkit = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-toolkit" }
+cube-infra-modal = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-modal" }
+cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend" }
 osworld-cube = { path = "../cubes/osworld-cube", editable = true }
 webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
 terminalbench-cube = { path = "../cubes/terminalbench-cube", editable = true }
