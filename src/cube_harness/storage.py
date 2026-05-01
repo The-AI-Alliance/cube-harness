@@ -211,11 +211,31 @@ class FileStorage:
         if failure_path.exists():
             trajectory_data.setdefault("metadata", {})["_failure_text"] = failure_path.read_text()
 
+    def _maybe_inject_episode_status(self, ep_dir: Path, trajectory_data: dict) -> None:
+        """Inject episode status fields from status.json into trajectory metadata.
+
+        Adds _episode_status, _retry_count, _error_type, _error_message so that
+        xray_utils.trajectory_status() can use the authoritative status.json rather
+        than falling back to the legacy heuristic.
+        """
+        status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+        if status is None:
+            return
+        trajectory_data.setdefault("metadata", {}).update(
+            {
+                "_episode_status": status.status,
+                "_retry_count": status.retry_count,
+                "_error_type": status.error_type,
+                "_error_message": status.error_message,
+            }
+        )
+
     def _load_trajectory(self, ep_dir: Path, trajectory_id: str) -> Trajectory:
         with open(ep_dir / EPISODE_METADATA) as f:
             trajectory_data = json.load(f)
 
         self._maybe_inject_failure_text(ep_dir, trajectory_data)
+        self._maybe_inject_episode_status(ep_dir, trajectory_data)
 
         steps: list[TrajectoryStep] = []
         steps_dir = ep_dir / STEPS_DIR
@@ -305,6 +325,7 @@ class FileStorage:
 
         if (ep_dir / EPISODE_METADATA).exists():
             self._maybe_inject_failure_text(ep_dir, trajectory_data)
+            self._maybe_inject_episode_status(ep_dir, trajectory_data)
 
         trajectory_data["steps"] = []
         return Trajectory.model_validate(trajectory_data)
@@ -321,6 +342,7 @@ class FileStorage:
                 with open(ep_dir / EPISODE_METADATA) as f:
                     data = json.load(f)
                 self._maybe_inject_failure_text(ep_dir, data)
+                self._maybe_inject_episode_status(ep_dir, data)
                 data["steps"] = []
                 results.append(Trajectory.model_validate(data))
             except Exception as e:
@@ -495,6 +517,16 @@ class FileStorage:
                 failure_path = ep_dir / "failure.txt"
                 if failure_path.exists():
                     metadata["_failure_text"] = failure_path.read_text()
+                ep_status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+                if ep_status is not None:
+                    metadata.update(
+                        {
+                            "_episode_status": ep_status.status,
+                            "_retry_count": ep_status.retry_count,
+                            "_error_type": ep_status.error_type,
+                            "_error_message": ep_status.error_message,
+                        }
+                    )
                 stubs.append(Trajectory(id=traj_id, metadata=metadata))
             except Exception:
                 logger.debug(f"Could not read episode config for missing stub: {ep_dir}")

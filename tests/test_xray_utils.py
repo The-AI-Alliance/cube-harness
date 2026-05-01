@@ -94,17 +94,19 @@ def timed_trajectory(env_step_with_screenshot: EnvironmentOutput, agent_step_wit
 def multi_agent_trajectories() -> list[Trajectory]:
     """Multiple trajectories with different agents and tasks."""
     trajs = []
+    ep = 0
     for agent in ["agent_a", "agent_b"]:
         for task in ["task_1", "task_2"]:
             for seed in range(2):
                 traj = Trajectory(
-                    id=f"{agent}_{task}_{seed}",
+                    id=f"{task}_ep{ep}",
                     metadata={"agent_name": agent, "task_id": task, "seed": seed},
                     start_time=float(seed),
                     end_time=float(seed + 1),
                     reward_info={"reward": 1.0 if seed == 0 else 0.0},
                 )
                 trajs.append(traj)
+                ep += 1
     return trajs
 
 
@@ -193,23 +195,44 @@ class TestGetDirectoryContents:
 
 
 class TestGetExperimentsTableRows:
-    def test_flat_layout_n_trajs_matches_metadata_count(self, tmp_path: Path) -> None:
+    def test_flat_layout_status_cell_shows_total(self, tmp_path: Path) -> None:
         exp_dir = tmp_path / "flat_exp"
         exp_dir.mkdir()
         (exp_dir / "a.metadata.json").write_text("{}")
         (exp_dir / "b.metadata.json").write_text("{}")
         rows = xray_utils.get_experiments_table_rows(tmp_path)
         flat = next(r for r in rows if r["experiment"] == "flat_exp")
-        assert flat["n_trajs"] == 2
+        assert "status" in flat
+        # flat layout has no episodes/ dir — falls back to "? = N" format
+        assert "2" in flat["status"]
 
-    def test_legacy_trajectories_subdir_n_trajs(self, tmp_path: Path) -> None:
+    def test_legacy_trajectories_subdir_has_status(self, tmp_path: Path) -> None:
         exp_dir = tmp_path / "legacy_exp"
         traj_dir = exp_dir / "trajectories"
         traj_dir.mkdir(parents=True)
         (traj_dir / "x.metadata.json").write_text("{}")
         rows = xray_utils.get_experiments_table_rows(tmp_path)
         leg = next(r for r in rows if r["experiment"] == "legacy_exp")
-        assert leg["n_trajs"] == 1
+        assert "status" in leg
+
+    def test_agent_populated_from_episode_metadata(self, tmp_path: Path) -> None:
+        ep_dir = tmp_path / "exp_a" / "episodes" / "task_1_ep0"
+        ep_dir.mkdir(parents=True)
+        (ep_dir / "episode.metadata.json").write_text('{"metadata": {"agent_name": "react_agent"}}')
+        rows = xray_utils.get_experiments_table_rows(tmp_path)
+        row = next(r for r in rows if r["experiment"] == "exp_a")
+        assert row["agent"] == "react_agent"
+
+    def test_status_cell_from_status_json(self, tmp_path: Path) -> None:
+        for ep_name, status in [("ep0", "COMPLETED"), ("ep1", "RUNNING")]:
+            ep_dir = tmp_path / "exp_b" / "episodes" / ep_name
+            ep_dir.mkdir(parents=True)
+            (ep_dir / "status.json").write_text(f'{{"status": "{status}"}}')
+        rows = xray_utils.get_experiments_table_rows(tmp_path)
+        row = next(r for r in rows if r["experiment"] == "exp_b")
+        assert "✅" in row["status"]
+        assert "▶️" in row["status"]
+        assert "/ 2" in row["status"]
 
 
 # ---------------------------------------------------------------------------
@@ -482,11 +505,14 @@ class TestGetStepLogsMarkdown:
 
 
 # ---------------------------------------------------------------------------
-# TestTrajectoryStatus
+# TestTrajectoryStatusLegacy — heuristic fallback (no _episode_status in metadata)
 # ---------------------------------------------------------------------------
 
 
-class TestTrajectoryStatus:
+class TestTrajectoryStatusLegacy:
+    """Tests for _infer_status_legacy(), exercised through trajectory_status() when
+    no _episode_status key is present (pre-PR#315 experiments without status.json)."""
+
     def test_missing_no_failure_is_queued(self) -> None:
         stub = Trajectory(id="t", metadata={"_missing": True})
         assert xray_utils.trajectory_status(stub) == "queued"
@@ -520,6 +546,73 @@ class TestTrajectoryStatus:
         """A completed trajectory with a stale failure.txt should not be system_error."""
         traj = Trajectory(
             id="t", start_time=1.0, end_time=2.0, reward_info={"reward": 1.0}, metadata={"_failure_text": "old error"}
+        )
+        assert xray_utils.trajectory_status(traj) == "success"
+
+
+# ---------------------------------------------------------------------------
+# TestTrajectoryStatusFromEpisodeStatus — canonical path (status.json present)
+# ---------------------------------------------------------------------------
+
+
+class TestTrajectoryStatusFromEpisodeStatus:
+    """trajectory_status() reads _episode_status injected by FileStorage from status.json."""
+
+    def test_queued(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "QUEUED"})
+        assert xray_utils.trajectory_status(traj) == "queued"
+
+    def test_running(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "RUNNING"})
+        assert xray_utils.trajectory_status(traj) == "running"
+
+    def test_completed_with_reward_is_success(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "COMPLETED"}, reward_info={"reward": 1.0})
+        assert xray_utils.trajectory_status(traj) == "success"
+
+    def test_completed_no_reward_is_fail(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "COMPLETED"}, reward_info={"reward": 0.0})
+        assert xray_utils.trajectory_status(traj) == "fail"
+
+    def test_completed_no_reward_info_is_fail(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "COMPLETED"})
+        assert xray_utils.trajectory_status(traj) == "fail"
+
+    def test_max_steps_reached(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "MAX_STEPS_REACHED"})
+        assert xray_utils.trajectory_status(traj) == "max_steps"
+
+    def test_failed(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "FAILED"})
+        assert xray_utils.trajectory_status(traj) == "failed"
+
+    def test_stale(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "STALE"})
+        assert xray_utils.trajectory_status(traj) == "stale"
+
+    def test_cancelled(self) -> None:
+        traj = Trajectory(id="t", metadata={"_episode_status": "CANCELLED"})
+        assert xray_utils.trajectory_status(traj) == "cancelled"
+
+    def test_episode_status_takes_priority_over_heuristic(self) -> None:
+        """_episode_status wins even when heuristics would say something different."""
+        traj = Trajectory(
+            id="t",
+            metadata={"_episode_status": "STALE", "_failure_text": "crash"},
+            start_time=1.0,
+            end_time=2.0,
+            reward_info={"reward": 1.0},
+        )
+        assert xray_utils.trajectory_status(traj) == "stale"
+
+    def test_unknown_status_falls_back_to_legacy(self) -> None:
+        """An unrecognised status string doesn't crash — falls back to legacy heuristic."""
+        traj = Trajectory(
+            id="t",
+            metadata={"_episode_status": "FUTURE_UNKNOWN_STATUS"},
+            start_time=1.0,
+            end_time=2.0,
+            reward_info={"reward": 1.0},
         )
         assert xray_utils.trajectory_status(traj) == "success"
 
@@ -575,7 +668,7 @@ class TestComputeExperimentStats:
     def test_single_finished_trajectory(self, timed_trajectory: Trajectory) -> None:
         result = xray_utils.compute_experiment_stats([timed_trajectory])
         assert "1" in result
-        assert "Finished" in result
+        assert "completed" in result.lower()
 
     def test_counts_system_error_trajectories(self) -> None:
         # A stub with _missing=True and _failure_text is a system_error → counted as errored
@@ -625,16 +718,43 @@ class TestBuildAgentTable:
         rows = xray_utils.build_agent_table([traj])
         assert rows[0]["agent_name"] == "unknown"
 
-    def test_counts_trajs(self, multi_agent_trajectories: list[Trajectory]) -> None:
+    def test_no_n_trajs_column(self, multi_agent_trajectories: list[Trajectory]) -> None:
         rows = xray_utils.build_agent_table(multi_agent_trajectories)
-        agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
-        # fixture: 2 tasks × 2 seeds = 4 trajectories per agent
-        assert agent_a_row["n_trajs"] == 4
+        assert "n_trajs" not in rows[0]
 
-    def test_error_count_zero_for_clean_trajs(self, multi_agent_trajectories: list[Trajectory]) -> None:
+    def test_avg_reward_before_status(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        keys = list(rows[0].keys())
+        assert keys.index("avg_reward") < keys.index("status")
+
+    def test_has_status_column_not_n_err_n_running(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """n_err and n_running replaced by the unified status cell."""
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        assert len(rows) > 0
+        assert "status" in rows[0]
+        assert "n_err" not in rows[0]
+        assert "n_running" not in rows[0]
+
+    def test_status_cell_contains_total(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """Status cell shows '/ N' total trajectory count."""
         rows = xray_utils.build_agent_table(multi_agent_trajectories)
         agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
-        assert "0" in agent_a_row["n_err"]  # "0" with no red HTML span
+        assert "/ 4" in agent_a_row["status"]
+
+    def test_status_cell_collapses_success_and_fail(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """Success and fail both show as ✓ in the agent table (avg_reward has the breakdown)."""
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
+        # fixture has 2 success + 2 fail per agent — collapsed to one ✓ count
+        assert "✅" in agent_a_row["status"]
+        assert "🟢" not in agent_a_row["status"]
+        assert "⚫" not in agent_a_row["status"]
+
+    def test_status_cell_shows_error_symbol_for_crashed_traj(self) -> None:
+        """⛔ appears in the status cell when a trajectory has FAILED status."""
+        traj = Trajectory(id="t", metadata={"agent_name": "agent_a", "_episode_status": "FAILED"})
+        rows = xray_utils.build_agent_table([traj])
+        assert "⛔" in rows[0]["status"]
 
     def test_total_cost_dash_for_unloaded_stubs(self, multi_agent_trajectories: list[Trajectory]) -> None:
         """total_cost shows '-' when no cost data is available (metadata stubs have steps=[])."""
@@ -650,103 +770,92 @@ class TestBuildAgentTable:
 
 
 # ---------------------------------------------------------------------------
-# TestBuildTaskTable
+# TestBuildTrajectoryTable
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTaskTable:
+class TestBuildTrajectoryTable:
     def test_filters_by_agent_key(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        # agent_a has task_1 (×2) and task_2 (×2) = 4 trajectories
+        assert len(rows) == 4
         task_ids = [r["task_id"] for r in rows]
         assert "task_1" in task_ids
         assert "task_2" in task_ids
-        assert len(rows) == 2
-
-    def test_groups_by_task_id(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["n_seeds"] == 2
-
-    def test_returns_empty_for_unknown_agent(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "nonexistent_agent")
-        assert rows == []
-
-    def test_has_n_success_not_avg_reward(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_reward replaced by n_success; neither success_rate nor avg_reward should be present."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        assert len(rows) > 0
-        assert "success_rate" not in rows[0]
-        assert "avg_reward" not in rows[0]
-        assert "n_success" in rows[0]
-
-    def test_n_success_value(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """n_success counts seeds with reward > 0 (seed 0 has reward=1.0, seed 1 has 0.0)."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["n_success"] == 1
-
-    def test_avg_duration_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_duration is present and shows a formatted string."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert "avg_duration" in task_1_row
-        # Each seed is 1.0s long → avg = 1.0s
-        assert task_1_row["avg_duration"] == "1.0s"
-
-    def test_avg_duration_missing_when_no_timing(self) -> None:
-        """avg_duration falls back to '-' when trajectories have no timing info."""
-        trajs = [
-            Trajectory(
-                id="t1",
-                metadata={"agent_name": "agent_a", "task_id": "task_x"},
-                reward_info={"reward": 1.0},
-            )
-        ]
-        rows = xray_utils.build_task_table(trajs, "agent_a")
-        assert rows[0]["avg_duration"] == "-"
-
-    def test_avg_steps_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_steps shows '-' for metadata stubs (no loaded steps)."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert "avg_steps" in task_1_row
-        # Stubs have steps=[] → shows "-"
-        assert task_1_row["avg_steps"] == "-"
-
-    def test_avg_tokens_and_cost_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_tokens and avg_cost show '-' for unloaded metadata stubs."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["avg_tokens"] == "-"
-        assert task_1_row["avg_cost"] == "-"
-
-
-# ---------------------------------------------------------------------------
-# TestBuildSeedTable
-# ---------------------------------------------------------------------------
-
-
-class TestBuildSeedTable:
-    def test_filters_by_agent_and_task(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "task_1")
-        assert len(rows) == 2
-        traj_ids = [r["traj_id"] for r in rows]
-        assert "agent_a_task_1_0" in traj_ids
-        assert "agent_a_task_1_1" in traj_ids
 
     def test_one_row_per_trajectory(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_b", "task_2")
-        assert len(rows) == 2
+        """No aggregation — every trajectory gets its own row."""
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_b")
+        assert len(rows) == 4
+
+    def test_returns_empty_for_unknown_agent(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "nonexistent_agent")
+        assert rows == []
+
+    def test_has_task_id_and_seed_columns(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        assert len(rows) > 0
+        assert "task_id" in rows[0]
+        assert "seed" in rows[0]
+        assert "_traj_id" in rows[0]
+        assert "status" in rows[0]
+
+    def test_seed_column_omitted_when_all_none(self) -> None:
+        trajs = [Trajectory(id=f"task_1_ep{i}", metadata={"agent_name": "a", "task_id": "task_1"}) for i in range(3)]
+        rows = xray_utils.build_trajectory_table(trajs, "a")
+        assert "seed" not in rows[0]
+
+    def test_traj_id_values_match_trajectory_ids(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        traj_ids = [r["_traj_id"] for r in rows]
+        assert "task_1_ep0" in traj_ids
+        assert "task_1_ep1" in traj_ids
+
+    def test_no_aggregation_columns(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """Removed aggregate columns: n_seeds, n_success, avg_steps, etc."""
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        assert "n_seeds" not in rows[0]
+        assert "n_success" not in rows[0]
+        assert "avg_steps" not in rows[0]
+
+    def test_sorted_by_task_id_then_start_time(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        task_ids = [r["task_id"] for r in rows]
+        # task_1 rows come before task_2 (lexicographic sort)
+        last_task_1 = max(i for i, t in enumerate(task_ids) if t == "task_1")
+        first_task_2 = min(i for i, t in enumerate(task_ids) if t == "task_2")
+        assert last_task_1 < first_task_2
 
     def test_no_reward_column(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """reward column was removed; status icon captures success/fail instead."""
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "task_1")
-        assert len(rows) > 0
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
         assert "reward" not in rows[0]
 
-    def test_returns_empty_for_unknown_combination(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "nonexistent_task")
-        assert rows == []
+    def test_duration_shows_dash_when_no_timing(self) -> None:
+        traj = Trajectory(id="t1", metadata={"agent_name": "agent_a", "task_id": "task_x"})
+        rows = xray_utils.build_trajectory_table([traj], "agent_a")
+        assert rows[0]["duration"] == "-"
+
+    def test_retry_badge_shown_when_retry_count_gt_0(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 2},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "×2" in rows[0]["status"]
+
+    def test_no_retry_badge_when_retry_count_is_0(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 0},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "×" not in rows[0]["status"]
 
 
 # ---------------------------------------------------------------------------
@@ -1132,3 +1241,106 @@ class TestGetChatBranchesWithMessageObjects:
         assert "system" in html
         assert "System prompt from Message" in html
         assert "User dict message" in html
+
+
+# ---------------------------------------------------------------------------
+# TestBuildStatusCell
+# ---------------------------------------------------------------------------
+
+
+class TestBuildStatusCell:
+    def test_all_completed_shows_check_and_total(self) -> None:
+        cell = xray_utils._build_status_cell(["success", "success", "fail"])
+        assert "✅" in cell
+        assert "/ 3" in cell
+
+    def test_mixed_statuses_shows_each_symbol(self) -> None:
+        cell = xray_utils._build_status_cell(["success", "running", "failed", "stale"])
+        assert "▶️" in cell
+        assert "⛔" in cell
+        assert "👻" in cell
+        assert "/ 4" in cell
+
+    def test_success_and_fail_collapse_to_one_count(self) -> None:
+        cell = xray_utils._build_status_cell(["success", "success", "fail"])
+        # Should show "3✓" not "2✓ + 1⚫"
+        assert "3" in cell
+        assert "⚫" not in cell
+
+    def test_zero_counts_omitted(self) -> None:
+        cell = xray_utils._build_status_cell(["success"])
+        assert "▶️" not in cell
+        assert "⛔" not in cell
+
+    def test_max_steps_folds_into_completed(self) -> None:
+        # max_steps is a terminal outcome — collapses to ✓ at agent level like success/fail
+        cell = xray_utils._build_status_cell(["max_steps"])
+        assert "✅" in cell
+        assert "🎬" not in cell
+
+    def test_cancelled_symbol(self) -> None:
+        cell = xray_utils._build_status_cell(["cancelled"])
+        assert "🚫" in cell
+
+
+# ---------------------------------------------------------------------------
+# TestBuildTaskTableStatusPriority
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTrajectoryTableStatusIcons:
+    """Each trajectory row shows its own status icon (no aggregation)."""
+
+    def _make_traj(self, agent: str, task: str, traj_id: str, status: str) -> Trajectory:
+        return Trajectory(id=traj_id, metadata={"agent_name": agent, "task_id": task, "_episode_status": status})
+
+    def test_failed_row_shows_failed_icon(self) -> None:
+        traj = self._make_traj("a", "t1", "t1_ep0", "FAILED")
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "⛔" in rows[0]["status"]
+
+    def test_stale_row_shows_stale_icon(self) -> None:
+        traj = self._make_traj("a", "t1", "t1_ep0", "STALE")
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "👻" in rows[0]["status"]
+
+    def test_max_steps_row_shows_max_steps_icon(self) -> None:
+        traj = self._make_traj("a", "t1", "t1_ep0", "MAX_STEPS_REACHED")
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "🎬" in rows[0]["status"]
+
+    def test_success_row_shows_green_icon(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "🟢" in rows[0]["status"]
+
+
+# ---------------------------------------------------------------------------
+# TestGetLogsTabMarkdownEpisodeStatus
+# ---------------------------------------------------------------------------
+
+
+class TestGetLogsTabMarkdownEpisodeStatus:
+    def test_shows_retry_count_when_gt_0(self) -> None:
+        traj = Trajectory(id="t", metadata={"_retry_count": 3})
+        result = xray_utils.get_logs_tab_markdown(traj, "")
+        assert "Attempt" in result
+        assert "3" in result
+
+    def test_shows_error_type_and_message(self) -> None:
+        traj = Trajectory(
+            id="t",
+            metadata={"_error_type": "RuntimeError", "_error_message": "OOM on GPU"},
+        )
+        result = xray_utils.get_logs_tab_markdown(traj, "")
+        assert "RuntimeError" in result
+        assert "OOM on GPU" in result
+
+    def test_no_episode_status_section_when_all_absent(self) -> None:
+        traj = Trajectory(id="t", metadata={})
+        result = xray_utils.get_logs_tab_markdown(traj, "")
+        assert "Episode Status" not in result
