@@ -31,7 +31,7 @@ install:
 	@echo "Install requires sudo permissions to install Playwright dependencies. You may be prompted for your password."
 	uv sync --all-extras
 	uv run playwright install chromium --with-deps
-	git config core.hooksPath .githooks
+	pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg
 
 ci-install:
 	uv sync --frozen --all-extras
