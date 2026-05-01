@@ -255,10 +255,9 @@ class SWEBenchLiveTaskConfig(TaskConfig[SWEBenchLiveTaskMetadata]):
     oracle_mode: bool = False
     """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
 
-    @classmethod
-    def verify_installed(cls) -> None:
+    def verify_installed(self) -> None:
         """Fail fast if the per-task execution cache is empty."""
-        cache_dir = cls.task_execution_cache_dir()
+        cache_dir = type(self).task_execution_cache_dir()
         if not cache_dir.exists() or not any(cache_dir.iterdir()):
             raise RuntimeError(
                 f"SWE-bench Live per-task execution cache is empty at {cache_dir}. "
@@ -278,8 +277,9 @@ class SWEBenchLiveTaskConfig(TaskConfig[SWEBenchLiveTaskMetadata]):
                     "(preferred) or a legacy container_backend."
                 )
 
-        type(self).verify_installed()
-        execution_info = SWEBenchLiveExecutionInfo.model_validate(type(self).load_task_execution_info(self.task_id))
+        self.verify_installed()
+        raw = self.load_task_execution_info()
+        execution_info = SWEBenchLiveExecutionInfo.model_validate(raw)
 
         return SWEBenchLiveTask(
             metadata=self.metadata,

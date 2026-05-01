@@ -131,6 +131,11 @@ uv run recipes/hello_miniwob.py   # example run
 Environment vars go in `.env` (loaded by pyproject). `OPENAI_API_KEY`
 is the only required one for the baseline recipes; see individual cubes for others.
 
+**Ray launch**: use `.venv/bin/python recipe.py` or `uv run --active recipe.py` — never bare
+`uv run` when `VIRTUAL_ENV` is set. uv will silently create an ephemeral env whose `.pth` files
+can point to deleted paths, causing `ImportError` on Ray workers. `exp_runner.py` warns when it
+detects this.
+
 ## Cross-repo PRs (cube-harness ↔ cube-standard)
 
 When a PR depends on an unreleased cube-standard branch, do **not** commit

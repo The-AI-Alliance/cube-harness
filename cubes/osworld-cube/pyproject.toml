@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "OSWorld benchmark ported to the CUBE protocol"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc7",
+    "cube-standard>=0.1.0rc8",
     "cube-computer-tool",
     "cube-vm-backend[docker]",
     "pillow>=9.0",

@@ -29,12 +29,13 @@ import subprocess
 from collections.abc import Generator
 from copy import deepcopy
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from dotenv import load_dotenv
 
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.container import ContainerBackend
+from cube.infra_local import LocalInfraConfig
 from cube.resource import InfraConfig, ResourceConfig
 from cube.task import RuntimeContext, TaskConfig, TaskMetadata
 
@@ -187,20 +188,9 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
     use_som: bool = False
     """Set-of-Marks observation post-processing toggle, propagated from the benchmark config."""
 
-    @classmethod
-    def task_execution_cache_dir(cls) -> Path:
-        """Override the default ``~/.cube/<package>/tasks_execution_info`` location.
-
-        OSWorld co-locates the per-task execution cache under ``OSWORLD_BASE_DIR``
-        alongside the cloned repo, so ``install()`` and ``uninstall()`` work on a
-        single directory tree.
-        """
-        return OSWORLD_BASE_DIR / "tasks_execution_info"
-
-    @classmethod
-    def verify_installed(cls) -> None:
+    def verify_installed(self) -> None:
         """Fail fast if the per-task cache or the OSWorld repo are missing."""
-        cache_dir = cls.task_execution_cache_dir()
+        cache_dir = type(self).task_execution_cache_dir()
         if not cache_dir.exists() or not any(cache_dir.iterdir()):
             raise RuntimeError(
                 f"OSWorld per-task execution cache is empty at {cache_dir}. "
@@ -225,8 +215,8 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
         ``OSWorldBenchmarkConfig.install()`` and surfaces it via
         ``OSWorldTask.execution_info``.
         """
-        type(self).verify_installed()
-        raw = type(self).load_task_execution_info(self.task_id)
+        self.verify_installed()
+        raw = self.load_task_execution_info()
         execution_info = OSWorldExecutionInfo.model_validate(raw)
         return OSWorldTask(
             metadata=self.metadata,
@@ -244,14 +234,10 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
 
 
 class OSWorldBenchmark(Benchmark["OSWorldBenchmarkConfig"]):
-    """Runtime pair — owns the infra reference passed to ``make(infra)`` and
-    publishes it into ``runtime_context["infra"]`` so per-task VM launches
-    flow naturally through ``Task.runtime_context``.
+    """Runtime pair — publishes ``self._infra`` (stashed by the base
+    ``Benchmark.__init__``) into ``runtime_context["infra"]`` so per-task VM
+    launches flow naturally through ``Task.runtime_context``.
     """
-
-    def __init__(self, config: "OSWorldBenchmarkConfig", infra: InfraConfig | None = None) -> None:
-        super().__init__(config)
-        self._infra = infra
 
     def _setup(self) -> None:
         provider = type(self._infra).__name__ if self._infra is not None else "<none>"
@@ -355,26 +341,10 @@ class OSWorldBenchmarkConfig(BenchmarkConfig[OSWorldTaskMetadata]):
         return OSWORLD_BASE_DIR
 
     def make(self, infra: InfraConfig | None = None) -> OSWorldBenchmark:
-        """Override to forward ``infra`` into the runtime constructor.
-
-        Per-cube override — cube-standard's base ``make(infra)`` only passes
-        ``config`` to the runtime, but OSWorld needs ``infra`` on the runtime so
-        ``_setup()`` can publish it into ``runtime_context["infra"]`` for per-task
-        VM launches. Provisioning is mirrored from the base implementation.
+        """Resolve a default infra of ``LocalInfraConfig`` if none provided, then
+        delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
         """
-        from cube import LocalInfraConfig
-
-        resolved_infra = infra or LocalInfraConfig()
-        if self.resources:
-            for resource in self.resources:
-                if resolved_infra.provision_status(resource) == "ready":
-                    logger.info("Resource %s already provisioned on %s", resource.name, resolved_infra.fingerprint())
-                    continue
-                logger.info("Provisioning resource %s on %s...", resource.name, resolved_infra.fingerprint())
-                resolved_infra.provision(resource)
-        bench = OSWorldBenchmark(config=self, infra=resolved_infra)
-        bench.setup()
-        return bench
+        return cast(OSWorldBenchmark, super().make(infra=infra or LocalInfraConfig()))
 
     def get_task_configs(self) -> Generator[OSWorldTaskConfig, None, None]:
         """Yield OSWorldTaskConfig objects, propagating use_som from the benchmark."""

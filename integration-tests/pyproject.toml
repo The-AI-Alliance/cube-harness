@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "End-to-end integration tests for CUBE infra backends + benchmark cubes"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc6",
+    "cube-standard>=0.1.0rc8",
     "pytest>=8.0",
     "tenacity>=9.1.4",
 ]

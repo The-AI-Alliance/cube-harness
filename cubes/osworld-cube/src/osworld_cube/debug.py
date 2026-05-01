@@ -83,8 +83,7 @@ class DebugOSWorldTaskConfig(OSWorldTaskConfig):
     required to run debug tasks.
     """
 
-    @classmethod
-    def verify_installed(cls) -> None:
+    def verify_installed(self) -> None:
         """No-op: debug execution data is embedded in this module."""
 
     def make(

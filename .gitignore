@@ -6,6 +6,15 @@
 tmp/
 temp/
 
+# Gradio auto-generated files (TLS cert etc.)
+.gradio/
+
+# Claude Code worktrees (created by Claude during development sessions)
+.claude/worktrees/
+
+# Meta-agent experiment outputs (large, not for VCS)
+meta_agent/results/
+
 # Personal experiment recipes (shared recipes are committed without the custom_ prefix)
 recipes/custom_*
 
