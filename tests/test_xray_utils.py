@@ -695,11 +695,14 @@ class TestBuildAgentTable:
         rows = xray_utils.build_agent_table([traj])
         assert rows[0]["agent_name"] == "unknown"
 
-    def test_counts_trajs(self, multi_agent_trajectories: list[Trajectory]) -> None:
+    def test_no_n_trajs_column(self, multi_agent_trajectories: list[Trajectory]) -> None:
         rows = xray_utils.build_agent_table(multi_agent_trajectories)
-        agent_a_row = next(r for r in rows if r["agent_name"] == "agent_a")
-        # fixture: 2 tasks × 2 seeds = 4 trajectories per agent
-        assert agent_a_row["n_trajs"] == 4
+        assert "n_trajs" not in rows[0]
+
+    def test_avg_reward_before_status(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_agent_table(multi_agent_trajectories)
+        keys = list(rows[0].keys())
+        assert keys.index("avg_reward") < keys.index("status")
 
     def test_has_status_column_not_n_err_n_running(self, multi_agent_trajectories: list[Trajectory]) -> None:
         """n_err and n_running replaced by the unified status cell."""

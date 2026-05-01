@@ -1148,7 +1148,7 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     """Build one row per unique agent for the top-level agent table.
 
     Groups trajectories by metadata.get('agent_name', 'unknown').
-    Columns: agent_name, n_trajs, status, avg_reward, total_cost
+    Columns: agent_name, avg_reward, status, total_cost
 
     status — ``[count][symbol] + ... = total`` cell, e.g. ``15✓ + 4▶️ + 2🎬 = 21``.
              success and fail both collapse to ✓ (avg_reward already captures the breakdown).
@@ -1172,9 +1172,8 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
         rows.append(
             {
                 "agent_name": agent_key,
-                "n_trajs": len(agent_trajs),
-                "status": _build_status_cell(statuses),
                 "avg_reward": round(avg_reward, 3),
+                "status": _build_status_cell(statuses),
                 "total_cost": cost_str,
             }
         )

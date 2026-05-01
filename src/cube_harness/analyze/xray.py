@@ -1274,7 +1274,7 @@ def run_xray(
                 experiment_stats = gr.Markdown("")
             with gr.Tab("Agents") as agents_tab:
                 agent_table = gr.DataFrame(
-                    headers=["agent_name", "n_trajs", "status", "avg_reward", "total_cost"],
+                    headers=["agent_name", "avg_reward", "status", "total_cost"],
                     datatype="html",
                     max_height=260,
                     show_label=False,
