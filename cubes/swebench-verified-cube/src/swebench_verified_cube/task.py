@@ -12,7 +12,7 @@ from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
 from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
-from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
+from swebench_verified_cube.tool import BashOnlySWEBenchTool, SWEBenchTool, SWEBenchToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,20 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         return self.execution_info
 
     def _build_tool(self) -> None:
-        """Copy /testbed to a writable location if the container mounts it read-only."""
+        """Ensure /testbed source files are writable, then build the tool.
+
+        SWE-bench containers often have root-owned .py files (644) inside a
+        world-writable /testbed.  cp+mv re-owns each non-writable file in place:
+        mv unlinks via the parent directory (writable) and recreates with runtime
+        user ownership.  Running before relocate_if_readonly keeps the path stable
+        so conda editable installs (which point to /testbed) continue to work.
+        """
+        self._container.exec(
+            f"find {self.tool_config.working_dir} -not -path '*/.git/*' -name '*.py' ! -writable"
+            f' -exec sh -c \'cp "$1" "$1.tmp" && mv "$1.tmp" "$1"\' _ {{}} \\;'
+            f" 2>/dev/null || true",
+            timeout=120,
+        )
         new_wd = relocate_if_readonly(
             self._container,
             self.tool_config.working_dir,
@@ -110,7 +123,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
         # Oracle mode: write gold patch for debug/baseline use
         if self.oracle_mode and self._exec.patch:
-            assert isinstance(self.tool, SWEBenchTool)
+            assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
             b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
@@ -125,7 +138,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
-        assert isinstance(self.tool, SWEBenchTool)
+        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
 
         # Apply test patch
         self._apply_patch(self._exec.test_patch)
@@ -163,7 +176,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
     def _apply_patch(self, patch: str) -> str:
         """Apply a unified diff patch to /testbed using git apply with fallbacks."""
-        assert isinstance(self.tool, SWEBenchTool)
+        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
         b64 = base64.b64encode(patch.encode()).decode()
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
@@ -208,7 +221,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         - non-zero exit but zero failures: old sympy containers emit import-level
           deprecation errors that inflate the exit code even when all tests passed.
         """
-        assert isinstance(self.tool, SWEBenchTool)
+        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
         if not test_directives:
             return True, ""
 

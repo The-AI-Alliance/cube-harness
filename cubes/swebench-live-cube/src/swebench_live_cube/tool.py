@@ -1,4 +1,4 @@
-"""Tool layer — bash, read_file, write_file backed by a CUBE Container."""
+"""Tool layer — bash-only and full-surface tools backed by a CUBE Container."""
 
 import logging
 import shlex
@@ -98,3 +98,67 @@ class SWEBenchTool(Tool):
         escaped = content.replace("'", "'\\''")
         self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
         return f"Wrote {len(content)} bytes to {path}"
+
+
+class BashOnlySWEBenchToolConfig(ToolConfig):
+    """Config for bash-only SWE-bench tool — matches mini-SWE-agent's surface."""
+
+    working_dir: str = "/testbed"
+    max_output_bytes: int = MAX_OUTPUT_BYTES
+
+    def make(self, container: Container | None = None) -> "BashOnlySWEBenchTool":
+        if container is None:
+            raise ValueError("BashOnlySWEBenchTool requires a container")
+        return BashOnlySWEBenchTool(config=self, container=container)
+
+
+class BashOnlySWEBenchTool(Tool):
+    """Bash-only tool: a single bash() action.
+
+    Agents edit files via inline Python, heredoc, or sed — the same pattern
+    used by mini-SWE-agent.  Simpler surface reduces parsing failures and
+    removes lint-feedback noise from the observation stream.
+    """
+
+    def __init__(self, config: BashOnlySWEBenchToolConfig, container: Container) -> None:
+        self._config = config
+        self._container = container
+
+    def reset(self) -> None:
+        pass
+
+    def _run_bash(self, command: str, timeout: int = 120) -> str:
+        result = self._container.exec(command, timeout=timeout, workdir=self._config.working_dir)
+        parts = []
+        if result.stdout:
+            parts.append(result.stdout)
+        if result.stderr:
+            parts.append(result.stderr)
+        if result.exit_code == 124:
+            parts.append(f"[timed out after {timeout}s]")
+        elif result.exit_code != 0:
+            parts.append(f"[exit_code: {result.exit_code}]")
+        return "\n".join(parts) if parts else "(no output)"
+
+    _MAX_BASH_TIMEOUT: int = 600
+
+    @tool_action
+    def bash(self, command: str, timeout: int = 120) -> str:
+        """Execute a bash command in the sandbox (/testbed) and return its output.
+
+        Args:
+            command: Shell command. cwd=/testbed. env changes do not persist between calls.
+            timeout: Seconds, max 600.
+        """
+        timeout = min(timeout, self._MAX_BASH_TIMEOUT)
+        output = self._run_bash(command, timeout=timeout)
+        encoded = output.encode("utf-8")
+        if len(encoded) <= self._config.max_output_bytes:
+            return output
+        head = encoded[:5000].decode("utf-8", errors="ignore")
+        tail = encoded[-5000:].decode("utf-8", errors="ignore")
+        return f"{head}\n[... {len(encoded) - 10000} bytes elided ...]\n{tail}"
+
+    def bash_unlimited(self, command: str, timeout: int = 120) -> str:
+        """Unlimited bash for internal use (evaluate, apply_patch)."""
+        return self._run_bash(command, timeout=timeout)
