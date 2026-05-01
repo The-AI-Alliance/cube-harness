@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "OSWorld benchmark ported to the CUBE protocol"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc7",
+    "cube-standard>=0.1.0rc8",
     "cube-computer-tool",
     "cube-vm-backend[docker]",
     "pillow>=9.0",
@@ -78,11 +78,6 @@ markers = [
 override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
-# Track cube-standard from main while picking up PR #133 (infra-init) and
-# subsequent updates. Every reference to the cube-standard repo MUST use the
-# same URL+ref, otherwise uv treats them as conflicting sources for the same
-# package. TODO: drop git pins once cube-standard 0.1.0rc8 ships to PyPI.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }
 cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool" }
 cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend" }
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }

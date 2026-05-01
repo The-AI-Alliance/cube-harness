@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "End-to-end integration tests for CUBE infra backends + benchmark cubes"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc6",
+    "cube-standard>=0.1.0rc8",
     "pytest>=8.0",
     "tenacity>=9.1.4",
 ]
@@ -87,11 +87,8 @@ markers = [
 ]
 
 [tool.uv.sources]
-# Track cube-standard from main while picking up PR #133 (infra-init) and
-# subsequent updates. Every reference to the cube-standard repo MUST use the
-# same URL+ref, otherwise uv treats them as conflicting sources for the same
-# package. TODO: drop git pins once cube-standard 0.1.0rc8 ships to PyPI.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }
+# Every reference to the cube-standard repo MUST use the same URL+ref,
+# otherwise uv treats them as conflicting sources for the same package.
 cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }
 cube-infra-daytona = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-daytona" }

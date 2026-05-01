@@ -11,7 +11,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc7",
+    "cube-standard>=0.1.0rc8",
     "cube-browser-playwright>=0.2.0",  # added back temporarily for browsergym.py, should be removed once browsergym.py is moved to cube-browser-tool package
     "pydantic~=2.0",
     "litellm~=1.80.8",
@@ -46,13 +46,6 @@ build-backend = "uv_build"
 
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
-
-[tool.uv.sources]
-# Track cube-standard from main while picking up PR #133 (infra-init) and
-# subsequent updates. Every reference to the cube-standard repo MUST use the
-# same URL+ref, otherwise uv treats them as conflicting sources for the same
-# package. TODO: drop once cube-standard 0.1.0rc8 ships to PyPI.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }
 
 
 [tool.ruff]

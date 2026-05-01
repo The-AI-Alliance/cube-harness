@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "MiniWob++ benchmark for cube"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc7",
+    "cube-standard>=0.1.0rc8",
     "miniwob>=1.0",
     "cube-browser-tool"
 ]
@@ -18,13 +18,6 @@ build-backend = "uv_build"
 
 [tool.uv-build]
 include = ["src/miniwob_cube/task_metadata.json"]
-
-[tool.uv.sources]
-# Track cube-standard from main while picking up PR #133 (infra-init) and
-# subsequent updates. Every reference to the cube-standard repo MUST use the
-# same URL+ref, otherwise uv treats them as conflicting sources for the same
-# package. TODO: drop once cube-standard 0.1.0rc8 ships to PyPI.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }
 
 [tool.ruff]
 fix = true

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "SWE-bench Verified — 500 real-world GitHub issues with test-based validation"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard[docker]>=0.1.0rc7",
+    "cube-standard[docker]>=0.1.0rc8",
     "datasets",
 ]
 
@@ -17,13 +17,6 @@ build-backend = "uv_build"
 
 [tool.uv-build]
 include = ["src/swebench_verified_cube/task_metadata.json"]
-
-[tool.uv.sources]
-# Track cube-standard from main while picking up PR #133 (infra-init) and
-# subsequent updates. Every reference to the cube-standard repo MUST use the
-# same URL+ref, otherwise uv treats them as conflicting sources for the same
-# package. TODO: drop once cube-standard 0.1.0rc8 ships to PyPI.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard" }
 
 [dependency-groups]
 dev = [

@@ -479,7 +479,7 @@ wheels = [
 [[package]]
 name = "cube-computer-tool"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool#1d381db68c3650eeb9b90a76bc416611a345c2aa" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool#a82f1984e033e4829d03854bdc011e22d6139f5f" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
@@ -491,7 +491,7 @@ dependencies = [
 [[package]]
 name = "cube-infra-aws"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws#1d381db68c3650eeb9b90a76bc416611a345c2aa" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws#a82f1984e033e4829d03854bdc011e22d6139f5f" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
@@ -502,7 +502,7 @@ dependencies = [
 [[package]]
 name = "cube-infra-azure"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure#1d381db68c3650eeb9b90a76bc416611a345c2aa" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure#a82f1984e033e4829d03854bdc011e22d6139f5f" }
 dependencies = [
     { name = "azure-identity" },
     { name = "azure-mgmt-compute" },
@@ -516,8 +516,8 @@ dependencies = [
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc7"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard#1d381db68c3650eeb9b90a76bc416611a345c2aa" }
+version = "0.1.0rc8"
+source = { git = "https://github.com/The-AI-Alliance/cube-standard#a82f1984e033e4829d03854bdc011e22d6139f5f" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -534,7 +534,7 @@ dependencies = [
 [[package]]
 name = "cube-vm-backend"
 version = "0.2.1"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend#1d381db68c3650eeb9b90a76bc416611a345c2aa" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend#a82f1984e033e4829d03854bdc011e22d6139f5f" }
 dependencies = [
     { name = "cube-standard" },
     { name = "requests" },
@@ -1361,7 +1361,7 @@ requires-dist = [
     { name = "cube-computer-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool" },
     { name = "cube-infra-aws", marker = "extra == 'aws'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws" },
     { name = "cube-infra-azure", marker = "extra == 'azure'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard" },
+    { name = "cube-standard", specifier = ">=0.1.0rc8" },
     { name = "cube-vm-backend", extras = ["docker"], git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend" },
     { name = "fastdtw", specifier = ">=0.3" },
     { name = "formulas", specifier = ">=1.2" },

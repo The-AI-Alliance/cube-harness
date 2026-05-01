@@ -188,20 +188,9 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
     use_som: bool = False
     """Set-of-Marks observation post-processing toggle, propagated from the benchmark config."""
 
-    @classmethod
-    def task_execution_cache_dir(cls) -> Path:
-        """Override the default ``~/.cube/<package>/tasks_execution_info`` location.
-
-        OSWorld co-locates the per-task execution cache under ``OSWORLD_BASE_DIR``
-        alongside the cloned repo, so ``install()`` and ``uninstall()`` work on a
-        single directory tree.
-        """
-        return OSWORLD_BASE_DIR / "tasks_execution_info"
-
-    @classmethod
-    def verify_installed(cls) -> None:
+    def verify_installed(self) -> None:
         """Fail fast if the per-task cache or the OSWorld repo are missing."""
-        cache_dir = cls.task_execution_cache_dir()
+        cache_dir = type(self).task_execution_cache_dir()
         if not cache_dir.exists() or not any(cache_dir.iterdir()):
             raise RuntimeError(
                 f"OSWorld per-task execution cache is empty at {cache_dir}. "
@@ -226,8 +215,8 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
         ``OSWorldBenchmarkConfig.install()`` and surfaces it via
         ``OSWorldTask.execution_info``.
         """
-        type(self).verify_installed()
-        raw = type(self).load_task_execution_info(self.task_id)
+        self.verify_installed()
+        raw = self.load_task_execution_info()
         execution_info = OSWorldExecutionInfo.model_validate(raw)
         return OSWorldTask(
             metadata=self.metadata,
