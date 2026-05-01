@@ -1,4 +1,4 @@
-.PHONY: install test bootstrap-winrm build-image
+.PHONY: install test unit-test bootstrap-winrm build-image
 
 install:
 	uv sync --all-extras
@@ -6,6 +6,9 @@ install:
 	uv run python scripts/create_task_metadata.py
 
 test:
+	uv run cube test waa-cube
+
+unit-test:
 	uv run pytest tests/
 
 # One-time WinRM bootstrap on the base qcow2 (uses WAA's Flask guest agent
