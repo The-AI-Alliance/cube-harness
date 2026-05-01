@@ -1256,114 +1256,33 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     return rows
 
 
-def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dict[str, Any]]:
-    """Build one row per unique task for a selected agent.
+def build_trajectory_table(trajectories: list[Trajectory], agent_key: str) -> list[dict[str, Any]]:
+    """Build one row per trajectory for a selected agent.
 
     Filters trajectories to those matching agent_key.
-    Columns: status, task_id, n_seeds, n_success, avg_steps, avg_duration, avg_tokens, avg_cost
-
-    Status priority (worst first): system_error > error > running > queued > success > fail.
-    n_success counts seeds where reward > 0.
-    avg_duration is from Trajectory.start/end_time (available for metadata stubs).
-    avg_steps, avg_tokens, avg_cost show "-" when step data hasn't been loaded yet.
+    Columns: status, task_id, traj_id, n_steps, duration, tokens, cost
+    Sorted by task_id then start_time within a task.
     """
     agent_trajs = [t for t in trajectories if t.metadata.get("agent_name", "unknown") == agent_key]
+    agent_trajs.sort(key=lambda t: (t.metadata.get("task_id", "unknown"), t.start_time is None, t.start_time or 0))
 
-    groups: dict[str, list[Trajectory]] = {}
+    rows = []
     for traj in agent_trajs:
-        task_id = traj.metadata.get("task_id", "unknown")
-        groups.setdefault(task_id, []).append(traj)
-
-    rows = []
-    for task_id in sorted(groups.keys()):
-        task_trajs = groups[task_id]
-        all_stats = [compute_trajectory_stats(t) for t in task_trajs]
-
-        statuses = [trajectory_status(t) for t in task_trajs]
-        n_success = sum(1 for s in statuses if s == "success")
-
-        durations = [
-            t.end_time - t.start_time for t in task_trajs if t.start_time is not None and t.end_time is not None
-        ]
-        avg_duration_str = format_duration(sum(durations) / len(durations)) if durations else "-"
-
-        n_steps_list = [s["n_env_steps"] for s in all_stats]
-        avg_steps = sum(n_steps_list) / len(n_steps_list) if n_steps_list else 0
-        avg_steps_str = f"{avg_steps:.1f}" if any(n > 0 for n in n_steps_list) else "-"
-
-        total_tokens_list = [int(s["prompt_tokens"]) + int(s["completion_tokens"]) for s in all_stats]
-        avg_tokens = sum(total_tokens_list) / len(total_tokens_list) if total_tokens_list else 0
-        avg_tokens_str = f"{avg_tokens:,.0f}" if avg_tokens > 0 else "-"
-
-        costs = [float(s["cost"]) for s in all_stats]
-        avg_cost = sum(costs) / len(costs) if costs else 0.0
-        avg_cost_str = f"${avg_cost:.4f}" if avg_cost > 0 else "-"
-
-        # Aggregate task status: worst-case wins.
-        # Priority: failed > stale > cancelled > system_error > running > queued >
-        #           max_steps > success > fail
-        _TASK_STATUS_PRIORITY = [
-            "failed", "stale", "cancelled", "system_error",
-            "running", "queued", "max_steps", "success", "fail",
-        ]
-        status_set = set(statuses)
-        task_status = next((p for p in _TASK_STATUS_PRIORITY if p in status_set), "fail")
-
-        err_style = "color:#dc3545;font-weight:bold" if task_status == "system_error" else ""
-        task_id_html = (
-            f"<span style='{err_style}'>{html_lib.escape(task_id)}</span>" if err_style else html_lib.escape(task_id)
-        )
-
-        rows.append(
-            {
-                "status": _STATUS_HTML[task_status],
-                "task_id": task_id_html,
-                "n_seeds": len(task_trajs),
-                "n_success": n_success,
-                "avg_steps": avg_steps_str,
-                "avg_duration": avg_duration_str,
-                "avg_tokens": avg_tokens_str,
-                "avg_cost": avg_cost_str,
-            }
-        )
-    return rows
-
-
-def build_seed_table(
-    trajectories: list[Trajectory],
-    agent_key: str,
-    task_id: str,
-) -> list[dict[str, Any]]:
-    """Build one row per trajectory (seed) for a selected agent + task.
-
-    Filters trajectories by agent_key and task_id.
-    Columns: status, traj_id, n_steps, duration, tokens, cost
-    """
-    filtered = [
-        t
-        for t in trajectories
-        if t.metadata.get("agent_name", "unknown") == agent_key and t.metadata.get("task_id", "unknown") == task_id
-    ]
-
-    rows = []
-    for traj in sorted(filtered, key=lambda t: (t.start_time is None, t.start_time or 0)):
         stats = compute_trajectory_stats(traj)
+        task_id = traj.metadata.get("task_id", "unknown")
+        status = trajectory_status(traj)
+        retry_count = traj.metadata.get("_retry_count", 0)
+        retry_badge = f" <sup style='color:#888;font-size:9px'>×{retry_count}</sup>" if retry_count else ""
         duration_str = format_duration(stats["duration"]) if stats["duration"] is not None else "-"
         total_tokens = int(stats["prompt_tokens"]) + int(stats["completion_tokens"])
         tokens_str = f"{total_tokens:,}" if total_tokens > 0 else "-"
         cost_str = f"${float(stats['cost']):.4f}" if float(stats["cost"]) > 0 else "-"
-        n_steps = stats["n_env_steps"]
-        status = trajectory_status(traj)
-        retry_count = traj.metadata.get("_retry_count", 0)
-        retry_badge = (
-            f" <sup style='color:#888;font-size:9px'>×{retry_count}</sup>" if retry_count else ""
-        )
-
         rows.append(
             {
                 "status": _STATUS_HTML[status] + retry_badge,
+                "task_id": html_lib.escape(task_id),
                 "traj_id": traj.id,
-                "n_steps": n_steps,
+                "n_steps": stats["n_env_steps"],
                 "duration": duration_str,
                 "tokens": tokens_str,
                 "cost": cost_str,

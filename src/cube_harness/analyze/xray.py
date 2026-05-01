@@ -54,7 +54,6 @@ class XRayState:
     results_dir: Path
     trajectories: list[Trajectory] = field(default_factory=list)
     selected_agent_key: str | None = None
-    selected_task_id: str | None = None
     current_trajectory: Trajectory | None = None
     # Index into env_step_indices — i.e., which UI step is current
     step: int = 0
@@ -118,7 +117,6 @@ class XRayState:
             self.trajectories.extend(trajs + stubs)
             self._traj_storages.extend([storage] * (len(trajs) + len(stubs)))
         self.selected_agent_key = None
-        self.selected_task_id = None
         self.current_trajectory = None
         self.step = 0
         self._env_step_indices = []
@@ -336,16 +334,8 @@ class XRayState:
         return time.time() - self._last_change_time > timeout_s
 
     def select_agent(self, agent_key: str) -> None:
-        """Select an agent; resets task, trajectory, and step."""
+        """Select an agent; resets trajectory and step."""
         self.selected_agent_key = agent_key
-        self.selected_task_id = None
-        self.current_trajectory = None
-        self.step = 0
-        self._env_step_indices = []
-
-    def select_task(self, task_id: str) -> None:
-        """Select a task for the current agent; resets trajectory and step."""
-        self.selected_task_id = task_id
         self.current_trajectory = None
         self.step = 0
         self._env_step_indices = []
@@ -675,75 +665,43 @@ def run_xray(
 
     def _make_tab_labels(
         agent_rows: list[dict[str, Any]],
-        task_rows: list[dict[str, Any]],
-        seed_rows: list[dict[str, Any]],
-    ) -> tuple[gr.Tab, gr.Tab, gr.Tab]:
+        traj_rows: list[dict[str, Any]],
+    ) -> tuple[gr.Tab, gr.Tab]:
         """Return gr.Tab updates with counts embedded in labels."""
         return (
             gr.Tab(label=f"Agents ({len(agent_rows)})"),
-            gr.Tab(label=f"Tasks ({len(task_rows)})"),
-            gr.Tab(label=f"Seeds ({len(seed_rows)})"),
+            gr.Tab(label=f"Trajectories ({len(traj_rows)})"),
         )
 
-    def _load_and_build_hierarchy() -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
-        """Build experiment stats + agent/task/seed tables after state.load_experiments().
+    def _load_and_build_hierarchy() -> tuple[str, Any, Any, StepId, gr.Tab, gr.Tab, str, str]:
+        """Build experiment stats + agent/trajectory tables after state.load_experiments().
 
-        Auto-selects the first agent, first task, and first seed when available.
-        Returns the 10-tuple expected by both on_experiments_change and on_bg_load_tick callers.
+        Auto-selects the first agent and first trajectory when available.
+        Returns the 8-tuple expected by both on_experiments_change and on_bg_load_tick callers.
         """
         exp_stats = xray_utils.compute_experiment_stats(state.trajectories)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
 
-        # Auto-select first agent
         if not agent_rows:
-            seed_rows_: list[dict[str, Any]] = []
-            task_rows_: list[dict[str, Any]] = []
-            tab_labels = _make_tab_labels(agent_rows, task_rows_, seed_rows_)
-            return exp_stats, _rows_to_table(agent_rows), [], [], StepId(), *tab_labels, *state.get_config_jsons()
+            tab_labels = _make_tab_labels(agent_rows, [])
+            return exp_stats, _rows_to_table(agent_rows), [], StepId(), *tab_labels, *state.get_config_jsons()
         first_agent_key = agent_rows[0]["agent_name"]
         state.select_agent(first_agent_key)
         agent_table_data = _rows_to_table(agent_rows, first_agent_key, "agent_name")
 
-        # Auto-select first task
-        task_rows = xray_utils.build_task_table(state.trajectories, first_agent_key)
-        if not task_rows:
-            tab_labels = _make_tab_labels(agent_rows, task_rows, [])
-            return (
-                exp_stats,
-                agent_table_data,
-                _rows_to_table(task_rows),
-                [],
-                StepId(),
-                *tab_labels,
-                *state.get_config_jsons(),
-            )
-        first_task_id = task_rows[0]["task_id"]
-        state.select_task(first_task_id)
-        task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
-
-        # Auto-select first seed/trajectory
-        seed_rows = xray_utils.build_seed_table(state.trajectories, first_agent_key, first_task_id)
-        if not seed_rows:
-            tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return (
-                exp_stats,
-                agent_table_data,
-                task_table_data,
-                _rows_to_table(seed_rows),
-                StepId(),
-                *tab_labels,
-                *state.get_config_jsons(),
-            )
-        first_traj_id = seed_rows[0]["traj_id"]
+        traj_rows = xray_utils.build_trajectory_table(state.trajectories, first_agent_key)
+        if not traj_rows:
+            tab_labels = _make_tab_labels(agent_rows, traj_rows)
+            return exp_stats, agent_table_data, _rows_to_table(traj_rows), StepId(), *tab_labels, *state.get_config_jsons()
+        first_traj_id = traj_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
-        seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
+        traj_table_data = _rows_to_table(traj_rows, first_traj_id, "traj_id")
 
-        tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+        tab_labels = _make_tab_labels(agent_rows, traj_rows)
         return (
             exp_stats,
             agent_table_data,
-            task_table_data,
-            seed_table_data,
+            traj_table_data,
             StepId(step=0),
             *tab_labels,
             *state.get_config_jsons(),
@@ -751,22 +709,20 @@ def run_xray(
 
     def on_experiments_change(
         exp_df: Any,
-    ) -> tuple[str, Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str, gr.Timer]:
+    ) -> tuple[str, Any, Any, StepId, gr.Tab, gr.Tab, str, str, gr.Timer]:
         """Handle checkbox changes in the Experiments table.
 
         Extracts selected experiment names, loads them (merging trajectories), and
-        rebuilds the agent/task/seed hierarchy. Returns gr.skip() for all outputs
+        rebuilds the agent/trajectory hierarchy. Returns gr.skip() for all outputs
         when the selection hasn't actually changed (avoids spurious Gradio events).
         """
         _empty = (
             "",
             None,
             None,
-            None,
             StepId(),
             gr.Tab(label="Agents (0)"),
-            gr.Tab(label="Tasks (0)"),
-            gr.Tab(label="Seeds (0)"),
+            gr.Tab(label="Trajectories (0)"),
             "",
             "",
             gr.Timer(active=False),
@@ -775,7 +731,7 @@ def run_xray(
             return _empty
         selected_names = [str(exp_df.iloc[i, 1]) for i in range(len(exp_df)) if exp_df.iloc[i, 0]]
         if set(selected_names) == set(state._selected_exp_names):
-            return tuple(gr.skip() for _ in range(11))  # type: ignore[return-value]
+            return tuple(gr.skip() for _ in range(9))  # type: ignore[return-value]
         if not selected_names:
             state._bg_gen += 1
             state._selected_exp_names = []
@@ -800,11 +756,9 @@ def run_xray(
             "",
             None,
             None,
-            None,
             StepId(),
             gr.Tab(label="Agents (0)"),
-            gr.Tab(label="Tasks (0)"),
-            gr.Tab(label="Seeds (0)"),
+            gr.Tab(label="Trajectories (0)"),
             "",
             "",
             gr.Timer(active=False),
@@ -813,88 +767,48 @@ def run_xray(
 
     def on_select_agent(
         evt: gr.SelectData, agent_df: Any
-    ) -> tuple[Any, Any, Any, StepId, gr.Tab, gr.Tab, gr.Tab, str, str]:
+    ) -> tuple[Any, Any, StepId, gr.Tab, gr.Tab, str, str]:
         if evt is None or evt.index is None or agent_df is None or len(agent_df) == 0:
             return (
                 [],
                 [],
-                [],
                 StepId(),
                 gr.Tab(label="Agents (0)"),
-                gr.Tab(label="Tasks (0)"),
-                gr.Tab(label="Seeds (0)"),
+                gr.Tab(label="Trajectories (0)"),
                 "",
                 "",
             )
         row = evt.index[0]
-        # Strip HTML tags to get the raw key value
         agent_key = re.sub(r"<[^>]+>", "", str(agent_df.iloc[row, 0]))
         state.select_agent(agent_key)
         agent_rows = xray_utils.build_agent_table(state.trajectories)
         agent_table_data = _rows_to_table(agent_rows, agent_key, "agent_name")
-        task_rows = xray_utils.build_task_table(state.trajectories, agent_key)
-        if not task_rows:
-            tab_labels = _make_tab_labels(agent_rows, task_rows, [])
-            return agent_table_data, _rows_to_table(task_rows), [], StepId(), *tab_labels, *state.get_config_jsons()
-        # Auto-select first task and first seed
-        first_task_id = task_rows[0]["task_id"]
-        state.select_task(first_task_id)
-        task_table_data = _rows_to_table(task_rows, first_task_id, "task_id")
-        seed_rows = xray_utils.build_seed_table(state.trajectories, agent_key, first_task_id)
-        if not seed_rows:
-            tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-            return (
-                agent_table_data,
-                task_table_data,
-                _rows_to_table(seed_rows),
-                StepId(),
-                *tab_labels,
-                *state.get_config_jsons(),
-            )
-        first_traj_id = seed_rows[0]["traj_id"]
+        traj_rows = xray_utils.build_trajectory_table(state.trajectories, agent_key)
+        if not traj_rows:
+            tab_labels = _make_tab_labels(agent_rows, traj_rows)
+            return agent_table_data, _rows_to_table(traj_rows), StepId(), *tab_labels, *state.get_config_jsons()
+        first_traj_id = traj_rows[0]["traj_id"]
         state.select_trajectory(first_traj_id)
-        seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
-        tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
+        traj_table_data = _rows_to_table(traj_rows, first_traj_id, "traj_id")
+        tab_labels = _make_tab_labels(agent_rows, traj_rows)
         return (
             agent_table_data,
-            task_table_data,
-            seed_table_data,
+            traj_table_data,
             StepId(step=0),
             *tab_labels,
             *state.get_config_jsons(),
         )
 
-    def on_select_task(evt: gr.SelectData, task_df: Any) -> tuple[Any, Any, StepId, gr.Tab]:
-        if evt is None or evt.index is None or task_df is None or len(task_df) == 0:
-            return [], [], StepId(), gr.Tab(label="Seeds (0)")
-        row = evt.index[0]
-        task_id = re.sub(r"<[^>]+>", "", str(task_df.iloc[row, 1]))
-        state.select_task(task_id)
-        if state.selected_agent_key is None:
-            return [], [], StepId(), gr.Tab(label="Seeds (0)")
-        task_rows = xray_utils.build_task_table(state.trajectories, state.selected_agent_key)
-        task_table_data = _rows_to_table(task_rows, task_id, "task_id")
-        seed_rows = xray_utils.build_seed_table(state.trajectories, state.selected_agent_key, task_id)
-        seeds_tab_update = gr.Tab(label=f"Seeds ({len(seed_rows)})")
-        if not seed_rows:
-            return task_table_data, _rows_to_table(seed_rows), StepId(), seeds_tab_update
-        # Auto-select first seed
-        first_traj_id = seed_rows[0]["traj_id"]
-        state.select_trajectory(first_traj_id)
-        seed_table_data = _rows_to_table(seed_rows, first_traj_id, "traj_id")
-        return task_table_data, seed_table_data, StepId(step=0), seeds_tab_update
-
-    def on_select_seed(evt: gr.SelectData, seed_df: Any) -> tuple[Any, StepId]:
-        if evt is None or evt.index is None or seed_df is None or len(seed_df) == 0:
+    def on_select_trajectory(evt: gr.SelectData, traj_df: Any) -> tuple[Any, StepId]:
+        if evt is None or evt.index is None or traj_df is None or len(traj_df) == 0:
             return [], StepId(step=0)
         row = evt.index[0]
-        traj_id = re.sub(r"<[^>]+>", "", str(seed_df.iloc[row, 1]))  # col 0 is status emoji
+        traj_id = re.sub(r"<[^>]+>", "", str(traj_df.iloc[row, 2]))  # col 2 is traj_id
         state.select_trajectory(traj_id)
-        if state.selected_agent_key is None or state.selected_task_id is None:
+        if state.selected_agent_key is None:
             return [], StepId(step=0)
-        seed_rows = xray_utils.build_seed_table(state.trajectories, state.selected_agent_key, state.selected_task_id)
-        seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
-        return seed_table_data, StepId(step=0)
+        traj_rows = xray_utils.build_trajectory_table(state.trajectories, state.selected_agent_key)
+        return _rows_to_table(traj_rows, traj_id, "traj_id"), StepId(step=0)
 
     def on_bg_load_tick() -> tuple[Any, Any, Any, Any, str, gr.Timer, gr.Tab, gr.Tab, gr.Tab]:
         """Periodic refresh handler: bulk-loads stubs, then live-polls for new/changed trajectories.
@@ -914,15 +828,9 @@ def run_xray(
         active_agent = agent_rows[0]["agent_name"] if (agent_rows and agent_key is None) else agent_key
         agent_table_data = _rows_to_table(agent_rows, active_agent, "agent_name")
 
-        task_key = state.selected_task_id
-        task_rows = xray_utils.build_task_table(state.trajectories, active_agent) if active_agent else []
-        task_table_data = _rows_to_table(task_rows, task_key, "task_id")
-
-        seed_rows = (
-            xray_utils.build_seed_table(state.trajectories, active_agent, task_key) if active_agent and task_key else []
-        )
+        traj_rows = xray_utils.build_trajectory_table(state.trajectories, active_agent) if active_agent else []
         traj_id = state.current_trajectory.id if state.current_trajectory else None
-        seed_table_data = _rows_to_table(seed_rows, traj_id, "traj_id")
+        traj_table_data = _rows_to_table(traj_rows, traj_id, "traj_id")
 
         n_total = len(state.trajectories)
         n_completed = sum(
@@ -955,8 +863,8 @@ def run_xray(
         experiment_done = state.is_experiment_complete() or state.is_experiment_stale()
         still_active = not state._bg_loading_done or not experiment_done
         timer_update = gr.Timer(active=still_active)
-        tab_labels = _make_tab_labels(agent_rows, task_rows, seed_rows)
-        return exp_stats, agent_table_data, task_table_data, seed_table_data, progress_html, timer_update, *tab_labels
+        tab_labels = _make_tab_labels(agent_rows, traj_rows)
+        return exp_stats, agent_table_data, traj_table_data, progress_html, timer_update, *tab_labels
 
     def navigate_prev() -> StepId:
         """Step backward; reads state.step from closure so JS button.click() works too."""
@@ -1231,7 +1139,7 @@ def run_xray(
 3. When an experiment is running, the viewer polls for new trajectories every second until complete.
 
 ### Browsing results
-4. Drill down via the **Agents → Tasks → Seeds** tabs to select a specific episode.
+4. Drill down via the **Agents → Trajectories** tabs to select a specific episode.
 5. The **Dashboard** tab shows a live progress bar and aggregate stats (reward, tokens, cost).
 6. **Agent Config** / **Exp Config** tabs display the configuration used for the experiment.
 
@@ -1260,7 +1168,7 @@ def run_xray(
 | ✓ | Completed — success, fail, or max-steps (all terminal outcomes) |
 | ▶️ | Running — episode in progress |
 | 🕐 | Queued — not yet started |
-| 🎬 | Max steps reached (shown in Tasks/Seeds tabs) |
+| 🎬 | Max steps reached (shown in Trajectories tab) |
 | ⛔ | Failed — episode errored |
 | 👻 | Stale — no activity for too long |
 | 🚫 | Cancelled |
@@ -1294,32 +1202,14 @@ def run_xray(
                     interactive=False,
                     elem_id="agent_table",
                 )
-            with gr.Tab("Tasks") as tasks_tab:
-                task_table = gr.DataFrame(
-                    headers=[
-                        "status",
-                        "task_id",
-                        "n_seeds",
-                        "n_success",
-                        "avg_steps",
-                        "avg_duration",
-                        "avg_tokens",
-                        "avg_cost",
-                    ],
+            with gr.Tab("Trajectories") as trajs_tab:
+                traj_table = gr.DataFrame(
+                    headers=["status", "task_id", "traj_id", "n_steps", "duration", "tokens", "cost"],
                     datatype="html",
                     max_height=260,
                     show_label=False,
                     interactive=False,
-                    elem_id="task_table",
-                )
-            with gr.Tab("Seeds") as seeds_tab:
-                seed_table = gr.DataFrame(
-                    headers=["status", "traj_id", "n_steps", "duration", "tokens", "cost"],
-                    datatype="html",
-                    max_height=260,
-                    show_label=False,
-                    interactive=False,
-                    elem_id="seed_table",
+                    elem_id="traj_table",
                 )
             with gr.Tab("Agent Config"):
                 agent_config_code = gr.Code(language="json", show_label=False)
@@ -1450,12 +1340,10 @@ def run_xray(
         _hierarchy_outputs = [
             experiment_stats,
             agent_table,
-            task_table,
-            seed_table,
+            traj_table,
             step_id,
             agents_tab,
-            tasks_tab,
-            seeds_tab,
+            trajs_tab,
             agent_config_code,
             exp_config_code,
             bg_timer,
@@ -1470,13 +1358,11 @@ def run_xray(
             outputs=[
                 experiment_stats,
                 agent_table,
-                task_table,
-                seed_table,
+                traj_table,
                 progress_bar,
                 bg_timer,
                 agents_tab,
-                tasks_tab,
-                seeds_tab,
+                trajs_tab,
             ],
         )
 
@@ -1485,18 +1371,15 @@ def run_xray(
             inputs=agent_table,
             outputs=[
                 agent_table,
-                task_table,
-                seed_table,
+                traj_table,
                 step_id,
                 agents_tab,
-                tasks_tab,
-                seeds_tab,
+                trajs_tab,
                 agent_config_code,
                 exp_config_code,
             ],
         )
-        task_table.select(fn=on_select_task, inputs=task_table, outputs=[task_table, seed_table, step_id, seeds_tab])
-        seed_table.select(fn=on_select_seed, inputs=seed_table, outputs=[seed_table, step_id])
+        traj_table.select(fn=on_select_trajectory, inputs=traj_table, outputs=[traj_table, step_id])
 
         # Timeline click
         timeline_click_input.change(fn=handle_timeline_click, inputs=timeline_click_input, outputs=step_id)
@@ -1590,8 +1473,8 @@ def run_xray(
             rows = xray_utils.get_experiments_table_rows(state.results_dir)
             if not rows:
                 return (
-                    "", None, None, None, StepId(),
-                    gr.Tab(label="Agents (0)"), gr.Tab(label="Tasks (0)"), gr.Tab(label="Seeds (0)"),
+                    "", None, None, StepId(),
+                    gr.Tab(label="Agents (0)"), gr.Tab(label="Trajectories (0)"),
                     "", "", gr.Timer(active=False),
                 )
             state.load_experiments([state.results_dir / rows[0]["experiment"]])

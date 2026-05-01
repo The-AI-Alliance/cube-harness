@@ -768,103 +768,86 @@ class TestBuildAgentTable:
 
 
 # ---------------------------------------------------------------------------
-# TestBuildTaskTable
+# TestBuildTrajectoryTable
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTaskTable:
+class TestBuildTrajectoryTable:
     def test_filters_by_agent_key(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        # agent_a has task_1 (×2) and task_2 (×2) = 4 trajectories
+        assert len(rows) == 4
         task_ids = [r["task_id"] for r in rows]
         assert "task_1" in task_ids
         assert "task_2" in task_ids
-        assert len(rows) == 2
 
-    def test_groups_by_task_id(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["n_seeds"] == 2
+    def test_one_row_per_trajectory(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """No aggregation — every trajectory gets its own row."""
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_b")
+        assert len(rows) == 4
 
     def test_returns_empty_for_unknown_agent(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "nonexistent_agent")
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "nonexistent_agent")
         assert rows == []
 
-    def test_has_n_success_not_avg_reward(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_reward replaced by n_success; neither success_rate nor avg_reward should be present."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
+    def test_has_task_id_and_traj_id_columns(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
         assert len(rows) > 0
-        assert "success_rate" not in rows[0]
-        assert "avg_reward" not in rows[0]
-        assert "n_success" in rows[0]
+        assert "task_id" in rows[0]
+        assert "traj_id" in rows[0]
+        assert "status" in rows[0]
 
-    def test_n_success_value(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """n_success counts seeds with reward > 0 (seed 0 has reward=1.0, seed 1 has 0.0)."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["n_success"] == 1
-
-    def test_avg_duration_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_duration is present and shows a formatted string."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert "avg_duration" in task_1_row
-        # Each seed is 1.0s long → avg = 1.0s
-        assert task_1_row["avg_duration"] == "1.0s"
-
-    def test_avg_duration_missing_when_no_timing(self) -> None:
-        """avg_duration falls back to '-' when trajectories have no timing info."""
-        trajs = [
-            Trajectory(
-                id="t1",
-                metadata={"agent_name": "agent_a", "task_id": "task_x"},
-                reward_info={"reward": 1.0},
-            )
-        ]
-        rows = xray_utils.build_task_table(trajs, "agent_a")
-        assert rows[0]["avg_duration"] == "-"
-
-    def test_avg_steps_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_steps shows '-' for metadata stubs (no loaded steps)."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert "avg_steps" in task_1_row
-        # Stubs have steps=[] → shows "-"
-        assert task_1_row["avg_steps"] == "-"
-
-    def test_avg_tokens_and_cost_present(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """avg_tokens and avg_cost show '-' for unloaded metadata stubs."""
-        rows = xray_utils.build_task_table(multi_agent_trajectories, "agent_a")
-        task_1_row = next(r for r in rows if r["task_id"] == "task_1")
-        assert task_1_row["avg_tokens"] == "-"
-        assert task_1_row["avg_cost"] == "-"
-
-
-# ---------------------------------------------------------------------------
-# TestBuildSeedTable
-# ---------------------------------------------------------------------------
-
-
-class TestBuildSeedTable:
-    def test_filters_by_agent_and_task(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "task_1")
-        assert len(rows) == 2
+    def test_traj_id_values_match_trajectory_ids(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
         traj_ids = [r["traj_id"] for r in rows]
         assert "agent_a_task_1_0" in traj_ids
         assert "agent_a_task_1_1" in traj_ids
 
-    def test_one_row_per_trajectory(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_b", "task_2")
-        assert len(rows) == 2
+    def test_no_aggregation_columns(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        """Removed aggregate columns: n_seeds, n_success, avg_steps, etc."""
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        assert "n_seeds" not in rows[0]
+        assert "n_success" not in rows[0]
+        assert "avg_steps" not in rows[0]
+
+    def test_sorted_by_task_id_then_start_time(self, multi_agent_trajectories: list[Trajectory]) -> None:
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
+        task_ids = [r["task_id"] for r in rows]
+        # task_1 rows come before task_2 (lexicographic sort)
+        last_task_1 = max(i for i, t in enumerate(task_ids) if t == "task_1")
+        first_task_2 = min(i for i, t in enumerate(task_ids) if t == "task_2")
+        assert last_task_1 < first_task_2
 
     def test_no_reward_column(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        """reward column was removed; status icon captures success/fail instead."""
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "task_1")
-        assert len(rows) > 0
+        rows = xray_utils.build_trajectory_table(multi_agent_trajectories, "agent_a")
         assert "reward" not in rows[0]
 
-    def test_returns_empty_for_unknown_combination(self, multi_agent_trajectories: list[Trajectory]) -> None:
-        rows = xray_utils.build_seed_table(multi_agent_trajectories, "agent_a", "nonexistent_task")
-        assert rows == []
+    def test_duration_shows_dash_when_no_timing(self) -> None:
+        traj = Trajectory(id="t1", metadata={"agent_name": "agent_a", "task_id": "task_x"})
+        rows = xray_utils.build_trajectory_table([traj], "agent_a")
+        assert rows[0]["duration"] == "-"
+
+    def test_retry_badge_shown_when_retry_count_gt_0(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 2},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "×2" in rows[0]["status"]
+
+    def test_no_retry_badge_when_retry_count_is_0(self) -> None:
+        traj = Trajectory(
+            id="t1_ep0",
+            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 0},
+            start_time=0.0,
+            end_time=1.0,
+            reward_info={"reward": 1.0},
+        )
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "×" not in rows[0]["status"]
 
 
 # ---------------------------------------------------------------------------
@@ -1297,97 +1280,35 @@ class TestBuildStatusCell:
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTaskTableStatusPriority:
-    def _make_traj(self, agent: str, task: str, status: str) -> Trajectory:
-        return Trajectory(id=f"{task}_ep0", metadata={"agent_name": agent, "task_id": task, "_episode_status": status})
+class TestBuildTrajectoryTableStatusIcons:
+    """Each trajectory row shows its own status icon (no aggregation)."""
 
-    def test_failed_beats_stale(self) -> None:
-        trajs = [
-            self._make_traj("a", "t1", "FAILED"),
-            self._make_traj("a", "t1", "STALE"),
-        ]
-        rows = xray_utils.build_task_table(trajs, "a")
+    def _make_traj(self, agent: str, task: str, traj_id: str, status: str) -> Trajectory:
+        return Trajectory(id=traj_id, metadata={"agent_name": agent, "task_id": task, "_episode_status": status})
+
+    def test_failed_row_shows_failed_icon(self) -> None:
+        traj = self._make_traj("a", "t1", "t1_ep0", "FAILED")
+        rows = xray_utils.build_trajectory_table([traj], "a")
         assert "⛔" in rows[0]["status"]
 
-    def test_stale_beats_cancelled(self) -> None:
-        trajs = [
-            self._make_traj("a", "t1", "STALE"),
-            self._make_traj("a", "t1", "CANCELLED"),
-        ]
-        rows = xray_utils.build_task_table(trajs, "a")
+    def test_stale_row_shows_stale_icon(self) -> None:
+        traj = self._make_traj("a", "t1", "t1_ep0", "STALE")
+        rows = xray_utils.build_trajectory_table([traj], "a")
         assert "👻" in rows[0]["status"]
 
-    def test_cancelled_beats_running(self) -> None:
-        trajs = [
-            self._make_traj("a", "t1", "CANCELLED"),
-            self._make_traj("a", "t1", "RUNNING"),
-        ]
-        rows = xray_utils.build_task_table(trajs, "a")
-        assert "🚫" in rows[0]["status"]
-
-    def test_max_steps_beats_success(self) -> None:
-        trajs = [
-            self._make_traj("a", "t1", "MAX_STEPS_REACHED"),
-            Trajectory(
-                id="t1_ep1",
-                metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
-                reward_info={"reward": 1.0},
-            ),
-        ]
-        rows = xray_utils.build_task_table(trajs, "a")
+    def test_max_steps_row_shows_max_steps_icon(self) -> None:
+        traj = self._make_traj("a", "t1", "t1_ep0", "MAX_STEPS_REACHED")
+        rows = xray_utils.build_trajectory_table([traj], "a")
         assert "🎬" in rows[0]["status"]
 
-    def test_all_success_shows_green(self) -> None:
-        trajs = [
-            Trajectory(
-                id=f"t1_ep{i}",
-                metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
-                reward_info={"reward": 1.0},
-            )
-            for i in range(3)
-        ]
-        rows = xray_utils.build_task_table(trajs, "a")
-        assert "🟢" in rows[0]["status"]
-
-
-# ---------------------------------------------------------------------------
-# TestBuildSeedTableRetryBadge
-# ---------------------------------------------------------------------------
-
-
-class TestBuildSeedTableRetryBadge:
-    def test_retry_badge_shown_when_retry_count_gt_0(self) -> None:
-        traj = Trajectory(
-            id="t1_ep0",
-            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 2},
-            start_time=0.0,
-            end_time=1.0,
-            reward_info={"reward": 1.0},
-        )
-        rows = xray_utils.build_seed_table([traj], "a", "t1")
-        assert "×2" in rows[0]["status"]
-
-    def test_no_retry_badge_when_retry_count_is_0(self) -> None:
-        traj = Trajectory(
-            id="t1_ep0",
-            metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED", "_retry_count": 0},
-            start_time=0.0,
-            end_time=1.0,
-            reward_info={"reward": 1.0},
-        )
-        rows = xray_utils.build_seed_table([traj], "a", "t1")
-        assert "×" not in rows[0]["status"]
-
-    def test_no_retry_badge_when_key_absent(self) -> None:
+    def test_success_row_shows_green_icon(self) -> None:
         traj = Trajectory(
             id="t1_ep0",
             metadata={"agent_name": "a", "task_id": "t1", "_episode_status": "COMPLETED"},
-            start_time=0.0,
-            end_time=1.0,
             reward_info={"reward": 1.0},
         )
-        rows = xray_utils.build_seed_table([traj], "a", "t1")
-        assert "×" not in rows[0]["status"]
+        rows = xray_utils.build_trajectory_table([traj], "a")
+        assert "🟢" in rows[0]["status"]
 
 
 # ---------------------------------------------------------------------------

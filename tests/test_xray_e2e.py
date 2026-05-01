@@ -175,13 +175,9 @@ class TestXRayStatusUI:
             timeout=timeout,
         )
 
-    def _click_task_row_by_id(self, page, task_id: str) -> None:
-        """Click the task row whose task_id cell contains task_id.
-
-        Gradio non-interactive DataFrames may not render data-col attributes,
-        so we find the row via text content instead.
-        """
-        row = page.locator("#task_table tr").filter(has_text=re.compile(rf"\b{task_id}\b")).first
+    def _click_traj_row_by_id(self, page, traj_id: str) -> None:
+        """Click the trajectory row whose traj_id cell contains traj_id."""
+        row = page.locator("#traj_table tr").filter(has_text=re.compile(rf"\b{traj_id}\b")).first
         row.click()
         page.wait_for_timeout(500)
 
@@ -198,59 +194,36 @@ class TestXRayStatusUI:
         page, _ = page_with_exp
         page.get_by_role("tab", name=re.compile(r"Agents")).click()
         self._wait_for_table_rows(page, "agent_table")
-        # Use text_content() for headers which may be inside aria-hidden tables.
         headers = [h.text_content() for h in page.locator("#agent_table table thead th").all()]
         assert not any("n_err" in h for h in headers)
         assert not any("n_running" in h for h in headers)
 
-    def test_tasks_tab_shows_failed_symbol(self, page_with_exp: tuple) -> None:
+    def test_trajectories_tab_shows_all_symbols(self, page_with_exp: tuple) -> None:
+        """All status icons across all trajectories are visible in a single table."""
         page, screenshots = page_with_exp
-        # Experiment auto-selects first agent; navigate to Tasks directly.
-        page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-        self._wait_for_table_rows(page, "task_table", min_rows=4)
+        page.get_by_role("tab", name=re.compile(r"Trajectories")).click()
+        self._wait_for_table_rows(page, "traj_table", min_rows=5)
         if screenshots:
-            page.screenshot(path=str(SCREENSHOT_DIR / "03_tasks_tab.png"))
-        table_html = self._table_text(page, "task_table")
+            page.screenshot(path=str(SCREENSHOT_DIR / "03_trajectories_tab.png"))
+        table_html = self._table_text(page, "traj_table")
         assert "⛔" in table_html
-
-    def test_tasks_tab_shows_max_steps_symbol(self, page_with_exp: tuple) -> None:
-        page, _ = page_with_exp
-        page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-        self._wait_for_table_rows(page, "task_table", min_rows=4)
-        table_html = self._table_text(page, "task_table")
         assert "🎬" in table_html
-
-    def test_seeds_tab_shows_retry_badge(self, page_with_exp: tuple) -> None:
-        """The MAX_STEPS_REACHED seed has retry_count=1 — ×1 badge should appear."""
-        page, screenshots = page_with_exp
-        page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-        self._wait_for_table_rows(page, "task_table", min_rows=4)
-        # Click the task_2 row (MAX_STEPS_REACHED episode).
-        self._click_task_row_by_id(page, "task_2")
-        page.get_by_role("tab", name=re.compile(r"Seeds")).click()
-        # Wait until seed table is rendered and shows task_2's trajectory.
-        page.wait_for_function(
-            "() => { const el = document.querySelector('#seed_table'); return el && el.innerText.includes('task_2_ep0'); }",
-            timeout=8000,
-        )
-        if screenshots:
-            page.screenshot(path=str(SCREENSHOT_DIR / "04_seeds_tab_retry.png"))
-        table_html = self._table_text(page, "seed_table")
-        assert "×1" in table_html
-
-    def test_stale_symbol_visible(self, page_with_exp: tuple) -> None:
-        page, screenshots = page_with_exp
-        page.get_by_role("tab", name=re.compile(r"Tasks")).click()
-        self._wait_for_table_rows(page, "task_table", min_rows=4)
-        # Click the task_4 row (STALE episode).
-        self._click_task_row_by_id(page, "task_4")
-        page.get_by_role("tab", name=re.compile(r"Seeds")).click()
-        # Wait until seed table is rendered and shows task_4's trajectory.
-        page.wait_for_function(
-            "() => { const el = document.querySelector('#seed_table'); return el && el.innerText.includes('task_4_ep0'); }",
-            timeout=8000,
-        )
-        if screenshots:
-            page.screenshot(path=str(SCREENSHOT_DIR / "05_seeds_stale.png"))
-        table_html = self._table_text(page, "seed_table")
         assert "👻" in table_html
+
+    def test_trajectories_tab_has_task_id_column(self, page_with_exp: tuple) -> None:
+        page, _ = page_with_exp
+        page.get_by_role("tab", name=re.compile(r"Trajectories")).click()
+        self._wait_for_table_rows(page, "traj_table", min_rows=5)
+        headers = [h.text_content() for h in page.locator("#traj_table table thead th").all()]
+        assert any("task_id" in h for h in headers)
+        assert any("traj_id" in h for h in headers)
+
+    def test_trajectories_tab_shows_retry_badge(self, page_with_exp: tuple) -> None:
+        """The MAX_STEPS_REACHED trajectory has retry_count=1 — ×1 badge should appear."""
+        page, screenshots = page_with_exp
+        page.get_by_role("tab", name=re.compile(r"Trajectories")).click()
+        self._wait_for_table_rows(page, "traj_table", min_rows=5)
+        if screenshots:
+            page.screenshot(path=str(SCREENSHOT_DIR / "04_trajectories_retry.png"))
+        table_html = self._table_text(page, "traj_table")
+        assert "×1" in table_html
