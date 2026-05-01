@@ -39,18 +39,18 @@ def main(debug: bool) -> None:
     llm_config = LLMConfig(model_name="gpt-5-mini")
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    benchmark = MiniWobBenchmarkConfig(
+    benchmark_config = MiniWobBenchmarkConfig(
         tool_config=BrowsergymConfig(
             use_screenshot=True,
             use_html=True,
             use_axtree=False,
         )
-    ).make()
+    )
     exp = Experiment(
         name="miniwob_bgym",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=10,
     )
     if debug:
