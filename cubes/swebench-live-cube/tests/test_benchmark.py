@@ -5,7 +5,10 @@ serialization round-trip).
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from cube.benchmark import BenchmarkConfig
+from cube.container import ExecResult
 from cube.task import TaskExecutionInfo
 
 from swebench_live_cube.benchmark import SWEBenchLiveBenchmarkConfig
@@ -15,6 +18,7 @@ from swebench_live_cube.task import (
     SWEBenchLiveTaskConfig,
     SWEBenchLiveTaskMetadata,
 )
+from swebench_live_cube.tool import BashOnlySWEBenchTool, BashOnlySWEBenchToolConfig
 
 
 _DEBUG_TASK_IDS = list(_TASK_ACTIONS)
@@ -107,3 +111,27 @@ def test_execution_info_roundtrip():
     assert restored.fail_to_pass == ["test_a"]
     assert restored.test_cmds == ["pytest -x test_a.py"]
     assert restored.eval_timeout == 1800  # default preserved
+
+
+def test_bash_only_tool_output_truncation() -> None:
+    """bash() head+tail truncates large output without raising."""
+    container = MagicMock()
+    big_output = "x" * 200_000
+    container.exec.return_value = ExecResult(stdout=big_output, stderr="", exit_code=0)
+
+    config = BashOnlySWEBenchToolConfig(max_output_bytes=100_000)
+    tool = BashOnlySWEBenchTool(config=config, container=container)
+
+    result = tool.bash(command="echo hi")
+    assert "[... " in result
+    assert "bytes elided" in result
+    assert len(result.encode()) < 200_000
+
+
+def test_bash_only_tool_no_output() -> None:
+    """bash() returns '(no output)' when stdout and stderr are both empty."""
+    container = MagicMock()
+    container.exec.return_value = ExecResult(stdout="", stderr="", exit_code=0)
+
+    tool = BashOnlySWEBenchTool(config=BashOnlySWEBenchToolConfig(), container=container)
+    assert tool.bash(command="true") == "(no output)"
