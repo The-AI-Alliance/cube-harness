@@ -1,7 +1,9 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
+import site
 import time
+from pathlib import Path
 from uuid import uuid4
 
 import ray
@@ -16,6 +18,66 @@ from cube_harness.storage import FileStorage, Storage
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+
+def _editable_packages_for_ray() -> list[Path]:
+    """Return Python package directories from all editable installs in the venv.
+
+    Ray creates a fresh worker venv via uv, installing only packages from
+    pyproject.toml/uv.lock. Editable installs (cube packages, infra toolkit,
+    etc.) are absent from the worker venv and cause ImportError on task
+    deserialization when Pydantic models from those packages are pickled.
+
+    This scans site-packages for .pth files (the editable install marker),
+    collects the Python package directories they expose, and returns them as
+    py_modules for the Ray runtime_env. Ray uploads these to the cluster so
+    workers can import them.
+
+    The main project package (cube_harness) is excluded — Ray already remaps
+    its .pth file to the packed working directory.
+    """
+    harness_root = Path(__file__).resolve().parents[2]  # cube-harness/
+    main_pkg = "cube_harness"  # already handled by Ray's working_dir packing
+    packages: list[Path] = []
+    seen: set[Path] = set()
+
+    for sp in site.getsitepackages():
+        sp_path = Path(sp)
+        if not sp_path.is_dir():
+            continue
+        for pth_file in sp_path.glob("*.pth"):
+            try:
+                src_dir = Path(pth_file.read_text().strip()).resolve()
+            except Exception:
+                continue
+            if not src_dir.is_dir():
+                continue
+            for pkg_dir in src_dir.iterdir():
+                if not pkg_dir.is_dir() or not (pkg_dir / "__init__.py").exists():
+                    continue
+                if pkg_dir.name == main_pkg or pkg_dir in seen:
+                    continue
+                # Skip packages that live inside the harness root — Ray already packs
+                # those via working_dir and remaps their .pth file.
+                try:
+                    pkg_dir.relative_to(harness_root)
+                    continue  # inside working_dir — already handled
+                except ValueError:
+                    pass
+                seen.add(pkg_dir)
+                packages.append(pkg_dir)
+
+    # Also include cube packages from cubes/*/src — they're inside working_dir but
+    # NOT remapped by Ray (only the main package gets .pth remapping).
+    cubes_dir = harness_root / "cubes"
+    if cubes_dir.is_dir():
+        for src_dir in cubes_dir.glob("*/src"):
+            for pkg_dir in src_dir.iterdir():
+                if pkg_dir.is_dir() and (pkg_dir / "__init__.py").exists() and pkg_dir not in seen:
+                    seen.add(pkg_dir)
+                    packages.append(pkg_dir)
+
+    return packages
 
 
 def _extract_model(exp: Experiment) -> str | None:
@@ -176,12 +238,20 @@ def _run_with_ray_impl(
             return episode.run()
 
     if not ray.is_initialized():
+        cube_packages = _editable_packages_for_ray()
+        runtime_env: dict[str, object] = {"env_vars": get_trace_env_vars()}
+        if cube_packages:
+            # Ray uploads py_modules to the cluster and places them in the worker's
+            # CWD, making them importable. This fixes editable cube installs (cubes/*/src)
+            # that are not in pyproject.toml and therefore absent from the worker venv.
+            runtime_env["py_modules"] = [str(p) for p in cube_packages]
+            logger.info("Ray runtime_env py_modules: %s", runtime_env["py_modules"])
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",
             include_dashboard=True,
             log_to_driver=True,
-            runtime_env={"env_vars": get_trace_env_vars()},
+            runtime_env=runtime_env,
         )  # TODO: Ray breaks signal handling, we cannot react to Ctrl+C here, still cannot find a workaround
 
     with exp.benchmark_config.make(exp.infra) as benchmark:
