@@ -236,7 +236,7 @@ class WAATask(Task):
             sections.append((label, body))
         try:
             with open(out_path, "w") as f:
-                f.write(f"# Dead-VM diagnostic dump\n")
+                f.write("# Dead-VM diagnostic dump\n")
                 f.write(f"# Task: {self.metadata.id}\n")
                 f.write(f"# VM: {vm_name}\n")
                 f.write(f"# Public IP: {public_ip}\n")
