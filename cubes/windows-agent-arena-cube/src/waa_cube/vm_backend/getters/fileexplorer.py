@@ -34,6 +34,21 @@ def get_vm_file_exists_in_desktop(env, config) -> bool:
         return False
 
 
+def get_vm_file_exists_in_vm_folder(env, config) -> bool:
+    """Generalisation of ``get_vm_file_exists_in_desktop`` to any folder.
+
+    Config keys: ``folder_name`` (full VM path), ``file_name`` (basename).
+    """
+    folder_path = config["folder_name"]
+    file_name = config["file_name"]
+    logger.info(f"Checking for {file_name} in {folder_path}")
+    if env.controller.get_vm_file_exists_in_path(file_name, folder_path):
+        logger.info(f"File {file_name} exists in {folder_path}")
+        return True
+    logger.info(f"File {file_name} does not exist in {folder_path}")
+    return False
+
+
 def get_are_files_sorted_by_modified_time(env, config: dict) -> bool:
     if not config["directory"]:
         return False
@@ -109,8 +124,10 @@ def get_zipped_folder_in_desktop(env, config) -> str:
     with py7zr.SevenZipFile(file, mode="r", password=config["password"]) as z:
         if not z.needs_password():
             return "false"
-        for i in z.readall():
-            if i == "OldProjects/example.txt":
+        # py7zr's old `readall()` returned a dict of {path: data}; current API
+        # is getnames() for filename-only checks (and read([targets]) for content).
+        for name in z.getnames():
+            if name == "OldProjects/example.txt":
                 return "true"
     return "false"
 

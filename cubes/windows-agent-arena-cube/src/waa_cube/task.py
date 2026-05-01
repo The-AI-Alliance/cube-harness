@@ -391,11 +391,16 @@ class WAATask(Task):
 
         return self._computer.get_observation()
 
-    def _evaluate_task(self) -> float:
-        """Run the WAA evaluator and return reward ∈ [0.0, 1.0]."""
+    def _evaluate_task(self) -> tuple[float, dict[str, Any]]:
+        """Run the WAA evaluator and return ``(reward, info)``.
+
+        ``reward`` ∈ [0.0, 1.0]. ``info`` carries diagnostic context (see
+        ``Evaluator.evaluate``) so harness callers can distinguish a real
+        agent failure from an evaluator-side bug.
+        """
         if self._computer._guest is None:
             logger.error("_evaluate_task() called with no VM attached")
-            return 0.0
+            return 0.0, {"evaluation_error": {"phase": "setup", "type": "NoVMAttached", "message": "no guest agent"}}
 
         chromium_port, vlc_port, server_port = self._get_vm_ports()
         cache_dir_base = Path(self._computer.config.cache_dir)
@@ -413,12 +418,12 @@ class WAATask(Task):
             "evaluator": exec_info.evaluator,
         }
         try:
-            reward = evaluator.evaluate(eval_config, self._computer._action_history)
+            reward, info = evaluator.evaluate(eval_config, self._computer._action_history)
             logger.info("WAA task evaluation result: %f", reward)
-            return reward
+            return reward, info
         except Exception as exc:
-            logger.error("Evaluation failed: %s", exc)
-            return 0.0
+            logger.exception("Evaluation failed for %s", self.metadata.id)
+            return 0.0, {"evaluation_error": {"phase": "evaluator_top_level", "type": type(exc).__name__, "message": str(exc)}}
 
     def _waa_execution_info(self) -> "WAATaskExecutionInfo":
         """Return self.execution_info coerced to WAATaskExecutionInfo.
@@ -485,11 +490,12 @@ class WAATask(Task):
         eval_func = evaluator_cfg.get("func", "unknown")
         logger.debug("Evaluating WAA task %s with evaluator: %s", self.metadata.id, eval_func)
 
-        reward = self._evaluate_task()
+        reward, eval_info = self._evaluate_task()
         logger.info("WAA task %s evaluation: reward=%f, evaluator=%s", self.metadata.id, reward, eval_func)
         return reward, {
             "evaluator": eval_func,
             "expected": evaluator_cfg.get("expected", {}),
+            **eval_info,
         }
 
     def finished(self, obs: Observation) -> bool:

@@ -393,6 +393,37 @@ def check_qt_max_volume(actual_config_path, rule):
         return 0
 
 
+def check_qt_video_resize(actual_config_path, rule):
+    """Check VLC's qt-video-autoresize setting in the user config (vlcrc).
+
+    Rule dict carries the expected value under either ``qt-video-autoresize``
+    (matching the line key in vlcrc) or ``expected_qt_video_autoresize``,
+    accepted in either form for compatibility with task configs.
+    """
+    with open(actual_config_path, "rb") as file:
+        config_file = file.read().decode("utf-8")
+
+    expected = rule.get("qt-video-autoresize")
+    if expected is None:
+        expected = rule.get("expected_qt_video_autoresize")
+    if isinstance(expected, int):
+        expected = str(expected)
+
+    try:
+        # VLC default: qt-video-autoresize=1 (auto-resize enabled).
+        qt_video_autoresize = "1"
+        for line in config_file.split("\n"):
+            if "qt-video-autoresize=" in line:
+                qt_video_autoresize = line.split("=")[-1].strip()
+        return 1 if qt_video_autoresize == expected else 0
+    except FileNotFoundError:
+        logger.error("VLC configuration file not found.")
+        return 0
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
+        return 0
+
+
 def check_qt_minimal_view(actual_config_path, rule):
     with open(actual_config_path, "rb") as file:
         config_file = file.read().decode("utf-8")

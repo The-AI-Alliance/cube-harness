@@ -163,7 +163,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Student_Level_Fill_Blank.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Student_Level_Fill_Blank.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -419,7 +419,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "IncomeStatement2.xlsx \u2014 LibreOffice Calc",
+            "window_name": "IncomeStatement2.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -555,7 +555,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "SmallBalanceSheet.xlsx \u2014 LibreOffice Calc",
+            "window_name": "SmallBalanceSheet.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -719,7 +719,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Novels_Intro_Packet.docx \u2014 LibreOffice Writer",
+            "window_name": "Novels_Intro_Packet.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -787,7 +787,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "04 CHIN9505 EBook Purchasing info 2021 Jan.docx \u2014 LibreOffice Writer",
+            "window_name": "04 CHIN9505 EBook Purchasing info 2021 Jan.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -865,7 +865,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "SalesRep.xlsx \u2014 LibreOffice Calc",
+            "window_name": "SalesRep.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -957,7 +957,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "NetIncome.xlsx \u2014 LibreOffice Calc",
+            "window_name": "NetIncome.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -1041,7 +1041,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "H2O_Factsheet_WA.docx \u2014 LibreOffice Writer",
+            "window_name": "H2O_Factsheet_WA.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -1126,7 +1126,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Customers_New_7digit_Id.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Customers_New_7digit_Id.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -1300,7 +1300,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "copy_sheet_insert.xlsx \u2014 LibreOffice Calc",
+            "window_name": "copy_sheet_insert.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -1396,7 +1396,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "LibreOffice_Open_Source_Word_Processing.docx \u2014 LibreOffice Writer",
+            "window_name": "LibreOffice_Open_Source_Word_Processing.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -1459,7 +1459,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Dublin_Zoo_Intro.docx \u2014 LibreOffice Writer",
+            "window_name": "Dublin_Zoo_Intro.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -1690,7 +1690,7 @@
             },
             {
               "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
-              "title": "PSY - GANGNAM STYLE(\uac15\ub0a8\uc2a4\ud0c0\uc77c) M/V",
+              "title": "PSY - GANGNAM STYLE(강남스타일) M/V",
               "visit_time_from_now_in_seconds": 1631
             },
             {
@@ -1740,7 +1740,7 @@
             },
             {
               "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
-              "title": "PSY - GANGNAM STYLE(\uac15\ub0a8\uc2a4\ud0c0\uc77c) M/V",
+              "title": "PSY - GANGNAM STYLE(강남스타일) M/V",
               "visit_time_from_now_in_seconds": 3700
             },
             {
@@ -2178,7 +2178,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "FutureValue.xlsx \u2014 LibreOffice Calc",
+            "window_name": "FutureValue.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -2261,7 +2261,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "EntireSummerSales.xlsx \u2014 LibreOffice Calc",
+            "window_name": "EntireSummerSales.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -2350,7 +2350,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "WeeklySales.xlsx \u2014 LibreOffice Calc",
+            "window_name": "WeeklySales.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -2434,10 +2434,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -2445,12 +2444,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -2501,7 +2494,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "PeriodRate.xlsx \u2014 LibreOffice Calc",
+            "window_name": "PeriodRate.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -2661,7 +2654,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "SalesRep.xlsx \u2014 LibreOffice Calc",
+            "window_name": "SalesRep.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -3126,7 +3119,7 @@
       "expected": {
         "type": "rule",
         "rules": {
-          "expected": "Documents"
+          "expected": "Documents - File Explorer"
         }
       }
     },
@@ -3230,7 +3223,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "DemographicProfile.xlsx \u2014 LibreOffice Calc",
+            "window_name": "DemographicProfile.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -3608,7 +3601,7 @@
       {
         "type": "activate_window",
         "parameters": {
-          "window_name": "lecture.pdf \u2014 6.006 Introduction to Algorithms, Lecture 2: Data Structures",
+          "window_name": "lecture.pdf — 6.006 Introduction to Algorithms, Lecture 2: Data Structures",
           "strict": true
         }
       },
@@ -3646,10 +3639,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -3657,12 +3649,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -3713,7 +3699,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "LARS_Science_Assessment_Resource_List_7-30-21.xlsx \u2014 LibreOffice Calc",
+            "window_name": "LARS_Science_Assessment_Resource_List_7-30-21.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -3909,7 +3895,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Constitution_Template_With_Guidelines.docx \u2014 LibreOffice Writer",
+            "window_name": "Constitution_Template_With_Guidelines.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -3972,7 +3958,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "How_to_read_a_scientific_article.docx \u2014 LibreOffice Writer",
+            "window_name": "How_to_read_a_scientific_article.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -4099,7 +4085,7 @@
             },
             {
               "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
-              "title": "PSY - GANGNAM STYLE(\uac15\ub0a8\uc2a4\ud0c0\uc77c) M/V",
+              "title": "PSY - GANGNAM STYLE(강남스타일) M/V",
               "visit_time_from_now_in_seconds": 1631
             },
             {
@@ -4149,7 +4135,7 @@
             },
             {
               "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
-              "title": "PSY - GANGNAM STYLE(\uac15\ub0a8\uc2a4\ud0c0\uc77c) M/V",
+              "title": "PSY - GANGNAM STYLE(강남스타일) M/V",
               "visit_time_from_now_in_seconds": 3700
             },
             {
@@ -4652,7 +4638,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "RampUpAndDown.xlsx \u2014 LibreOffice Calc",
+            "window_name": "RampUpAndDown.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -4851,7 +4837,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Employee_Age_By_Birthday.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Employee_Age_By_Birthday.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -4934,7 +4920,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Padding_Decimals_In_Formular.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Padding_Decimals_In_Formular.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -5288,7 +5274,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "EasyGDPBreakdown.xlsx \u2014 LibreOffice Calc",
+            "window_name": "EasyGDPBreakdown.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -5472,7 +5458,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "ExpenseReport.xlsx \u2014 LibreOffice Calc",
+            "window_name": "ExpenseReport.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -5569,7 +5555,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "sample-recruitment-phone-script.odt \u2014 LibreOffice Writer",
+            "window_name": "sample-recruitment-phone-script.odt — LibreOffice Writer",
             "strict": true
           }
         },
@@ -5737,7 +5723,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "GEOG2169_Course_Outline_2022-23.docx \u2014 LibreOffice Writer",
+            "window_name": "GEOG2169_Course_Outline_2022-23.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -5843,7 +5829,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Name_Order_Id_move_column.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Name_Order_Id_move_column.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -6174,7 +6160,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "VLOOKUP_Fill_the_form.xlsx \u2014 LibreOffice Calc",
+            "window_name": "VLOOKUP_Fill_the_form.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -6257,7 +6243,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Order_Sales_Serial#.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Order_Sales_Serial#.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -6427,7 +6413,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "CCCH9003_Tutorial_guidelines.docx \u2014 LibreOffice Writer",
+            "window_name": "CCCH9003_Tutorial_guidelines.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -6498,7 +6484,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Calendar_Highlight_Weekend_Days.xlsx \u2014 LibreOffice Calc",
+            "window_name": "Calendar_Highlight_Weekend_Days.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -6594,7 +6580,26 @@
       "result": {
         "type": "vlc_config",
         "dest": "vlcrc"
-      }
+      },
+      "postconfig": [
+        {
+          "type": "launch",
+          "parameters": {
+            "command": [
+              "powershell",
+              "-NoProfile",
+              "-Command",
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
+            ]
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 1
+          }
+        }
+      ]
     },
     "related_apps": [
       "vlc"
@@ -6636,7 +6641,26 @@
       "result": {
         "type": "vlc_config",
         "dest": "vlcrc"
-      }
+      },
+      "postconfig": [
+        {
+          "type": "launch",
+          "parameters": {
+            "command": [
+              "powershell",
+              "-NoProfile",
+              "-Command",
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
+            ]
+          }
+        },
+        {
+          "type": "sleep",
+          "parameters": {
+            "seconds": 1
+          }
+        }
+      ]
     },
     "related_apps": [
       "vlc"
@@ -6731,10 +6755,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -6742,12 +6765,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -6799,10 +6816,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -6810,12 +6826,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -7033,7 +7043,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Graphemes_Sound_Letter_Patterns.docx \u2014 LibreOffice Writer",
+            "window_name": "Graphemes_Sound_Letter_Patterns.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -7448,7 +7458,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "BoomerangSales.xlsx \u2014 LibreOffice Calc",
+            "window_name": "BoomerangSales.xlsx — LibreOffice Calc",
             "strict": true
           }
         },
@@ -7930,10 +7940,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -7941,12 +7950,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -8283,7 +8286,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Essay_Writing_English_for_uni.docx \u2014 LibreOffice Writer",
+            "window_name": "Essay_Writing_English_for_uni.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -8783,7 +8786,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "CCHU9045_Course_Outline_2019-20.docx \u2014 LibreOffice Writer",
+            "window_name": "CCHU9045_Course_Outline_2019-20.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -9118,10 +9121,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -9129,12 +9131,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -9186,7 +9182,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "presentation_instruction_2023_Feb.docx \u2014 LibreOffice Writer",
+            "window_name": "presentation_instruction_2023_Feb.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -9319,7 +9315,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Y22-2119-assign4.docx \u2014 LibreOffice Writer",
+            "window_name": "Y22-2119-assign4.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -9517,7 +9513,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "Geography_And_Magical_Realism.docx \u2014 LibreOffice Writer",
+            "window_name": "Geography_And_Magical_Realism.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -9872,7 +9868,7 @@
         {
           "type": "activate_window",
           "parameters": {
-            "window_name": "loa-one-time-submission-sealand.docx \u2014 LibreOffice Writer",
+            "window_name": "loa-one-time-submission-sealand.docx — LibreOffice Writer",
             "strict": true
           }
         },
@@ -9942,10 +9938,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -9953,12 +9948,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],
@@ -10159,10 +10148,9 @@
           "parameters": {
             "command": [
               "powershell",
+              "-NoProfile",
               "-Command",
-              "Stop-Process",
-              "-Name",
-              "vlc"
+              "Get-Process vlc -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null; $_.WaitForExit(5000) | Out-Null }"
             ]
           }
         },
@@ -10170,12 +10158,6 @@
           "type": "sleep",
           "parameters": {
             "seconds": 1
-          }
-        },
-        {
-          "type": "launch",
-          "parameters": {
-            "command": "vlc"
           }
         }
       ],

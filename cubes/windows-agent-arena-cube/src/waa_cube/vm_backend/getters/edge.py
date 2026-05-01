@@ -141,15 +141,13 @@ def get_enable_enhanced_safety_browsing_from_edge(env, config: Dict[str, str]):
         )["output"].strip()
     else:
         raise Exception("Unsupported operating system")
-    try:
-        content = env.controller.get_file(preference_file_path)
-        data = json.loads(content)
-        is_enabled = data["edge"]["super_duper_secure_mode"]["enabled"]  # bool
-        logger.info(f"enhanced safety browsing is enabled: {is_enabled}")
-        return 1.0 if is_enabled else 0.0
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        return 0.0
+    content = env.controller.get_file(preference_file_path)
+    if content is None:
+        raise FileNotFoundError(f"Edge Preferences not found at {preference_file_path}")
+    data = json.loads(content)
+    is_enabled = data.get("edge", {}).get("super_duper_secure_mode", {}).get("enabled", False)
+    logger.info(f"super_duper_secure_mode (enhanced safety browsing) enabled: {is_enabled}")
+    return 1.0 if is_enabled else 0.0
 
 
 def get_enable_do_not_track_from_edge(env, config: Dict[str, str]):

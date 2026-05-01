@@ -37,11 +37,16 @@ def get_vlc_playing_info(env, config: Dict[str, str]):
 def get_vlc_config(env, config: Dict[str, str]):
     """
     Reads the VLC configuration file to check setting.
+
+    Raises ``FileNotFoundError`` when the user-level ``vlcrc`` doesn't exist
+    yet on the VM — typically because VLC was never opened during the
+    episode, so settings the agent was supposed to change weren't persisted.
+    The evaluator's ``FileNotFoundError`` handler treats this as a clean 0.0,
+    distinct from a code-level bug.
     """
 
     os_type = env.vm_platform
 
-    # fixme: depends on how we config and install the vlc in virtual machine, need to be aligned and double-checked
     if os_type == "Linux":
         config_path = env.controller.execute_python_command(
             "import os; print(os.path.expanduser('~/.config/vlc/vlcrc'))"
@@ -57,8 +62,11 @@ def get_vlc_config(env, config: Dict[str, str]):
     else:
         raise Exception("Unsupported operating system", os_type)
 
-    _path = os.path.join(env.cache_dir, config["dest"])
     content = env.controller.get_file(config_path)
+    if content is None:
+        raise FileNotFoundError(f"VLC config file not found on VM at {config_path}")
+
+    _path = os.path.join(env.cache_dir, config["dest"])
     with open(_path, "wb") as f:
         f.write(content)
 

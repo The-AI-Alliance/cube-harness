@@ -1262,15 +1262,12 @@ def get_enable_do_not_track(env, config: Dict[str, str]):
     else:
         raise Exception("Unsupported operating system")
 
-    try:
-        content = env.controller.get_file(preference_file_path)
-        data = json.loads(content)
-
-        if_enable_do_not_track = data.get("enable_do_not_track", {})  # bool
-        return "true" if if_enable_do_not_track else "false"
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        return "false"
+    content = env.controller.get_file(preference_file_path)
+    if content is None:
+        raise FileNotFoundError(f"Chrome Preferences not found at {preference_file_path}")
+    data = json.loads(content)
+    if_enable_do_not_track = data.get("enable_do_not_track", False)
+    return "true" if if_enable_do_not_track else "false"
 
 
 def get_enable_enhanced_safety_browsing(env, config: Dict[str, str]):
