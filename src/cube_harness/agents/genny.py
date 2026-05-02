@@ -1,4 +1,4 @@
-"""Genny agent — cache-friendly context management.
+"""Genny2 agent — cache-friendly context management.
 
 Two operating modes, both with a stable cacheable prefix:
 
@@ -241,19 +241,27 @@ class TextToolAdapter:
 # ---------------------------------------------------------------------------
 
 
-class GennyConfig(AgentConfig):
+class Genny2Config(AgentConfig):
     # Core
     llm_config: LLMConfig
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
-    # react_prompt: reason-then-act, used when enable_summarize=False (COT embedded in act call)
+    # react_prompt: reason-then-act, used when enable_summarize=False and flat_history=False
     react_prompt: str = _DEFAULT_REACT_PROMPT
-    # act_prompt: action-only, used when enable_summarize=True (reasoning done in summarize pass)
+    # act_prompt: action-only, used when enable_summarize=True and flat_history=False
     act_prompt: str = _DEFAULT_ACT_PROMPT
+    # step_prompt: trailing user message appended each act step when flat_history=True.
+    # Empty string = no trailing message (mini-swe-agent style).
+    step_prompt: str = ""
 
     # Tool interface: False = native API tool_use (default); True = fn sigs in system prompt
     # + <tool_call> XML parsing (TextToolAdapter). Both modes are supported; tools_as_text
     # exists for ablation studies — if it shows no benefit it will be removed.
     tools_as_text: bool = False
+
+    # Flat history mode: True = linear conversation with no injected summaries/headers,
+    # equivalent to mini-swe-agent prompt structure. Summaries are still accumulated
+    # internally (for logging/XRay) but not injected into the prompt.
+    flat_history: bool = False
 
     # Summarize pass
     enable_summarize: bool = False  # False = raw history mode; True = rolling summaries mode
@@ -278,16 +286,22 @@ class GennyConfig(AgentConfig):
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
+    # Hard per-episode cost cap in USD. Checked before each act call; triggers a STOP when hit.
+    cost_limit: float | None = None
+    # Retry budget when the model returns no tool calls. On each retry the empty response
+    # and a correction user message are appended; if still no tool calls after all retries,
+    # a STOP action is returned. 0 = no retry (preserves current behavior).
+    max_format_errors: int = 0
 
     @property
     def agent_name(self) -> str:
-        name = f"Genny-{self.llm_config.model_name}".replace("/", "_")
+        name = f"Genny2-{self.llm_config.model_name}".replace("/", "_")
         if self.summarize_llm_config and self.summarize_llm_config.model_name != self.llm_config.model_name:
             name += f"+{self.summarize_llm_config.model_name}".replace("/", "_")
         return name
 
-    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny":
-        return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
+    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny2":
+        return Genny2(config=self, action_schemas=action_set or [], task_id=task_id)
 
 
 # ---------------------------------------------------------------------------
@@ -295,25 +309,27 @@ class GennyConfig(AgentConfig):
 # ---------------------------------------------------------------------------
 
 
-class Genny(Agent):
-    """ReAct-style agent with cache-friendly context management.
+class Genny2(Agent):
+    """ReAct-style agent with cache-friendly context management and mini-swe-agent compatibility.
 
-    Mode A (enable_summarize=False): raw history grows by one (obs, asst) pair per step.
-    Latest obs is appended at context-build time, keeping the completed history as a stable
-    cacheable prefix.
+    Mode A (enable_summarize=False, flat_history=False): raw history grows by one (obs, asst)
+    pair per step. Completed history is a stable cacheable prefix.
 
-    Mode B (enable_summarize=True): a separate summarize LLM call produces a per-step
-    summary stored as its own assistant message. Summaries accumulate as individual messages
-    (not bundled) so each step's cache extends the previous step's. Latest obs is shown to
-    both the summarize and act passes; the act pass also sees the new summary before the obs.
+    Mode B (enable_summarize=True, flat_history=False): a separate summarize LLM call produces
+    a per-step summary stored as its own assistant message. Summaries accumulate as individual
+    messages so each step's cache extends the previous step's.
+
+    Flat mode (flat_history=True): linear prompt with no injected scaffolding — equivalent to
+    mini-swe-agent. Summaries (if enable_summarize=True) are computed for logging/XRay but
+    never injected into the prompt. step_prompt="" omits the trailing user message entirely.
     """
 
-    name: str = "genny"
-    description: str = "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
+    name: str = "genny2"
+    description: str = "Genny2 — cache-friendly context management with flat/summarize/raw history modes."
     input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
     output_content_types: list[str] = ["application/json"]
 
-    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema], task_id: str | None = None):
+    def __init__(self, config: Genny2Config, action_schemas: list[ActionSchema], task_id: str | None = None):
         self.config = config
         self.task_id = task_id
         if task_id is None and (config.task_hints or config.task_clarification):
@@ -338,13 +354,19 @@ class Genny(Agent):
         self.tool_adapter: ToolAdapter = TextToolAdapter() if config.tools_as_text else NativeToolAdapter()
         self.goal: list[dict] = []
         self.summaries: list[str] = []  # Mode B: one entry per step
-        self.history: list[list[dict | Message]] = []  # Mode A: completed (obs, asst) pairs
+        self.history: list[list[dict | Message]] = []  # Mode A / flat: completed (obs, asst) pairs
         self._latest_obs: list[dict | Message] = []  # current step's obs, not yet in history
         self._actions_cnt: int = 0
+        self._total_cost: float = 0.0  # accumulated USD cost for cost_limit checks
 
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
             logger.info("Max actions reached, issuing STOP action.")
+            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
+        if self.config.cost_limit is not None and self._total_cost >= self.config.cost_limit:
+            logger.info(
+                f"Cost limit ${self.config.cost_limit:.2f} reached (${self._total_cost:.4f} spent), issuing STOP."
+            )
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
@@ -362,19 +384,30 @@ class Genny(Agent):
             self.summaries.append(summary)
 
         with profiler("act"):
-            response, act_call = self._act()
+            response, act_calls = self._act()
         actions = self.tool_adapter.decode(response)
+
+        # Format error exhaustion: _act() retried max_format_errors times but still no tool calls.
+        if not actions and self.config.max_format_errors > 0:
+            logger.warning("Format error retries exhausted — no tool calls returned. Issuing STOP.")
+            actions = [Action(name=STOP_ACTION.name, arguments={})]
 
         if self.config.enable_summarize:
             self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
+            if self.config.flat_history:
+                # Flat mode: also commit obs+asst so _build_base_prompt renders the flat conversation.
+                if self._latest_obs:
+                    self.history.append(self._latest_obs)
+                self.history.append([response])
         else:
             thoughts = _get_reasoning(response) or None
-            # Mode A: commit the completed (obs, asst) round to history.
             if self._latest_obs:
                 self.history.append(self._latest_obs)
             self.history.append([response])
 
-        llm_calls: list[LLMCall] = [act_call] + ([sum_call] if sum_call is not None else [])
+        llm_calls: list[LLMCall] = act_calls + ([sum_call] if sum_call is not None else [])
+        for call in llm_calls:
+            self._total_cost += call.usage.cost
         self._actions_cnt += 1
         return AgentOutput(
             actions=actions,
@@ -415,7 +448,7 @@ class Genny(Agent):
         if self._task_hint:
             messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
             messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
-        if self.config.enable_summarize:
+        if self.config.enable_summarize and not self.config.flat_history:
             summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else self.summaries
             for s in summaries:
                 messages.append({"role": "assistant", "content": s})
@@ -448,8 +481,8 @@ class Genny(Agent):
         )
         return response.message.content or "", llm_call
 
-    def _act(self) -> tuple[Message, LLMCall]:
-        """Build context, encode tools, call act LLM, return (response_message, llm_call)."""
+    def _act(self) -> tuple[Message, list[LLMCall]]:
+        """Build context, encode tools, call act LLM; retry up to max_format_errors times on no tool calls."""
         messages = self._choose_context()
         api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
@@ -463,23 +496,60 @@ class Genny(Agent):
             f"LLM usage — prompt: {response.usage.prompt_tokens}, "
             f"completion: {response.usage.completion_tokens}, cost: ${response.usage.cost:.4f}"
         )
-        llm_call = LLMCall(
-            tag="act", llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
-        )
-        return response.message, llm_call
+        llm_calls = [
+            LLMCall(
+                tag="act",
+                llm_config=self.config.llm_config,
+                prompt=prompt,
+                output=response.message,
+                usage=response.usage,
+            )
+        ]
+        for attempt in range(self.config.max_format_errors):
+            if response.message.tool_calls:
+                break
+            logger.warning(
+                f"No tool calls in response (attempt {attempt + 1}/{self.config.max_format_errors}), retrying."
+            )
+            api_messages = list(api_messages) + [
+                response.message,
+                {"role": "user", "content": "No tool calls found. Every response MUST include at least one tool call."},
+            ]
+            prompt = Prompt(messages=api_messages, tools=api_tools)
+            response = self.llm(prompt)
+            llm_calls.append(
+                LLMCall(
+                    tag="act",
+                    llm_config=self.config.llm_config,
+                    prompt=prompt,
+                    output=response.message,
+                    usage=response.usage,
+                )
+            )
+        return response.message, llm_calls
 
     def _choose_context(self) -> list[dict | Message]:
         """Build the act-pass prompt.
 
-        Mode B: base_prefix(exclude_last) + new_summary + latest_obs + act_prompt.
+        Flat mode (flat_history=True): base_prefix (flat history) + latest_obs.
+          step_prompt="" skips the trailing user message entirely — the model acts on
+          the bare tool result, matching mini-swe-agent behavior.
+
+        Mode B (enable_summarize=True, flat_history=False):
+          base_prefix(exclude_last) + new_summary + latest_obs + act_prompt.
           Summaries are contiguous before the obs so the cache prefix ending at
           new_summary is a valid prefix of the next step's sum call.
 
-        Mode A: base_prefix (completed history) + latest_obs + react_prompt.
+        Mode A (enable_summarize=False, flat_history=False):
+          base_prefix (completed history) + latest_obs + react_prompt.
           Step counter prepended to final user message only so preceding messages
           stay byte-for-byte identical across steps.
         """
-        if self.config.enable_summarize:
+        if self.config.flat_history:
+            messages = self._build_base_prompt()
+            messages.extend(self._latest_obs)
+            final_prompt = self.config.step_prompt
+        elif self.config.enable_summarize:
             messages = self._build_base_prompt(exclude_last_summary=True)
             if self.summaries:
                 messages.append({"role": "assistant", "content": self.summaries[-1]})
@@ -489,7 +559,8 @@ class Genny(Agent):
             messages = self._build_base_prompt()
             messages.extend(self._latest_obs)
             final_prompt = self.config.react_prompt
-        if self.config.max_actions is not None:
-            final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
-        messages.append({"role": "user", "content": final_prompt})
+        if final_prompt:
+            if self.config.max_actions is not None:
+                final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
+            messages.append({"role": "user", "content": final_prompt})
         return messages
