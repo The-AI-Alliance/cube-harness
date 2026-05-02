@@ -1,38 +1,21 @@
-"""Genny2 agent — cache-friendly context management.
+"""Genny agent — Phase 1: context management.
 
-Two operating modes, both with a stable cacheable prefix:
-
-Mode A — growing raw history (enable_summarize=False):
+Context layout per act call:
     system_prompt          (static)
-    goal                   (static)
-    hints / clarification  (static)
-    [obs_0, asst_0, ...]   (completed rounds, grow by one pair each step)
-    latest_obs             (the new observation, appended at context-build time)
-    react_prompt           (static)
-
-Mode B — rolling summaries (enable_summarize=True):
-    system_prompt          (static)
-    goal                   (static)
-    hints / clarification  (static)
-    asst: summary_1        (one message per step — NOT bundled)
-    asst: summary_2
-    ...
-    asst: summary_k        ← rolling cache breakpoint lands here
-    latest_obs             (shown to both sum and act passes)
-    [asst: summary_{k+1}]  (act pass only, after summarize generates it)
-    act_prompt / react_prompt
-
-Summaries as separate messages (not a single bundled block) lets Anthropic's
-prefix cache extend cleanly across steps: each step's cache ending at summary_k
-is a valid prefix of the next step, which starts the same way and appends one more.
+    [tool definitions]     (if tools_as_text=True, injected into system by TextToolAdapter)
+    goal                   (static, extracted from step 0)
+    summaries[-k:]         (rolling compressed history, one string per summarize pass)
+    history[-n obs:]       (windowed raw obs/asst groups)
+    react_prompt           (static instruction)
 """
 
 import json
 import logging
+import re
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import cast
+from typing import Protocol, cast
 
 from cube.core import Action, ActionSchema, Observation
 from cube.task import STOP_ACTION
@@ -99,23 +82,61 @@ Respond with text only — do not call any tools or functions."""
 
 
 # ---------------------------------------------------------------------------
-# Tool helpers
+# Tool formatting helpers
 # ---------------------------------------------------------------------------
 
 
-def _encode_tools(tools: list[ActionSchema]) -> list[dict]:
-    return [t.as_dict() for t in tools]
+def _json_type_to_python(json_type: str) -> str:
+    return {
+        "string": "str",
+        "integer": "int",
+        "number": "float",
+        "boolean": "bool",
+        "array": "list",
+        "object": "dict",
+    }.get(json_type, "Any")
 
 
-def _decode_actions(response: "Message") -> "list[Action]":
-    actions = []
-    for tc in getattr(response, "tool_calls", None) or []:
-        args = tc.function.arguments
-        if isinstance(args, str):
-            args = json.loads(args)
-        if tc.function.name:
-            actions.append(Action(id=tc.id, name=tc.function.name, arguments=args))
-    return actions
+def _format_tools_as_text(tools: list[ActionSchema]) -> str:
+    """Format action schemas as Python-style function signatures for text-mode injection.
+
+    Used by TextToolAdapter for ablation studies vs. native tool calling. Parameters with
+    complex JSON schemas (e.g. nested objects, $ref) render as 'Any' — best-effort display.
+    If ablation shows no benefit over native tool calling, this adapter will be removed.
+    """
+    lines = ["## Available Functions"]
+    for tool in tools:
+        props = tool.parameters.get("properties", {})
+        required = set(tool.parameters.get("required", []))
+        args = []
+        for pname, pinfo in props.items():
+            ptype = _json_type_to_python(pinfo.get("type", "Any"))
+            suffix = "" if pname in required else " = None"
+            args.append(f"{pname}: {ptype}{suffix}")
+        lines.append(f"def {tool.name}({', '.join(args)}) -> None:")
+        if tool.description:
+            lines.append(f'    """{tool.description}"""')
+        lines.append("")
+    lines += [
+        "To call a function, respond with:",
+        '<tool_call>{"name": "...", "arguments": {...}}</tool_call>',
+    ]
+    return "\n".join(lines)
+
+
+def _format_summaries_block(summaries: list[str]) -> str:
+    """Combine past-step summaries into a single assistant message with step headers."""
+    parts = ["## Summary of past interactions"]
+    for i, summary in enumerate(summaries, 1):
+        parts.append(f"### Step {i}\n\n{summary}")
+    return "\n\n".join(parts)
+
+
+def _obs_section_header(n: int | None) -> str:
+    """User-message header that precedes the windowed observation history."""
+    if n is None:
+        return "## Most recent observations"
+    return f"## {n} most recent observations"
 
 
 def _format_action_list(actions: "list[Action]") -> str:
@@ -139,6 +160,21 @@ def _get_reasoning(response: "Message") -> str:
     return response.content or ""
 
 
+def _extract_act_summary(response: "Message", actions: "list[Action]") -> str:
+    """Build a step summary from an act-pass response for use as a rolling COT entry.
+
+    Combines the LLM's reasoning text (extended thinking or inline content) with a
+    formatted description of the action(s) taken. Used when enable_summarize=False so
+    that prior reasoning is visible in future steps via self.summaries.
+    """
+    cot = _get_reasoning(response)
+    parts = []
+    if cot:
+        parts.append(cot.strip())
+    parts.append(f"Action: {_format_action_list(actions)}")
+    return "\n\n".join(parts)
+
+
 def _truncate_message(msg: dict, max_chars: int) -> dict:
     content = msg.get("content", "")
     if isinstance(content, str) and len(content) > max_chars:
@@ -147,33 +183,99 @@ def _truncate_message(msg: dict, max_chars: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ToolAdapter — isolates text vs. native tool interface
+# ---------------------------------------------------------------------------
+
+
+class ToolAdapter(Protocol):
+    def encode(
+        self, tools: list[ActionSchema], messages: list[dict | Message]
+    ) -> tuple[list[dict], list[dict | Message]]:
+        """Return (api_tools, api_messages). api_tools is empty when baked into messages."""
+        ...
+
+    def decode(self, response: Message) -> list[Action]:
+        """Extract actions from LLM response."""
+        ...
+
+
+class NativeToolAdapter:
+    """Passes tools natively via the LLM API tool_use interface."""
+
+    def encode(
+        self, tools: list[ActionSchema], messages: list[dict | Message]
+    ) -> tuple[list[dict], list[dict | Message]]:
+        return [t.as_dict() for t in tools], messages
+
+    def decode(self, response: Message) -> list[Action]:
+        actions = []
+        for tc in getattr(response, "tool_calls", None) or []:
+            args = tc.function.arguments
+            if isinstance(args, str):
+                args = json.loads(args)
+            if tc.function.name:
+                actions.append(Action(id=tc.id, name=tc.function.name, arguments=args))
+        return actions
+
+
+class TextToolAdapter:
+    """Injects function signatures into the system prompt; parses <tool_call> XML tags."""
+
+    def encode(
+        self, tools: list[ActionSchema], messages: list[dict | Message]
+    ) -> tuple[list[dict], list[dict | Message]]:
+        if not tools:
+            return [], list(messages)
+        sigs = _format_tools_as_text(tools)
+        result: list[dict | Message] = list(messages)
+        if result and isinstance(result[0], dict) and result[0].get("role") == "system":
+            system_msg = dict(result[0])
+            system_msg["content"] = system_msg["content"] + "\n\n" + sigs
+            result[0] = system_msg
+        else:
+            result.insert(0, {"role": "system", "content": sigs})
+        return [], result
+
+    def decode(self, response: Message) -> list[Action]:
+        content = getattr(response, "content", "") or ""
+        actions = []
+        for raw in re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL):
+            try:
+                data = json.loads(raw.strip())
+                actions.append(Action(name=data["name"], arguments=data.get("arguments", {})))
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"Failed to parse tool_call: {raw!r} — {e}")
+        return actions
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
 
-class Genny2Config(AgentConfig):
+class GennyConfig(AgentConfig):
     # Core
     llm_config: LLMConfig
     system_prompt: str = _DEFAULT_SYSTEM_PROMPT
-    # react_prompt: reason-then-act, used when enable_summarize=False and flat_history=False
+    # react_prompt: reason-then-act, used when enable_summarize=False (COT embedded in act call)
     react_prompt: str = _DEFAULT_REACT_PROMPT
-    # act_prompt: action-only, used when enable_summarize=True and flat_history=False
+    # act_prompt: action-only, used when enable_summarize=True (reasoning done in summarize pass)
     act_prompt: str = _DEFAULT_ACT_PROMPT
-    # step_prompt: trailing user message appended each act step when flat_history=True.
-    # Empty string = no trailing message (mini-swe-agent style).
-    step_prompt: str = ""
 
-    # Flat history mode: True = linear conversation with no injected summaries/headers,
-    # equivalent to mini-swe-agent prompt structure. Summaries are still accumulated
-    # internally (for logging/XRay) but not injected into the prompt.
-    flat_history: bool = False
+    # Tool interface: False = native API tool_use (default); True = fn sigs in system prompt
+    # + <tool_call> XML parsing (TextToolAdapter). Both modes are supported; tools_as_text
+    # exists for ablation studies — if it shows no benefit it will be removed.
+    tools_as_text: bool = False
 
     # Summarize pass
-    enable_summarize: bool = False  # False = raw history mode; True = rolling summaries mode
+    enable_summarize: bool = False  # False = extract COT from act pass; True = separate summarize LLM call
+    summarize_cot_only: bool = False  # True = concise CoT; False = verbose + Key Facts
     summarize_llm_config: LLMConfig | None = None  # None = reuse llm_config
-    # Instruction sent to the summarize LLM. Swap to _DEFAULT_SUMMARIZE_COT_PROMPT for a
-    # lighter CoT-style summary instead of the default verbose + Key Facts format.
-    summarize_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
+    summarize_verbose_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
+    summarize_cot_prompt: str = _DEFAULT_SUMMARIZE_COT_PROMPT
+
+    # Observation window
+    render_last_n_obs: int | None = None  # None = all
 
     # General hint injected after the goal in every step's context.
     # Use this when one hint applies to a whole task subset (one config per subset).
@@ -191,25 +293,16 @@ class Genny2Config(AgentConfig):
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
-    # Hard per-episode cost cap in USD. Checked before each act call; triggers a STOP when hit.
-    cost_limit: float | None = None
-    # Hard per-episode token cap (prompt + completion across all LLM calls). Checked before
-    # each act call; triggers a STOP when hit. Useful as a proxy budget when pricing is unknown.
-    token_limit: int | None = None
-    # Retry budget when the model returns no tool calls. On each retry the empty response
-    # and a correction user message are appended; if still no tool calls after all retries,
-    # a STOP action is returned. 0 = no retry (preserves current behavior).
-    max_format_errors: int = 0
 
     @property
     def agent_name(self) -> str:
-        name = f"Genny2-{self.llm_config.model_name}".replace("/", "_")
+        name = f"Genny-{self.llm_config.model_name}".replace("/", "_")
         if self.summarize_llm_config and self.summarize_llm_config.model_name != self.llm_config.model_name:
             name += f"+{self.summarize_llm_config.model_name}".replace("/", "_")
         return name
 
-    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny2":
-        return Genny2(config=self, action_schemas=action_set or [], task_id=task_id)
+    def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny":
+        return Genny(config=self, action_schemas=action_set or [], task_id=task_id)
 
 
 # ---------------------------------------------------------------------------
@@ -217,27 +310,25 @@ class Genny2Config(AgentConfig):
 # ---------------------------------------------------------------------------
 
 
-class Genny2(Agent):
-    """ReAct-style agent with cache-friendly context management and mini-swe-agent compatibility.
+class Genny(Agent):
+    """ReAct-style agent with explicit context management.
 
-    Mode A (enable_summarize=False, flat_history=False): raw history grows by one (obs, asst)
-    pair per step. Completed history is a stable cacheable prefix.
+    Each step builds a prompt from: system prompt, goal (step 0 obs), collapsed summaries
+    (rolling COT or separate summarize pass), and a windowed obs history. Tools are passed
+    natively or injected as text signatures for ablation studies (see tools_as_text).
 
-    Mode B (enable_summarize=True, flat_history=False): a separate summarize LLM call produces
-    a per-step summary stored as its own assistant message. Summaries accumulate as individual
-    messages so each step's cache extends the previous step's.
-
-    Flat mode (flat_history=True): linear prompt with no injected scaffolding — equivalent to
-    mini-swe-agent. Summaries (if enable_summarize=True) are computed for logging/XRay but
-    never injected into the prompt. step_prompt="" omits the trailing user message entirely.
+    With enable_summarize=True: a separate summarize LLM call reasons about the obs
+    before the act call, sharing the same prompt prefix for cache efficiency.
+    With enable_summarize=False: COT is extracted from the act response and rolled
+    into summaries for future steps.
     """
 
-    name: str = "genny2"
-    description: str = "Genny2 — cache-friendly context management with flat/summarize/raw history modes."
+    name: str = "genny"
+    description: str = "Genny — phase 1 context management: summarize pass, windowed history, tool adapters."
     input_content_types: list[str] = ["image/png", "image/jpeg", "text/plain", "application/json"]
     output_content_types: list[str] = ["application/json"]
 
-    def __init__(self, config: Genny2Config, action_schemas: list[ActionSchema], task_id: str | None = None):
+    def __init__(self, config: GennyConfig, action_schemas: list[ActionSchema], task_id: str | None = None):
         self.config = config
         self.task_id = task_id
         if task_id is None and (config.task_hints or config.task_clarification):
@@ -259,26 +350,15 @@ class Genny2(Agent):
         self.summarize_llm: LLM = self._summarize_llm_config.make()
         self.token_counter = config.llm_config.make_counter()
         self.action_schemas: list[ActionSchema] = action_schemas
+        self.tool_adapter: ToolAdapter = TextToolAdapter() if config.tools_as_text else NativeToolAdapter()
         self.goal: list[dict] = []
-        self.summaries: list[str] = []  # Mode B: one summary per step (raw, no action suffix)
-        self.summary_actions: list[str] = []  # Mode B: action taken per step, separate message for cache stability
-        self.history: list[list[dict | Message]] = []  # Mode A / flat: completed (obs, asst) pairs
-        self._latest_obs: list[dict | Message] = []  # current step's obs, not yet in history
+        self.summaries: list[str] = []
+        self.history: list[list[dict | Message]] = []  # groups: one per obs or asst turn
         self._actions_cnt: int = 0
-        self._total_cost: float = 0.0
-        self._total_tokens: int = 0
 
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
             logger.info("Max actions reached, issuing STOP action.")
-            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
-        if self.config.cost_limit is not None and self._total_cost >= self.config.cost_limit:
-            logger.info(
-                f"Cost limit ${self.config.cost_limit:.2f} reached (${self._total_cost:.4f} spent), issuing STOP."
-            )
-            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
-        if self.config.token_limit is not None and self._total_tokens >= self.config.token_limit:
-            logger.info(f"Token limit {self.config.token_limit} reached ({self._total_tokens} used), issuing STOP.")
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
@@ -290,37 +370,31 @@ class Genny2(Agent):
         thoughts: str | None = None
         sum_call: LLMCall | None = None
         if self.config.enable_summarize:
+            # Summarize the current obs (already in history via _ingest_obs).
             with profiler("summarize"):
                 summary, sum_call = self._summarize_past()
-            thoughts = summary
+            thoughts = summary  # capture before action is appended below
             self.summaries.append(summary)
 
         with profiler("act"):
-            response, act_calls = self._act()
-        actions = _decode_actions(response)
-
-        # Format error exhaustion: _act() retried max_format_errors times but still no tool calls.
-        if not actions and self.config.max_format_errors > 0:
-            logger.warning("Format error retries exhausted — no tool calls returned. Issuing STOP.")
-            actions = [Action(name=STOP_ACTION.name, arguments={})]
+            response, act_call = self._act()
+        actions = self.tool_adapter.decode(response)
 
         if self.config.enable_summarize:
-            self.summary_actions.append(_format_action_list(actions))
-            if self.config.flat_history:
-                # Flat mode: also commit obs+asst so _build_base_prompt renders the flat conversation.
-                if self._latest_obs:
-                    self.history.append(self._latest_obs)
-                self.history.append([response])
+            # Append the decided action to the current step's summary so the
+            # summaries block alternates reasoning → action, matching the COT mode format.
+            self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
         else:
+            # No explicit summarize LLM — extract COT from the act response for rolling context.
             thoughts = _get_reasoning(response) or None
-            if self._latest_obs:
-                self.history.append(self._latest_obs)
-            self.history.append([response])
+            step_summary = _extract_act_summary(response, actions)
+            if step_summary:
+                self.summaries.append(step_summary)
 
-        llm_calls: list[LLMCall] = act_calls + ([sum_call] if sum_call is not None else [])
-        for call in llm_calls:
-            self._total_cost += call.usage.cost
-            self._total_tokens += call.usage.prompt_tokens + call.usage.completion_tokens
+        # act first so the primary tab is always "act"; summary follows when present.
+        llm_calls: list[LLMCall] = [act_call] + ([sum_call] if sum_call is not None else [])
+        asst_group: list[dict | Message] = [response]
+        self.history.append(asst_group)
         self._actions_cnt += 1
         return AgentOutput(
             actions=actions,
@@ -336,22 +410,24 @@ class Genny2(Agent):
         return messages
 
     def _ingest_obs(self, obs_messages: list[dict | Message]) -> None:
-        """On step 0 extract goal; on all steps park the obs in _latest_obs."""
+        """On step 0 extract goal; on subsequent steps append obs group to history."""
         if not self.goal:
             self.goal = [obs_messages[0]]
-            self._latest_obs = list(obs_messages[1:])
+            if len(obs_messages) > 1:
+                self.history.append(obs_messages[1:])
         else:
-            self._latest_obs = list(obs_messages)
+            self.history.append(obs_messages)
 
     def _build_base_prompt(self, exclude_last_summary: bool = False) -> list[dict | Message]:
-        """Build the stable prompt prefix shared by summarize and act passes.
+        """Build the shared prompt prefix used by both _summarize_past and _choose_context.
 
-        Mode A: system + goal + hints + completed history (obs+asst pairs).
-        Mode B: system + goal + hints + summaries as individual assistant messages.
+        Both passes extend this prefix with their specific final instruction, ensuring the
+        [system, goal, summaries_block, obs_header, windowed_history] prefix is byte-for-byte
+        identical → prompt-cache hit on the entire prefix.
 
-        Latest obs is NOT included here — callers append it so the prefix up to the
-        last summary/action remains byte-identical across both passes and across steps,
-        enabling Anthropic's longest-prefix cache matching.
+        When exclude_last_summary=True the last entry in self.summaries is omitted from the
+        collapsed block so it can be placed after the obs (used by _choose_context when
+        enable_summarize=True).
         """
         messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
         messages.extend(self.goal)
@@ -361,30 +437,30 @@ class Genny2(Agent):
         if self._task_hint:
             messages.append({"role": "user", "content": f"## Task Hint\n\n{self._task_hint}"})
             messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
-        if self.config.enable_summarize and not self.config.flat_history:
-            summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else self.summaries
-            for i, s in enumerate(summaries):
-                messages.append({"role": "assistant", "content": s})
-                # Action for step i lives in a separate user message so the summary bytes
-                # stay unchanged across steps → Anthropic prefix cache extends cleanly.
-                if i < len(self.summary_actions):
-                    messages.append({"role": "user", "content": self.summary_actions[i]})
-        else:
-            for group in self.history:
-                messages.extend(group)
+        past_summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else list(self.summaries)
+        if past_summaries:
+            messages.append({"role": "assistant", "content": _format_summaries_block(past_summaries)})
+        windowed = self._windowed_history()
+        if windowed:
+            messages.append({"role": "user", "content": _obs_section_header(self.config.render_last_n_obs)})
+            messages.extend(windowed)
         return messages
 
     def _summarize_past(self) -> tuple[str, LLMCall]:
-        """Summarize the latest obs. Prompt: base_prefix + latest_obs + summarize_instruction.
+        """Extend the shared base prompt with the summarize instruction.
 
-        The base_prefix (system, goal, hints, prior summaries) is byte-for-byte identical
-        to the act pass prefix → within-step cache hit between summarize and act.
+        Uses _build_base_prompt() + tool_adapter.encode() so the system prompt
+        transformation and tool definitions are byte-for-byte identical to the act pass
+        → prompt-cache hit on the full shared prefix (system, tools, goal, summaries, obs).
+        The summarize LLM has tool_choice="none" so it responds with text, not tool calls.
         """
+        user_prompt = (
+            self.config.summarize_cot_prompt if self.config.summarize_cot_only else self.config.summarize_verbose_prompt
+        )
         messages = self._build_base_prompt()
-        messages.extend(self._latest_obs)
-        messages.append({"role": "user", "content": self.config.summarize_prompt})
-        api_tools = _encode_tools(self.action_schemas)
-        prompt = Prompt(messages=messages, tools=api_tools)
+        messages.append({"role": "user", "content": user_prompt})
+        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
+        prompt = Prompt(messages=api_messages, tools=api_tools)
         response = self.summarize_llm(prompt)
         llm_call = LLMCall(
             tag="summary",
@@ -395,12 +471,12 @@ class Genny2(Agent):
         )
         return response.message.content or "", llm_call
 
-    def _act(self) -> tuple[Message, list[LLMCall]]:
-        """Build context, encode tools, call act LLM; retry up to max_format_errors times on no tool calls."""
+    def _act(self) -> tuple[Message, LLMCall]:
+        """Build context, encode tools, call act LLM, return (response_message, llm_call)."""
         messages = self._choose_context()
-        api_tools = _encode_tools(self.action_schemas)
-        prompt = Prompt(messages=messages, tools=api_tools)
-        logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=messages)}")
+        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
+        prompt = Prompt(messages=api_messages, tools=api_tools)
+        logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}")
         try:
             response = self.llm(prompt)
         except Exception as e:
@@ -410,71 +486,69 @@ class Genny2(Agent):
             f"LLM usage — prompt: {response.usage.prompt_tokens}, "
             f"completion: {response.usage.completion_tokens}, cost: ${response.usage.cost:.4f}"
         )
-        llm_calls = [
-            LLMCall(
-                tag="act",
-                llm_config=self.config.llm_config,
-                prompt=prompt,
-                output=response.message,
-                usage=response.usage,
-            )
-        ]
-        for attempt in range(self.config.max_format_errors):
-            if response.message.tool_calls:
-                break
-            logger.warning(
-                f"No tool calls in response (attempt {attempt + 1}/{self.config.max_format_errors}), retrying."
-            )
-            messages = list(messages) + [
-                response.message,
-                {"role": "user", "content": "No tool calls found. Every response MUST include at least one tool call."},
-            ]
-            prompt = Prompt(messages=messages, tools=api_tools)
-            response = self.llm(prompt)
-            llm_calls.append(
-                LLMCall(
-                    tag="act",
-                    llm_config=self.config.llm_config,
-                    prompt=prompt,
-                    output=response.message,
-                    usage=response.usage,
-                )
-            )
-        return response.message, llm_calls
+        llm_call = LLMCall(
+            tag="act", llm_config=self.config.llm_config, prompt=prompt, output=response.message, usage=response.usage
+        )
+        return response.message, llm_call
 
     def _choose_context(self) -> list[dict | Message]:
-        """Build the act-pass prompt.
+        """Extend the shared base prompt with the act instruction.
 
-        Flat mode (flat_history=True): base_prefix (flat history) + latest_obs.
-          step_prompt="" skips the trailing user message entirely — the model acts on
-          the bare tool result, matching mini-swe-agent behavior.
+        When enable_summarize=True, self.summaries[-1] is the current step's reasoning
+        (from _summarize_past). It is excluded from the collapsed block and placed *after*
+        the obs window so the LLM sees obs → reasoning → act_prompt.
 
-        Mode B (enable_summarize=True, flat_history=False):
-          base_prefix(exclude_last) + new_summary + latest_obs + act_prompt.
-          Summaries are contiguous before the obs so the cache prefix ending at
-          new_summary is a valid prefix of the next step's sum call.
-
-        Mode A (enable_summarize=False, flat_history=False):
-          base_prefix (completed history) + latest_obs + react_prompt.
-          Step counter prepended to final user message only so preceding messages
-          stay byte-for-byte identical across steps.
+        When enable_summarize=False, all summaries (COT extracted from prior act passes)
+        go into the collapsed block; react_prompt instructs the LLM to reason inline.
         """
-        if self.config.flat_history:
-            messages = self._build_base_prompt()
-            messages.extend(self._latest_obs)
-            final_prompt = self.config.step_prompt
-        elif self.config.enable_summarize:
-            messages = self._build_base_prompt(exclude_last_summary=True)
-            if self.summaries:
-                messages.append({"role": "assistant", "content": self.summaries[-1]})
-            messages.extend(self._latest_obs)
-            final_prompt = self.config.act_prompt
-        else:
-            messages = self._build_base_prompt()
-            messages.extend(self._latest_obs)
-            final_prompt = self.config.react_prompt
-        if final_prompt:
-            if self.config.max_actions is not None:
-                final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
-            messages.append({"role": "user", "content": final_prompt})
+        messages = self._build_base_prompt(exclude_last_summary=self.config.enable_summarize)
+        if self.config.enable_summarize and self.summaries:
+            messages.append({"role": "assistant", "content": self.summaries[-1]})
+        final_prompt = self.config.act_prompt if self.config.enable_summarize else self.config.react_prompt
+        messages.append({"role": "user", "content": final_prompt})
         return messages
+
+    def _windowed_history(self) -> list[dict | Message]:
+        """Return flattened history groups, limited to last render_last_n_obs observations.
+
+        When render_last_n_obs is set, only obs groups are included (not their preceding asst
+        groups). Leading tool-role messages are stripped from each obs group so the prompt stays
+        structurally valid — the paired tool_calls live in the dropped asst groups, but those
+        actions are already captured in self.summaries, making the tool results redundant.
+
+        When an obs group is entirely tool messages (e.g. SWEBench bash results), stripping
+        would leave nothing and including them raw would orphan tool_call_id references (API
+        error). Instead they are re-wrapped as a single user message so the agent can see the
+        output.
+        """
+        if self.config.render_last_n_obs is None:
+            return [msg for group in self.history for msg in group]
+        n = self.config.render_last_n_obs
+        # Obs groups start with role 'user'/'tool'; asst groups start with role 'assistant'.
+        obs_groups = [
+            g
+            for g in self.history
+            if g and (g[0].role if isinstance(g[0], Message) else g[0].get("role", "")) != "assistant"
+        ]
+        selected = obs_groups[-n:] if n < len(obs_groups) else obs_groups
+        result: list[dict | Message] = []
+        for group in selected:
+            # Find first non-tool message index.
+            start = next(
+                (i for i, m in enumerate(group) if not (isinstance(m, dict) and m.get("role") == "tool")), len(group)
+            )
+            if start < len(group):
+                # Mixed group: leading tool messages followed by user content (e.g. browser
+                # screenshot). Drop tool messages; their actions are captured in self.summaries.
+                result.extend(group[start:])
+            elif start > 0:
+                # Entire group is tool messages (e.g. SWEBench bash results). Re-wrap as a
+                # user message to keep the prompt structurally valid.
+                tool_text = "\n\n".join(
+                    m.get("content", "") if isinstance(m, dict) else (m.content or "") for m in group
+                )
+                result.append({"role": "user", "content": tool_text})
+            else:
+                # No tool messages — include group as-is.
+                result.extend(group)
+        return result
