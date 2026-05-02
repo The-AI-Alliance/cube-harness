@@ -52,9 +52,9 @@ requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "fix/waa-guest-agent-methods" }
-cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", rev = "fix/waa-guest-agent-methods" }
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", rev = "fix/waa-guest-agent-methods" }
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "main" }
+cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", branch = "main" }
+cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", branch = "main" }
 
 [dependency-groups]
 dev = [
