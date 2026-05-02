@@ -1,11 +1,12 @@
-.PHONY: help install ci-install update format lint test coverage hello debug xray review
+.PHONY: help install ci-install update format lint lint-check test coverage hello debug xray review
 
 help:
 	@echo "make install       - Install dependencies in editable mode"
 	@echo "make ci-install    - Install dependencies with locked versions (for CI)"
 	@echo "make update        - Update dependencies"
 	@echo "make format        - Format code"
-	@echo "make lint          - Lint and auto-fix"
+	@echo "make lint          - Lint and auto-fix (modifies files)"
+	@echo "make lint-check    - Check lint without fixing (read-only, what CI runs)"
 	@echo "make test          - Run unit tests"
 	@echo "make coverage      - Run tests with coverage report"
 	@echo "make hello         - Run hello_miniwob recipe"
@@ -31,7 +32,7 @@ install:
 	@echo "Install requires sudo permissions to install Playwright dependencies. You may be prompted for your password."
 	uv sync --all-extras
 	uv run playwright install chromium --with-deps
-	git config core.hooksPath .githooks
+	pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg
 
 ci-install:
 	uv sync --frozen --all-extras

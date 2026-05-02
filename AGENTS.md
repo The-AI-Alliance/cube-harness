@@ -123,10 +123,14 @@ make install            # uv sync --all-extras
 make test               # full pytest
 make debug              # small end-to-end run
 make xray               # open the trajectory viewer
-make lint
+make lint               # uvx ruff check --fix && uvx ruff format  (auto-fixes in place)
+make lint-check         # uvx ruff check --diff && uvx ruff format --diff  (read-only, what CI runs)
 make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency
 uv run recipes/hello_miniwob.py   # example run
 ```
+
+Always run `make lint` before finishing a task. `ruff check` and `ruff format` are
+**separate passes** — running only one is not enough for CI.
 
 Environment vars go in `.env` (loaded by pyproject). `OPENAI_API_KEY`
 is the only required one for the baseline recipes; see individual cubes for others.
