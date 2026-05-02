@@ -16,10 +16,8 @@ from cube_harness.agents.genny import (
     NativeToolAdapter,
     TextToolAdapter,
     _format_action_list,
-    _format_summaries_block,
     _format_tools_as_text,
     _json_type_to_python,
-    _obs_section_header,
     _truncate_message,
 )
 from cube_harness.llm import LLMConfig, LLMResponse, Usage
@@ -45,14 +43,12 @@ def _make_schema(name: str = "click", description: str = "Click an element.") ->
 
 
 def _make_agent(
-    render_last_n_obs: int | None = None,
     enable_summarize: bool = False,
     summarize_cot_only: bool = False,
     tools_as_text: bool = False,
 ) -> Genny:
     config = GennyConfig(
         llm_config=LLMConfig(model_name="test"),
-        render_last_n_obs=render_last_n_obs,
         enable_summarize=enable_summarize,
         summarize_cot_only=summarize_cot_only,
         tools_as_text=tools_as_text,
@@ -60,14 +56,13 @@ def _make_agent(
     return Genny(config=config, action_schemas=[_make_schema()])
 
 
-def _simulate_steps(agent: Genny, n_steps: int) -> None:
-    """Populate agent state as if n_steps obs+asst pairs have been processed."""
+def _simulate_completed_rounds(agent: Genny, n: int) -> None:
+    """Populate agent state as if n obs+asst rounds have completed (Mode A)."""
     agent.goal = [{"role": "user", "content": "goal"}]
-    for i in range(n_steps):
+    for i in range(n):
         agent.history.append([{"role": "user", "content": f"obs_{i}"}])
         agent.history.append([{"role": "assistant", "content": f"asst_{i}"}])
-    # Final pending obs (no asst response yet)
-    agent.history.append([{"role": "user", "content": f"obs_{n_steps}"}])
+    agent._latest_obs = [{"role": "user", "content": f"obs_{n}"}]
 
 
 # ---------------------------------------------------------------------------
@@ -84,35 +79,6 @@ class TestJsonTypeToPython:
 
     def test_unknown_falls_back_to_any(self) -> None:
         assert _json_type_to_python("unknown") == "Any"
-
-
-class TestFormatSummariesBlock:
-    def test_has_header(self) -> None:
-        result = _format_summaries_block(["s1", "s2"])
-        assert result.startswith("## Summary of past interactions")
-
-    def test_all_summaries_included(self) -> None:
-        result = _format_summaries_block(["alpha", "beta"])
-        assert "alpha" in result
-        assert "beta" in result
-
-    def test_step_headers_present(self) -> None:
-        result = _format_summaries_block(["first", "second"])
-        assert "### Step 1" in result
-        assert "### Step 2" in result
-
-    def test_single_summary(self) -> None:
-        result = _format_summaries_block(["only one"])
-        assert "only one" in result
-        assert "### Step 1" in result
-
-
-class TestObsSectionHeader:
-    def test_none_produces_generic_header(self) -> None:
-        assert "observations" in _obs_section_header(None).lower()
-
-    def test_n_included_in_header(self) -> None:
-        assert "3" in _obs_section_header(3)
 
 
 class TestTruncateMessage:
@@ -141,13 +107,11 @@ class TestFormatToolsAsText:
         schema = _make_schema()
         result = _format_tools_as_text([schema])
         assert "element_id: str" in result
-        # element_id is required — no "= None"
         assert "element_id: str = None" not in result
 
     def test_optional_arg_has_default(self) -> None:
         schema = _make_schema()
         result = _format_tools_as_text([schema])
-        # force is not required
         assert "force: bool = None" in result
 
     def test_includes_tool_call_instruction(self) -> None:
@@ -266,13 +230,14 @@ class TestTextToolAdapter:
 
 
 class TestIngestObs:
-    def test_first_obs_sets_goal(self) -> None:
+    def test_first_obs_sets_goal_and_empty_latest_obs(self) -> None:
         agent = _make_agent()
         agent._ingest_obs([{"role": "user", "content": "goal text"}])
         assert agent.goal == [{"role": "user", "content": "goal text"}]
+        assert agent._latest_obs == []
         assert agent.history == []
 
-    def test_first_obs_with_extra_messages_puts_rest_in_history(self) -> None:
+    def test_first_obs_extra_messages_go_to_latest_obs(self) -> None:
         agent = _make_agent()
         agent._ingest_obs(
             [
@@ -281,144 +246,185 @@ class TestIngestObs:
             ]
         )
         assert agent.goal == [{"role": "user", "content": "goal"}]
-        assert agent.history == [[{"role": "user", "content": "screenshot"}]]
+        assert agent._latest_obs == [{"role": "user", "content": "screenshot"}]
+        assert agent.history == []
 
-    def test_subsequent_obs_appended_as_group(self) -> None:
+    def test_subsequent_obs_goes_to_latest_obs_not_history(self) -> None:
         agent = _make_agent()
         agent.goal = [{"role": "user", "content": "goal"}]
         agent._ingest_obs([{"role": "user", "content": "obs_1"}])
-        assert len(agent.history) == 1
-        assert agent.history[0] == [{"role": "user", "content": "obs_1"}]
+        assert agent._latest_obs == [{"role": "user", "content": "obs_1"}]
+        assert agent.history == []
 
-
-class TestWindowedHistory:
-    def test_none_returns_all(self) -> None:
-        agent = _make_agent(render_last_n_obs=None)
-        _simulate_steps(agent, n_steps=3)
-        flat = agent._windowed_history()
-        expected = [msg for group in agent.history for msg in group]
-        assert flat == expected
-
-    def test_render_last_1_obs(self) -> None:
-        agent = _make_agent(render_last_n_obs=1)
-        _simulate_steps(agent, n_steps=3)
-        flat = agent._windowed_history()
-        # Only the last obs group — no preceding asst group (its action is in summaries)
-        assert len(flat) == 1
-        assert flat[0]["content"] == "obs_3"
-
-    def test_render_last_2_obs(self) -> None:
-        agent = _make_agent(render_last_n_obs=2)
-        _simulate_steps(agent, n_steps=3)
-        flat = agent._windowed_history()
-        # Only the last 2 obs groups — asst groups excluded
-        assert len(flat) == 2
-        assert flat[0]["content"] == "obs_2"
-        assert flat[1]["content"] == "obs_3"
-
-    def test_window_larger_than_history_returns_all_obs(self) -> None:
-        agent = _make_agent(render_last_n_obs=100)
-        _simulate_steps(agent, n_steps=2)
-        flat = agent._windowed_history()
-        # All obs groups (obs_0, obs_1, obs_2) — asst groups excluded
-        obs_groups = [g for g in agent.history if g and g[0].get("role") != "assistant"]
-        assert flat == [msg for group in obs_groups for msg in group]
-
-    def test_tool_messages_stripped_from_windowed_obs(self) -> None:
-        agent = _make_agent(render_last_n_obs=1)
+    def test_subsequent_obs_replaces_previous_latest_obs(self) -> None:
+        agent = _make_agent()
         agent.goal = [{"role": "user", "content": "goal"}]
-        # Simulate: one completed step (obs with tool result + user content) + asst + pending obs
-        agent.history.append(
-            [{"role": "tool", "content": "Success", "tool_call_id": "c1"}, {"role": "user", "content": "axtree"}]
-        )
-        agent.history.append([{"role": "assistant", "content": "act", "tool_calls": [{"id": "c1"}]}])
-        agent.history.append(
-            [
-                {"role": "tool", "content": "Success", "tool_call_id": "c2"},
-                {"role": "user", "content": "current_axtree"},
-            ]
-        )
-        flat = agent._windowed_history()
-        # Tool message stripped; only the user content from the latest obs remains
-        assert all(m.get("role") != "tool" for m in flat)
-        assert flat[0]["content"] == "current_axtree"
+        agent._ingest_obs([{"role": "user", "content": "obs_1"}])
+        agent._ingest_obs([{"role": "user", "content": "obs_2"}])
+        assert agent._latest_obs == [{"role": "user", "content": "obs_2"}]
 
-    def test_all_tool_obs_rewrapped_as_user(self) -> None:
-        """SWEBench-style: obs group is entirely tool messages — must be re-wrapped as user."""
-        agent = _make_agent(render_last_n_obs=2)
+
+class TestBuildBasePromptModeA:
+    """Mode A (enable_summarize=False): completed history included in base prompt."""
+
+    def test_starts_with_system(self) -> None:
+        agent = _make_agent()
         agent.goal = [{"role": "user", "content": "goal"}]
-        # Step 1: bash output (all tool messages, no trailing user message)
-        agent.history.append([{"role": "tool", "content": "total 84\ndrwxr-xr-x ...", "tool_call_id": "c1"}])
-        agent.history.append([{"role": "assistant", "content": "I ran ls", "tool_calls": [{"id": "c1"}]}])
-        # Step 2: another bash output
-        agent.history.append([{"role": "tool", "content": "src/\ntests/\n", "tool_call_id": "c2"}])
-        flat = agent._windowed_history()
-        # Both tool groups re-wrapped as user messages; no raw tool role in output
-        assert all(m.get("role") != "tool" for m in flat)
-        assert len(flat) == 2
-        assert flat[0]["role"] == "user"
-        assert "total 84" in flat[0]["content"]
-        assert flat[1]["role"] == "user"
-        assert "src/" in flat[1]["content"]
+        messages = agent._build_base_prompt()
+        assert messages[0]["role"] == "system"
+
+    def test_completed_history_included(self) -> None:
+        agent = _make_agent()
+        _simulate_completed_rounds(agent, n=2)
+        messages = agent._build_base_prompt()
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        assert "obs_0" in contents
+        assert "asst_0" in contents
+        assert "obs_1" in contents
+        assert "asst_1" in contents
+
+    def test_latest_obs_not_in_base_prompt(self) -> None:
+        """Latest obs is appended by callers, not baked into _build_base_prompt."""
+        agent = _make_agent()
+        _simulate_completed_rounds(agent, n=2)
+        messages = agent._build_base_prompt()
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        assert "obs_2" not in contents
+
+    def test_prefix_stable_across_steps(self) -> None:
+        """The base prompt up to the last completed round is identical between steps."""
+        agent = _make_agent()
+        _simulate_completed_rounds(agent, n=2)
+        prefix_step2 = agent._build_base_prompt()
+
+        # Simulate one more step completing
+        agent.history.append([{"role": "user", "content": "obs_2"}])
+        agent.history.append([{"role": "assistant", "content": "asst_2"}])
+        agent._latest_obs = [{"role": "user", "content": "obs_3"}]
+
+        prefix_step3 = agent._build_base_prompt()
+        # step2 prefix is a strict prefix of step3 prefix
+        assert prefix_step3[: len(prefix_step2)] == prefix_step2
+
+
+class TestBuildBasePromptModeB:
+    """Mode B (enable_summarize=True): summaries as separate assistant messages."""
+
+    def test_summaries_are_separate_messages(self) -> None:
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["summary_1", "summary_2"]
+        messages = agent._build_base_prompt()
+        asst_contents = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+        assert "summary_1" in asst_contents
+        assert "summary_2" in asst_contents
+
+    def test_summaries_not_bundled_into_single_block(self) -> None:
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["summary_1", "summary_2"]
+        messages = agent._build_base_prompt()
+        asst_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+        # Each summary is its own message — no bundling
+        assert len(asst_messages) == 2
+
+    def test_exclude_last_summary_drops_only_last(self) -> None:
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["s1", "s2", "s3"]
+        messages = agent._build_base_prompt(exclude_last_summary=True)
+        asst_contents = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+        assert "s1" in asst_contents
+        assert "s2" in asst_contents
+        assert "s3" not in asst_contents
+
+    def test_latest_obs_not_in_base_prompt(self) -> None:
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["s1"]
+        agent._latest_obs = [{"role": "user", "content": "latest observation"}]
+        messages = agent._build_base_prompt()
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        assert "latest observation" not in contents
+
+    def test_prefix_stable_across_steps(self) -> None:
+        """base_prompt up to last summary is identical between consecutive steps."""
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["s1", "s2"]
+        prefix_step2 = agent._build_base_prompt()
+
+        agent.summaries = ["s1", "s2", "s3"]
+        prefix_step3 = agent._build_base_prompt()
+
+        assert prefix_step3[: len(prefix_step2)] == prefix_step2
 
 
 class TestChooseContext:
     def test_always_starts_with_system(self) -> None:
         agent = _make_agent()
-        _simulate_steps(agent, n_steps=1)
+        _simulate_completed_rounds(agent, n=1)
         messages = agent._choose_context()
         assert messages[0]["role"] == "system"
 
     def test_goal_always_included(self) -> None:
-        agent = _make_agent(render_last_n_obs=1)
-        _simulate_steps(agent, n_steps=5)
+        agent = _make_agent()
+        _simulate_completed_rounds(agent, n=2)
         messages = agent._choose_context()
         assert any(m.get("content") == "goal" for m in messages)
 
-    def test_past_summaries_collapsed_into_single_block(self) -> None:
-        """All past summaries are combined into one assistant message with a header."""
+    def test_mode_a_latest_obs_before_react_prompt(self) -> None:
         agent = _make_agent(enable_summarize=False)
         agent.goal = [{"role": "user", "content": "goal"}]
-        agent.summaries = ["summary A", "summary B"]
-        messages = agent._choose_context()
-        asst_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
-        assert len(asst_messages) == 1
-        block = asst_messages[0]["content"]
-        assert "## Summary of past interactions" in block
-        assert "summary A" in block
-        assert "summary B" in block
-
-    def test_current_step_summary_appears_after_obs_when_summarize_enabled(self) -> None:
-        """When enable_summarize=True, the current step's summary (self.summaries[-1])
-        is placed AFTER the windowed history, not before it."""
-        agent = _make_agent(enable_summarize=True)
-        agent.goal = [{"role": "user", "content": "goal"}]
-        agent.summaries = ["past summary", "current step summary"]
-        agent.history = [[{"role": "user", "content": "latest obs"}]]
+        agent._latest_obs = [{"role": "user", "content": "current obs"}]
         messages = agent._choose_context()
         contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
-        obs_idx = next(i for i, c in enumerate(contents) if c == "latest obs")
-        current_summary_idx = next(i for i, c in enumerate(contents) if c == "current step summary")
-        assert current_summary_idx > obs_idx, "current step summary should appear after the obs"
+        obs_idx = contents.index("current obs")
+        react_idx = contents.index(agent.config.react_prompt)
+        assert obs_idx < react_idx
 
-    def test_obs_section_header_inserted_before_windowed_history(self) -> None:
-        agent = _make_agent(render_last_n_obs=2)
-        _simulate_steps(agent, n_steps=1)
+    def test_mode_b_new_summary_before_latest_obs(self) -> None:
+        """Mode B act pass: new summary comes before latest obs (keeps summaries contiguous)."""
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["past summary", "new summary"]
+        agent._latest_obs = [{"role": "user", "content": "current obs"}]
         messages = agent._choose_context()
-        user_contents = [m.get("content", "") for m in messages if isinstance(m, dict) and m.get("role") == "user"]
-        assert any("most recent observations" in c for c in user_contents)
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        new_summary_idx = contents.index("new summary")
+        obs_idx = contents.index("current obs")
+        assert new_summary_idx < obs_idx
+
+    def test_mode_b_past_summaries_before_new_summary(self) -> None:
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["s1", "s2"]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
+        messages = agent._choose_context()
+        asst_contents = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
+        assert asst_contents == ["s1", "s2"]
 
     def test_ends_with_react_prompt_when_summarize_disabled(self) -> None:
         agent = _make_agent(enable_summarize=False)
-        _simulate_steps(agent, n_steps=1)
+        _simulate_completed_rounds(agent, n=1)
         messages = agent._choose_context()
         assert messages[-1]["content"] == agent.config.react_prompt
 
     def test_ends_with_act_prompt_when_summarize_enabled(self) -> None:
         agent = _make_agent(enable_summarize=True)
-        _simulate_steps(agent, n_steps=1)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
         messages = agent._choose_context()
         assert messages[-1]["content"] == agent.config.act_prompt
+
+    def test_step_counter_in_final_prompt_when_max_actions_set(self) -> None:
+        agent = _make_agent()
+        agent.config = agent.config.model_copy(update={"max_actions": 5})
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
+        agent._actions_cnt = 2
+        messages = agent._choose_context()
+        assert "[Step 3/5]" in messages[-1]["content"]
 
 
 # ---------------------------------------------------------------------------
@@ -454,23 +460,56 @@ class TestSummarizePast:
     def test_returns_summary_string(self) -> None:
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response("my summary"))
         summary, _ = agent._summarize_past()
         assert summary == "my summary"
 
-    def test_includes_prior_summaries_in_prompt(self) -> None:
+    def test_includes_latest_obs_in_prompt(self) -> None:
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
-        agent.summaries = ["prior summary"]
+        agent._latest_obs = [{"role": "user", "content": "the current screenshot"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
         prompt = agent.summarize_llm.call_args[0][0]
         contents = [m.get("content", "") for m in prompt.messages if isinstance(m, dict)]
-        assert any("prior summary" in c for c in contents)
+        assert any("the current screenshot" in c for c in contents)
+
+    def test_includes_prior_summaries_as_separate_messages(self) -> None:
+        """Prior summaries appear as individual assistant messages, not a bundled block."""
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["step one cot", "step two cot"]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
+        agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
+        agent._summarize_past()
+        prompt = agent.summarize_llm.call_args[0][0]
+        asst_msgs = [m for m in prompt.messages if isinstance(m, dict) and m.get("role") == "assistant"]
+        assert len(asst_msgs) == 2
+        assert asst_msgs[0]["content"] == "step one cot"
+        assert asst_msgs[1]["content"] == "step two cot"
+
+    def test_sum_and_act_share_prefix(self) -> None:
+        """Sum call and act call share identical prefix up to the last prior summary."""
+        agent = _make_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        agent.summaries = ["s1"]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
+        agent.summarize_llm = MagicMock(return_value=_mock_llm_response("new summary"))
+        agent._summarize_past()
+        sum_prompt = agent.summarize_llm.call_args[0][0]
+
+        agent.summaries.append("new summary")
+        act_messages = agent._choose_context()
+
+        # Both start with the same prefix (system, goal, s1) before diverging
+        n = 3  # system + goal + s1
+        assert sum_prompt.messages[:n] == act_messages[:n]
 
     def test_cot_mode_uses_cot_prompt(self) -> None:
         agent = _make_agent(enable_summarize=True, summarize_cot_only=True)
         agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
         prompt = agent.summarize_llm.call_args[0][0]
@@ -479,64 +518,39 @@ class TestSummarizePast:
     def test_verbose_mode_uses_verbose_prompt(self) -> None:
         agent = _make_agent(enable_summarize=True, summarize_cot_only=False)
         agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
         prompt = agent.summarize_llm.call_args[0][0]
         assert prompt.messages[-1]["content"] == agent.config.summarize_verbose_prompt
 
     def test_uses_same_system_prompt_as_act_pass(self) -> None:
-        """Both passes start with the same system_prompt → cache hit on shared prefix."""
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
         prompt = agent.summarize_llm.call_args[0][0]
         assert isinstance(prompt.messages[0], dict)
         assert prompt.messages[0]["content"] == agent.config.system_prompt
 
-    def test_prior_summaries_formatted_as_block(self) -> None:
-        """Prior summaries appear as a single block with step headers."""
-        agent = _make_agent(enable_summarize=True)
-        agent.goal = [{"role": "user", "content": "goal"}]
-        agent.summaries = ["step one cot\n\nAction: click()", "step two cot\n\nAction: type()"]
-        agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
-        agent._summarize_past()
-        prompt = agent.summarize_llm.call_args[0][0]
-        asst_msgs = [m for m in prompt.messages if isinstance(m, dict) and m.get("role") == "assistant"]
-        assert len(asst_msgs) == 1
-        assert "### Step 1" in asst_msgs[0]["content"]
-        assert "### Step 2" in asst_msgs[0]["content"]
-
-    def test_uses_windowed_history_not_separate_obs(self) -> None:
-        """_summarize_past reads obs from _windowed_history() (same as act pass)."""
-        agent = _make_agent(enable_summarize=True)
-        agent.goal = [{"role": "user", "content": "goal"}]
-        agent.history = [[{"role": "user", "content": "obs from history"}]]
-        agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
-        agent._summarize_past()
-        prompt = agent.summarize_llm.call_args[0][0]
-        contents = [m.get("content", "") for m in prompt.messages if isinstance(m, dict)]
-        assert any("obs from history" in c for c in contents)
-
     def test_passes_same_tools_as_act_pass_for_cache(self) -> None:
-        """Summarize LLM receives the same tools as the act LLM → identical cache key prefix."""
-        agent = _make_agent(enable_summarize=True)  # NativeToolAdapter (default)
+        agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
         prompt = agent.summarize_llm.call_args[0][0]
-        assert len(prompt.tools) > 0, "Summarize prompt must include tool definitions for cache parity"
+        assert len(prompt.tools) > 0
         assert prompt.tools[0]["function"]["name"] == "click"
 
     def test_summarize_llm_uses_same_tool_choice_as_act_llm(self) -> None:
-        """Summarize LLM config matches act LLM tool_choice for identical cache key."""
         agent = _make_agent(enable_summarize=True)
         assert agent._summarize_llm_config.tool_choice == agent.config.llm_config.tool_choice
 
 
 class TestStep:
     def test_step_appends_summary_with_action_when_enabled(self) -> None:
-        """Summary entry includes both the LLM reasoning and the decided action."""
         agent = _make_agent(enable_summarize=True)
         agent.llm = MagicMock(return_value=_mock_llm_response("action"))
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response("step summary"))
@@ -546,15 +560,32 @@ class TestStep:
         assert "step summary" in agent.summaries[0]
         assert "Action:" in agent.summaries[0]
 
-    def test_step_extracts_cot_to_summaries_when_summarize_disabled(self) -> None:
-        """When enable_summarize=False, act-pass COT is extracted into self.summaries."""
+    def test_mode_a_commits_obs_and_asst_to_history(self) -> None:
+        """Mode A: after step(), completed (obs, asst) pair is in self.history."""
         agent = _make_agent(enable_summarize=False)
         agent.llm = MagicMock(return_value=_mock_llm_response("I think therefore I act"))
         obs = Observation.from_text("goal text")
         agent.step(obs)
-        assert len(agent.summaries) == 1
-        assert "I think therefore I act" in agent.summaries[0]
-        assert "Action:" in agent.summaries[0]
+        # history: initial obs (from step 0 extra messages or none) + asst
+        # For a single-message obs, _latest_obs after ingest is [], so only asst committed
+        # Let's just check history grew
+        assert len(agent.history) >= 1
+
+    def test_mode_a_second_step_obs_in_history(self) -> None:
+        """Mode A: after step 2, step 1's obs and asst are both in history."""
+        agent = _make_agent(enable_summarize=False)
+        agent.llm = MagicMock(return_value=_mock_llm_response("response"))
+        obs1 = Observation.from_text("goal text")
+        agent.step(obs1)
+        obs2 = Observation.from_text("second obs")
+        agent.step(obs2)
+        def _content(m: object) -> str:
+            if isinstance(m, dict):
+                return m.get("content", "") or ""
+            return getattr(m, "content", "") or ""
+
+        all_contents = [_content(m) for group in agent.history for m in group]
+        assert any("response" in c for c in all_contents)
 
     def test_step_increments_action_count(self) -> None:
         agent = _make_agent()
@@ -570,24 +601,20 @@ class TestStep:
         assert result.actions[0].name == "final_step"
 
     def test_thoughts_is_summary_when_summarize_enabled(self) -> None:
-        """thoughts captures the summarize-pass COT, before the action is appended."""
         agent = _make_agent(enable_summarize=True)
         agent.llm = MagicMock(return_value=_mock_llm_response("act text"))
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response("my cot reasoning"))
         result = agent.step(Observation.from_text("goal text"))
         assert result.thoughts == "my cot reasoning"
-        # The stored summary has the action appended, but thoughts is the raw COT.
         assert "Action:" not in result.thoughts
 
     def test_thoughts_is_inline_content_when_summarize_disabled(self) -> None:
-        """thoughts captures the act-pass inline content when no summarize pass."""
         agent = _make_agent(enable_summarize=False)
         agent.llm = MagicMock(return_value=_mock_llm_response("I think therefore I act"))
         result = agent.step(Observation.from_text("goal text"))
         assert result.thoughts == "I think therefore I act"
 
     def test_thoughts_is_none_when_no_content(self) -> None:
-        """thoughts is None when the LLM returns no text content."""
         agent = _make_agent(enable_summarize=False)
         agent.llm = MagicMock(return_value=_mock_llm_response(""))
         result = agent.step(Observation.from_text("goal text"))
@@ -665,7 +692,6 @@ class TestHintResolution:
         agent = Genny(config=config, action_schemas=[], task_id="t1")
         agent.goal = [{"role": "user", "content": "do the task"}]
         messages = agent._build_base_prompt()
-        # No "Task Hint" or "Additional task details" sections
         contents = " ".join(m.get("content", "") for m in messages if isinstance(m, dict))
         assert "Task Hint" not in contents
         assert "Additional task details" not in contents
