@@ -130,8 +130,7 @@ uv run recipes/hello_miniwob.py   # example run
 ```
 
 Always run `make lint` before finishing a task. `ruff check` and `ruff format` are
-**separate passes** — running only one is not enough for CI. Scope to `src/ tests/`
-to avoid false positives from `cubes/`: `uvx ruff check --fix src/ tests/ && uvx ruff format src/ tests/`.
+**separate passes** — running only one is not enough for CI.
 
 Environment vars go in `.env` (loaded by pyproject). `OPENAI_API_KEY`
 is the only required one for the baseline recipes; see individual cubes for others.
