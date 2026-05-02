@@ -168,6 +168,7 @@ class TestBuildBasePromptModeB:
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
         agent.summaries = ["summary_1", "summary_2"]
+        agent.summary_actions = ["action_1", "action_2"]
         messages = agent._build_base_prompt()
         asst_contents = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
         assert "summary_1" in asst_contents
@@ -177,6 +178,7 @@ class TestBuildBasePromptModeB:
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
         agent.summaries = ["summary_1", "summary_2"]
+        agent.summary_actions = ["action_1", "action_2"]
         messages = agent._build_base_prompt()
         asst_messages = [m for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
         # Each summary is its own message — no bundling
@@ -186,6 +188,7 @@ class TestBuildBasePromptModeB:
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
         agent.summaries = ["s1", "s2", "s3"]
+        agent.summary_actions = ["a1", "a2"]  # no action for s3 yet (live step)
         messages = agent._build_base_prompt(exclude_last_summary=True)
         asst_contents = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "assistant"]
         assert "s1" in asst_contents
@@ -202,13 +205,15 @@ class TestBuildBasePromptModeB:
         assert "latest observation" not in contents
 
     def test_prefix_stable_across_steps(self) -> None:
-        """base_prompt up to last summary is identical between consecutive steps."""
+        """base_prompt is a strict prefix of the next step's base_prompt (full prefix stability)."""
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
         agent.summaries = ["s1", "s2"]
+        agent.summary_actions = ["a1", "a2"]
         prefix_step2 = agent._build_base_prompt()
 
         agent.summaries = ["s1", "s2", "s3"]
+        agent.summary_actions = ["a1", "a2", "a3"]
         prefix_step3 = agent._build_base_prompt()
 
         assert prefix_step3[: len(prefix_step2)] == prefix_step2
@@ -330,10 +335,11 @@ class TestSummarizePast:
         assert any("the current screenshot" in c for c in contents)
 
     def test_includes_prior_summaries_as_separate_messages(self) -> None:
-        """Prior summaries appear as individual assistant messages, not a bundled block."""
+        """Prior summaries appear as individual assistant messages interleaved with action user messages."""
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
         agent.summaries = ["step one cot", "step two cot"]
+        agent.summary_actions = ["action_1", "action_2"]
         agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
@@ -344,10 +350,11 @@ class TestSummarizePast:
         assert asst_msgs[1]["content"] == "step two cot"
 
     def test_sum_and_act_share_prefix(self) -> None:
-        """Sum call and act call share identical prefix up to the last prior summary."""
+        """Sum call and act call share identical prefix up to the prior summary+action block."""
         agent = _make_agent(enable_summarize=True)
         agent.goal = [{"role": "user", "content": "goal"}]
         agent.summaries = ["s1"]
+        agent.summary_actions = ["a1"]
         agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response("new summary"))
         agent._summarize_past()
@@ -356,8 +363,8 @@ class TestSummarizePast:
         agent.summaries.append("new summary")
         act_messages = agent._choose_context()
 
-        # Both start with the same prefix (system, goal, s1) before diverging
-        n = 3  # system + goal + s1
+        # Both share [system, goal, s1, a1] before diverging
+        n = 4  # system + goal + s1 + a1
         assert sum_prompt.messages[:n] == act_messages[:n]
 
     def test_custom_summarize_prompt_is_used(self) -> None:
@@ -400,15 +407,18 @@ class TestSummarizePast:
 
 
 class TestStep:
-    def test_step_appends_summary_with_action_when_enabled(self) -> None:
+    def test_step_records_summary_and_action_separately(self) -> None:
         agent = _make_agent(enable_summarize=True)
         agent.llm = MagicMock(return_value=_mock_llm_response("action"))
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response("step summary"))
         obs = Observation.from_text("goal text")
         agent.step(obs)
+        # Summary stays pure (no action appended) — cache stability.
         assert len(agent.summaries) == 1
-        assert "step summary" in agent.summaries[0]
-        assert "Action:" in agent.summaries[0]
+        assert agent.summaries[0] == "step summary"
+        # Action lives in its own parallel list.
+        assert len(agent.summary_actions) == 1
+        assert "no action" in agent.summary_actions[0]  # mock had no tool calls
 
     def test_mode_a_commits_obs_and_asst_to_history(self) -> None:
         """Mode A: after step(), completed (obs, asst) pair is in self.history."""
