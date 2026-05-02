@@ -15,7 +15,7 @@ import os
 import pytest
 from cube.core import ActionSchema, Observation
 
-from cube_harness.agents.genny import Genny2, Genny2Config
+from cube_harness.agents.genny2 import Genny2, Genny2Config
 from cube_harness.llm import LLMConfig
 
 # claude-haiku-4-5-20251001 does NOT support prompt caching on the Anthropic API

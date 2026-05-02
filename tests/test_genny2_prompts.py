@@ -15,7 +15,7 @@ from cube.core import ActionSchema, Observation
 from litellm import Message as LitellmMessage
 from litellm.types.utils import ChatCompletionMessageToolCall, Function
 
-from cube_harness.agents.genny import Genny2, Genny2Config
+from cube_harness.agents.genny2 import Genny2, Genny2Config
 from cube_harness.llm import LLMConfig, LLMResponse, Prompt, Usage
 
 # ---------------------------------------------------------------------------

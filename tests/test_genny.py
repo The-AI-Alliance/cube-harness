@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from cube.core import Action, ActionSchema, Observation
 
-from cube_harness.agents.genny import (
+from cube_harness.agents.genny2 import (
     Genny2,
     Genny2Config,
     _format_action_list,
@@ -566,7 +566,7 @@ class TestHintResolution:
         import logging
 
         config = Genny2Config(llm_config=_llm_config(), task_hints={"t1": "x"})
-        with caplog.at_level(logging.DEBUG, logger="cube_harness.agents.genny"):
+        with caplog.at_level(logging.DEBUG, logger="cube_harness.agents.genny2"):
             Genny2(config=config, action_schemas=[], task_id=None)
         assert any("task_id is None" in r.message for r in caplog.records)
 
