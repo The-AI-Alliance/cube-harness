@@ -93,18 +93,31 @@ def _msg_role(msg: Any) -> str | None:
 
 
 def _build_cache_injection_points(messages: list) -> list[dict]:
-    """Return ephemeral cache_control breakpoints: first system msg + last assistant msg.
+    """Return ephemeral cache_control breakpoints: second message + last assistant.
 
-    Two breakpoints anchor a static prefix (system + tools above it) and a rolling
-    boundary that naturally extends each step as new assistant turns are appended.
-    Anthropic's longest-prefix match handles cross-step cache hits.
+    Two breakpoints enable cross-step cache hits:
+
+    1. Second message (index 1) — the goal / first large user content.  Marking
+       this creates a stable seed cache (system + tools + goal) that all later
+       steps can hit.  Marking only the system message fails because the system
+       message is usually below Anthropic's 1 024-token minimum alone.
+
+    2. Last assistant message — the rolling boundary.  On each new step the
+       history grows by one (obs, asst) pair, so this breakpoint is always one
+       message further out.  Anthropic's longest-prefix match hits the previous
+       step's cache and writes a slightly longer entry.
+
+    At step 0 (no assistant yet) only breakpoint 1 is emitted, writing the seed
+    cache.  At step 1+, breakpoint 2 is also emitted; the lookup hits the seed
+    (or the previous step's rolling cache) and the write extends it.
     """
+    if len(messages) < 2:
+        return []
     points: list[dict] = []
     control = {"type": "ephemeral"}
-    for i, msg in enumerate(messages):
-        if _msg_role(msg) == "system":
-            points.append({"location": "message", "index": i, "control": control})
-            break
+    # Breakpoint 1: second message — stable goal / main content anchor.
+    points.append({"location": "message", "index": 1, "control": control})
+    # Breakpoint 2: last assistant — rolling per-step extension.
     for i in range(len(messages) - 1, -1, -1):
         if _msg_role(messages[i]) == "assistant":
             if not any(p["index"] == i for p in points):

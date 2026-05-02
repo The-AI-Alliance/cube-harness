@@ -220,9 +220,8 @@ class TestCacheControlHelpers:
         assert _build_cache_injection_points([]) == []
 
     def test_injection_points_system_only(self) -> None:
-        points = _build_cache_injection_points([{"role": "system", "content": "x"}])
-        # No assistant message; only system anchor.
-        assert points == [{"location": "message", "index": 0, "control": {"type": "ephemeral"}}]
+        # Single message → len < 2, no breakpoints emitted.
+        assert _build_cache_injection_points([{"role": "system", "content": "x"}]) == []
 
     def test_injection_points_system_user_assistant(self) -> None:
         msgs = [
@@ -232,7 +231,7 @@ class TestCacheControlHelpers:
         ]
         points = _build_cache_injection_points(msgs)
         assert points == [
-            {"location": "message", "index": 0, "control": {"type": "ephemeral"}},
+            {"location": "message", "index": 1, "control": {"type": "ephemeral"}},
             {"location": "message", "index": 2, "control": {"type": "ephemeral"}},
         ]
 
@@ -247,7 +246,7 @@ class TestCacheControlHelpers:
         ]
         points = _build_cache_injection_points(msgs)
         indices = sorted(p["index"] for p in points)
-        assert indices == [0, 4]
+        assert indices == [1, 4]
 
     def test_injection_points_no_system(self) -> None:
         msgs = [
@@ -263,7 +262,8 @@ class TestCacheControlHelpers:
         msgs = [Message(role="system", content="s"), Message(role="assistant", content="a")]
         points = _build_cache_injection_points(msgs)
         indices = sorted(p["index"] for p in points)
-        assert indices == [0, 1]
+        # Both breakpoints land at index 1: second message = assistant → deduplicated to one entry.
+        assert indices == [1]
 
     def test_mark_last_tool_for_cache_empty(self) -> None:
         assert _mark_last_tool_for_cache([]) == []
@@ -334,7 +334,7 @@ class TestLLMCacheControl:
         kwargs = mock_completion.call_args.kwargs
         points = kwargs["cache_control_injection_points"]
         indices = sorted(p["index"] for p in points)
-        assert indices == [0, 2]
+        assert indices == [1, 2]
         # Last tool marked, first untouched. Original prompt.tools must not be mutated.
         assert kwargs["tools"][1]["cache_control"] == {"type": "ephemeral"}
         assert "cache_control" not in kwargs["tools"][0]
@@ -352,7 +352,7 @@ class TestLLMCacheControl:
         )
         llm(prompt)
         kwargs = mock_completion.call_args.kwargs
-        # Only system-message anchor when no assistant has spoken yet.
+        # Only the second-message anchor when no assistant has spoken yet.
         assert kwargs["cache_control_injection_points"] == [
-            {"location": "message", "index": 0, "control": {"type": "ephemeral"}}
+            {"location": "message", "index": 1, "control": {"type": "ephemeral"}}
         ]

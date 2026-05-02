@@ -260,7 +260,8 @@ class Genny2(Agent):
         self.token_counter = config.llm_config.make_counter()
         self.action_schemas: list[ActionSchema] = action_schemas
         self.goal: list[dict] = []
-        self.summaries: list[str] = []  # Mode B: one entry per step
+        self.summaries: list[str] = []  # Mode B: one summary per step (raw, no action suffix)
+        self.summary_actions: list[str] = []  # Mode B: action taken per step, separate message for cache stability
         self.history: list[list[dict | Message]] = []  # Mode A / flat: completed (obs, asst) pairs
         self._latest_obs: list[dict | Message] = []  # current step's obs, not yet in history
         self._actions_cnt: int = 0
@@ -304,7 +305,7 @@ class Genny2(Agent):
             actions = [Action(name=STOP_ACTION.name, arguments={})]
 
         if self.config.enable_summarize:
-            self.summaries[-1] += f"\n\nAction: {_format_action_list(actions)}"
+            self.summary_actions.append(_format_action_list(actions))
             if self.config.flat_history:
                 # Flat mode: also commit obs+asst so _build_base_prompt renders the flat conversation.
                 if self._latest_obs:
@@ -362,8 +363,12 @@ class Genny2(Agent):
             messages.append({"role": "assistant", "content": "Understood, I'll keep this in mind."})
         if self.config.enable_summarize and not self.config.flat_history:
             summaries = self.summaries[:-1] if (exclude_last_summary and self.summaries) else self.summaries
-            for s in summaries:
+            for i, s in enumerate(summaries):
                 messages.append({"role": "assistant", "content": s})
+                # Action for step i lives in a separate user message so the summary bytes
+                # stay unchanged across steps → Anthropic prefix cache extends cleanly.
+                if i < len(self.summary_actions):
+                    messages.append({"role": "user", "content": self.summary_actions[i]})
         else:
             for group in self.history:
                 messages.extend(group)

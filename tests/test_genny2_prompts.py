@@ -368,11 +368,11 @@ class TestModeBPromptStructure:
         agent.step(Observation.from_text("obs_1"))
 
         sum_1_msgs = cap_sum.calls[1].messages
-        # Should have: [sys, goal, asst:sum_0, obs_1, sum_instruction]
-        assert _roles(sum_1_msgs) == ["system", "user", "assistant", "user", "user"]
+        # [sys, goal, asst:sum_0, user:action_0, obs_1, sum_instruction]
+        assert _roles(sum_1_msgs) == ["system", "user", "assistant", "user", "user", "user"]
 
     def test_step1_act_two_summaries_as_separate_messages(self) -> None:
-        """Each step's summary is a separate assistant message — NOT bundled."""
+        """Each step's summary is a separate assistant message, each followed by its action user message."""
         agent = _make_agent(enable_summarize=True)
         cap_act = CapturingLLM()
         cap_sum = CapturingLLM(responses=[_text_response("sum_0"), _text_response("sum_1")])
@@ -383,8 +383,8 @@ class TestModeBPromptStructure:
         agent.step(Observation.from_text("obs_1"))
 
         act_1_msgs = cap_act.calls[1].messages
-        # [sys, goal, asst:sum_0, asst:sum_1, obs_1, act_prompt]
-        assert _roles(act_1_msgs) == ["system", "user", "assistant", "assistant", "user", "user"]
+        # [sys, goal, asst:sum_0, user:action_0, asst:sum_1, obs_1, act_prompt]
+        assert _roles(act_1_msgs) == ["system", "user", "assistant", "user", "assistant", "user", "user"]
 
     def test_step1_act_obs_before_act_prompt(self) -> None:
         agent = _make_agent(enable_summarize=True)
@@ -412,10 +412,10 @@ class TestModeBPromptStructure:
 class TestModeBWithinStepCacheHit:
     def test_step1_sum_and_act_share_same_prefix(self) -> None:
         """
-        sum pass:  [sys, goal, asst:sum_0_w_action, obs_1, sum_cot]
-        act pass:  [sys, goal, asst:sum_0_w_action, asst:sum_1, obs_1, act_prompt]
+        sum pass:  [sys, goal, asst:sum_0, user:action_0, obs_1, sum_cot]
+        act pass:  [sys, goal, asst:sum_0, user:action_0, asst:sum_1, obs_1, act_prompt]
 
-        First 3 messages are identical → within-step cache hit.
+        First 4 messages are identical → within-step cache hit on [sys, goal, sum_0, action_0].
         """
         agent = _make_agent(enable_summarize=True)
         cap_act = CapturingLLM()
@@ -429,9 +429,8 @@ class TestModeBWithinStepCacheHit:
         sum_1 = cap_sum.calls[1].messages
         act_1 = cap_act.calls[1].messages
 
-        # Shared prefix ends before obs_1 in sum pass, and before asst:sum_1 in act pass
-        # Both start with [sys, goal, asst:sum_0_w_action]
-        assert _sigs(sum_1[:3]) == _sigs(act_1[:3])
+        # Both start with [sys, goal, asst:sum_0, user:action_0] — 4 identical messages.
+        assert _sigs(sum_1[:4]) == _sigs(act_1[:4])
 
     def test_step2_sum_and_act_share_same_prefix(self) -> None:
         agent = _make_agent(enable_summarize=True)
@@ -443,12 +442,12 @@ class TestModeBWithinStepCacheHit:
         for i in range(3):
             agent.step(Observation.from_text(f"obs_{i}"))
 
-        # step 2: sum has [sys, goal, asst:s0, asst:s1, obs_2, sum_cot]
-        # step 2: act has [sys, goal, asst:s0, asst:s1, asst:s2, obs_2, act_prompt]
-        # shared prefix = first 4 messages
+        # step 2: sum has [sys, goal, asst:s0, user:a0, asst:s1, user:a1, obs_2, sum_cot]
+        # step 2: act has [sys, goal, asst:s0, user:a0, asst:s1, user:a1, asst:s2, obs_2, act_prompt]
+        # shared prefix = first 6 messages
         sum_2 = cap_sum.calls[2].messages
         act_2 = cap_act.calls[2].messages
-        prefix_len = 4  # [sys, goal, asst:s0, asst:s1]
+        prefix_len = 6  # [sys, goal, asst:s0, user:a0, asst:s1, user:a1]
         assert _sigs(sum_2[:prefix_len]) == _sigs(act_2[:prefix_len])
 
 
@@ -463,12 +462,10 @@ class TestModeBCrossStepPrefixStability:
     def test_step0_act_prefix_in_step1_sum(self) -> None:
         """
         step 0 act: [sys, goal, asst:sum_0, act_prompt]
-        step 1 sum: [sys, goal, asst:sum_0_w_action, obs_1, sum_cot]
+        step 1 sum: [sys, goal, asst:sum_0, user:action_0, obs_1, sum_cot]
 
-        The first 2 messages (sys + goal) are identical.
-        After that, both have asst:sum_0 (the content differs by the appended action tag).
-        The shared byte-identical prefix is [sys, goal] only here, since sum_0 gets
-        the action tag appended after the act call.
+        sum_0 bytes are IDENTICAL between step 0 act and step 1 sum (no mutation).
+        Shared prefix = [sys, goal, asst:sum_0] — full cross-step cache hit on step 0's write.
         """
         agent = _make_agent(enable_summarize=True)
         cap_act = CapturingLLM()
@@ -480,13 +477,33 @@ class TestModeBCrossStepPrefixStability:
         agent.step(Observation.from_text("obs_1"))
 
         act_0 = cap_act.calls[0].messages  # [sys, goal, asst:sum_0, act_prompt]
-        sum_1 = cap_sum.calls[1].messages  # [sys, goal, asst:sum_0+action, obs_1, sum_cot]
+        sum_1 = cap_sum.calls[1].messages  # [sys, goal, asst:sum_0, user:action_0, obs_1, sum_cot]
 
-        # [sys, goal] are identical
-        assert _sigs(act_0[:2]) == _sigs(sum_1[:2])
-        # Both have an assistant message at index 2 (summary content may differ by action tag)
-        assert _role(act_0[2]) == "assistant"
-        assert _role(sum_1[2]) == "assistant"
+        # First 3 messages are byte-identical — full cache hit on step 0's write.
+        assert _sigs(act_0[:3]) == _sigs(sum_1[:3])
+
+    def test_cache_breakpoint_prefix_is_prefix_of_next_sum(self) -> None:
+        """Anthropic caches the prefix up to the last assistant (breakpoint).
+        That cached prefix must be byte-identical to the start of the next step's sum prompt.
+        """
+        agent = _make_agent(enable_summarize=True)
+        cap_act = CapturingLLM()
+        cap_sum = CapturingLLM(responses=[_text_response(f"sum_{i}") for i in range(4)])
+        agent.llm = cap_act
+        agent.summarize_llm = cap_sum
+
+        for i in range(4):
+            agent.step(Observation.from_text(f"obs_{i}"))
+
+        for n in range(len(cap_act.calls) - 1):
+            act_n = cap_act.calls[n].messages
+            sum_n1 = cap_sum.calls[n + 1].messages
+            # The Anthropic cache breakpoint sits at the last assistant message in act_n.
+            last_asst = max(i for i, m in enumerate(act_n) if _role(m) == "assistant")
+            cache_prefix = _sigs(act_n[: last_asst + 1])
+            assert _sigs(sum_n1[: len(cache_prefix)]) == cache_prefix, (
+                f"Cache prefix from step {n} act not a prefix of step {n + 1} sum"
+            )
 
     def test_summaries_grow_by_one_each_step(self) -> None:
         """Each act pass has exactly one more assistant-summary message than the previous."""
