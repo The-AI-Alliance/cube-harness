@@ -13,11 +13,7 @@ from cube.core import Action, ActionSchema, Observation
 from cube_harness.agents.genny import (
     Genny2,
     Genny2Config,
-    NativeToolAdapter,
-    TextToolAdapter,
     _format_action_list,
-    _format_tools_as_text,
-    _json_type_to_python,
     _truncate_message,
 )
 from cube_harness.llm import LLMConfig, LLMResponse, Usage
@@ -44,14 +40,10 @@ def _make_schema(name: str = "click", description: str = "Click an element.") ->
 
 def _make_agent(
     enable_summarize: bool = False,
-    summarize_cot_only: bool = False,
-    tools_as_text: bool = False,
 ) -> Genny2:
     config = Genny2Config(
         llm_config=LLMConfig(model_name="test"),
         enable_summarize=enable_summarize,
-        summarize_cot_only=summarize_cot_only,
-        tools_as_text=tools_as_text,
     )
     return Genny2(config=config, action_schemas=[_make_schema()])
 
@@ -70,17 +62,6 @@ def _simulate_completed_rounds(agent: Genny2, n: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-class TestJsonTypeToPython:
-    def test_known_types(self) -> None:
-        assert _json_type_to_python("string") == "str"
-        assert _json_type_to_python("integer") == "int"
-        assert _json_type_to_python("boolean") == "bool"
-        assert _json_type_to_python("array") == "list"
-
-    def test_unknown_falls_back_to_any(self) -> None:
-        assert _json_type_to_python("unknown") == "Any"
-
-
 class TestTruncateMessage:
     def test_truncates_long_content(self) -> None:
         msg = {"role": "user", "content": "a" * 200}
@@ -95,133 +76,6 @@ class TestTruncateMessage:
     def test_non_string_content_unchanged(self) -> None:
         msg = {"role": "user", "content": [{"type": "image_url"}]}
         assert _truncate_message(msg, max_chars=10) == msg
-
-
-class TestFormatToolsAsText:
-    def test_contains_function_name(self) -> None:
-        schema = _make_schema("browser_click")
-        result = _format_tools_as_text([schema])
-        assert "def browser_click(" in result
-
-    def test_required_arg_has_no_default(self) -> None:
-        schema = _make_schema()
-        result = _format_tools_as_text([schema])
-        assert "element_id: str" in result
-        assert "element_id: str = None" not in result
-
-    def test_optional_arg_has_default(self) -> None:
-        schema = _make_schema()
-        result = _format_tools_as_text([schema])
-        assert "force: bool = None" in result
-
-    def test_includes_tool_call_instruction(self) -> None:
-        result = _format_tools_as_text([_make_schema()])
-        assert "<tool_call>" in result
-
-    def test_multiple_tools(self) -> None:
-        schemas = [_make_schema("click"), _make_schema("type")]
-        result = _format_tools_as_text(schemas)
-        assert "def click(" in result
-        assert "def type(" in result
-
-
-# ---------------------------------------------------------------------------
-# NativeToolAdapter
-# ---------------------------------------------------------------------------
-
-
-class TestNativeToolAdapter:
-    def test_encode_returns_tool_dicts(self) -> None:
-        adapter = NativeToolAdapter()
-        schema = _make_schema()
-        tools, msgs = adapter.encode([schema], [{"role": "user", "content": "hi"}])
-        assert tools == [schema.as_dict()]
-        assert msgs == [{"role": "user", "content": "hi"}]
-
-    def test_decode_parses_tool_calls(self) -> None:
-        adapter = NativeToolAdapter()
-        tc = MagicMock()
-        tc.id = "call_1"
-        tc.function.name = "click"
-        tc.function.arguments = '{"element_id": "btn"}'
-        response = MagicMock()
-        response.tool_calls = [tc]
-        actions = adapter.decode(response)
-        assert len(actions) == 1
-        assert actions[0].name == "click"
-        assert actions[0].arguments == {"element_id": "btn"}
-
-    def test_decode_empty_when_no_tool_calls(self) -> None:
-        adapter = NativeToolAdapter()
-        response = MagicMock()
-        response.tool_calls = None
-        assert adapter.decode(response) == []
-
-
-# ---------------------------------------------------------------------------
-# TextToolAdapter
-# ---------------------------------------------------------------------------
-
-
-class TestTextToolAdapter:
-    def test_encode_injects_sigs_into_system(self) -> None:
-        adapter = TextToolAdapter()
-        schema = _make_schema("click")
-        messages = [{"role": "system", "content": "You are an agent."}]
-        _, result = adapter.encode([schema], messages)
-        assert "def click(" in result[0]["content"]
-        assert result[0]["role"] == "system"
-
-    def test_encode_returns_empty_tools(self) -> None:
-        adapter = TextToolAdapter()
-        api_tools, _ = adapter.encode([_make_schema()], [{"role": "system", "content": "s"}])
-        assert api_tools == []
-
-    def test_encode_no_tools_returns_messages_unchanged(self) -> None:
-        adapter = TextToolAdapter()
-        messages = [{"role": "user", "content": "hi"}]
-        tools, result = adapter.encode([], messages)
-        assert tools == []
-        assert result == messages
-
-    def test_encode_does_not_mutate_original_messages(self) -> None:
-        adapter = TextToolAdapter()
-        original = [{"role": "system", "content": "original"}]
-        adapter.encode([_make_schema()], original)
-        assert original[0]["content"] == "original"
-
-    def test_decode_parses_tool_call_tags(self) -> None:
-        adapter = TextToolAdapter()
-        response = MagicMock()
-        response.content = 'Reasoning...\n<tool_call>{"name": "click", "arguments": {"element_id": "btn"}}</tool_call>'
-        actions = adapter.decode(response)
-        assert len(actions) == 1
-        assert actions[0].name == "click"
-        assert actions[0].arguments == {"element_id": "btn"}
-
-    def test_decode_multiple_calls(self) -> None:
-        adapter = TextToolAdapter()
-        response = MagicMock()
-        response.content = (
-            '<tool_call>{"name": "click", "arguments": {}}</tool_call>'
-            '<tool_call>{"name": "type", "arguments": {"text": "hi"}}</tool_call>'
-        )
-        actions = adapter.decode(response)
-        assert len(actions) == 2
-        assert actions[0].name == "click"
-        assert actions[1].name == "type"
-
-    def test_decode_empty_when_no_tags(self) -> None:
-        adapter = TextToolAdapter()
-        response = MagicMock()
-        response.content = "Just thinking aloud."
-        assert adapter.decode(response) == []
-
-    def test_decode_skips_malformed_json(self) -> None:
-        adapter = TextToolAdapter()
-        response = MagicMock()
-        response.content = "<tool_call>NOT JSON</tool_call>"
-        assert adapter.decode(response) == []
 
 
 # ---------------------------------------------------------------------------
@@ -506,23 +360,19 @@ class TestSummarizePast:
         n = 3  # system + goal + s1
         assert sum_prompt.messages[:n] == act_messages[:n]
 
-    def test_cot_mode_uses_cot_prompt(self) -> None:
-        agent = _make_agent(enable_summarize=True, summarize_cot_only=True)
+    def test_custom_summarize_prompt_is_used(self) -> None:
+        config = Genny2Config(
+            llm_config=LLMConfig(model_name="test"),
+            enable_summarize=True,
+            summarize_prompt="My custom summarize instruction.",
+        )
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
         agent.goal = [{"role": "user", "content": "goal"}]
         agent._latest_obs = [{"role": "user", "content": "obs"}]
         agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
         agent._summarize_past()
         prompt = agent.summarize_llm.call_args[0][0]
-        assert prompt.messages[-1]["content"] == agent.config.summarize_cot_prompt
-
-    def test_verbose_mode_uses_verbose_prompt(self) -> None:
-        agent = _make_agent(enable_summarize=True, summarize_cot_only=False)
-        agent.goal = [{"role": "user", "content": "goal"}]
-        agent._latest_obs = [{"role": "user", "content": "obs"}]
-        agent.summarize_llm = MagicMock(return_value=_mock_llm_response())
-        agent._summarize_past()
-        prompt = agent.summarize_llm.call_args[0][0]
-        assert prompt.messages[-1]["content"] == agent.config.summarize_verbose_prompt
+        assert prompt.messages[-1]["content"] == "My custom summarize instruction."
 
     def test_uses_same_system_prompt_as_act_pass(self) -> None:
         agent = _make_agent(enable_summarize=True)
@@ -832,6 +682,53 @@ class TestCostLimit:
         agent.step(Observation.from_text("t1"))
         agent.step(Observation.from_text("t2"))
         assert agent._total_cost == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# token_limit
+# ---------------------------------------------------------------------------
+
+
+def _mock_llm_response_with_tokens(prompt_tokens: int, completion_tokens: int, text: str = "response") -> LLMResponse:
+    from litellm import Message as LitellmMessage
+
+    return LLMResponse(
+        message=LitellmMessage(role="assistant", content=text),
+        usage=Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens),
+    )
+
+
+class TestTokenLimit:
+    def test_no_stop_when_below_limit(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), token_limit=1000)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_tokens(10, 5))
+        agent.step(Observation.from_text("task"))
+        agent.llm.assert_called_once()
+
+    def test_stop_when_limit_reached(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), token_limit=10)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_tokens(8, 5))
+        agent.step(Observation.from_text("task"))  # uses 13 tokens, exceeds limit
+        result = agent.step(Observation.from_text("task2"))
+        assert result.actions[0].name == "final_step"
+
+    def test_no_limit_when_token_limit_none(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), token_limit=None)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent._total_tokens = 999_999
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_tokens(0, 0))
+        agent.step(Observation.from_text("task"))
+        agent.llm.assert_called_once()
+
+    def test_total_tokens_accumulates(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), token_limit=10_000)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_tokens(100, 50))
+        agent.step(Observation.from_text("t1"))
+        agent.step(Observation.from_text("t2"))
+        assert agent._total_tokens == 300
 
 
 # ---------------------------------------------------------------------------

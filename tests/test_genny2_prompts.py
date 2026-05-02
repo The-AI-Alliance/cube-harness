@@ -97,8 +97,7 @@ def _make_agent(
         react_prompt=react_prompt,
         act_prompt=act_prompt,
         system_prompt=system_prompt,
-        summarize_cot_only=True,
-        summarize_cot_prompt=_SUM_COT,
+        summarize_prompt=_SUM_COT,
         **kwargs,
     )
     return Genny2(config=config, action_schemas=[_schema()])

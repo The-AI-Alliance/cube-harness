@@ -29,11 +29,10 @@ is a valid prefix of the next step, which starts the same way and appends one mo
 
 import json
 import logging
-import re
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Protocol, cast
+from typing import cast
 
 from cube.core import Action, ActionSchema, Observation
 from cube.task import STOP_ACTION
@@ -100,46 +99,23 @@ Respond with text only — do not call any tools or functions."""
 
 
 # ---------------------------------------------------------------------------
-# Tool formatting helpers
+# Tool helpers
 # ---------------------------------------------------------------------------
 
 
-def _json_type_to_python(json_type: str) -> str:
-    return {
-        "string": "str",
-        "integer": "int",
-        "number": "float",
-        "boolean": "bool",
-        "array": "list",
-        "object": "dict",
-    }.get(json_type, "Any")
+def _encode_tools(tools: list[ActionSchema]) -> list[dict]:
+    return [t.as_dict() for t in tools]
 
 
-def _format_tools_as_text(tools: list[ActionSchema]) -> str:
-    """Format action schemas as Python-style function signatures for text-mode injection.
-
-    Used by TextToolAdapter for ablation studies vs. native tool calling. Parameters with
-    complex JSON schemas (e.g. nested objects, $ref) render as 'Any' — best-effort display.
-    If ablation shows no benefit over native tool calling, this adapter will be removed.
-    """
-    lines = ["## Available Functions"]
-    for tool in tools:
-        props = tool.parameters.get("properties", {})
-        required = set(tool.parameters.get("required", []))
-        args = []
-        for pname, pinfo in props.items():
-            ptype = _json_type_to_python(pinfo.get("type", "Any"))
-            suffix = "" if pname in required else " = None"
-            args.append(f"{pname}: {ptype}{suffix}")
-        lines.append(f"def {tool.name}({', '.join(args)}) -> None:")
-        if tool.description:
-            lines.append(f'    """{tool.description}"""')
-        lines.append("")
-    lines += [
-        "To call a function, respond with:",
-        '<tool_call>{"name": "...", "arguments": {...}}</tool_call>',
-    ]
-    return "\n".join(lines)
+def _decode_actions(response: "Message") -> "list[Action]":
+    actions = []
+    for tc in getattr(response, "tool_calls", None) or []:
+        args = tc.function.arguments
+        if isinstance(args, str):
+            args = json.loads(args)
+        if tc.function.name:
+            actions.append(Action(id=tc.id, name=tc.function.name, arguments=args))
+    return actions
 
 
 def _format_action_list(actions: "list[Action]") -> str:
@@ -171,72 +147,6 @@ def _truncate_message(msg: dict, max_chars: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# ToolAdapter — isolates text vs. native tool interface
-# ---------------------------------------------------------------------------
-
-
-class ToolAdapter(Protocol):
-    def encode(
-        self, tools: list[ActionSchema], messages: list[dict | Message]
-    ) -> tuple[list[dict], list[dict | Message]]:
-        """Return (api_tools, api_messages). api_tools is empty when baked into messages."""
-        ...
-
-    def decode(self, response: Message) -> list[Action]:
-        """Extract actions from LLM response."""
-        ...
-
-
-class NativeToolAdapter:
-    """Passes tools natively via the LLM API tool_use interface."""
-
-    def encode(
-        self, tools: list[ActionSchema], messages: list[dict | Message]
-    ) -> tuple[list[dict], list[dict | Message]]:
-        return [t.as_dict() for t in tools], messages
-
-    def decode(self, response: Message) -> list[Action]:
-        actions = []
-        for tc in getattr(response, "tool_calls", None) or []:
-            args = tc.function.arguments
-            if isinstance(args, str):
-                args = json.loads(args)
-            if tc.function.name:
-                actions.append(Action(id=tc.id, name=tc.function.name, arguments=args))
-        return actions
-
-
-class TextToolAdapter:
-    """Injects function signatures into the system prompt; parses <tool_call> XML tags."""
-
-    def encode(
-        self, tools: list[ActionSchema], messages: list[dict | Message]
-    ) -> tuple[list[dict], list[dict | Message]]:
-        if not tools:
-            return [], list(messages)
-        sigs = _format_tools_as_text(tools)
-        result: list[dict | Message] = list(messages)
-        if result and isinstance(result[0], dict) and result[0].get("role") == "system":
-            system_msg = dict(result[0])
-            system_msg["content"] = system_msg["content"] + "\n\n" + sigs
-            result[0] = system_msg
-        else:
-            result.insert(0, {"role": "system", "content": sigs})
-        return [], result
-
-    def decode(self, response: Message) -> list[Action]:
-        content = getattr(response, "content", "") or ""
-        actions = []
-        for raw in re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL):
-            try:
-                data = json.loads(raw.strip())
-                actions.append(Action(name=data["name"], arguments=data.get("arguments", {})))
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Failed to parse tool_call: {raw!r} — {e}")
-        return actions
-
-
-# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -253,11 +163,6 @@ class Genny2Config(AgentConfig):
     # Empty string = no trailing message (mini-swe-agent style).
     step_prompt: str = ""
 
-    # Tool interface: False = native API tool_use (default); True = fn sigs in system prompt
-    # + <tool_call> XML parsing (TextToolAdapter). Both modes are supported; tools_as_text
-    # exists for ablation studies — if it shows no benefit it will be removed.
-    tools_as_text: bool = False
-
     # Flat history mode: True = linear conversation with no injected summaries/headers,
     # equivalent to mini-swe-agent prompt structure. Summaries are still accumulated
     # internally (for logging/XRay) but not injected into the prompt.
@@ -265,10 +170,10 @@ class Genny2Config(AgentConfig):
 
     # Summarize pass
     enable_summarize: bool = False  # False = raw history mode; True = rolling summaries mode
-    summarize_cot_only: bool = False  # True = concise CoT; False = verbose + Key Facts
     summarize_llm_config: LLMConfig | None = None  # None = reuse llm_config
-    summarize_verbose_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
-    summarize_cot_prompt: str = _DEFAULT_SUMMARIZE_COT_PROMPT
+    # Instruction sent to the summarize LLM. Swap to _DEFAULT_SUMMARIZE_COT_PROMPT for a
+    # lighter CoT-style summary instead of the default verbose + Key Facts format.
+    summarize_prompt: str = _DEFAULT_SUMMARIZE_VERBOSE_PROMPT
 
     # General hint injected after the goal in every step's context.
     # Use this when one hint applies to a whole task subset (one config per subset).
@@ -288,6 +193,9 @@ class Genny2Config(AgentConfig):
     max_actions: int | None = None  # None = unlimited
     # Hard per-episode cost cap in USD. Checked before each act call; triggers a STOP when hit.
     cost_limit: float | None = None
+    # Hard per-episode token cap (prompt + completion across all LLM calls). Checked before
+    # each act call; triggers a STOP when hit. Useful as a proxy budget when pricing is unknown.
+    token_limit: int | None = None
     # Retry budget when the model returns no tool calls. On each retry the empty response
     # and a correction user message are appended; if still no tool calls after all retries,
     # a STOP action is returned. 0 = no retry (preserves current behavior).
@@ -351,13 +259,13 @@ class Genny2(Agent):
         self.summarize_llm: LLM = self._summarize_llm_config.make()
         self.token_counter = config.llm_config.make_counter()
         self.action_schemas: list[ActionSchema] = action_schemas
-        self.tool_adapter: ToolAdapter = TextToolAdapter() if config.tools_as_text else NativeToolAdapter()
         self.goal: list[dict] = []
         self.summaries: list[str] = []  # Mode B: one entry per step
         self.history: list[list[dict | Message]] = []  # Mode A / flat: completed (obs, asst) pairs
         self._latest_obs: list[dict | Message] = []  # current step's obs, not yet in history
         self._actions_cnt: int = 0
-        self._total_cost: float = 0.0  # accumulated USD cost for cost_limit checks
+        self._total_cost: float = 0.0
+        self._total_tokens: int = 0
 
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
@@ -367,6 +275,9 @@ class Genny2(Agent):
             logger.info(
                 f"Cost limit ${self.config.cost_limit:.2f} reached (${self._total_cost:.4f} spent), issuing STOP."
             )
+            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
+        if self.config.token_limit is not None and self._total_tokens >= self.config.token_limit:
+            logger.info(f"Token limit {self.config.token_limit} reached ({self._total_tokens} used), issuing STOP.")
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
@@ -385,7 +296,7 @@ class Genny2(Agent):
 
         with profiler("act"):
             response, act_calls = self._act()
-        actions = self.tool_adapter.decode(response)
+        actions = _decode_actions(response)
 
         # Format error exhaustion: _act() retried max_format_errors times but still no tool calls.
         if not actions and self.config.max_format_errors > 0:
@@ -408,6 +319,7 @@ class Genny2(Agent):
         llm_calls: list[LLMCall] = act_calls + ([sum_call] if sum_call is not None else [])
         for call in llm_calls:
             self._total_cost += call.usage.cost
+            self._total_tokens += call.usage.prompt_tokens + call.usage.completion_tokens
         self._actions_cnt += 1
         return AgentOutput(
             actions=actions,
@@ -463,14 +375,11 @@ class Genny2(Agent):
         The base_prefix (system, goal, hints, prior summaries) is byte-for-byte identical
         to the act pass prefix → within-step cache hit between summarize and act.
         """
-        user_prompt = (
-            self.config.summarize_cot_prompt if self.config.summarize_cot_only else self.config.summarize_verbose_prompt
-        )
         messages = self._build_base_prompt()
         messages.extend(self._latest_obs)
-        messages.append({"role": "user", "content": user_prompt})
-        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
-        prompt = Prompt(messages=api_messages, tools=api_tools)
+        messages.append({"role": "user", "content": self.config.summarize_prompt})
+        api_tools = _encode_tools(self.action_schemas)
+        prompt = Prompt(messages=messages, tools=api_tools)
         response = self.summarize_llm(prompt)
         llm_call = LLMCall(
             tag="summary",
@@ -484,9 +393,9 @@ class Genny2(Agent):
     def _act(self) -> tuple[Message, list[LLMCall]]:
         """Build context, encode tools, call act LLM; retry up to max_format_errors times on no tool calls."""
         messages = self._choose_context()
-        api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
-        prompt = Prompt(messages=api_messages, tools=api_tools)
-        logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}")
+        api_tools = _encode_tools(self.action_schemas)
+        prompt = Prompt(messages=messages, tools=api_tools)
+        logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=messages)}")
         try:
             response = self.llm(prompt)
         except Exception as e:
@@ -511,11 +420,11 @@ class Genny2(Agent):
             logger.warning(
                 f"No tool calls in response (attempt {attempt + 1}/{self.config.max_format_errors}), retrying."
             )
-            api_messages = list(api_messages) + [
+            messages = list(messages) + [
                 response.message,
                 {"role": "user", "content": "No tool calls found. Every response MUST include at least one tool call."},
             ]
-            prompt = Prompt(messages=api_messages, tools=api_tools)
+            prompt = Prompt(messages=messages, tools=api_tools)
             response = self.llm(prompt)
             llm_calls.append(
                 LLMCall(
