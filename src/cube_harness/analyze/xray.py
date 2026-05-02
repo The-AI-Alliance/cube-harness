@@ -549,9 +549,9 @@ th {
     margin: 0 !important;
     padding: 0 !important;
 }
-/* Experiments table: hide the "select all" header checkbox */
-#exp_table table thead tr th:first-child input[type="checkbox"] {
-    display: none;
+/* Experiments table: hide entire first header cell (checkbox col has no label) */
+#exp_table table thead tr th:first-child {
+    visibility: hidden !important;
 }
 /* Experiments table: narrow the checkbox column */
 #exp_table table th:first-child,
@@ -560,9 +560,70 @@ th {
     min-width: 36px !important;
     max-width: 36px !important;
 }
+/* Experiments table: cap experiment name column, overflow with ellipsis */
+#exp_table table th:nth-child(2),
+#exp_table table td:nth-child(2) {
+    max-width: 300px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+/* Experiments table: fixed widths for metadata columns */
+#exp_table table th:nth-child(3),
+#exp_table table td:nth-child(3) { width: 130px !important; white-space: nowrap !important; }
+#exp_table table th:nth-child(4),
+#exp_table table td:nth-child(4) { width: 120px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+#exp_table table th:nth-child(5),
+#exp_table table td:nth-child(5) { width: 160px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+#exp_table table th:nth-child(6),
+#exp_table table td:nth-child(6) { width: 130px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+#exp_table table th:nth-child(7),
+#exp_table table td:nth-child(7) { width: 130px !important; }
+#exp_table table th:nth-child(8),
+#exp_table table td:nth-child(8) { width: 120px !important; white-space: nowrap !important; }
+/* Experiments table: hide the cell context menu (Add row/Delete row) entirely */
+#exp_table .cell-menu {
+    display: none !important;
+}
 /* Experiments table: prevent renaming column headers */
 #exp_table table thead th [contenteditable] {
     pointer-events: none !important;
+}
+/* Experiments table: non-checkbox cells are read-only — block click-to-edit */
+#exp_table td:not(:first-child) span[data-editable] {
+    pointer-events: none !important;
+    cursor: default !important;
+    user-select: text !important;
+}
+/* Experiments table: stronger contrast for unchecked checkboxes */
+#exp_table input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px !important;
+    height: 16px !important;
+    border: 2px solid #6b7280 !important;
+    border-radius: 3px !important;
+    background: white !important;
+    cursor: pointer !important;
+    position: relative !important;
+    flex-shrink: 0 !important;
+}
+#exp_table input[type="checkbox"]:checked {
+    background: #6366f1 !important;
+    border-color: #6366f1 !important;
+}
+#exp_table input[type="checkbox"]:checked::after {
+    content: "" !important;
+    display: block !important;
+    width: 4px !important;
+    height: 8px !important;
+    border: 2px solid white !important;
+    border-top: none !important;
+    border-left: none !important;
+    transform: rotate(45deg) !important;
+    position: absolute !important;
+    top: 1px !important;
+    left: 4px !important;
 }
 """
 
@@ -1210,7 +1271,7 @@ def run_xray(
                     exp_refresh_btn = gr.Button("↺ Refresh", scale=0, size="sm")
                     exp_archive_btn = gr.Button("🗃 Archive selected", scale=0, size="sm", variant="secondary")
                 exp_table = gr.DataFrame(
-                    headers=["☑", "experiment", "date", "agent", "model", "benchmark", "status", "avg_reward"],
+                    headers=["", "experiment", "date", "agent", "model", "benchmark", "status", "avg_reward"],
                     datatype=["bool", "str", "str", "str", "str", "str", "html", "str"],
                     col_count=(8, "fixed"),
                     interactive=True,
