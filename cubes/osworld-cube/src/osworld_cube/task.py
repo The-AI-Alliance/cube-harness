@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from cube.infra_utils import free_port, open_tunnel
+from cube.infra_utils import open_tunnel
 from PIL import Image
 from pydantic import PrivateAttr
 
@@ -162,24 +162,43 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
         if self._handle is None or self._extra_tunnels:
             return
 
-        tunnel = getattr(self._handle, "_tunnel", None)
-        tunnel_args = getattr(tunnel, "args", None)
-        if not isinstance(tunnel_args, (list, tuple)):
+        # AzureResourceHandle exposes _tunnels (plural list of subprocess.Popen)
+        # since the cube-standard SSH-tunnel refactor — the old single _tunnel
+        # attribute is gone. Walk the list and pull the first valid SSH argv.
+        tunnels = getattr(self._handle, "_tunnels", None) or []
+        if not tunnels:
+            # Fall back to legacy single-tunnel attribute for any handle that
+            # still uses it.
+            legacy = getattr(self._handle, "_tunnel", None)
+            if legacy is not None:
+                tunnels = [legacy]
+        ssh_privkey = ssh_user = vm_ip = None
+        for tun in tunnels:
+            tunnel_args = getattr(tun, "args", None)
+            if not isinstance(tunnel_args, (list, tuple)):
+                continue
+            try:
+                identity_index = tunnel_args.index("-i") + 1
+                ssh_privkey = str(tunnel_args[identity_index])
+                ssh_target = str(tunnel_args[-1])
+                ssh_user, vm_ip = ssh_target.split("@", 1)
+                break
+            except (ValueError, IndexError):
+                continue
+        if not (ssh_privkey and ssh_user and vm_ip):
+            logger.warning("Could not parse SSH tunnel arguments from handle; using default VM ports (Chrome CDP will refuse)")
             return
 
-        try:
-            identity_index = tunnel_args.index("-i") + 1
-            ssh_privkey = str(tunnel_args[identity_index])
-            ssh_target = str(tunnel_args[-1])
-            ssh_user, vm_ip = ssh_target.split("@", 1)
-        except (ValueError, IndexError):
-            logger.warning("Could not parse SSH tunnel arguments; using default VM ports")
-            return
-
-        self._chromium_port = free_port()
-        self._extra_tunnels.append(open_tunnel(vm_ip, ssh_user, ssh_privkey, self._chromium_port, _CHROMIUM_PORT))
-        self._vlc_port = free_port()
-        self._extra_tunnels.append(open_tunnel(vm_ip, ssh_user, ssh_privkey, self._vlc_port, _VLC_PORT))
+        # cube-standard's open_tunnel now picks its own local port atomically
+        # (kernel-allocated, race-free) and returns (proc, local_port). The
+        # old call here was passing free_port() as remote_port and CHROMIUM
+        # as max_attempts due to the signature change — this caused the
+        # tunnel to point at the wrong remote port and Chrome CDP to refuse
+        # connections. See cube-standard PR #99.
+        chromium_tunnel, self._chromium_port = open_tunnel(vm_ip, ssh_user, ssh_privkey, _CHROMIUM_PORT)
+        self._extra_tunnels.append(chromium_tunnel)
+        vlc_tunnel, self._vlc_port = open_tunnel(vm_ip, ssh_user, ssh_privkey, _VLC_PORT)
+        self._extra_tunnels.append(vlc_tunnel)
         logger.info(
             "Opened auxiliary VM tunnels: Chromium localhost:%d -> 9222, VLC localhost:%d -> 8080",
             self._chromium_port,
