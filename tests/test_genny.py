@@ -1,4 +1,4 @@
-"""Tests for Genny.
+"""Tests for Genny2.
 
 Most tests do NOT require LLM calls — they exercise pure functions and agent
 state manipulation directly. LLM-touching paths (_summarize_past, _act_pass,
@@ -11,8 +11,8 @@ import pytest
 from cube.core import Action, ActionSchema, Observation
 
 from cube_harness.agents.genny import (
-    Genny,
-    GennyConfig,
+    Genny2,
+    Genny2Config,
     NativeToolAdapter,
     TextToolAdapter,
     _format_action_list,
@@ -46,17 +46,17 @@ def _make_agent(
     enable_summarize: bool = False,
     summarize_cot_only: bool = False,
     tools_as_text: bool = False,
-) -> Genny:
-    config = GennyConfig(
+) -> Genny2:
+    config = Genny2Config(
         llm_config=LLMConfig(model_name="test"),
         enable_summarize=enable_summarize,
         summarize_cot_only=summarize_cot_only,
         tools_as_text=tools_as_text,
     )
-    return Genny(config=config, action_schemas=[_make_schema()])
+    return Genny2(config=config, action_schemas=[_make_schema()])
 
 
-def _simulate_completed_rounds(agent: Genny, n: int) -> None:
+def _simulate_completed_rounds(agent: Genny2, n: int) -> None:
     """Populate agent state as if n obs+asst rounds have completed (Mode A)."""
     agent.goal = [{"role": "user", "content": "goal"}]
     for i in range(n):
@@ -225,7 +225,7 @@ class TestTextToolAdapter:
 
 
 # ---------------------------------------------------------------------------
-# Genny state — no LLM required
+# Genny2 state — no LLM required
 # ---------------------------------------------------------------------------
 
 
@@ -579,6 +579,7 @@ class TestStep:
         agent.step(obs1)
         obs2 = Observation.from_text("second obs")
         agent.step(obs2)
+
         def _content(m: object) -> str:
             if isinstance(m, dict):
                 return m.get("content", "") or ""
@@ -632,64 +633,64 @@ def _llm_config() -> LLMConfig:
 
 class TestHintResolution:
     def test_task_hints_takes_precedence_over_hint(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), hint="general", task_hints={"t1": "specific"})
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config(), hint="general", task_hints={"t1": "specific"})
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         assert agent._task_hint == "specific"
 
     def test_falls_back_to_hint_when_no_task_id_match(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), hint="general", task_hints={"other": "x"})
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config(), hint="general", task_hints={"other": "x"})
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         assert agent._task_hint == "general"
 
     def test_empty_when_no_hint_and_no_match(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), task_hints={"other": "x"})
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config(), task_hints={"other": "x"})
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         assert agent._task_hint == ""
 
     def test_general_hint_applied_when_task_id_none(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), hint="fallback hint")
-        agent = Genny(config=config, action_schemas=[], task_id=None)
+        config = Genny2Config(llm_config=_llm_config(), hint="fallback hint")
+        agent = Genny2(config=config, action_schemas=[], task_id=None)
         assert agent._task_hint == "fallback hint"
 
     def test_task_hints_not_applied_when_task_id_none(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), hint="general", task_hints={"t1": "specific"})
-        agent = Genny(config=config, action_schemas=[], task_id=None)
+        config = Genny2Config(llm_config=_llm_config(), hint="general", task_hints={"t1": "specific"})
+        agent = Genny2(config=config, action_schemas=[], task_id=None)
         assert agent._task_hint == "general"
 
     def test_task_clarification_resolved_by_task_id(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), task_clarification={"t1": "answer format: numeric"})
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config(), task_clarification={"t1": "answer format: numeric"})
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         assert agent._task_clarification == "answer format: numeric"
 
     def test_task_clarification_empty_when_no_match(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), task_clarification={"other": "x"})
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config(), task_clarification={"other": "x"})
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         assert agent._task_clarification == ""
 
     def test_task_clarification_empty_when_task_id_none(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), task_clarification={"t1": "x"})
-        agent = Genny(config=config, action_schemas=[], task_id=None)
+        config = Genny2Config(llm_config=_llm_config(), task_clarification={"t1": "x"})
+        agent = Genny2(config=config, action_schemas=[], task_id=None)
         assert agent._task_clarification == ""
 
     def test_hint_injected_into_base_prompt(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), hint="use keyboard_type_into for dropdowns")
-        agent = Genny(config=config, action_schemas=[], task_id=None)
+        config = Genny2Config(llm_config=_llm_config(), hint="use keyboard_type_into for dropdowns")
+        agent = Genny2(config=config, action_schemas=[], task_id=None)
         agent.goal = [{"role": "user", "content": "do the task"}]
         messages = agent._build_base_prompt()
         contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
         assert any("use keyboard_type_into for dropdowns" in c for c in contents)
 
     def test_clarification_injected_into_base_prompt(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), task_clarification={"t1": "answer must be numeric"})
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config(), task_clarification={"t1": "answer must be numeric"})
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         agent.goal = [{"role": "user", "content": "do the task"}]
         messages = agent._build_base_prompt()
         contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
         assert any("answer must be numeric" in c for c in contents)
 
     def test_no_hint_messages_when_both_empty(self) -> None:
-        config = GennyConfig(llm_config=_llm_config())
-        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        config = Genny2Config(llm_config=_llm_config())
+        agent = Genny2(config=config, action_schemas=[], task_id="t1")
         agent.goal = [{"role": "user", "content": "do the task"}]
         messages = agent._build_base_prompt()
         contents = " ".join(m.get("content", "") for m in messages if isinstance(m, dict))
@@ -697,14 +698,205 @@ class TestHintResolution:
         assert "Additional task details" not in contents
 
     def test_make_wires_task_id(self) -> None:
-        config = GennyConfig(llm_config=_llm_config(), task_hints={"t1": "my hint"})
+        config = Genny2Config(llm_config=_llm_config(), task_hints={"t1": "my hint"})
         agent = config.make(task_id="t1")
         assert agent._task_hint == "my hint"
 
     def test_none_task_id_logs_debug_when_hints_configured(self, caplog: pytest.LogCaptureFixture) -> None:
         import logging
 
-        config = GennyConfig(llm_config=_llm_config(), task_hints={"t1": "x"})
+        config = Genny2Config(llm_config=_llm_config(), task_hints={"t1": "x"})
         with caplog.at_level(logging.DEBUG, logger="cube_harness.agents.genny"):
-            Genny(config=config, action_schemas=[], task_id=None)
+            Genny2(config=config, action_schemas=[], task_id=None)
         assert any("task_id is None" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Flat history mode
+# ---------------------------------------------------------------------------
+
+
+def _make_flat_agent(step_prompt: str = "", enable_summarize: bool = False) -> Genny2:
+    config = Genny2Config(
+        llm_config=LLMConfig(model_name="test"),
+        flat_history=True,
+        step_prompt=step_prompt,
+        enable_summarize=enable_summarize,
+    )
+    return Genny2(config=config, action_schemas=[_make_schema()])
+
+
+class TestFlatHistory:
+    def test_base_prompt_uses_history_groups_not_summaries(self) -> None:
+        """flat_history=True: _build_base_prompt renders history groups even when enable_summarize=True."""
+        agent = _make_flat_agent(enable_summarize=True)
+        agent.goal = [{"role": "user", "content": "task"}]
+        agent.summaries = ["step1 summary"]
+        agent.history.append([{"role": "user", "content": "obs1"}])
+        agent.history.append([{"role": "assistant", "content": "asst1"}])
+        messages = agent._build_base_prompt()
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        assert "obs1" in contents
+        assert "asst1" in contents
+        assert "step1 summary" not in contents
+
+    def test_choose_context_no_trailing_message_when_step_prompt_empty(self) -> None:
+        """flat_history=True, step_prompt='': no trailing user message appended."""
+        agent = _make_flat_agent(step_prompt="")
+        agent.goal = [{"role": "user", "content": "task"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
+        messages = agent._choose_context()
+        last = messages[-1]
+        # Last message should be the obs, not an injected user prompt
+        assert isinstance(last, dict) and last.get("content") == "obs"
+
+    def test_choose_context_trailing_message_when_step_prompt_set(self) -> None:
+        """flat_history=True, step_prompt non-empty: trailing message appended."""
+        agent = _make_flat_agent(step_prompt="What next?")
+        agent.goal = [{"role": "user", "content": "task"}]
+        agent._latest_obs = [{"role": "user", "content": "obs"}]
+        messages = agent._choose_context()
+        last = messages[-1]
+        assert isinstance(last, dict) and last.get("content") == "What next?"
+
+    def test_flat_mode_commits_obs_and_asst_to_history(self) -> None:
+        """flat_history=True: each step commits obs+asst to history for flat base prompt."""
+        agent = _make_flat_agent()
+        agent.llm = MagicMock(return_value=_mock_llm_response("action taken"))
+        agent.step(Observation.from_text("initial task"))
+        agent.step(Observation.from_text("tool result"))
+        # After step 2, history should contain rounds from step 1
+        assert len(agent.history) >= 1
+
+    def test_flat_mode_step2_base_prompt_includes_step1_history(self) -> None:
+        """After step 1, step 2's base prompt includes step 1's completed round."""
+        agent = _make_flat_agent()
+        agent.llm = MagicMock(return_value=_mock_llm_response("step1 response"))
+        agent.step(Observation.from_text("initial task"))
+        agent.step(Observation.from_text("tool result"))
+        messages = agent._build_base_prompt()
+
+        def _content(m: object) -> str:
+            if isinstance(m, dict):
+                return m.get("content", "") or ""
+            return getattr(m, "content", "") or ""
+
+        all_contents = [_content(m) for m in messages]
+        assert any("step1 response" in c for c in all_contents)
+
+
+# ---------------------------------------------------------------------------
+# cost_limit
+# ---------------------------------------------------------------------------
+
+
+def _mock_llm_response_with_cost(cost: float, text: str = "response") -> LLMResponse:
+    from litellm import Message as LitellmMessage
+
+    return LLMResponse(
+        message=LitellmMessage(role="assistant", content=text),
+        usage=Usage(prompt_tokens=10, completion_tokens=5, cost=cost),
+    )
+
+
+class TestCostLimit:
+    def test_no_stop_when_below_limit(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), cost_limit=1.0)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_cost(0.10))
+        agent.step(Observation.from_text("task"))
+        # LLM was called (not short-circuited by cost limit)
+        agent.llm.assert_called_once()
+
+    def test_stop_when_limit_reached(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), cost_limit=0.05)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_cost(0.10))
+        agent.step(Observation.from_text("task"))  # spends $0.10, exceeds limit
+        result = agent.step(Observation.from_text("task2"))
+        assert result.actions[0].name == "final_step"
+
+    def test_no_limit_when_cost_limit_none(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), cost_limit=None)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent._total_cost = 999.0
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_cost(0.0))
+        agent.step(Observation.from_text("task"))
+        # LLM was called despite enormous accumulated cost because cost_limit=None
+        agent.llm.assert_called_once()
+
+    def test_total_cost_accumulates(self) -> None:
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), cost_limit=10.0)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_cost(0.50))
+        agent.step(Observation.from_text("t1"))
+        agent.step(Observation.from_text("t2"))
+        assert agent._total_cost == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# max_format_errors
+# ---------------------------------------------------------------------------
+
+
+def _mock_response_with_tool_call(name: str = "click") -> LLMResponse:
+    from litellm import Message as LitellmMessage
+    from litellm.types.utils import ChatCompletionMessageToolCall, Function
+
+    tc = ChatCompletionMessageToolCall(
+        id="call_1",
+        function=Function(name=name, arguments='{"element_id": "btn"}'),
+        type="function",
+    )
+    return LLMResponse(
+        message=LitellmMessage(role="assistant", content=None, tool_calls=[tc]),
+        usage=Usage(prompt_tokens=10, completion_tokens=5),
+    )
+
+
+class TestMaxFormatErrors:
+    def test_no_retry_when_zero(self) -> None:
+        """max_format_errors=0: no retry, empty actions list returned."""
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), max_format_errors=0)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response("no tool calls"))
+        result = agent.step(Observation.from_text("task"))
+        agent.llm.assert_called_once()
+        assert result.actions == []
+
+    def test_retries_on_no_tool_calls(self) -> None:
+        """max_format_errors=2: LLM called up to 3 times (1 initial + 2 retries)."""
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), max_format_errors=2)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        no_tool_resp = _mock_llm_response("no tool calls")
+        tool_resp = _mock_response_with_tool_call()
+        # First call: no tool calls. Second call: has tool call.
+        agent.llm = MagicMock(side_effect=[no_tool_resp, tool_resp])
+        result = agent.step(Observation.from_text("task"))
+        assert agent.llm.call_count == 2
+        assert len(result.actions) == 1
+
+    def test_stop_when_all_retries_exhausted(self) -> None:
+        """When all retries fail, STOP action is returned."""
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), max_format_errors=2)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        agent.llm = MagicMock(return_value=_mock_llm_response("no tool calls"))
+        result = agent.step(Observation.from_text("task"))
+        assert agent.llm.call_count == 3  # initial + 2 retries
+        assert result.actions[0].name == "final_step"
+
+    def test_correction_message_appended_on_retry(self) -> None:
+        """On retry the correction user message and empty response are in the next prompt."""
+        config = Genny2Config(llm_config=LLMConfig(model_name="test"), max_format_errors=1)
+        agent = Genny2(config=config, action_schemas=[_make_schema()])
+        no_tool_resp = _mock_llm_response("no tool calls")
+        tool_resp = _mock_response_with_tool_call()
+        agent.llm = MagicMock(side_effect=[no_tool_resp, tool_resp])
+        agent.step(Observation.from_text("task"))
+        # agent.llm is called as agent.llm(prompt) so args[0] is the Prompt
+        second_prompt = agent.llm.call_args_list[1][0][0]
+        contents = [
+            m.get("content", "") if isinstance(m, dict) else (getattr(m, "content", "") or "")
+            for m in second_prompt.messages
+        ]
+        assert any("No tool calls found" in (c or "") for c in contents)
