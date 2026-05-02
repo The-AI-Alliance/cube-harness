@@ -3,7 +3,7 @@
 import pprint
 from datetime import datetime
 from functools import partial
-from typing import Callable, List, Literal
+from typing import Any, Callable, List, Literal
 from uuid import uuid4
 
 from cube.core import TypedBaseModel
@@ -43,6 +43,11 @@ class LLMConfig(TypedBaseModel):
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
     timeout: float | None = 120.0  # seconds per attempt; None = no timeout
+    # Anthropic prompt caching. "auto" places ephemeral cache_control breakpoints at the
+    # system message and the last assistant message, plus the last tool definition. This
+    # gives a stable anchor (system + tools) and a rolling boundary (last assistant) that
+    # extends across steps as the conversation grows. No-op for non-Anthropic models.
+    set_cache_control: Literal["auto"] | None = None
 
     def make(self) -> "LLM":
         """Create LLM instance from config."""
@@ -71,12 +76,63 @@ class LLMResponse(TypedBaseModel):
     usage: Usage
 
 
+def _is_anthropic_model(model_name: str) -> bool:
+    """Heuristic: does this model route to Anthropic via LiteLLM?
+
+    Covers direct Anthropic, Bedrock-Anthropic, and Vertex-Claude routings. Used to
+    gate Anthropic-specific cache_control payloads so they don't leak to other providers.
+    """
+    name = model_name.lower()
+    return "claude" in name or "anthropic" in name
+
+
+def _msg_role(msg: Any) -> str | None:
+    if isinstance(msg, dict):
+        return msg.get("role")
+    return getattr(msg, "role", None)
+
+
+def _build_cache_injection_points(messages: list) -> list[dict]:
+    """Return ephemeral cache_control breakpoints: first system msg + last assistant msg.
+
+    Two breakpoints anchor a static prefix (system + tools above it) and a rolling
+    boundary that naturally extends each step as new assistant turns are appended.
+    Anthropic's longest-prefix match handles cross-step cache hits.
+    """
+    points: list[dict] = []
+    control = {"type": "ephemeral"}
+    for i, msg in enumerate(messages):
+        if _msg_role(msg) == "system":
+            points.append({"location": "message", "index": i, "control": control})
+            break
+    for i in range(len(messages) - 1, -1, -1):
+        if _msg_role(messages[i]) == "assistant":
+            if not any(p["index"] == i for p in points):
+                points.append({"location": "message", "index": i, "control": control})
+            break
+    return points
+
+
+def _mark_last_tool_for_cache(tools: list[dict]) -> list[dict]:
+    """Return a copy of tools with ephemeral cache_control on the last entry.
+
+    Caches the entire tools array prefix on Anthropic. LiteLLM passes the
+    cache_control field through to the Anthropic API.
+    """
+    if not tools:
+        return tools
+    result = [dict(t) for t in tools]
+    result[-1] = {**result[-1], "cache_control": {"type": "ephemeral"}}
+    return result
+
+
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
 
     def __call__(self, prompt: Prompt) -> LLMResponse:
-        kwargs = {
+        tools = prompt.tools
+        kwargs: dict[str, Any] = {
             "model": self.config.model_name,
             "temperature": self.config.temperature,
             "max_completion_tokens": self.config.max_completion_tokens,
@@ -84,12 +140,17 @@ class LLM:
             "retry_strategy": self.config.retry_strategy,
             "tool_choice": self.config.tool_choice,
             "parallel_tool_calls": self.config.parallel_tool_calls,
-            "tools": prompt.tools,
             "messages": prompt.messages,
             "timeout": self.config.timeout,
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.set_cache_control == "auto" and _is_anthropic_model(self.config.model_name):
+            injection_points = _build_cache_injection_points(prompt.messages)
+            if injection_points:
+                kwargs["cache_control_injection_points"] = injection_points
+            tools = _mark_last_tool_for_cache(tools)
+        kwargs["tools"] = tools
         response = completion_with_retries(**kwargs)
         usage = self._extract_usage(response)
         return LLMResponse(message=response.choices[0].message, usage=usage)
