@@ -81,7 +81,16 @@ You control the computer by calling run_pyautogui(code) with valid Python/pyauto
 
 
 def main(debug: bool) -> None:
-    output_dir = make_experiment_output_dir("genny_azure", "osworld-cube")
+    # Resume support: pass `OSWORLD_RESUME_DIR=/path/to/prior/eval/output` to
+    # pick up where a previous run left off (re-runs anything not COMPLETED /
+    # MAX_STEPS_REACHED). Otherwise creates a fresh timestamped output dir.
+    resume_from = os.environ.get("OSWORLD_RESUME_DIR")
+    if resume_from:
+        from pathlib import Path
+        output_dir = Path(resume_from)
+        print(f"RESUMING from existing output dir: {output_dir}")
+    else:
+        output_dir = make_experiment_output_dir("genny_azure", "osworld-cube")
 
     llm_config = LLMConfig(model_name="azure/gpt-5-mini", temperature=1.0)
     agent_config = GennyConfig(
@@ -104,7 +113,43 @@ def main(debug: bool) -> None:
         use_som=False,
     )
     OSWorldBenchmarkConfig.install()
-    benchmark_config = benchmark_config.named_subset("test_small")
+    # Subset selectable via env var so we can iterate fast on test_small (39)
+    # before scaling to test_nogdrive (360). Default to test_small. We always
+    # filter out gdrive-dependent tasks (test_small ∩ test_nogdrive) since
+    # those need credentials we don't reliably have wired up.
+    subset = os.environ.get("OSWORLD_SUBSET", "test_small")
+    benchmark_config = benchmark_config.named_subset(subset)
+    if subset in ("test_small", "test_all"):
+        nogdrive_ids = {
+            tid for tid, tm in OSWorldBenchmarkConfig.task_metadata.items()
+            if "test_nogdrive" in (getattr(tm, "test_sets", None) or [])
+        }
+        kept = [tid for tid in benchmark_config.task_ids or list(benchmark_config.task_metadata)
+                if tid in nogdrive_ids]
+        n_dropped = len(benchmark_config.task_ids or benchmark_config.task_metadata) - len(kept)
+        benchmark_config.task_ids = kept
+        if n_dropped:
+            logging.info("Filtered out %d gdrive task(s) from %s", n_dropped, subset)
+    logging.info("OSWorld eval: subset=%s, %d tasks", subset, len(benchmark_config.task_ids or benchmark_config.task_metadata))
+
+    print("--- pre-run cleanup ---")
+    pre_deleted = INFRA.cleanup_orphaned_resources()
+    if pre_deleted:
+        n = sum(len(v) for v in pre_deleted.values())
+        print(f"Cleaned up {n} orphaned resource(s) from prior runs")
+
+    # Pre-warm the Azure CLI token cache on disk before Ray workers spawn.
+    # Each Ray worker is a fresh Python process that calls `az account
+    # get-access-token` on first auth — at n_cpus=100+ that subprocess storm
+    # collides on `~/.azure/msal_token_cache.bin` and ~all workers fail with
+    # CredentialUnavailableError. By running `az` once here, the cache is
+    # populated; worker `az` calls then read the warm cache and return fast
+    # without hitting login.microsoftonline.com.
+    print("--- pre-warm Azure CLI token cache ---")
+    from cube_infra_azure.azure import _get_cached_cred
+    cred = _get_cached_cred()
+    tok = cred.get_token("https://management.azure.com/.default")
+    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time())/60:.1f}min")
 
     exp = Experiment(
         name="osworld_azure_gpt5_mini",
@@ -112,7 +157,8 @@ def main(debug: bool) -> None:
         agent_config=agent_config,
         benchmark_config=benchmark_config,
         infra=INFRA,
-        max_steps=15,
+        max_steps=100,
+        resume=bool(resume_from),
     )
 
     try:
@@ -132,9 +178,9 @@ def main(debug: bool) -> None:
             print(f"Output directory: {output_dir}")
             print(f"Model: {llm_config.model_name}")
             print(f"Infra: {INFRA.fingerprint()}")
-            print("Parallelism: 3 workers")
+            print("Parallelism: n_cpus=50")
             print("=" * 60 + "\n")
-            run_with_ray(exp, n_cpus=40)
+            run_with_ray(exp, n_cpus=50)
     finally:
         # Sweep any VMs orphaned by Ray force-kills or worker crashes.
         # Normal completions are already cleaned up by task.close() in episode.py.
