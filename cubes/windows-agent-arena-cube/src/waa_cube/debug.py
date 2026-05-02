@@ -20,7 +20,7 @@ import logging
 from pathlib import Path
 from typing import ClassVar
 
-from cube.benchmark import Benchmark
+from cube.benchmark import BenchmarkConfig
 from cube.container import ContainerBackend
 from cube.core import Action, ActionSchema, Observation
 from cube.task import TaskConfig, TaskMetadata
@@ -63,7 +63,7 @@ class DebugWAABenchmark(WAABenchmark):
     """
 
     benchmark_metadata = WAABenchmark.benchmark_metadata.model_copy(update={"name": "waa-cube-debug", "num_tasks": 2})
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = Benchmark.task_metadata_from_json(_DEBUG_TASK_METADATA_JSON)
+    task_metadata: ClassVar[dict[str, TaskMetadata]] = BenchmarkConfig.task_metadata_from_json(_DEBUG_TASK_METADATA_JSON)
     task_config_class: ClassVar[type[TaskConfig]] = DebugWAATaskConfig
 
     def install(self) -> None:
