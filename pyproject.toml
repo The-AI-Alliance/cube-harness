@@ -12,7 +12,6 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc8",
-    "cube-computer-tool>=0.1.0",
     "cube-browser-playwright>=0.2.0",  # added back temporarily for browsergym.py, should be removed once browsergym.py is moved to cube-browser-tool package
     "pydantic~=2.0",
     "litellm~=1.80.8",
@@ -35,19 +34,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# WorkArena benchmark dependencies
-workarena = [
-    "workarena-cube",
-]
-# Miniwob cube dependencies
-miniwob = [
-    "miniwob-cube",
-]
-# WAA benchmark dependencies
-waa = [
-    "waa-cube",
-    "cube-infra-azure",
-]
 # XRay trajectory viewer
 analyze = [
     "gradio~=5.49",
@@ -61,18 +47,6 @@ build-backend = "uv_build"
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
-[tool.uv.sources]
-# TODO: drop once cube-standard publishes the rc that includes
-# `TaskExecutionInfo`. The waa-cube refactor uses it; the latest published
-# cube-standard (0.1.0rc6) doesn't export it yet. PRs should declare
-# `Depends-on: cube-standard/main` (or a pinned ref) so `make review PR=<n>`
-# resolves it.
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "fix/waa-guest-agent-methods" }
-cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", rev = "fix/waa-guest-agent-methods" }
-cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", rev = "fix/waa-guest-agent-methods" }
-miniwob-cube = { path = "cubes/miniwob", editable = true }
-workarena-cube = { path = "cubes/workarena", editable = true }
-waa-cube = { path = "cubes/windows-agent-arena-cube", editable = true }
 
 [tool.ruff]
 fix = true
