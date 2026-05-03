@@ -249,8 +249,12 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             return "(no test commands)"
 
         outputs = []
+        working_dir = self.tool._config.working_dir
+        # Prepend working_dir (and src/ for src-layout packages) to PYTHONPATH so that
+        # source files patched in working_dir take precedence over any site-packages copy.
+        pythonpath = f"export PYTHONPATH={working_dir}:{working_dir}/src:${{PYTHONPATH:-}}"
         for cmd in test_cmds:
-            full_cmd = f"{CONDA_ACTIVATE} && {cmd}"  # tool.working_dir already set
+            full_cmd = f"{pythonpath}; {CONDA_ACTIVATE} && {cmd}"
             output = self.tool.bash_unlimited(full_cmd, timeout=timeout)
             outputs.append(output)
         return "\n".join(outputs)
