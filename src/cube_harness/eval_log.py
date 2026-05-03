@@ -277,7 +277,9 @@ class BenchmarkSubset(TypedBaseModel):
     def from_benchmark_config(cls, benchmark_config: BenchmarkConfig) -> "BenchmarkSubset":
         """Derive BenchmarkSubset from a cube BenchmarkConfig object."""
         name = benchmark_config.benchmark_metadata.name
-        n_tasks = len(benchmark_config.task_metadata)
+        # task_metadata is a ClassVar (full catalog); get_task_configs() respects
+        # any subset filter applied via subset_from_list / subset_from_glob.
+        n_tasks = sum(1 for _ in benchmark_config.get_task_configs())
         return cls(name=name, n_tasks=n_tasks)
 
 
