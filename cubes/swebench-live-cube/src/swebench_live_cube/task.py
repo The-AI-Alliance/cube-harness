@@ -145,11 +145,16 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             extra_setup="git config --global --add safe.directory /tmp/testbed",
         )
         if new_wd != self.tool_config.working_dir:
-            # Conda editable-install still points to the original /testbed after relocation.
-            # Re-register the package so imports use the relocated copy that patches modify.
+            # After cp -a, the conda editable install still points to the original /testbed.
+            # Directly update every .egg-link / .pth file that references the old path so that
+            # Python imports from the relocated copy (where patches will be applied).
+            orig_wd = self.tool_config.working_dir
             self._container.exec(
-                f"{CONDA_ACTIVATE} && pip install --no-deps -e {new_wd} 2>/dev/null || true",
-                timeout=120,
+                f"find /opt/miniconda3 -type f \\( -name '*.egg-link' -o -name '*.pth' \\)"
+                f" -exec grep -q '{orig_wd}' {{}} \\;"
+                f" -exec sed -i 's|{orig_wd}|{new_wd}|g' {{}} \\;"
+                f" 2>/dev/null || true",
+                timeout=30,
             )
         self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
