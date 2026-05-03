@@ -9,10 +9,10 @@ import shlex
 from typing import Any
 
 from cube.container import ContainerBackend, relocate_if_readonly
-from cube.core import Observation
-from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
+from cube.core import ActionSchema, Observation
+from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
-from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
+from swebench_verified_cube.tool import BashOnlySWEBenchTool, SWEBenchTool, SWEBenchToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +95,38 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
             )
         return self.execution_info
 
+    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
+        # Anthropic requires input_schema to have {"type": "object"}, not {}.
+        # STOP_ACTION uses parameters={}, which LiteLLM passes through verbatim
+        # and Anthropic rejects. Override with a valid empty-object schema.
+        stop = ActionSchema(
+            name=STOP_ACTION.name,
+            description=STOP_ACTION.description,
+            parameters={"type": "object", "properties": {}},
+        )
+        return actions + [stop]
+
     def _build_tool(self) -> None:
-        """Copy /testbed to a writable location if the container mounts it read-only."""
+        """Ensure /testbed files are writable and git-safe, then build the tool.
+
+        Two pre-flight fixes applied unconditionally:
+        1. git safe.directory: Git 2.35.2+ refuses to operate in repos owned by a
+           different user. Configure /testbed as safe so agents can run `git diff`.
+        2. chmod via cp/mv: some containers ship root-owned 644 .py files inside a
+           world-writable /testbed. mv unlinks via the writable parent and recreates
+           with the runtime user's ownership, making every file writable without sudo.
+           Running before relocate_if_readonly keeps conda editable-install paths stable.
+        """
+        self._container.exec(
+            f"git config --global --add safe.directory {self.tool_config.working_dir}",
+            timeout=30,
+        )
+        self._container.exec(
+            f"find {self.tool_config.working_dir} -not -path '*/.git/*' -name '*.py' ! -writable"
+            f' -exec sh -c \'cp "$1" "$1.tmp" && mv "$1.tmp" "$1"\' _ {{}} \\;'
+            f" 2>/dev/null || true",
+            timeout=120,
+        )
         new_wd = relocate_if_readonly(
             self._container,
             self.tool_config.working_dir,
@@ -110,7 +140,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
         # Oracle mode: write gold patch for debug/baseline use
         if self.oracle_mode and self._exec.patch:
-            assert isinstance(self.tool, SWEBenchTool)
+            assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
             b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
@@ -125,7 +155,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
-        assert isinstance(self.tool, SWEBenchTool)
+        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
 
         # Apply test patch
         self._apply_patch(self._exec.test_patch)
@@ -163,7 +193,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
     def _apply_patch(self, patch: str) -> str:
         """Apply a unified diff patch to /testbed using git apply with fallbacks."""
-        assert isinstance(self.tool, SWEBenchTool)
+        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
         b64 = base64.b64encode(patch.encode()).decode()
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
@@ -208,7 +238,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         - non-zero exit but zero failures: old sympy containers emit import-level
           deprecation errors that inflate the exit code even when all tests passed.
         """
-        assert isinstance(self.tool, SWEBenchTool)
+        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
         if not test_directives:
             return True, ""
 
@@ -222,6 +252,16 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
             return False, output + "\n[timed out]"
         if result.exit_code == 4 and not strict:
             return True, output
+        # pytest exit-4 ("no tests collected") also fires when test IDs are truncated, e.g.
+        # "test_X[(1," with no closing "]" — a SWE-bench dataset artifact. No agent can fix
+        # this, so treat it as pass even in strict (F2P) mode.
+        if result.exit_code == 4 and strict:
+            if re.search(r"\[\s*[^\]]*$", "\n".join(test_directives), re.MULTILINE):
+                logger.warning(
+                    "_run_tests: F2P test IDs appear truncated (no closing ']'); treating as pass. Directives: %r",
+                    test_directives,
+                )
+                return True, output
         if result.exit_code != 0 and not strict:
             tests_ran = bool(re.search(r"\b\d+\s+passed\b", output, re.IGNORECASE))
             no_failures = not bool(re.search(r"\b\d+\s+failed\b", output, re.IGNORECASE))
@@ -230,26 +270,38 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         return result.exit_code == 0, output
 
     @staticmethod
-    def _normalize_django_directive(directive: str) -> str:
+    def _normalize_django_directive(directive: str) -> str | None:
         """Convert SWE-bench unittest verbose format to Django runtests.py format.
 
         SWE-bench stores test directives in Python unittest verbose output format:
             "test_method (module.path.ClassName)"
         Django's runtests.py expects:
             "module.path.ClassName.test_method"
+
+        Returns None for malformed directives that look like human-readable test
+        descriptions (spaces, special chars) — SWE-bench dataset artifacts that
+        cannot be collected and would cause ModuleNotFoundError.
         """
-        m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive.strip())
+        directive = directive.strip()
+        m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive)
         if m:
             method, class_path = m.group(1), m.group(2)
             return f"{class_path}.{method}"
-        return directive  # already in the right format or unrecognised — pass through
+        # A valid Python dotted path has no spaces or special chars.
+        if re.search(r"[\s#'\"]", directive):
+            logger.debug("Skipping malformed P2P directive (bad test ID in dataset): %r", directive)
+            return None
+        return directive
 
     @staticmethod
     def _build_test_cmd(repo: str, test_directives: list[str]) -> str:
         """Build the test command based on repo's test framework."""
         if "django" in repo:
             normalized = [SWEBenchVerifiedTask._normalize_django_directive(t) for t in test_directives]
-            tests = " ".join(shlex.quote(t) for t in normalized)
+            valid = [t for t in normalized if t is not None]
+            if not valid:
+                return "true"  # all directives were malformed; treat as pass
+            tests = " ".join(shlex.quote(t) for t in valid)
             # PYTHONIOENCODING=utf-8: Django's test runner emits Unicode characters
             # (e.g. U+2026 ellipsis) that fail when the container locale is ASCII-only.
             return f"PYTHONIOENCODING=utf-8 ./tests/runtests.py --verbosity 2 {tests}"
