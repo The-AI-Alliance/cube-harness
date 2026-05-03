@@ -144,6 +144,13 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             "/tmp/testbed",
             extra_setup="git config --global --add safe.directory /tmp/testbed",
         )
+        if new_wd != self.tool_config.working_dir:
+            # Conda editable-install still points to the original /testbed after relocation.
+            # Re-register the package so imports use the relocated copy that patches modify.
+            self._container.exec(
+                f"{CONDA_ACTIVATE} && pip install --no-deps -e {new_wd} 2>/dev/null || true",
+                timeout=120,
+            )
         self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
