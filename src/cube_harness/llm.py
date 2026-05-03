@@ -47,7 +47,7 @@ class LLMConfig(TypedBaseModel):
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
-    tool_choice: Literal["auto", "none", "required"] = "auto"
+    tool_choice: Literal["auto", "none", "required"] | None = "auto"
     parallel_tool_calls: bool = False
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
