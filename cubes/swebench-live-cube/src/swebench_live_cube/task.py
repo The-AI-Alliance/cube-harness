@@ -146,16 +146,27 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
         )
         if new_wd != self.tool_config.working_dir:
             # After cp -a, the conda editable install still points to the original /testbed.
-            # Directly update every .egg-link / .pth file that references the old path so that
-            # Python imports from the relocated copy (where patches will be applied).
+            # Use the testbed Python to locate the real site-packages and update every
+            # .egg-link / .pth file that references the old path, so Python imports from
+            # the relocated copy (where patches will be applied).
             orig_wd = self.tool_config.working_dir
-            self._container.exec(
-                f"find /opt/miniconda3 -type f \\( -name '*.egg-link' -o -name '*.pth' \\)"
-                f" -exec grep -q '{orig_wd}' {{}} \\;"
-                f" -exec sed -i 's|{orig_wd}|{new_wd}|g' {{}} \\;"
-                f" 2>/dev/null || true",
+            py_script = (
+                "import site, os; "
+                "dirs = site.getsitepackages() + [site.getusersitepackages()]; "
+                "updated = []; "
+                "[updated.append(p) or open(p, 'w').write(c.replace(orig, new)) "
+                " for d in dirs "
+                " for root, _, files in os.walk(d) "
+                " for fname in files if fname.endswith(('.egg-link', '.pth')) "
+                " for p in [os.path.join(root, fname)] "
+                " for c in [open(p).read()] if orig in c]; "
+                "print('editable-install paths updated:', len(updated), updated)"
+            )
+            result = self._container.exec(
+                f"{CONDA_ACTIVATE} && python -c \"orig='{orig_wd}'; new='{new_wd}'; {py_script}\" 2>/dev/null || true",
                 timeout=30,
             )
+            logger.info("Editable-install path update: %s", result.stdout.strip())
         self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
