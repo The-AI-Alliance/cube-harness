@@ -163,6 +163,12 @@ class Genny2Config(AgentConfig):
     # Empty string = no trailing message (mini-swe-agent style).
     step_prompt: str = ""
 
+    # goal_template: template applied to the first observation (the task/problem statement).
+    # Use "{{task}}" as the placeholder for the raw observation text.
+    # Empty string = use raw observation text unchanged (default).
+    # Useful for wrapping the issue in <pr_description> + <instructions> blocks (mini-swe-agent style).
+    goal_template: str = ""
+
     # Flat history mode: True = linear conversation with no injected summaries/headers,
     # equivalent to mini-swe-agent prompt structure. Summaries are still accumulated
     # internally (for logging/XRay) but not injected into the prompt.
@@ -188,6 +194,11 @@ class Genny2Config(AgentConfig):
     # the goal — not as a separate hint section.
     task_clarification: dict[str, str] = Field(default_factory=dict)
 
+    # Observation format for tool results (role="tool" messages).
+    # "raw"        = send content unchanged (default).
+    # "output_tag" = wrap content in <output>...</output>, matching mini-swe-agent format.
+    obs_format: str = "raw"
+
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
@@ -209,7 +220,12 @@ class Genny2Config(AgentConfig):
         return name
 
     def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny2":
-        return Genny2(config=self, action_schemas=action_set or [], task_id=task_id)
+        schemas = action_set or []
+        # magic_submit uses bash magic-string submission; exclude final_step so the LLM sees
+        # only bash — matching mini-swe-agent's single-tool interface exactly.
+        if self.obs_format == "magic_submit":
+            schemas = [s for s in schemas if s.name != "final_step"]
+        return Genny2(config=self, action_schemas=schemas, task_id=task_id)
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +284,8 @@ class Genny2(Agent):
         self._total_cost: float = 0.0
         self._total_tokens: int = 0
 
+    _MAGIC_SUBMIT = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
+
     def step(self, obs: Observation) -> AgentOutput:
         if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
             logger.info("Max actions reached, issuing STOP action.")
@@ -280,6 +298,18 @@ class Genny2(Agent):
         if self.config.token_limit is not None and self._total_tokens >= self.config.token_limit:
             logger.info(f"Token limit {self.config.token_limit} reached ({self._total_tokens} used), issuing STOP.")
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
+
+        # Magic-string submission detection (mini-swe-agent compatibility).
+        # When obs_format="magic_submit", the agent submits by running:
+        #   echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && cat patch.txt
+        # Search all tool messages for the magic string — checking only the first line
+        # fails when BashOnlySWEBenchTool prepends <returncode>N</returncode>.
+        if self.config.obs_format == "magic_submit" and self._actions_cnt > 0:
+            raw_obs = obs.to_llm_messages()
+            obs_combined = "\n".join(m.get("content", "") if isinstance(m, dict) else "" for m in raw_obs)
+            if self._MAGIC_SUBMIT in obs_combined:
+                logger.info("Genny2: magic submission string detected — stopping episode.")
+                return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
 
@@ -331,6 +361,13 @@ class Genny2(Agent):
 
     def _obs_to_messages(self, obs: Observation) -> list[dict | Message]:
         messages = cast(list[dict | Message], obs.to_llm_messages())
+        if self.config.obs_format in ("output_tag", "magic_submit"):
+            wrapped = []
+            for m in messages:
+                if isinstance(m, dict) and m.get("role") == "tool" and isinstance(m.get("content"), str):
+                    m = {**m, "content": f"<output>\n{m['content']}\n</output>"}
+                wrapped.append(m)
+            messages = cast(list[dict | Message], wrapped)
         if self.config.max_obs_chars is not None:
             messages = cast(list[dict | Message], [_truncate_message(m, self.config.max_obs_chars) for m in messages])
         return messages
@@ -338,7 +375,14 @@ class Genny2(Agent):
     def _ingest_obs(self, obs_messages: list[dict | Message]) -> None:
         """On step 0 extract goal; on all steps park the obs in _latest_obs."""
         if not self.goal:
-            self.goal = [obs_messages[0]]
+            first = obs_messages[0]
+            if self.config.goal_template and "{{task}}" in self.config.goal_template:
+                raw = first.get("content", "") if isinstance(first, dict) else str(first)
+                first = {
+                    **(first if isinstance(first, dict) else {}),
+                    "content": self.config.goal_template.replace("{{task}}", raw),
+                }
+            self.goal = [first]
             self._latest_obs = list(obs_messages[1:])
         else:
             self._latest_obs = list(obs_messages)
