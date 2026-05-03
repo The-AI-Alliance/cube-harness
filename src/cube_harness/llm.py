@@ -38,7 +38,7 @@ class LLMConfig(TypedBaseModel):
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
-    tool_choice: Literal["auto", "none", "required"] = "auto"
+    tool_choice: Literal["auto", "none", "required"] | None = "auto"
     parallel_tool_calls: bool = False
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
@@ -163,7 +163,13 @@ class LLM:
             if injection_points:
                 kwargs["cache_control_injection_points"] = injection_points
             tools = _mark_last_tool_for_cache(tools)
-        kwargs["tools"] = tools
+        if tools:
+            kwargs["tools"] = tools
+        if not tools or self.config.tool_choice is None:
+            # Drop tool_choice / parallel_tool_calls when there are no tools (some providers
+            # reject tool_choice without a tools list) or when the caller opted out (None).
+            kwargs.pop("tool_choice", None)
+            kwargs.pop("parallel_tool_calls", None)
         response = completion_with_retries(**kwargs)
         usage = self._extract_usage(response)
         return LLMResponse(message=response.choices[0].message, usage=usage)

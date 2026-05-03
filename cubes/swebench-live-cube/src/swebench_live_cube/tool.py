@@ -28,6 +28,13 @@ class SWEBenchToolConfig(ToolConfig):
 class SWEBenchTool(Tool):
     """Agent-facing tool — delegates all execution to a CUBE Container."""
 
+    # Prevents interactive pagers (git log, man) from blocking in a headless container.
+    _ENV: dict[str, str] = {
+        "PAGER": "cat",
+        "MANPAGER": "cat",
+        "LESS": "-R",
+    }
+
     def __init__(self, config: SWEBenchToolConfig, container: Container) -> None:
         self._config = config
         self._container = container
@@ -36,8 +43,9 @@ class SWEBenchTool(Tool):
         pass
 
     def _exec(self, command: str, **kwargs: Any) -> ExecResult:
-        """Run a command in the container with default workdir."""
+        """Run a command in the container with default workdir and env."""
         kwargs.setdefault("workdir", self._config.working_dir)
+        kwargs.setdefault("env", self._ENV)
         return self._container.exec(command, **kwargs)
 
     # ── Agent actions ──────────────────────────────────────────────
@@ -57,8 +65,13 @@ class SWEBenchTool(Tool):
         return "\n".join(parts) if parts else "(no output)"
 
     @tool_action
-    def bash(self, command: str, timeout: int = 120) -> str:
+    def bash(self, command: str = "", timeout: int = 120) -> str:
         """Execute a bash command in the sandbox and return its output."""
+        # TODO: remove once cube-standard returns binding errors as recoverable observations
+        # (upstream fix: Tool.execute_action catches TypeError at bind-time and returns
+        # an error Observation rather than terminating the episode via StepError).
+        if not command or not command.strip():
+            return "[error] 'command' is required — provide a shell command string."
         output = self._run_bash(command, timeout=timeout)
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:

@@ -807,3 +807,85 @@ class TestMaxFormatErrors:
             for m in second_prompt.messages
         ]
         assert any("No tool calls found" in (c or "") for c in contents)
+
+
+# ---------------------------------------------------------------------------
+# Context compaction
+# ---------------------------------------------------------------------------
+
+
+def _make_compact_agent(threshold: int = 1) -> Genny2:
+    """Agent with compact_threshold_chars set (default 1 → always triggers)."""
+    config = Genny2Config(
+        llm_config=LLMConfig(model_name="test"),
+        compact_threshold_chars=threshold,
+    )
+    return Genny2(config=config, action_schemas=[_make_schema()])
+
+
+def _mock_llm_response_with_content(content: str) -> LLMResponse:
+    from litellm import Message
+
+    return LLMResponse(message=Message(role="assistant", content=content), usage=Usage())
+
+
+class TestCompaction:
+    def test_history_chars_below_threshold_returns_none(self) -> None:
+        agent = _make_compact_agent(threshold=1_000_000)
+        _simulate_completed_rounds(agent, 2)
+        assert agent._compact_history() is None
+
+    def test_compact_flat_history_trims_to_tail_and_sets_summary(self) -> None:
+        agent = _make_compact_agent(threshold=1)
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_content("compact summary"))
+        _simulate_completed_rounds(agent, 5)
+
+        result = agent._compact_flat_history()
+
+        assert result is not None
+        assert agent._compacted_summary == "compact summary"
+        assert len(agent.history) == 3  # keeps last 3 groups
+
+    def test_compact_flat_history_calls_llm_with_no_tools(self) -> None:
+        agent = _make_compact_agent(threshold=1)
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_content("summary"))
+        _simulate_completed_rounds(agent, 4)
+
+        agent._compact_flat_history()
+
+        call_prompt = agent.llm.call_args[0][0]
+        assert call_prompt.tools == []
+
+    def test_compact_summaries_consolidates_into_one(self) -> None:
+        agent = Genny2(
+            config=Genny2Config(
+                llm_config=LLMConfig(model_name="test"),
+                enable_summarize=True,
+                compact_threshold_chars=1,
+            ),
+            action_schemas=[_make_schema()],
+        )
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_content("consolidated"))
+        agent.summaries = ["s1", "s2", "s3"]
+        agent.summary_actions = ["a1", "a2", "a3"]
+
+        result = agent._compact_summaries()
+
+        assert result is not None
+        assert agent.summaries == ["consolidated"]
+        assert agent.summary_actions == []
+
+    def test_compact_history_injects_summary_into_system_message(self) -> None:
+        agent = _make_compact_agent(threshold=1)
+        agent.goal = [{"role": "user", "content": "task goal"}]
+        agent.llm = MagicMock(return_value=_mock_llm_response_with_content("old work summary"))
+        _simulate_completed_rounds(agent, 4)
+
+        agent._compact_flat_history()
+
+        messages = agent._choose_context()
+        system_msg = next(
+            m for m in messages if (m.get("role") if isinstance(m, dict) else getattr(m, "role", "")) == "system"
+        )
+        content = system_msg.get("content") if isinstance(system_msg, dict) else getattr(system_msg, "content", "")
+        assert "old work summary" in content

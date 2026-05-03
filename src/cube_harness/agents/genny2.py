@@ -97,6 +97,14 @@ In 2-3 sentences, reason about the latest observation: what happened, what it me
 
 Respond with text only — do not call any tools or functions."""
 
+_DEFAULT_COMPACT_PROMPT = """\
+Summarize the conversation history above. Include:
+- Key actions taken and their results
+- Important findings about the codebase
+- Current state and what has been accomplished so far
+Be concise but preserve all information needed to continue the task.
+Respond with text only — do not call any tools."""
+
 
 # ---------------------------------------------------------------------------
 # Tool helpers
@@ -199,6 +207,13 @@ class Genny2Config(AgentConfig):
     # "output_tag" = wrap content in <output>...</output>, matching mini-swe-agent format.
     obs_format: str = "raw"
 
+    # Context compaction — triggered when accumulated history exceeds this char threshold.
+    # For flat_history=True: compacts self.history into a summary injected into the system message.
+    # For enable_summarize=True (flat_history=False): compacts self.summaries into one entry.
+    # None = disabled (default).
+    compact_threshold_chars: int | None = None
+    compact_prompt: str = _DEFAULT_COMPACT_PROMPT
+
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
     max_actions: int | None = None  # None = unlimited
@@ -283,6 +298,7 @@ class Genny2(Agent):
         self._actions_cnt: int = 0
         self._total_cost: float = 0.0
         self._total_tokens: int = 0
+        self._compacted_summary: str = ""  # injected into system message after compaction
 
     _MAGIC_SUBMIT = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
 
@@ -317,6 +333,10 @@ class Genny2(Agent):
             obs_messages = self._obs_to_messages(obs)
             self._ingest_obs(obs_messages)
 
+        compact_call: LLMCall | None = None
+        with profiler("compact"):
+            compact_call = self._compact_history()
+
         thoughts: str | None = None
         sum_call: LLMCall | None = None
         if self.config.enable_summarize:
@@ -347,7 +367,11 @@ class Genny2(Agent):
                 self.history.append(self._latest_obs)
             self.history.append([response])
 
-        llm_calls: list[LLMCall] = act_calls + ([sum_call] if sum_call is not None else [])
+        llm_calls: list[LLMCall] = (
+            act_calls
+            + ([sum_call] if sum_call is not None else [])
+            + ([compact_call] if compact_call is not None else [])
+        )
         for call in llm_calls:
             self._total_cost += call.usage.cost
             self._total_tokens += call.usage.prompt_tokens + call.usage.completion_tokens
@@ -397,7 +421,10 @@ class Genny2(Agent):
         last summary/action remains byte-identical across both passes and across steps,
         enabling Anthropic's longest-prefix cache matching.
         """
-        messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
+        system_content = self.config.system_prompt
+        if self._compacted_summary:
+            system_content += f"\n\n## Summary of earlier work\n{self._compacted_summary}"
+        messages: list[dict | Message] = [{"role": "system", "content": system_content}]
         messages.extend(self.goal)
         if self._task_clarification:
             messages.append({"role": "user", "content": f"## Additional task details\n\n{self._task_clarification}"})
@@ -438,6 +465,90 @@ class Genny2(Agent):
             usage=response.usage,
         )
         return response.message.content or "", llm_call
+
+    def _history_chars(self) -> int:
+        """Estimate total chars in accumulated history (or summaries for Mode B)."""
+        total = 0
+        if self.config.enable_summarize and not self.config.flat_history:
+            for s in self.summaries:
+                total += len(s)
+            for a in self.summary_actions:
+                total += len(a)
+        else:
+            for group in self.history:
+                for msg in group:
+                    c = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "") or ""
+                    if isinstance(c, str):
+                        total += len(c)
+        return total
+
+    def _compact_history(self) -> "LLMCall | None":
+        """Trigger compaction if accumulated history exceeds compact_threshold_chars."""
+        if self.config.compact_threshold_chars is None:
+            return None
+        chars = self._history_chars()
+        if chars < self.config.compact_threshold_chars:
+            return None
+        logger.info(f"Compaction triggered: {chars} chars > threshold {self.config.compact_threshold_chars}")
+        if self.config.enable_summarize and not self.config.flat_history:
+            return self._compact_summaries()
+        return self._compact_flat_history()
+
+    def _compact_flat_history(self) -> "LLMCall | None":
+        """Compact flat history: summarise history[:-3], keep last 3 groups for API validity.
+
+        Keeping history[-3:] = [asst_{N-1}, obs_N, asst_N] ensures that _latest_obs
+        (tool results for asst_N's calls) remains properly preceded by a tool_use.
+        """
+        keep = 3
+        if len(self.history) <= keep:
+            return None
+        messages: list[dict | Message] = [{"role": "system", "content": self.config.system_prompt}]
+        messages.extend(self.goal)
+        for group in self.history[:-keep]:
+            messages.extend(group)
+        messages.append({"role": "user", "content": self.config.compact_prompt})
+        prompt = Prompt(messages=messages, tools=[])
+        response = self.llm(prompt)
+        summary = response.message.content or _get_reasoning(response.message) or ""
+        llm_call = LLMCall(
+            tag="compact",
+            llm_config=self.config.llm_config,
+            prompt=prompt,
+            output=response.message,
+            usage=response.usage,
+        )
+        self._compacted_summary = summary
+        self.history = self.history[-keep:]
+        logger.info(f"Flat history compacted: {len(self.history)} groups remain ({self._history_chars()} chars)")
+        return llm_call
+
+    def _compact_summaries(self) -> "LLMCall | None":
+        """Compact Mode B summaries list into a single consolidated summary."""
+        if len(self.summaries) < 2:
+            return None
+        steps_text = "\n\n".join(
+            f"Step {i + 1}:\n{s}" + (f"\nAction: {self.summary_actions[i]}" if i < len(self.summary_actions) else "")
+            for i, s in enumerate(self.summaries)
+        )
+        messages: list[dict | Message] = [
+            {"role": "system", "content": self.config.system_prompt},
+            {"role": "user", "content": steps_text + "\n\n" + self.config.compact_prompt},
+        ]
+        prompt = Prompt(messages=messages, tools=[])
+        response = self.llm(prompt)
+        summary = response.message.content or _get_reasoning(response.message) or ""
+        llm_call = LLMCall(
+            tag="compact",
+            llm_config=self.config.llm_config,
+            prompt=prompt,
+            output=response.message,
+            usage=response.usage,
+        )
+        self.summaries = [summary]
+        self.summary_actions = []
+        logger.info(f"Summaries compacted to 1 entry ({self._history_chars()} chars)")
+        return llm_call
 
     def _act(self) -> tuple[Message, list[LLMCall]]:
         """Build context, encode tools, call act LLM; retry up to max_format_errors times on no tool calls."""

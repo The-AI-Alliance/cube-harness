@@ -160,6 +160,43 @@ class TestLLM:
         assert result.message.tool_calls is not None
         assert result.message.content == "Tool call made."
 
+    @patch("cube_harness.llm.completion_with_retries")
+    def test_llm_call_empty_tools_drops_tool_choice(self, mock_completion, sample_llm_config, sample_prompt) -> None:
+        """When tools=[], tool_choice and parallel_tool_calls are omitted (some providers reject them)."""
+        mock_message = Message(role="assistant", content="no tools")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = None
+        mock_completion.return_value = mock_response
+
+        # sample_prompt has tools=[] by default
+        llm = LLM(config=sample_llm_config)
+        llm(sample_prompt)
+
+        call_kwargs = mock_completion.call_args.kwargs
+        assert "tools" not in call_kwargs
+        assert "tool_choice" not in call_kwargs
+        assert "parallel_tool_calls" not in call_kwargs
+
+    @patch("cube_harness.llm.completion_with_retries")
+    def test_llm_call_tool_choice_none_drops_tool_choice(self, mock_completion) -> None:
+        """When tool_choice=None, tool_choice and parallel_tool_calls are omitted even with tools present."""
+        mock_message = Message(role="assistant", content="ok")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = None
+        mock_completion.return_value = mock_response
+
+        tools = [{"type": "function", "function": {"name": "search", "parameters": {}}}]
+        prompt = Prompt(messages=[{"role": "user", "content": "go"}], tools=tools)
+        llm = LLM(config=LLMConfig(model_name="gpt-5-nano", tool_choice=None))
+        llm(prompt)
+
+        call_kwargs = mock_completion.call_args.kwargs
+        assert "tools" in call_kwargs
+        assert "tool_choice" not in call_kwargs
+        assert "parallel_tool_calls" not in call_kwargs
+
 
 class TestLLMCall:
     """Tests for LLMCall class."""

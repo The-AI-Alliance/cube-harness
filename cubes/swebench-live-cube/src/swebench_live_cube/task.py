@@ -12,8 +12,8 @@ import logging
 from typing import Any
 
 from cube.container import ContainerBackend, relocate_if_readonly
-from cube.core import Observation
-from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
+from cube.core import ActionSchema, Observation
+from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
 from swebench_live_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
@@ -106,7 +106,38 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             )
         return self.execution_info
 
+    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
+        # TODO: remove once cube-standard auto-includes STOP_ACTION in Task.action_set
+        # (upstream fix: Task.action_set appends STOP_ACTION when accept_agent_stop=True,
+        # and STOP_ACTION constant gets the Anthropic-compatible parameters schema).
+        stop = ActionSchema(
+            name=STOP_ACTION.name,
+            description=STOP_ACTION.description,
+            parameters={"type": "object", "properties": {}},
+        )
+        return actions + [stop]
+
     def _build_tool(self) -> None:
+        """Ensure /testbed files are writable and git-safe, then build the tool.
+
+        Two pre-flight fixes applied unconditionally (mirrors swebench-verified-cube):
+        1. git safe.directory: Git 2.35.2+ refuses to operate in repos owned by a
+           different user. Configure /testbed as safe so agents can run `git diff`.
+        2. chmod via cp/mv: some live containers ship root-owned 644 .py files inside
+           a world-writable /testbed. mv unlinks via the writable parent and recreates
+           with the runtime user's ownership, making every file writable without sudo.
+           Running before relocate_if_readonly keeps conda editable-install paths stable.
+        """
+        self._container.exec(
+            f"git config --global --add safe.directory {self.tool_config.working_dir}",
+            timeout=30,
+        )
+        self._container.exec(
+            f"find {self.tool_config.working_dir} -not -path '*/.git/*' -name '*.py' ! -writable"
+            f' -exec sh -c \'cp "$1" "$1.tmp" && mv "$1.tmp" "$1"\' _ {{}} \\;'
+            f" 2>/dev/null || true",
+            timeout=120,
+        )
         new_wd = relocate_if_readonly(
             self._container,
             self.tool_config.working_dir,
@@ -124,9 +155,11 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
+        assert isinstance(self.tool, SWEBenchTool)
         instruction = self._exec.problem_statement
         if self.include_hints and self._exec.hints_text:
             instruction += f"\n\n## Hints\n{self._exec.hints_text}"
+        instruction += f"\n\n[Working directory: {self.tool._config.working_dir}]"
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
