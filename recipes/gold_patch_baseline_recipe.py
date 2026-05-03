@@ -35,7 +35,8 @@ if _project_env.exists():
 
 from cube.core import Action, ActionSchema, Observation  # noqa: E402
 
-from cube_harness.agent import AgentConfig  # noqa: E402
+from cube_harness.agent import Agent, AgentConfig  # noqa: E402
+from cube_harness.core import AgentOutput  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 
@@ -89,23 +90,24 @@ _APPLY = Action(
 _STOP = Action(name="final_step", arguments={})
 
 
-class GoldPatchAgent:
+class GoldPatchAgent(Agent):
     """Deterministic agent: apply the oracle gold patch, then stop."""
 
-    def __init__(self) -> None:
-        self._step = 0
+    def __init__(self, config: AgentConfig) -> None:
+        super().__init__(config)
+        self._turn = 0
 
-    def __call__(self, obs: Observation, action_set: list[ActionSchema]) -> Action:
-        action = _APPLY if self._step == 0 else _STOP
-        self._step += 1
-        return action
+    def step(self, obs: Observation) -> AgentOutput:
+        action = _APPLY if self._turn == 0 else _STOP
+        self._turn += 1
+        return AgentOutput(actions=[action])
 
 
 class GoldPatchAgentConfig(AgentConfig):
     """Config for GoldPatchAgent — no LLM, no parameters."""
 
     def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> GoldPatchAgent:
-        return GoldPatchAgent()
+        return GoldPatchAgent(config=self)
 
 
 # ---------------------------------------------------------------------------
