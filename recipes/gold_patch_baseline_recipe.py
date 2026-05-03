@@ -104,7 +104,7 @@ class GoldPatchAgent:
 class GoldPatchAgentConfig(AgentConfig):
     """Config for GoldPatchAgent — no LLM, no parameters."""
 
-    def make(self) -> GoldPatchAgent:  # type: ignore[override]
+    def make(self, action_set: list[ActionSchema] | None = None, **kwargs) -> GoldPatchAgent:
         return GoldPatchAgent()
 
 
