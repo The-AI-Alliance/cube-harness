@@ -16,8 +16,9 @@ Usage:
     .venv/bin/python recipes/genny2_swe_recipe.py --subset hal_mini --toolkit \\
         --eai-profile yul101 --eai-path ~/bin/eai --n-parallel 20
 
-    # Specific model:
+    # Specific model and template variant:
     .venv/bin/python recipes/genny2_swe_recipe.py haiku --debug
+    .venv/bin/python recipes/genny2_swe_recipe.py haiku --template thought --subset hal_mini --toolkit ...
     .venv/bin/python recipes/genny2_swe_recipe.py gpt-5.4-mini --toolkit ...
 """
 
@@ -101,17 +102,42 @@ _HAL_MINI_TASK_IDS: frozenset[str] = frozenset(
 
 _SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks."
 
-# Minimal instance template: task description + the two constraints that matter for evaluation.
-# Environment details (cwd=/testbed, stateless subshells) are covered by the bash tool description.
-_INSTANCE_TEMPLATE = """\
-{{task}}
+# Template variants — ablation over two orthogonal axes:
+#   THOUGHT  — instructs the model to understand the problem before acting
+#   WORKFLOW — provides structured explore→plan→execute→iterate steps
+#
+# All variants are benchmark-agnostic: benchmark-specific constraints (e.g. "don't
+# modify tests") and submission instructions (e.g. "call final_step") are owned by
+# each cube and appended to the task description in task.reset().
 
-Do not modify test files (tests/ directory, test_*.py files) or configuration files.
+_THOUGHT_BLOCK = "Before acting, take time to understand the task: read the relevant files, reproduce or confirm the issue, and identify the root cause before making changes."
 
-When your fix is complete:
-1. Verify: `git diff > patch.txt && cat patch.txt`
-2. Confirm the patch only contains source file changes, then call `final_step`.\
+_WORKFLOW_BLOCK = """\
+Suggested approach:
+1. Reproduce: confirm the current behavior — run relevant commands or tests to observe the issue.
+2. Explore: read relevant source files to understand the code or system.
+3. Fix: apply the minimal change needed to resolve the issue.
+4. Verify: run commands or tests to confirm the fix works and nothing else broke. If it does not, diagnose and try again.\
 """
+
+# minimal — bare task description only (benchmark instructions are appended by the cube)
+_INSTANCE_TEMPLATE_MINIMAL = "{{task}}"
+
+# thought — adds reasoning orientation before acting
+_INSTANCE_TEMPLATE_THOUGHT = f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}"
+
+# workflow — adds structured step-by-step approach
+_INSTANCE_TEMPLATE_WORKFLOW = f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}"
+
+# thought-workflow — both axes combined
+_INSTANCE_TEMPLATE_THOUGHT_WORKFLOW = f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}\n\n{_WORKFLOW_BLOCK}"
+
+INSTANCE_TEMPLATES: dict[str, str] = {
+    "minimal": _INSTANCE_TEMPLATE_MINIMAL,
+    "thought": _INSTANCE_TEMPLATE_THOUGHT,
+    "workflow": _INSTANCE_TEMPLATE_WORKFLOW,
+    "thought-workflow": _INSTANCE_TEMPLATE_THOUGHT_WORKFLOW,
+}
 
 # ---------------------------------------------------------------------------
 # Model configs
@@ -197,6 +223,7 @@ def _make_benchmark_config(
 def run(
     model_key: str,
     *,
+    template: str,
     debug: bool,
     task_ids: list[str] | None,
     subset: str | None,
@@ -214,7 +241,7 @@ def run(
     agent_config = Genny2Config(
         llm_config=llm_config,
         system_prompt=_SYSTEM_PROMPT,
-        goal_template=_INSTANCE_TEMPLATE,
+        goal_template=INSTANCE_TEMPLATES[template],
         flat_history=True,
         step_prompt="",
         cost_limit=cost_limit,
@@ -230,7 +257,7 @@ def run(
 
     infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
     exp = Experiment(
-        name=f"genny2-swe-{model_key}-{infra_label}",
+        name=f"genny2-swe-{model_key}-{template}-{infra_label}",
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
@@ -239,7 +266,7 @@ def run(
         resume=resume,
     )
 
-    print(f"\n=== genny2 | {model_key} | {infra_label} | subset={subset or 'all'} ===")
+    print(f"\n=== genny2 | {model_key} | {template} | {infra_label} | subset={subset or 'all'} ===")
 
     if debug:
         run_sequentially(exp)
@@ -256,6 +283,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Genny2 SWE-bench Verified recipe")
     parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS))
+    parser.add_argument(
+        "--template",
+        default="minimal",
+        choices=list(INSTANCE_TEMPLATES),
+        help="Instance template variant (default: minimal)",
+    )
     parser.add_argument("--debug", action="store_true", help="Run debug oracle tasks sequentially")
     parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
     parser.add_argument("--subset", default=None, help="hal_mini or any named subset")
@@ -271,6 +304,7 @@ if __name__ == "__main__":
 
     run(
         model_key=args.model,
+        template=args.template,
         debug=args.debug,
         task_ids=[t.strip() for t in args.tasks.split(",")] if args.tasks else None,
         subset=args.subset,
