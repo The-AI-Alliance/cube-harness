@@ -9,7 +9,7 @@ from uuid import uuid4
 from cube.core import TypedBaseModel
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
-from pydantic import Field
+from pydantic import Field, field_validator
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
@@ -20,8 +20,25 @@ from pydantic import Field
 class Prompt(TypedBaseModel):
     """Represents the input prompt to chat completion api of LLM."""
 
-    messages: List[dict | Message]
+    messages: List[dict]
     tools: List[dict] = Field(default_factory=list)
+
+    @field_validator("messages", mode="before")
+    @classmethod
+    def _coerce_messages(cls, v: list) -> list[dict]:
+        """Coerce LiteLLM Message objects to plain dicts.
+
+        LiteLLM Message carries provider-specific fields (thinking_blocks,
+        reasoning_content) that Pydantic doesn't know about, causing
+        PydanticSerializationUnexpectedValue log spam on every model_dump call.
+        """
+        result: list[dict] = []
+        for msg in v:
+            if isinstance(msg, dict):
+                result.append(msg)
+            else:
+                result.append(msg.model_dump(exclude_none=True))
+        return result
 
     def __str__(self) -> str:
         """Debug view of the prompt."""

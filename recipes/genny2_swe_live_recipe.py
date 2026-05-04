@@ -89,17 +89,7 @@ _SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer 
 # and weaker models (haiku) never reached it before looping out at MAX_STEPS.
 # ---------------------------------------------------------------------------
 
-_INSTANCE_TEMPLATE = """\
-{{task}}
-
-Modify source files only. Do not modify test files (tests/ directory, test_*.py files) \
-or configuration files (pyproject.toml, setup.cfg, etc.). Always work in the directory \
-shown in [Working directory: ...] at the end of this message.
-
-When your fix is complete:
-1. Verify: `git diff > patch.txt && cat patch.txt`
-2. Confirm the patch only contains source file changes, then call `final_step`.\
-"""
+_INSTANCE_TEMPLATE = "{{task}}"
 
 # ---------------------------------------------------------------------------
 # Model configs
