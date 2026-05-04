@@ -211,6 +211,7 @@ def run(
         step_prompt="",
         obs_format="raw",
         cost_limit=cost_limit,
+        budget_hint_interval_usd=1.0 if cost_limit is not None else None,
         max_format_errors=3,
         max_actions=max_actions,
         max_obs_chars=20_000,
