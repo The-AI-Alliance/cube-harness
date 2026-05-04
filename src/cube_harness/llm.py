@@ -55,7 +55,7 @@ class LLMConfig(TypedBaseModel):
 
     model_name: str
     temperature: float = 1.0
-    max_input_tokens: int = 128000
+    max_tokens: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     tool_choice: Literal["auto", "none", "required"] = "auto"
@@ -175,7 +175,6 @@ class LLM:
             "parallel_tool_calls": self.config.parallel_tool_calls,
             "messages": prompt.messages,
             "timeout": self.config.timeout,
-            "max_input_tokens": self.config.max_input_tokens,
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
