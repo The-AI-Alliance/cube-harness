@@ -93,7 +93,7 @@ where = ["src"]
 
 [tool.uv.sources]
 # TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts" }
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts_genny2" }
 #cube-standard = { path = "../cube-standard/", editable = true}
 #cube-browser-tool = { path = "../cube-standard/cube-tools/cube-browser-tool/", editable = true }
 #cube = { path = "../cube-standard/" }

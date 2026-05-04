@@ -688,7 +688,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = "~=4.14" },
     { name = "browsergym-core", specifier = ">=0.14.3" },
     { name = "cube-browser-playwright", specifier = ">=0.2.0" },
-    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts_genny2" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "google-cloud-storage", specifier = ">=2.18.0" },
     { name = "gradio", marker = "extra == 'analyze'", specifier = "~=5.49" },
@@ -723,8 +723,8 @@ dev = [
 
 [[package]]
 name = "cube-standard"
-version = "0.1.0rc7"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts#db342cf25c8852cd51e3320406d85734d40a5d8d" }
+version = "0.1.0rc8"
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts_genny2#1fc21221c36f22102d2175eea9f3fec9e8caab27" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },

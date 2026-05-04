@@ -13,4 +13,4 @@ package = false
 [tool.uv.sources]
 cube-harness = { path = "../..", editable = true }
 webarena-verified-cube = { path = "../../cubes/webarena-verified", editable = true }
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "task_artifacts_genny2" }
