@@ -477,6 +477,7 @@ class Genny(Agent):
         api_tools, api_messages = self.tool_adapter.encode(self.action_schemas, messages)
         prompt = Prompt(messages=api_messages, tools=api_tools)
         logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=api_messages)}")
+        logger.debug("Act prompt:\n%s", prompt)
         try:
             response = self.llm(prompt)
         except Exception as e:
@@ -500,11 +501,17 @@ class Genny(Agent):
 
         When enable_summarize=False, all summaries (COT extracted from prior act passes)
         go into the collapsed block; react_prompt instructs the LLM to reason inline.
+
+        The step counter [Step X/N] is prepended to the final user message only — all
+        preceding messages are byte-for-byte identical across steps, preserving cache hits
+        on the system prompt, goal, hints, and summaries prefix.
         """
         messages = self._build_base_prompt(exclude_last_summary=self.config.enable_summarize)
         if self.config.enable_summarize and self.summaries:
             messages.append({"role": "assistant", "content": self.summaries[-1]})
         final_prompt = self.config.act_prompt if self.config.enable_summarize else self.config.react_prompt
+        if self.config.max_actions is not None:
+            final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
         messages.append({"role": "user", "content": final_prompt})
         return messages
 

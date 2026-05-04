@@ -8,9 +8,11 @@ from swebench_live_cube.task import (
     SWEBenchLiveTaskConfig,
     SWEBenchLiveTaskMetadata,
 )
-from swebench_live_cube.tool import SWEBenchTool, SWEBenchToolConfig
+from swebench_live_cube.tool import BashOnlySWEBenchTool, BashOnlySWEBenchToolConfig, SWEBenchTool, SWEBenchToolConfig
 
 __all__ = [
+    "BashOnlySWEBenchTool",
+    "BashOnlySWEBenchToolConfig",
     "SWEBenchLiveBenchmark",
     "SWEBenchLiveBenchmarkConfig",
     "SWEBenchLiveExecutionInfo",
