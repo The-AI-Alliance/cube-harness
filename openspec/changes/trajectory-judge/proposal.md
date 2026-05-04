@@ -231,8 +231,11 @@ def judge_episode(
     codebase_map: Path | None = None,
     related_trajectory_dirs: list[Path] | None = None,
     model: str = "claude-opus-4-7",
-) -> JudgeOutput:
-    """Run a post-hoc judge on a single episode trajectory directory."""
+) -> tuple[JudgeOutput, JudgeMetadata]:
+    """Run a post-hoc judge on a single episode trajectory directory.
+
+    Returns both the judgment and its billing/provenance metadata.
+    """
     ...
 
 def judge_experiment(
@@ -241,11 +244,12 @@ def judge_experiment(
     model: str = "claude-opus-4-7",
     n_parallel: int = 4,
     overwrite: bool = False,
-) -> dict[str, JudgeOutput]:
+) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge all episodes in an experiment output directory.
 
-    Writes judge_output.json alongside each episode_record.json.
-    Returns a mapping from trajectory_id to JudgeOutput.
+    Writes judge_output and judge_metadata into each episode_record.json.
+    Writes experiment_judge_summary.json with aggregate cost.
+    Returns a mapping from trajectory_id to (JudgeOutput, JudgeMetadata).
     """
     ...
 ```
@@ -266,10 +270,36 @@ It contains three sections:
 The judge is asked to return a single JSON block; the response is parsed with
 `json.loads` with fallback to a regex extractor for common LLM wrapping patterns.
 
-### Integration with `EpisodeRecord`
+### Judge cost and token tracking
 
-When `judge_experiment()` runs on a directory containing `experiment_record.json`, it
-updates each `episode_record.json` by populating the `judge_output` field:
+Each judge invocation has its own LLM cost, which must be tracked separately from the
+agent episode's cost — they are different LLM calls, run at different times, and billed
+to different purposes. The runner reports this to the caller and persists it alongside
+the judgment.
+
+**Where to store it.** Three options were considered:
+
+| Option | Verdict |
+|---|---|
+| Fields inside `JudgeOutput` | ✗ — mixes billing metadata into the judgment schema; `JudgeOutput` should be a pure analytical record, not a receipt |
+| Separate `judge_record.json` sidecar per episode | ✗ — proliferates files; the existing `episode_record.json` already aggregates per-episode metadata |
+| Sibling `judge_metadata` field in `episode_record.json` | ✓ — mirrors how the agent's own `usage` field sits alongside agent output; one file per episode, clean separation between content and provenance |
+
+**Schema.** A `JudgeMetadata` model is written alongside `judge_output` in
+`episode_record.json`:
+
+```python
+class JudgeMetadata(TypedBaseModel):
+    model: str                  # e.g. "claude-opus-4-7"
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    duration_s: float
+    timestamp: float            # wall-clock time the judge ran (Unix)
+    judge_schema_version: str   # e.g. "v1" — for forward-compatibility of stored records
+```
+
+**`episode_record.json` with both fields populated:**
 
 ```jsonc
 {
@@ -283,8 +313,41 @@ updates each `episode_record.json` by populating the `judge_output` field:
     "evidence": [{"step": 42, "quote": "diff --git a/..."}],
     "hypothesis": "Normalizing trailing whitespace in the evaluator would fix this class of rejection.",
     "hypothesis_confidence": 4
+  },
+  "judge_metadata": {
+    "model": "claude-opus-4-7",
+    "prompt_tokens": 18400,
+    "completion_tokens": 1240,
+    "cost_usd": 0.087,
+    "duration_s": 34.2,
+    "timestamp": 1746400000.0,
+    "judge_schema_version": "v1"
   }
 }
+```
+
+**Aggregate cost in `experiment_judge_summary.json`.** `judge_experiment()` also writes
+a per-experiment summary file that aggregates costs across all judged episodes:
+
+```jsonc
+{
+  "n_judged": 50,
+  "total_judge_cost_usd": 4.35,
+  "avg_judge_cost_usd": 0.087,
+  "total_judge_prompt_tokens": 920000,
+  "total_judge_completion_tokens": 62000,
+  "model": "claude-opus-4-7",
+  "judge_schema_version": "v1",
+  "timestamp": 1746400000.0
+}
+```
+
+**CLI output.** `--summary` prints the aggregate cost alongside blame distribution:
+
+```
+Judged 50/50 episodes  |  total judge cost: $4.35  |  avg: $0.087/ep
+Outcomes:  success=28  almost=4  failure=16  should_have_been_rewarded=2
+Primary blame:  model_capability=11  agent_scaffolding=9  eval_brittle=3  ...
 ```
 
 ### CLI
