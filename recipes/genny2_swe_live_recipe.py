@@ -1,23 +1,18 @@
 """Genny2 SWE recipe — swe-bench-live.
 
-Adapts genny2_swe_recipe.py for swe-bench-live:
-- Uses SWEBenchLiveBenchmarkConfig (bash + read_file + write_file tool, no <returncode> wrapper)
-- Submission via final_step (same as genny2 default)
-- Subsets: test (1000), lite (300), verified (499), full (1887)
+Uses the shared genny2_swe_config for prompts/models/agent construction.
 
 Usage:
     # Debug run (2 oracle tasks, sequential — no LLM needed):
     .venv/bin/python recipes/genny2_swe_live_recipe.py --debug
 
-    # First N tasks from a subset (for initial benchmark debugging):
-    .venv/bin/python recipes/genny2_swe_live_recipe.py --subset lite --n-tasks 5
+    # 30-task golden subset on Toolkit:
+    .venv/bin/python recipes/genny2_swe_live_recipe.py --subset live-golden-30 \\
+        --toolkit --eai-profile yul101 --eai-path ~/bin/eai --n-parallel 30
 
-    # Full 'lite' subset on Toolkit:
-    .venv/bin/python recipes/genny2_swe_live_recipe.py --subset lite --toolkit \\
-        --eai-profile yul101 --eai-path ~/bin/eai --n-parallel 20
-
-    # Specific model:
-    .venv/bin/python recipes/genny2_swe_live_recipe.py haiku --debug
+    # Full 'lite' subset:
+    .venv/bin/python recipes/genny2_swe_live_recipe.py --subset lite \\
+        --toolkit --eai-profile yul101 --eai-path ~/bin/eai --n-parallel 50
 """
 
 import json
@@ -31,16 +26,16 @@ _project_env = Path(__file__).resolve().parents[1] / ".env"
 if _project_env.exists():
     load_dotenv(_project_env, override=True)
 
-from cube_harness.agents.genny2 import BudgetConfig, Genny2Config  # noqa: E402
+from cube_harness.agents.genny2_swe_config import INSTANCE_TEMPLATES, MODEL_CONFIGS, make_agent_config  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
-from cube_harness.llm import LLMConfig  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
 # ---------------------------------------------------------------------------
 # Stratified 30-task sample from the lite subset (1 task per repo, seed=42).
-# 30 repos out of 70 in lite — use with --subset live30 for initial signal runs.
+# Use --subset live30 for an unsorted stratified sample.
+# Use --subset live-golden-30 for confirmed-solvable tasks.
 # ---------------------------------------------------------------------------
 
 _LIVE_30_SAMPLE: frozenset[str] = frozenset(
@@ -77,74 +72,6 @@ _LIVE_30_SAMPLE: frozenset[str] = frozenset(
         "jupyterlab__jupyter-ai-1022",
     ]
 )
-
-# ---------------------------------------------------------------------------
-# System prompt — verbatim from upstream mini-swe-agent swebench.yaml
-# ---------------------------------------------------------------------------
-
-_SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
-
-# Template variants — ablation over two orthogonal axes:
-#   THOUGHT  — instructs the model to understand the problem before acting
-#   WORKFLOW — provides structured explore→plan→execute→iterate steps
-#
-# All variants are benchmark-agnostic: benchmark-specific constraints and
-# submission instructions are owned by the cube and appended in task.reset().
-
-_THOUGHT_BLOCK = "Before acting, take time to understand the task: read the relevant files, reproduce or confirm the issue, and identify the root cause before making changes."
-
-_WORKFLOW_BLOCK = """\
-Suggested approach:
-1. Reproduce: confirm the current behavior — run the relevant test or command to observe the issue.
-2. Explore: read the relevant source files directly with `cat`, `grep`, or `find` to locate the root cause.
-3. Fix: apply the minimal change needed to resolve the issue.
-4. Verify: run the relevant test or command to confirm the fix works and nothing else broke. If it does not, make a focused adjustment and try again.\
-"""
-
-_INSTANCE_TEMPLATE_MINIMAL = "{{task}}"
-_INSTANCE_TEMPLATE_THOUGHT = f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}"
-_INSTANCE_TEMPLATE_WORKFLOW = f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}"
-_INSTANCE_TEMPLATE_THOUGHT_WORKFLOW = f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}\n\n{_WORKFLOW_BLOCK}"
-
-INSTANCE_TEMPLATES: dict[str, str] = {
-    "minimal": _INSTANCE_TEMPLATE_MINIMAL,
-    "thought": _INSTANCE_TEMPLATE_THOUGHT,
-    "workflow": _INSTANCE_TEMPLATE_WORKFLOW,
-    "thought-workflow": _INSTANCE_TEMPLATE_THOUGHT_WORKFLOW,
-}
-
-# ---------------------------------------------------------------------------
-# Model configs
-# ---------------------------------------------------------------------------
-
-MODEL_CONFIGS: dict[str, LLMConfig] = {
-    "gpt-5.4-mini": LLMConfig(
-        model_name="azure/gpt-5.4-mini",
-        temperature=1.0,
-        tool_choice="required",
-        parallel_tool_calls=True,
-    ),
-    "gpt-5.4": LLMConfig(
-        model_name="azure/gpt-5.4",
-        temperature=1.0,
-        tool_choice="required",
-        parallel_tool_calls=True,
-    ),
-    "haiku": LLMConfig(
-        model_name="anthropic/claude-haiku-4-5",
-        temperature=0.0,
-        tool_choice="required",
-        parallel_tool_calls=False,
-        set_cache_control="auto",
-    ),
-    "sonnet": LLMConfig(
-        model_name="anthropic/claude-sonnet-4-6",
-        temperature=1.0,
-        tool_choice="required",
-        parallel_tool_calls=True,
-        set_cache_control="auto",
-    ),
-}
 
 # ---------------------------------------------------------------------------
 # Infra / benchmark helpers
@@ -222,39 +149,23 @@ def run(
     cost_limit: float = 1.0,
     template: str = "thought-workflow",
 ) -> None:
-    llm_config = MODEL_CONFIGS[model_key]
-
-    agent_config = Genny2Config(
-        llm_config=llm_config,
-        system_prompt=_SYSTEM_PROMPT,
-        goal_template=INSTANCE_TEMPLATES[template],
-        flat_history=True,
-        step_prompt="",
-        obs_format="raw",
-        budget=BudgetConfig(max_actions=max_actions, cost_limit=cost_limit, display_every_k=5),
-        max_format_errors=3,
-        max_obs_chars=20_000,
-        compact_threshold_chars=400_000,
-    )
+    agent_config = make_agent_config(model_key, template, max_actions, cost_limit)
 
     infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
     benchmark_config = _make_benchmark_config(debug, task_ids, subset, n_tasks, solvable_from)
 
-    output_dir = retry_dir if retry_dir is not None else None
-    resume = retry_dir is not None
-
     infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
     exp = Experiment(
         name=f"genny2-swe-live-{model_key}-{infra_label}",
-        output_dir=output_dir,
+        output_dir=retry_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
         infra=infra,
         max_steps=max_actions,
-        resume=resume,
+        resume=retry_dir is not None,
     )
 
-    print(f"\n=== genny2-swe-live | {model_key} | {infra_label} | subset={subset or 'all'} ===")
+    print(f"\n=== genny2-swe-live | {model_key} | {template} | {infra_label} | subset={subset or 'all'} ===")
 
     if debug:
         run_sequentially(exp)
