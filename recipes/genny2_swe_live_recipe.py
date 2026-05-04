@@ -162,7 +162,11 @@ def _make_benchmark_config(
     config = SWEBenchLiveBenchmarkConfig()
     if solvable_from is not None:
         task_ids = json.loads(solvable_from.read_text())
-    if subset == "live30":
+    if subset == "live-golden-30":
+        from swebench_live_cube.gold_patch_recipe import _LIVE_GOLDEN_30
+
+        config = config.subset_from_list(list(_LIVE_GOLDEN_30))
+    elif subset == "live30":
         config = config.subset_from_list(list(_LIVE_30_SAMPLE))
     elif subset:
         config = config.named_subset(subset)
@@ -252,8 +256,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--subset",
         default=None,
-        choices=["test", "lite", "verified", "full", "live30"],
-        help="Named subset: live30 (30-task stratified), lite (300), verified (499), full (1887), test (1000)",
+        choices=["live-golden-30", "test", "lite", "verified", "full", "live30"],
+        help="Named subset: live-golden-30 (30 confirmed-solvable), live30 (30 stratified), lite (300), verified (499)",
     )
     parser.add_argument("--n-tasks", type=int, default=None, help="Take first N tasks from subset")
     parser.add_argument("--n-parallel", type=int, default=5)
