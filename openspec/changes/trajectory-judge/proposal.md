@@ -252,8 +252,8 @@ def judge_experiment(
 
 ### Prompt structure
 
-The judge prompt (rendered from a Jinja2 template at
-`src/cube_harness/analyze/judge_prompt.md.j2`) contains three sections:
+The judge prompt is a Python string constant in `judge.py`, assembled with `.format()`.
+It contains three sections:
 
 1. **Context** — paths to relevant source files from the codebase map, task description.
 2. **Trajectory pointer** — the path to the trajectory directory; the judge uses file
