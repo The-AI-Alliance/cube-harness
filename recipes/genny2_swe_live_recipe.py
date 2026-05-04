@@ -78,7 +78,7 @@ _LIVE_30_SAMPLE: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: bool) -> object:
+def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: bool, launch_timeout: int = 900) -> object:
     if toolkit:
         from cube_infra_toolkit import ToolkitInfraConfig
 
@@ -86,7 +86,7 @@ def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: boo
             profile=eai_profile,
             eai_path=eai_path,
             preemptable=preemptable,
-            launch_timeout_seconds=300,
+            launch_timeout_seconds=launch_timeout,
         )
     from cube.infra_local import LocalInfraConfig
 
@@ -148,10 +148,11 @@ def run(
     max_actions: int = 150,
     cost_limit: float = 1.0,
     template: str = "thought-workflow",
+    launch_timeout: int = 900,
 ) -> None:
     agent_config = make_agent_config(model_key, template, max_actions, cost_limit)
 
-    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
+    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable, launch_timeout)
     benchmark_config = _make_benchmark_config(debug, task_ids, subset, n_tasks, solvable_from)
 
     infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
@@ -199,6 +200,7 @@ if __name__ == "__main__":
     parser.add_argument("--preemptable", action="store_true")
     parser.add_argument("--max-actions", type=int, default=150)
     parser.add_argument("--cost-limit", type=float, default=1.0)
+    parser.add_argument("--launch-timeout", type=int, default=900)
     parser.add_argument(
         "--template",
         default="thought-workflow",
@@ -229,4 +231,5 @@ if __name__ == "__main__":
         max_actions=args.max_actions,
         cost_limit=args.cost_limit,
         template=args.template,
+        launch_timeout=args.launch_timeout,
     )
