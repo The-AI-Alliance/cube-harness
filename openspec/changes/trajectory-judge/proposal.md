@@ -49,101 +49,162 @@ Three concrete gaps this RFC addresses:
 
 ### Approach: LLM-as-judge via Claude Code Python API
 
-The judge is a Claude Code agent invoked programmatically using the `claude` Python
-SDK (or subprocess). It receives a structured prompt containing:
+The judge is a Claude Code agent invoked programmatically using the `claude` Python SDK.
+It receives:
 
-- The full trajectory (serialized as a flat conversation log with step indices).
-- A concise codebase map (relevant source files: agent prompt, tool definitions, benchmark
-  task description) — enough context to distinguish a scaffolding failure from a model
-  capability failure.
-- Optionally, a small cohort of related trajectories on the same task (to enable
-  contrastive analysis: "this agent solved it, this one didn't — why?").
+- **A path to the trajectory directory** — the judge reads files directly rather than
+  having a serialized log injected into the prompt. This matters for large trajectories:
+  observation dumps (axTree, DOM, screenshots) at individual steps can be fetched
+  on-demand rather than pre-loaded into a single massive context.
+- **A codebase map** — see [Codebase map](#codebase-map) below.
+- **Optionally, paths to related trajectories** on the same task — enabling contrastive
+  analysis ("this agent solved it in 12 steps, this one looped for 80 — why?").
 
 The judge outputs a JSON object conforming to `JudgeOutput`. The structured fields enable
 aggregation and statistical analysis; the free-form `analysis` field captures reasoning
 that doesn't fit in a taxonomy.
 
-**Why LLM-as-judge, not heuristics?**
+### Why Claude Code specifically?
 
-Failure mode classification requires understanding the agent's intent (did it *try* the
-right approach and fail, or never try?), the task's ambiguity (is the description
-underspecified?), and whether the evaluation harness is fair. No pattern-matching
-heuristic can do this reliably. A strong LLM can read the conversation and make the
-judgment — the same way a human researcher would, but consistently and at scale.
+Claude Code's agentic loop with file-reading tools enables the judge to do things that
+prompt-stuffing cannot:
 
-**Why Claude Code specifically?**
+- **Navigate large trajectory logs.** A trajectory directory contains per-step observation
+  files (axTree snapshots, DOM dumps, screenshots). The judge can `cat` step 12's axTree
+  and step 17's axTree side-by-side to see what changed — rather than receiving a
+  pre-compressed summary.
+- **Inspect specific screenshots.** For computer-use tasks, the judge can read the actual
+  screenshot at the step where the agent got confused, not a description of it.
+- **Cross-reference related trajectories.** Given paths to N related episodes, the judge
+  can grep for specific patterns across all of them to identify systematic failure modes.
+- **Read actual source files.** When attributing blame to the scaffolding or task
+  description, the judge reads the real agent prompt or benchmark task file — not a
+  summary injected by the caller. This is the primary hallucination-resistance mechanism:
+  blame must be grounded in something the judge actually read.
 
-Claude Code's agentic loop with file-reading tools means the judge can inspect the
-actual source files it's told are relevant, rather than trusting summaries embedded in
-the prompt. This reduces hallucination risk when the judge attributes blame to a specific
-prompt or scaffolding decision.
+### Codebase map
 
-**Hallucination resistance**
+The judge needs enough context to distinguish a scaffolding failure from a model
+capability failure. Rather than the caller constructing this context manually, a
+**per-cube claude-code skill** runs once to produce a `codebase_map.json` that the judge
+loads.
 
-The judge prompt is structured to minimize confabulation:
-- Evidence is required: structured `evidence` fields must quote specific steps and
-  transcript excerpts.
-- Confidence signals are explicit: `primary_blame_confidence` and `hypothesis_confidence`
-  are required enum fields, forcing the model to express uncertainty rather than hide it.
+The map's job is not to summarize the codebase — it is to give the judge the right entry
+points and keywords so it can run targeted greps. Contents:
+
+- Primary source files the agent interacts with (agent prompt template path, tool
+  definition paths, benchmark task description path, reward function path).
+- Key symbols and strings to grep for (tool names, error message patterns,
+  submission action names).
+- Pointers to the installed cube package — **git-cloned source is preferred** over
+  pip-installed distributions. Git-cloned packages are greppable, navigable with
+  line-number references, and show blame history; pip-installed wheels strip source
+  context. The per-cube skill should record the git clone path or the editable install
+  root so the judge can read actual source rather than `.pyc` artifacts.
+
+The skill is triggered once per (cube, agent config) pair and its output cached alongside
+the experiment directory.
+
+### Hallucination resistance
+
+- Evidence is required: `evidence` must quote specific steps and transcript excerpts when
+  `primary_blame != "none"`.
 - Blame categories are closed-world: the judge picks from a fixed taxonomy and must
-  assign `none` if no clear cause is found, rather than inventing a plausible-sounding one.
+  assign `none` rather than inventing a plausible-sounding cause.
+- Confidence is explicit: `primary_blame_confidence` and `hypothesis_confidence` are 0–5
+  scores, forcing the model to express uncertainty rather than hide it.
+- The `analysis` field is placed **first** in the output schema and acts as a scratchpad:
+  the judge reasons through the evidence before committing to the structured fields.
 
 ---
 
 ## V1 Schema: `JudgeOutput`
 
+Fields are ordered to follow the judge's reasoning process: free-form thinking first,
+then structured conclusions.
+
 ```python
 class BlameCategory(str, Enum):
-    task_unclear     = "task_unclear"      # Task description is ambiguous or underspecified
-    model_capability = "model_capability"  # Agent lacks the reasoning/knowledge for this task
-    tool_or_env      = "tool_or_env"       # Tool crash, env error, or infra failure
-    scaffolding      = "scaffolding"       # Agent loop, prompt format, or budget design
-    eval_brittle     = "eval_brittle"      # Evaluator rejects a correct solution
-    submission_format = "submission_format" # Agent didn't call the right termination action
-    none             = "none"              # Success, or cause is genuinely unclear
-
-class Confidence(str, Enum):
-    high   = "high"
-    medium = "medium"
-    low    = "low"
+    task_unclear            = "task_unclear"
+    model_capability        = "model_capability"
+    tool_failure            = "tool_failure"
+    env_failure             = "env_failure"
+    agent_scaffolding       = "agent_scaffolding"
+    action_space_limited    = "action_space_limited"
+    insufficient_observation = "insufficient_observation"
+    eval_brittle            = "eval_brittle"
+    submission_format       = "submission_format"
+    none                    = "none"
 
 class Outcome(str, Enum):
-    success        = "success"        # Agent solved the task
-    success_lucky  = "success_lucky"  # Solved but by accident / wrong approach
-    failure        = "failure"        # Task not solved
-    indeterminate  = "indeterminate"  # Outcome is ambiguous or evaluator is unreliable
+    success                  = "success"
+    success_lucky            = "success_lucky"
+    almost                   = "almost"
+    failure                  = "failure"
+    should_have_been_rewarded = "should_have_been_rewarded"
 
 class EvidenceItem(TypedBaseModel):
-    step: int                # Step index in the trajectory
-    quote: str               # Verbatim excerpt from the agent or environment output
+    step: int     # Step index in the trajectory
+    quote: str    # Verbatim excerpt from agent or environment output
 
 class JudgeOutput(TypedBaseModel):
+    # Reasoning scratchpad — filled first; grounds all structured fields below
+    analysis: str
+
+    # What happened
     outcome: Outcome
+    summary: str              # 1–3 sentences
+
+    # Why it happened
     primary_blame: BlameCategory
-    primary_blame_confidence: Confidence
+    primary_blame_confidence: int   # 0 (pure guess) – 5 (certain)
     other_blames: list[BlameCategory] = []
-    summary: str             # 1–3 sentences: what happened
     evidence: list[EvidenceItem]
-    hypothesis: str          # 1–2 sentences: what change would most likely help
-    hypothesis_confidence: Confidence
-    analysis: str            # Free-form multi-paragraph narrative
+
+    # What would fix it
+    hypothesis: str           # 1–2 sentences
+    hypothesis_confidence: int  # 0 (pure guess) – 5 (certain)
 ```
+
+### Outcome taxonomy
+
+| Outcome | Meaning |
+|---|---|
+| `success` | Agent solved the task correctly. |
+| `success_lucky` | Task marked as solved but agent reached it by accident or via a wrong approach. Worth less than a clean success as a training signal. |
+| `almost` | Agent clearly understood the task and made meaningful progress; failed on a minor technical detail. Worth more than `success_lucky` as a quality signal — the agent's strategy was sound. |
+| `failure` | Task not solved. |
+| `should_have_been_rewarded` | Agent did what the task asked, but was not rewarded — because the task description was ambiguous, the ground truth was stale, or the evaluation function was too brittle to accept a valid solution. Pairs naturally with `eval_brittle` or `task_unclear` as the primary blame. |
 
 ### Blame taxonomy
 
 | Category | Use when |
 |---|---|
 | `task_unclear` | The task description is ambiguous, contradictory, or missing necessary context. |
-| `model_capability` | The agent understands the task but lacks the reasoning ability, domain knowledge, or multi-step planning to solve it. |
-| `tool_or_env` | A tool raised an exception, an environment reset failed, a container crashed, or infra was unavailable — outside the agent's control. |
-| `scaffolding` | The agent loop, system prompt, budget limits, context window management, or submission protocol caused the failure — not the underlying LLM. |
+| `model_capability` | The agent understood the task but lacked the reasoning ability, domain knowledge, or multi-step planning to solve it. |
+| `tool_failure` | A tool raised an exception or returned an unexpected error — a bug or limitation in the tool wrapper itself (e.g. a bash tool that truncates output, a browser tool that crashes on a specific element). |
+| `env_failure` | The underlying environment or infrastructure failed outside the agent's and tool's control: container crash, network timeout, VM restart, port binding failure. |
+| `agent_scaffolding` | The agent loop, system prompt design, budget limits, context window management, or submission protocol caused the failure — not the underlying LLM capability. |
+| `action_space_limited` | The agent could not complete the task because a required action does not exist in its action space. A correct solution is impossible with the current tool set. |
+| `insufficient_observation` | The observation presented to the LLM was missing crucial information needed to take the right decision — e.g. a pruned axTree that hid the target element, a truncated tool output, or a screenshot at too low a resolution. |
 | `eval_brittle` | The agent produced a correct or acceptable solution but the evaluator rejected it (e.g. wrong whitespace, order-sensitive string match, stale ground truth). |
 | `submission_format` | The agent reached a correct solution but failed to submit it through the required channel (e.g. never called `final_step`, submitted to the wrong tool). |
-| `none` | Assign on success, or when the episode is too ambiguous to assign a blame without speculation. |
+| `none` | Assign on clean success, or when the episode is too ambiguous to assign a blame without speculation. |
 
 **Multi-blame:** `primary_blame` is the dominant cause. `other_blames` captures secondary
-contributing factors. For example, a submission error (`submission_format`) may co-occur
-with a `scaffolding` issue if the agent prompt doesn't mention the submission tool.
+contributing factors. `submission_format` and `agent_scaffolding` frequently co-occur:
+the agent didn't submit because the prompt never mentioned the submission tool.
+
+### Confidence score (0–5)
+
+| Score | Meaning |
+|---|---|
+| 5 | Certain — the evidence is unambiguous and directly supports the attribution. |
+| 4 | High — strong evidence, one minor alternative interpretation. |
+| 3 | Medium — plausible reading of the evidence; another interpretation is credible. |
+| 2 | Low — the attribution is a best guess; evidence is thin. |
+| 1 | Very low — mostly speculation. |
+| 0 | No basis — the judge cannot form a coherent attribution. |
 
 ---
 
@@ -163,15 +224,15 @@ src/cube_harness/analyze/
 
 ```python
 def judge_episode(
-    trajectory: Trajectory,
+    trajectory_dir: Path,
     *,
     agent_config: AgentConfig,
     task_description: str,
-    related_trajectories: list[Trajectory] | None = None,
+    codebase_map: Path | None = None,
+    related_trajectory_dirs: list[Path] | None = None,
     model: str = "claude-opus-4-7",
-    codebase_files: list[Path] | None = None,
 ) -> JudgeOutput:
-    """Run a post-hoc judge on a single episode trajectory."""
+    """Run a post-hoc judge on a single episode trajectory directory."""
     ...
 
 def judge_experiment(
@@ -191,35 +252,37 @@ def judge_experiment(
 
 ### Prompt structure
 
-The judge prompt is rendered from a Jinja2 template (checked in at
-`src/cube_harness/analyze/judge_prompt.md.j2`) with three sections:
+The judge prompt (rendered from a Jinja2 template at
+`src/cube_harness/analyze/judge_prompt.md.j2`) contains three sections:
 
-1. **Context** — agent config summary, task description, codebase files (if provided).
-2. **Trajectory** — flat conversation log with step indices, tool calls, and env responses.
+1. **Context** — paths to relevant source files from the codebase map, task description.
+2. **Trajectory pointer** — the path to the trajectory directory; the judge uses file
+   tools to navigate step files, fetch observations at specific steps, and read
+   screenshots as needed.
 3. **Instructions** — taxonomy definitions, output schema, evidence requirements,
-   confidence calibration guidelines.
+   confidence calibration guidelines. The judge is instructed to write `analysis` first
+   as a scratchpad before filling the structured fields.
 
-The judge is asked to return a JSON block only; the response is parsed with
-`json.loads` with fallback to a regex extractor for common LLM wrapping.
+The judge is asked to return a single JSON block; the response is parsed with
+`json.loads` with fallback to a regex extractor for common LLM wrapping patterns.
 
 ### Integration with `EpisodeRecord`
 
-When `judge_experiment()` is run on an output directory that already contains an
-`experiment_record.json`, it updates each `episode_record.json` in-place by populating
-the `judge_output` field (currently `null` in the atlas-eval-log schema):
+When `judge_experiment()` runs on a directory containing `experiment_record.json`, it
+updates each `episode_record.json` by populating the `judge_output` field:
 
 ```jsonc
 {
   "judge_output": {
-    "outcome": "failure",
-    "primary_blame": "scaffolding",
-    "primary_blame_confidence": "high",
+    "analysis": "The agent located the correct file at step 8 and produced a valid patch...",
+    "outcome": "should_have_been_rewarded",
+    "summary": "Agent produced a valid patch but the evaluator rejected it due to trailing whitespace.",
+    "primary_blame": "eval_brittle",
+    "primary_blame_confidence": 4,
     "other_blames": [],
-    "summary": "Agent never called final_step despite reaching a correct patch.",
     "evidence": [{"step": 42, "quote": "diff --git a/..."}],
-    "hypothesis": "Adding an explicit reminder to call final_step when a patch is ready would fix this class of failure.",
-    "hypothesis_confidence": "high",
-    "analysis": "..."
+    "hypothesis": "Normalizing trailing whitespace in the evaluator would fix this class of rejection.",
+    "hypothesis_confidence": 4
   }
 }
 ```
@@ -233,7 +296,7 @@ uv run python -m cube_harness.analyze.judge path/to/output_dir
 # With model override
 uv run python -m cube_harness.analyze.judge path/to/output_dir --model claude-sonnet-4-6
 
-# Print aggregated blame counts
+# Print aggregated blame counts and outcome distribution
 uv run python -m cube_harness.analyze.judge path/to/output_dir --summary
 ```
 
@@ -248,7 +311,7 @@ uv run python -m cube_harness.analyze.judge path/to/output_dir --summary
 
 2. **Benchmark-level diagnostics.** Aggregating `primary_blame` distributions across a
    run identifies systematic weaknesses: "60% of failures on this benchmark are
-   `tool_or_env` — fix the cube before tuning the agent."
+   `insufficient_observation` — fix the observation pipeline before tuning the agent."
 
 3. **Cross-run hypothesis tracking.** If `hypothesis` and `hypothesis_confidence` are
    persisted and linked to the experiment that tested the fix, the improvement is
@@ -265,12 +328,12 @@ but provides consistent, reproducible signals across runs.
 
 **Rule-based classifiers.** Too brittle: failure mode boundaries are semantic, not
 syntactic. "Agent looped" can be `model_capability` (couldn't find the fix) or
-`scaffolding` (no anti-loop instruction) depending on context.
+`agent_scaffolding` (no anti-loop instruction) depending on context.
 
 **Separate judge per benchmark.** Benchmark-specific prompts would be more accurate for
-known tasks but require ongoing maintenance and don't generalize. The taxonomy is designed
-to be benchmark-agnostic; benchmark-specific context is injected via `codebase_files` and
-`task_description` rather than hardcoded.
+known tasks but require ongoing maintenance and don't generalize. The taxonomy is
+benchmark-agnostic; benchmark-specific context is injected via the codebase map and task
+description rather than hardcoded.
 
 **Embedding-based clustering.** Useful as a complement for large-scale pattern discovery,
 but doesn't produce the structured blame + hypothesis needed for the improvement loop.
@@ -279,9 +342,11 @@ but doesn't produce the structured blame + hypothesis needed for the improvement
 
 ## Open questions
 
-1. How many related trajectories to include in the contrastive prompt — and at what token
-   cost — before the judge starts hallucinating?
+1. How many related trajectory directories to pass before the judge's navigation overhead
+   exceeds the signal from contrastive analysis?
 2. Should `judge_experiment()` write a single aggregated `experiment_judge_summary.json`,
    or only per-episode files? (Proposed: both.)
-3. Judge calibration: should `Confidence.low` be treated as `none` for aggregation
+3. Confidence calibration: should scores 0–1 be treated as `none` for aggregation
    purposes?
+4. Codebase map: should the per-cube skill check out a pinned git ref matching the
+   experiment's run commit, or always use `HEAD`?
