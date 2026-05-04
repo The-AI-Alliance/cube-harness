@@ -202,7 +202,14 @@ def _load_task_class(class_path: str) -> type:
     """Reconstruct a task class from its dotted module-qualified name."""
     module_name, class_name = class_path.rsplit(".", 1)
     module = importlib.import_module(module_name)
-    return getattr(module, class_name)
+    if hasattr(module, class_name):
+        return getattr(module, class_name)
+    for attr in vars(module).values():
+        if isinstance(attr, (list, tuple)):
+            for item in attr:
+                if isinstance(item, type) and item.__name__ == class_name:
+                    return item
+    raise AttributeError(f"module {module_name!r} has no attribute {class_name!r}")
 
 
 def _apply_task_runtime_preferences(tool: WorkArenaBrowserTool, workarena_task: AbstractServiceNowTask) -> None:
