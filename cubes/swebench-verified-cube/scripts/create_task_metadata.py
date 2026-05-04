@@ -7,7 +7,7 @@ the repository — end users never need to run this script.
 
 Only lightweight public fields are written (repo, base_commit, difficulty, version).
 Heavy execution data (problem_statement, patch, test_patch, etc.) is written by
-SWEBenchVerifiedBenchmark.install() into the per-task execution cache and is never committed.
+SWEBenchVerifiedBenchmarkConfig.install() into the per-task execution cache and is never committed.
 
 Usage:
     python scripts/create_task_metadata.py [--force] [--hf-cache DIR]
@@ -16,7 +16,7 @@ Options:
     --force          Overwrite task_metadata.json even if it already exists.
     --hf-cache DIR   Where to store the downloaded HF dataset.
                      Defaults to ~/.cube/swebench-verified-cube/huggingface_cache
-                     (same as SWEBenchVerifiedBenchmark.install()).
+                     (same as SWEBenchVerifiedBenchmarkConfig.install()).
 """
 
 from __future__ import annotations
@@ -34,13 +34,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from cube.container import ContainerConfig
 from datasets import load_dataset
 
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark, _DATASET_NAME
+from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig, _DATASET_NAME
 from swebench_verified_cube.task import SWEBenchVerifiedTaskMetadata
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_OUTPUT = Path(__file__).parent.parent / "src" / "swebench_verified_cube" / "task_metadata.json"
-_DEFAULT_HF_CACHE = SWEBenchVerifiedBenchmark.cache_dir() / "huggingface_cache"
+_DEFAULT_HF_CACHE = SWEBenchVerifiedBenchmarkConfig.cache_dir() / "huggingface_cache"
 
 _DOCKER_NAMESPACE = "swebench"
 _IMAGE_TAG = "latest"

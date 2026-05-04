@@ -30,6 +30,7 @@ dependencies = [
     "mcp[cli]>=1.26",
     "msgpack>=1.0.0",
     "zstandard>=0.20.0",
+    "docker>=7.1.0",
     "google-cloud-storage>=2.18.0",
 ]
 

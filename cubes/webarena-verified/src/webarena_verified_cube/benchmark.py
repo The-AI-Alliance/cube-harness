@@ -2,7 +2,7 @@ import logging
 import urllib.error
 import urllib.request
 from collections.abc import Generator
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.infra_local import LocalInfraConfig
@@ -29,8 +29,7 @@ class WebArenaVerifiedBenchmark(Benchmark["WebArenaVerifiedBenchmarkConfig"]):
         config: "WebArenaVerifiedBenchmarkConfig",
         infra: InfraConfig | None = None,
     ) -> None:
-        super().__init__(config)
-        self._infra: InfraConfig | None = infra
+        super().__init__(config, infra=infra)
         self._handle: ResourceHandle | None = None
 
     def _setup(self) -> None:
@@ -142,7 +141,7 @@ class WebArenaVerifiedBenchmark(Benchmark["WebArenaVerifiedBenchmarkConfig"]):
             self._handle = None
 
 
-class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig):
+class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig[WebArenaVerifiedTaskMetadata]):
     """WebArena Verified — 812 verified web automation tasks across 6 platforms.
 
     Exactly one of two setup modes must be configured before calling ``make()``:
@@ -197,18 +196,14 @@ class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig):
     """
 
     def make(self, infra: InfraConfig | None = None) -> WebArenaVerifiedBenchmark:
-        """Override to forward ``infra`` into the runtime constructor.
+        """Default ``infra`` to ``LocalInfraConfig`` when DockerServiceConfig
+        resources are declared in automatic mode, then delegate to the base
+        ``BenchmarkConfig.make`` for provisioning + setup.
 
-        Per-cube override — cube-standard's base ``make(infra)`` only passes
-        ``config`` to the runtime, but webarena-verified needs ``infra`` on the
-        runtime to launch its DockerServiceConfig in ``_setup``. Provisioning
-        is mirrored from the base implementation so callers see identical
-        behavior; ``_setup`` then only launches.
-
-        If ``infra`` is None and the config declares a DockerServiceConfig
-        resource (and no manual ``wav_config.environments`` are set), defaults
-        to ``LocalInfraConfig()``. Cloud users pass their own ``infra`` explicitly;
-        manual-mode users set ``wav_config.environments`` and never enter this branch.
+        Manual-mode users set ``wav_config.environments`` and pass no infra;
+        cloud users pass their own ``infra`` explicitly; the local-default
+        branch fires only for the default case where DockerServiceConfig
+        resources are declared but no infra is provided.
         """
         needs_infra = self.wav_config.environments is None and any(
             isinstance(r, DockerServiceConfig) for r in self.resources
@@ -218,24 +213,11 @@ class WebArenaVerifiedBenchmarkConfig(BenchmarkConfig):
                 "No infra= passed but DockerServiceConfig resources are declared; defaulting to LocalInfraConfig()"
             )
             infra = LocalInfraConfig()
-
-        if self.resources and infra is not None:
-            for resource in self.resources:
-                if infra.provision_status(resource) == "ready":
-                    logger.info("Resource %s already provisioned on %s", resource.name, infra.fingerprint())
-                    continue
-                logger.info("Provisioning resource %s on %s...", resource.name, infra.fingerprint())
-                infra.provision(resource)
-        bench = WebArenaVerifiedBenchmark(config=self, infra=infra)
-        bench.setup()
-        return bench
+        return cast(WebArenaVerifiedBenchmark, super().make(infra=infra))
 
     def get_task_configs(self) -> Generator[WebArenaVerifiedTaskConfig, None, None]:
         """Yield TaskConfigs with wav_config forwarded from benchmark settings."""
         for tm in self.tasks().values():
-            if not isinstance(tm, WebArenaVerifiedTaskMetadata):
-                raise ValueError(f"tasks() expected WebArenaVerifiedTaskMetadata, got {type(tm)}")
-
             yield WebArenaVerifiedTaskConfig(
                 metadata=tm,
                 tool_config=self.tool_config,

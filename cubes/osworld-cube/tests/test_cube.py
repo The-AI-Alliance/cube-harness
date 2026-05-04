@@ -27,18 +27,19 @@ from osworld_cube.debug import get_debug_benchmark, make_debug_agent
 
 @pytest.fixture(scope="session")
 def debug_task_configs(infra: InfraConfig):
-    benchmark = get_debug_benchmark(infra=infra)
-    benchmark.install()
-    benchmark.setup()
-    configs = {tc.task_id: tc for tc in benchmark.get_task_configs()}
+    config = get_debug_benchmark()
+    config.install()
+    benchmark = config.make(infra=infra)
+    runtime_context = benchmark._runtime_context
+    configs = {tc.task_id: (tc, runtime_context) for tc in config.get_task_configs()}
     yield configs
     benchmark.close()
 
 
 @pytest.mark.integration
 def test_debug_episodes(debug_task_configs) -> None:
-    for task_id, tc in debug_task_configs.items():
-        task = tc.make()
+    for task_id, (tc, runtime_context) in debug_task_configs.items():
+        task = tc.make(runtime_context=runtime_context)
         agent = make_debug_agent(task_id)
         report = run_debug_episode(task, agent, max_steps=20)
         assert report["done"], f"Task {task_id}: episode did not complete: {report}"

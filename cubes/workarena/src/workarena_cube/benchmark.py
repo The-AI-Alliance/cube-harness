@@ -9,7 +9,7 @@ from cube.seed import AbstractSeedGenerator
 from cube.task import TaskConfig, TaskMetadata
 from pydantic import PrivateAttr, model_validator
 
-from workarena_cube.task import WorkArenaTaskConfig
+from workarena_cube.task import WorkArenaTaskConfig, WorkArenaTaskMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class WorkArenaBenchmark(Benchmark["WorkArenaBenchmarkConfig"]):
         logger.info("WorkArena benchmark closed.")
 
 
-class WorkArenaBenchmarkConfig(BenchmarkConfig):
+class WorkArenaBenchmarkConfig(BenchmarkConfig[WorkArenaTaskMetadata]):
     """CUBE BenchmarkConfig for WorkArena ServiceNow tasks.
 
     By default loads all task types from all levels (l1, l2, l3).

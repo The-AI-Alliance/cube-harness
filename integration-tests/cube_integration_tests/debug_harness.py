@@ -2,9 +2,13 @@
 
 Expected cube module shape
 --------------------------
-- ``get_debug_benchmark(infra) -> Benchmark``
+- ``get_debug_benchmark() -> BenchmarkConfig``
 - ``make_debug_agent(task_id) -> agent callable``
 - ``_TASK_ACTIONS: dict[str, list[Action]]``
+
+The harness owns ``config.install()`` and ``config.make(infra)`` — the cube's
+``get_debug_benchmark`` is a pure factory (no infra argument) since the rc7
+``BenchmarkConfig`` migration.
 """
 
 from __future__ import annotations
@@ -42,19 +46,20 @@ def run_debug_task(
     """
     import threading
 
-    bench = cube_debug_module.get_debug_benchmark(infra=infra)
-    bench.setup()
+    config = cube_debug_module.get_debug_benchmark()
+    config.install()
+    benchmark = config.make(infra)
 
     result: dict[str, Any] = {}
     exc_holder: list[BaseException] = []
 
     def _run() -> None:
         try:
-            task_configs = [tc for tc in bench.get_task_configs() if tc.task_id == task_id]
+            task_configs = [tc for tc in config.get_task_configs() if tc.task_id == task_id]
             if not task_configs:
                 raise ValueError(f"Task {task_id!r} not found in benchmark debug subset")
             tc = task_configs[0]
-            task = tc.make(runtime_context=bench._runtime_context)
+            task = benchmark.spawn(tc)
             try:
                 logger.info("START  task=%r  infra=%s", task_id, infra.fingerprint())
                 t0 = time.monotonic()
@@ -83,7 +88,7 @@ def run_debug_task(
         thread.start()
         thread.join(timeout=timeout)
     finally:
-        bench.close()
+        benchmark.close()
 
     if thread.is_alive():
         raise TimeoutError(

@@ -60,7 +60,7 @@ tests/                          # pytest suite
 
 ## Spec index
 
-Read the spec, then the code. Each spec is the authoritative contract for its layer.
+Each spec is the authoritative contract for its layer.
 
 | Layer | Module | Spec |
 |-------|--------|------|
@@ -78,6 +78,20 @@ Read the spec, then the code. Each spec is the authoritative contract for its la
 **External contracts (cube-standard):** Any field typed as `cube.task.Task`,
 `cube.benchmark.Benchmark`, `cube.tool.Tool`, `cube.core.*`, or `cube.resource.*`
 is governed by cube-standard's specs. Don't subclass those here — consume them.
+
+## Engineering principles
+
+- **Read the spec first.** Before touching any layer, read its spec in `openspec/specs/`. Specs are the authoritative design intent — but they can be stale or wrong; flag discrepancies rather than silently working around them.
+- **Fix in the right place.** A quick local experiment to understand a problem is fine. But the committed fix must address the root cause in the correct layer — not a workaround scoped to a single call site or context.
+- **Understand before fixing.** Many bad fixes come from acting too fast. Make sure you understand the broader design before proposing a change. A fix that misses the bigger picture is worse than no fix.
+- **Lean diffs.** Make the minimal change that solves the problem. Avoid verbose additions, unnecessary abstractions, and duplicated logic that already exists elsewhere. If existing code can be reused or consolidated, do it. A hard-to-review diff is a liability.
+- **Think long-term.** Every change should age well. Ask whether today's shortcut becomes tomorrow's debt — and whether the design could evolve cleanly if requirements change.
+
+## Code review
+
+**Sign your commits.** Every commit needs a `Signed-off-by` line (`git commit -s`). DCO is enforced by CI — unsigned commits will be blocked.
+
+PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md)), which audits changes against these guidelines. Write PRs as if a reviewer will check each principle above against the diff.
 
 ## Workflow for code changes
 
@@ -109,13 +123,22 @@ make install            # uv sync --all-extras
 make test               # full pytest
 make debug              # small end-to-end run
 make xray               # open the trajectory viewer
-make lint
+make lint               # uvx ruff check --fix && uvx ruff format  (auto-fixes in place)
+make lint-check         # uvx ruff check --diff && uvx ruff format --diff  (read-only, what CI runs)
 make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency
 uv run --project recipes/miniwob recipes/miniwob/hello_miniwob.py   # example run
 ```
 
+Always run `make lint` before finishing a task. `ruff check` and `ruff format` are
+**separate passes** — running only one is not enough for CI.
+
 Environment vars go in `.env` (loaded by pyproject). `OPENAI_API_KEY`
 is the only required one for the baseline recipes; see individual cubes for others.
+
+**Ray launch**: use `.venv/bin/python recipe.py` or `uv run --active recipe.py` — never bare
+`uv run` when `VIRTUAL_ENV` is set. uv will silently create an ephemeral env whose `.pth` files
+can point to deleted paths, causing `ImportError` on Ray workers. `exp_runner.py` warns when it
+detects this.
 
 ## Cross-repo PRs (cube-harness ↔ cube-standard)
 

@@ -1,0 +1,32 @@
+[
+    {
+        "id": "waa-debug-notepad",
+        "instruction": "Open Notepad.",
+        "snapshot": "init_state",
+        "config": [],
+        "evaluator": {
+            "func": "check_include_exclude",
+            "result": {
+                "type": "vm_active_window_title"
+            },
+            "expected": {
+                "type": "rule",
+                "rules": {
+                    "include": ["Notepad"],
+                    "exclude": []
+                }
+            }
+        },
+        "related_apps": ["notepad"],
+        "domain": "debug"
+    },
+    {
+        "id": "waa-debug-infeasible",
+        "instruction": "Open the application 'QuantumBrainStorm 3000' which should be pre-installed on this computer.",
+        "snapshot": "init_state",
+        "config": [],
+        "evaluator": {"func": "infeasible"},
+        "related_apps": [],
+        "domain": "debug"
+    }
+]

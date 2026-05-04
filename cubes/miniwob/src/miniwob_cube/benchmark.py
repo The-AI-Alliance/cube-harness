@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import ClassVar, Generator
 
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
+from cube.resource import InfraConfig
 from cube.task import TaskConfig
 
 from miniwob_cube.task import MiniWobTaskConfig, MiniWobTaskMetadata
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 class MiniWobBenchmark(Benchmark["MiniWobBenchmarkConfig"]):
     """Runtime pair — owns the local HTTP server process serving MiniWob HTML."""
 
-    def __init__(self, config: "MiniWobBenchmarkConfig") -> None:
-        super().__init__(config)
+    def __init__(self, config: "MiniWobBenchmarkConfig", infra: InfraConfig | None = None) -> None:
+        super().__init__(config, infra=infra)
         self._server_process: subprocess.Popen | None = None
         self._stdout_file: TextIOWrapper | None = None
         self._stderr_file: TextIOWrapper | None = None
@@ -85,7 +86,7 @@ class MiniWobBenchmark(Benchmark["MiniWobBenchmarkConfig"]):
             self._stderr_file = None
 
 
-class MiniWobBenchmarkConfig(BenchmarkConfig):
+class MiniWobBenchmarkConfig(BenchmarkConfig[MiniWobTaskMetadata]):
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
         name="miniwob-cube",
         version="1.0.0",
@@ -109,9 +110,6 @@ class MiniWobBenchmarkConfig(BenchmarkConfig):
 
     def get_task_configs(self) -> Generator[MiniWobTaskConfig, None, None]:
         for tm in self.tasks().values():
-            if not isinstance(tm, MiniWobTaskMetadata):
-                raise ValueError(f"tasks() expected MiniWobTaskMetadata, got {type(tm)}")
-
             yield MiniWobTaskConfig(
                 metadata=tm,
                 tool_config=self.tool_config,

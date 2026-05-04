@@ -5,6 +5,11 @@ This is a developer tool. Run it after cloning (or updating) the OSWorld repo
 to regenerate the shipped package resource. The output file is committed to
 the repository - end users never need to run this script.
 
+Only lightweight public fields are written (instruction, domain, test_sets,
+snapshot, os_type, related_apps). Heavy execution data (config, evaluator) is
+written by OSWorldBenchmarkConfig.install() into the per-task execution cache
+and is never committed.
+
 The script clones the repo automatically if it is not already present.
 
 Usage:

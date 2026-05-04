@@ -1,6 +1,8 @@
 """Run experiments with Ray or sequentially."""
 
 import logging
+import os
+import sys
 import time
 from uuid import uuid4
 
@@ -16,6 +18,33 @@ from cube_harness.storage import FileStorage, Storage
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
+
+# Default timeouts shared with xray_utils for ghost-episode detection.
+DEFAULT_STEP_TIMEOUT_S: float = 1800.0
+DEFAULT_CANCEL_GRACE_S: float = 120.0
+
+
+def _warn_if_ephemeral_venv() -> None:
+    """Warn when VIRTUAL_ENV is set but the interpreter lives elsewhere.
+
+    This happens when a recipe is launched with bare `uv run recipe.py` while VIRTUAL_ENV
+    already points to a project venv (e.g. inside a Claude worktree or after `source .venv/bin/activate`).
+    uv ignores the mismatch and creates an ephemeral env in ~/.cache/uv/environments-v2/ whose .pth
+    files can point to stale or deleted paths. Ray workers inherit that environment and may fail
+    with ImportError on any editable-installed cube package.
+
+    Fix: launch with `.venv/bin/python recipe.py`  or  `uv run --active recipe.py`.
+    """
+    venv = os.environ.get("VIRTUAL_ENV", "")
+    if venv and not sys.executable.startswith(venv):
+        logger.warning(
+            "VIRTUAL_ENV=%s but the interpreter is %s — uv may have created an ephemeral "
+            "environment whose .pth files point to stale paths. Ray workers will inherit "
+            "this environment and may raise ImportError. "
+            "Launch with:  .venv/bin/python <recipe>.py  or  uv run --active <recipe>.py",
+            venv,
+            sys.executable,
+        )
 
 
 def _extract_model(exp: Experiment) -> str | None:
@@ -62,8 +91,8 @@ def run_with_ray(
     *,
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
-    step_timeout_s: float = 1800.0,
-    cancel_grace_s: float = 120.0,
+    step_timeout_s: float = DEFAULT_STEP_TIMEOUT_S,
+    cancel_grace_s: float = DEFAULT_CANCEL_GRACE_S,
     orphan_threshold_s: float = 3600.0,
     max_retry_rounds: int = 3,
     otlp_endpoint: str | None = None,
@@ -176,6 +205,7 @@ def _run_with_ray_impl(
             return episode.run()
 
     if not ray.is_initialized():
+        _warn_if_ephemeral_venv()
         ray.init(
             num_cpus=n_cpus,
             dashboard_host="0.0.0.0",
@@ -334,8 +364,8 @@ def run_sequentially(
     exp: Experiment,
     debug_limit: int | None = None,
     *,
-    step_timeout_s: float = 1800.0,
-    cancel_grace_s: float = 120.0,
+    step_timeout_s: float = DEFAULT_STEP_TIMEOUT_S,
+    cancel_grace_s: float = DEFAULT_CANCEL_GRACE_S,
     orphan_threshold_s: float = 3600.0,
     max_retry_rounds: int = 3,
     otlp_endpoint: str | None = None,

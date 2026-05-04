@@ -112,11 +112,26 @@ class TestComputerConfig:
 
 
 class TestDebugBenchmark:
-    def test_get_debug_benchmark_defaults_to_local_infra(self) -> None:
-        from osworld_cube.debug import get_debug_benchmark
+    def test_get_debug_benchmark_returns_config(self) -> None:
+        """``get_debug_benchmark`` returns a ``DebugOSWorldBenchmarkConfig`` per the
+        cube-standard rc7 protocol — infra is no longer a config field; it is
+        passed via ``config.make(infra)``."""
+        from osworld_cube.debug import DebugOSWorldBenchmarkConfig, get_debug_benchmark
 
-        benchmark = get_debug_benchmark()
-        assert isinstance(benchmark.infra, LocalInfraConfig)
+        cfg = get_debug_benchmark()
+        assert isinstance(cfg, DebugOSWorldBenchmarkConfig)
+        assert cfg.num_tasks == 2
+
+    def test_default_infra_resolves_to_local(self) -> None:
+        """The ``__main__`` path calls ``_get_default_infra`` which falls back to
+        ``LocalInfraConfig`` when no env-var override is set."""
+        import os
+
+        from osworld_cube.debug import _get_default_infra
+
+        os.environ.pop("OSWORLD_CUBE_TEST_INFRA_CONFIG_FILE", None)
+        infra = _get_default_infra()
+        assert isinstance(infra, LocalInfraConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -267,10 +282,16 @@ def _make_task_metadata(task_id: str = "t1", instruction: str = "Do something"):
         snapshot="init_state",
         os_type="ubuntu",
         related_apps=[],
-        extra_info={
-            "config": [],
-            "evaluator": {"func": "check_file", "expected": {}},
-        },
+    )
+
+
+def _make_execution_info(evaluator: dict | None = None):
+    """Default execution info for OSWorldTask tests — empty config, simple evaluator."""
+    from osworld_cube.task import OSWorldExecutionInfo
+
+    return OSWorldExecutionInfo(
+        config=[],
+        evaluator=evaluator if evaluator is not None else {"func": "check_file", "expected": {}},
     )
 
 
@@ -302,7 +323,11 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
+            tool_config=ComputerConfig(),
+        )
         assert task._computer is not None
         assert task._computer._vm is None
         assert task._handle is None
@@ -325,8 +350,9 @@ class TestOSWorldTask:
 
             task = OSWorldTask(
                 metadata=_make_task_metadata(),
+                execution_info=_make_execution_info(),
                 tool_config=ComputerConfig(),
-                infra=mock_infra,
+                runtime_context={"infra": mock_infra},
             )
             obs, info = task.reset()
 
@@ -338,7 +364,11 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
+            tool_config=ComputerConfig(),
+        )
         mock_handle = _make_mock_handle()
         task._handle = mock_handle
 
@@ -363,7 +393,11 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
+            tool_config=ComputerConfig(),
+        )
         mock_handle = _make_mock_handle()
         task._handle = mock_handle
 
@@ -382,9 +416,12 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            execution_info=_make_execution_info({"func": "check_file"}),
+            tool_config=ComputerConfig(),
+        )
         task._handle = _make_mock_handle()
-        task._current_task_config = {"id": "t1", "evaluator": {"func": "check_file"}}
         task._computer._guest = _make_mock_guest()
 
         with patch(PATCH_EVALUATOR) as mock_eval_cls:
@@ -396,7 +433,7 @@ class TestOSWorldTask:
 
     def test_evaluate_no_evaluator_returns_zero(self) -> None:
         from osworld_cube.computer import ComputerConfig
-        from osworld_cube.task import OSWorldTask, OSWorldTaskMetadata
+        from osworld_cube.task import OSWorldExecutionInfo, OSWorldTask, OSWorldTaskMetadata
 
         task = OSWorldTask(
             metadata=OSWorldTaskMetadata(
@@ -408,8 +445,8 @@ class TestOSWorldTask:
                 snapshot="init_state",
                 os_type="ubuntu",
                 related_apps=[],
-                extra_info={},
             ),
+            execution_info=OSWorldExecutionInfo(config=[], evaluator={}),
             tool_config=ComputerConfig(),
         )
         reward, info = task.evaluate(Observation())
@@ -420,7 +457,11 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
+            tool_config=ComputerConfig(),
+        )
         assert task.finished(Observation()) is False
         task._computer._is_done = True
         assert task.finished(Observation()) is True
@@ -432,6 +473,7 @@ class TestOSWorldTask:
 
         task = OSWorldTask(
             metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
             tool_config=ComputerConfig(observe_after_action=False),
         )
         mock_handle = _make_mock_handle()
@@ -460,6 +502,7 @@ class TestOSWorldTask:
 
         task = OSWorldTask(
             metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
             tool_config=ComputerConfig(observe_after_action=False),
         )
         mock_handle = _make_mock_handle()
@@ -481,7 +524,11 @@ class TestOSWorldTask:
         from osworld_cube.computer import ComputerConfig
         from osworld_cube.task import OSWorldTask
 
-        task = OSWorldTask(metadata=_make_task_metadata(), tool_config=ComputerConfig())
+        task = OSWorldTask(
+            metadata=_make_task_metadata(),
+            execution_info=_make_execution_info(),
+            tool_config=ComputerConfig(),
+        )
         mock_handle = _make_mock_handle()
         task._handle = mock_handle
         task._computer._guest = _make_mock_guest()
@@ -524,81 +571,119 @@ class TestOSWorldTestSet:
 
 class TestOSWorldBenchmark:
     def test_benchmark_metadata(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
-        assert OSWorldBenchmark.benchmark_metadata.name == "osworld-cube"
-        assert OSWorldBenchmark.task_config_class.__name__ == "OSWorldTaskConfig"
+        assert OSWorldBenchmarkConfig.benchmark_metadata.name == "osworld-cube"
+        assert OSWorldBenchmarkConfig.task_config_class.__name__ == "OSWorldTaskConfig"
+        assert OSWorldBenchmarkConfig.benchmark_class.__name__ == "OSWorldBenchmark"
 
     def test_load_all_tasks_from_shipped_metadata(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
-        assert len(OSWorldBenchmark.task_metadata) > 0
-        assert all(tm.test_sets for tm in OSWorldBenchmark.task_metadata.values())
+        assert len(OSWorldBenchmarkConfig.task_metadata) > 0
+        assert all(tm.test_sets for tm in OSWorldBenchmarkConfig.task_metadata.values())
 
     def test_domain_filter_via_subset_from_glob(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
-        bench = OSWorldBenchmark()
-        chrome_bench = bench.subset_from_glob("domain", "chrome")
-        assert isinstance(chrome_bench, OSWorldBenchmark)
-        assert len(chrome_bench.task_metadata) > 0
-        assert len(chrome_bench.task_metadata) < len(bench.task_metadata)
-        assert all(tm.domain == "chrome" for tm in chrome_bench.task_metadata.values())
+        cfg = OSWorldBenchmarkConfig()
+        chrome_cfg = cfg.subset_from_glob("domain", "chrome")
+        assert isinstance(chrome_cfg, OSWorldBenchmarkConfig)
+        assert len(chrome_cfg.tasks()) > 0
+        assert len(chrome_cfg.tasks()) < len(cfg.tasks())
+        assert all(tm.domain == "chrome" for tm in chrome_cfg.tasks().values())
 
     def test_named_subset_test_small(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
-        bench = OSWorldBenchmark()
-        small_bench = bench.named_subset("test_small")
-        assert isinstance(small_bench, OSWorldBenchmark)
-        assert len(small_bench.task_metadata) > 0
-        assert len(small_bench.task_metadata) < len(bench.task_metadata)
-        assert all("test_small" in tm.test_sets for tm in small_bench.task_metadata.values())
+        cfg = OSWorldBenchmarkConfig()
+        small_cfg = cfg.named_subset("test_small")
+        assert isinstance(small_cfg, OSWorldBenchmarkConfig)
+        assert len(small_cfg.tasks()) > 0
+        assert len(small_cfg.tasks()) < len(cfg.tasks())
+        assert all("test_small" in tm.test_sets for tm in small_cfg.tasks().values())
 
     def test_get_task_configs_carries_metadata(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig, OSWorldTaskConfig
 
-        bench = OSWorldBenchmark()
-        configs = list(bench.get_task_configs())
-        assert len(configs) == len(bench.task_metadata) == 368
+        cfg = OSWorldBenchmarkConfig()
+        configs = list(cfg.get_task_configs())
+        assert len(configs) == len(cfg.tasks()) == 368
 
-        for cfg in configs:
-            assert isinstance(cfg, OSWorldTaskConfig)
-            assert cfg.task_id in bench.task_metadata
+        for tc in configs:
+            assert isinstance(tc, OSWorldTaskConfig)
+            assert tc.task_id in cfg.tasks()
+            # metadata travels with the config — no driver-side lookup required
+            assert tc.metadata.id == tc.task_id
 
     def test_task_config_make_produces_osworld_task(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
-        from osworld_cube.task import OSWorldTask
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig, OSWorldTaskConfig
+        from osworld_cube.task import OSWorldExecutionInfo, OSWorldTask
 
-        bench = OSWorldBenchmark()
-        cfg = next(bench.get_task_configs())
+        cfg = OSWorldBenchmarkConfig()
+        tc = next(cfg.get_task_configs())
         fake_exec_info = {"config": [], "evaluator": {"func": "check_file"}}
-        with patch.object(OSWorldBenchmark, "load_task_execution_info", return_value=fake_exec_info):
-            task = cfg.make()
+        with (
+            patch.object(OSWorldTaskConfig, "verify_installed"),
+            patch.object(OSWorldTaskConfig, "load_task_execution_info", return_value=fake_exec_info),
+        ):
+            task = tc.make()
 
         assert isinstance(task, OSWorldTask)
-        assert task.metadata.id == cfg.task_id
-        assert "config" in task.metadata.extra_info
-        assert "evaluator" in task.metadata.extra_info
+        assert task.metadata.id == tc.task_id
+        assert isinstance(task.execution_info, OSWorldExecutionInfo)
+        assert task.execution_info.config == []
+        assert task.execution_info.evaluator == {"func": "check_file"}
 
     def test_test_all_has_all_tasks(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
-        bench = OSWorldBenchmark().named_subset("test_all")
-        assert len(bench.task_metadata) == len(OSWorldBenchmark.task_metadata)
+        cfg = OSWorldBenchmarkConfig().named_subset("test_all")
+        assert len(cfg.tasks()) == len(OSWorldBenchmarkConfig.task_metadata)
 
     def test_use_som_propagates_to_task_configs(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig, OSWorldTaskConfig
 
-        bench = OSWorldBenchmark(use_som=True)
-        cfg = next(bench.get_task_configs())
-        assert isinstance(cfg, OSWorldTaskConfig)
-        assert cfg.use_som is True
+        cfg = OSWorldBenchmarkConfig(use_som=True)
+        tc = next(cfg.get_task_configs())
+        assert isinstance(tc, OSWorldTaskConfig)
+        assert tc.use_som is True
+
+    def test_make_with_local_infra_publishes_runtime_context(self) -> None:
+        """``OSWorldBenchmarkConfig.make(infra)`` constructs the runtime pair and
+        publishes infra into ``runtime_context['infra']`` so per-task VM launches
+        flow naturally through ``Task.runtime_context``."""
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
+
+        mock_infra = MagicMock(spec=InfraConfig)
+        mock_infra.provision_status.return_value = "ready"
+        mock_infra.fingerprint.return_value = "mock-fp"
+
+        cfg = OSWorldBenchmarkConfig()
+        bench = cfg.make(infra=mock_infra)
+        try:
+            assert bench._runtime_context.get("infra") is mock_infra
+        finally:
+            bench.close()
 
     def test_close_does_not_raise(self) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        """Closing a fresh runtime pair must succeed without errors."""
+        from osworld_cube.benchmark import OSWorldBenchmark, OSWorldBenchmarkConfig
 
-        OSWorldBenchmark().close()
+        bench = OSWorldBenchmark(config=OSWorldBenchmarkConfig())
+        bench.setup()
+        bench.close()
+
+    def test_round_trip_serialization(self) -> None:
+        """``OSWorldBenchmarkConfig`` serializes and deserializes with all instance
+        fields preserved (rc7 cross-process transport contract)."""
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
+
+        original = OSWorldBenchmarkConfig(use_som=True)
+        dumped = original.model_dump_json()
+        restored = OSWorldBenchmarkConfig.model_validate_json(dumped)
+        assert restored.use_som is True
+        assert len(restored.tasks()) == len(original.tasks())
 
 
 # ---------------------------------------------------------------------------
@@ -673,7 +758,9 @@ class TestCreateTaskMetadata:
         assert tasks["task-a"]["instruction"] == "Do A"
         assert tasks["task-a"]["snapshot"] == "init_state"
         assert tasks["task-a"]["os_type"] == "ubuntu"
-        assert tasks["task-a"]["extra_info"] == {}
+        # ``extra_info`` was removed in cube-standard rc7 — heavy data lives on
+        # OSWorldExecutionInfo, populated lazily on the worker.
+        assert "extra_info" not in tasks["task-a"]
         assert "test_all" in tasks["task-a"]["test_sets"]
         assert "test_small" not in tasks["task-a"]["test_sets"]
         assert "test_small" in tasks["task-b"]["test_sets"]
@@ -753,12 +840,12 @@ def _make_fake_task_metadata(tmp_path: Path) -> dict:
 
 def _install_patches(repo: Path, cache_dir: Path, fake_tm: dict):
     """Return a list of context managers that isolate install() from the real filesystem."""
-    from osworld_cube.benchmark import OSWorldBenchmark
+    from osworld_cube.benchmark import OSWorldBenchmarkConfig, OSWorldTaskConfig
 
     return [
-        patch.object(OSWorldBenchmark, "task_metadata", fake_tm),
+        patch.object(OSWorldBenchmarkConfig, "task_metadata", fake_tm),
         patch("osworld_cube.benchmark.OSWORLD_REPO_DIR", repo),
-        patch.object(OSWorldBenchmark, "task_execution_cache_dir", return_value=cache_dir),
+        patch.object(OSWorldTaskConfig, "task_execution_cache_dir", return_value=cache_dir),
         patch("osworld_cube.benchmark.ensure_proxy_config_in_env"),
         patch("osworld_cube.benchmark.load_dotenv"),
     ]
@@ -768,7 +855,7 @@ class TestInstall:
     def test_install_populates_execution_cache(self, tmp_path: Path) -> None:
         from contextlib import ExitStack
 
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
         repo = _make_fake_repo(tmp_path)
         cache_dir = tmp_path / "cache"
@@ -777,7 +864,7 @@ class TestInstall:
         with ExitStack() as stack:
             for p in _install_patches(repo, cache_dir, fake_tm):
                 stack.enter_context(p)
-            OSWorldBenchmark.install()
+            OSWorldBenchmarkConfig.install()
 
         assert (cache_dir / "task-a.json").exists()
         exec_info = json.loads((cache_dir / "task-a.json").read_text())
@@ -787,7 +874,7 @@ class TestInstall:
     def test_install_is_idempotent(self, tmp_path: Path) -> None:
         from contextlib import ExitStack
 
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
         repo = _make_fake_repo(tmp_path)
         cache_dir = tmp_path / "cache"
@@ -796,16 +883,16 @@ class TestInstall:
         with ExitStack() as stack:
             for p in _install_patches(repo, cache_dir, fake_tm):
                 stack.enter_context(p)
-            OSWorldBenchmark.install()
+            OSWorldBenchmarkConfig.install()
             mtime = (cache_dir / "task-a.json").stat().st_mtime
-            OSWorldBenchmark.install()  # second call
+            OSWorldBenchmarkConfig.install()  # second call
 
         assert (cache_dir / "task-a.json").stat().st_mtime == mtime  # file untouched
 
     def test_install_does_not_write_task_metadata_json(self, tmp_path: Path) -> None:
         from contextlib import ExitStack
 
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
         repo = _make_fake_repo(tmp_path)
         cache_dir = tmp_path / "cache"
@@ -815,12 +902,12 @@ class TestInstall:
         with ExitStack() as stack:
             for p in _install_patches(repo, cache_dir, fake_tm):
                 stack.enter_context(p)
-            OSWorldBenchmark.install()
+            OSWorldBenchmarkConfig.install()
 
         assert not metadata_json.exists()
 
     def test_uninstall_removes_execution_cache_and_repo(self, tmp_path: Path) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig, OSWorldTaskConfig
 
         repo = _make_fake_repo(tmp_path)
         cache_dir = tmp_path / "cache"
@@ -829,15 +916,15 @@ class TestInstall:
 
         with (
             patch("osworld_cube.benchmark.OSWORLD_REPO_DIR", repo),
-            patch.object(OSWorldBenchmark, "task_execution_cache_dir", return_value=cache_dir),
+            patch.object(OSWorldTaskConfig, "task_execution_cache_dir", return_value=cache_dir),
         ):
-            OSWorldBenchmark.uninstall()
+            OSWorldBenchmarkConfig.uninstall()
 
         assert not cache_dir.exists()
         assert not repo.exists()
 
     def test_uninstall_does_not_remove_task_metadata_json(self, tmp_path: Path) -> None:
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig, OSWorldTaskConfig
 
         repo = _make_fake_repo(tmp_path)
         cache_dir = tmp_path / "cache"
@@ -846,19 +933,30 @@ class TestInstall:
 
         with (
             patch("osworld_cube.benchmark.OSWORLD_REPO_DIR", repo),
-            patch.object(OSWorldBenchmark, "task_execution_cache_dir", return_value=cache_dir),
+            patch.object(OSWorldTaskConfig, "task_execution_cache_dir", return_value=cache_dir),
         ):
-            OSWorldBenchmark.uninstall()
+            OSWorldBenchmarkConfig.uninstall()
 
         assert metadata_json.exists()
 
     def test_install_raises_when_task_metadata_empty(self, tmp_path: Path) -> None:
         import pytest
 
-        from osworld_cube.benchmark import OSWorldBenchmark
+        from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
         with (
-            patch.object(OSWorldBenchmark, "task_metadata", {}),
+            patch.object(OSWorldBenchmarkConfig, "task_metadata", {}),
         ):
             with pytest.raises(RuntimeError, match="task_metadata is empty"):
-                OSWorldBenchmark.install()
+                OSWorldBenchmarkConfig.install()
+
+    def test_verify_installed_raises_when_cache_empty(self, tmp_path: Path) -> None:
+        import pytest
+
+        from osworld_cube.benchmark import OSWorldTaskConfig
+
+        empty_cache = tmp_path / "cache"
+        cfg = OSWorldTaskConfig(metadata=_make_task_metadata())
+        with patch.object(OSWorldTaskConfig, "task_execution_cache_dir", return_value=empty_cache):
+            with pytest.raises(RuntimeError, match="execution cache is empty"):
+                cfg.verify_installed()

@@ -74,14 +74,17 @@ def _make_neverending_benchmark(max_steps: int) -> CubeBenchmarkConfig:
 
 
 def _make_benchmark(n: int) -> CubeBenchmarkConfig:
-    """Create a cube BenchmarkConfig with n tasks for testing."""
+    """Create a cube BenchmarkConfig with n tasks for testing.
+
+    Inherits ``benchmark_metadata``/``task_config_class``/``benchmark_class``
+    from ``MockCubeBenchmarkConfig`` so all calls share the same cache dir
+    and the back-stamp on ``MockCubeTaskConfig._benchmark_cache_dir`` stays
+    consistent — cube-standard rejects re-stamping with a different value.
+    """
     task_meta = {f"task_{i}": TaskMetadata(id=f"task_{i}") for i in range(n)}
 
     class _NTaskBenchmarkConfig(MockCubeBenchmarkConfig):
-        benchmark_metadata = BenchmarkMetadata(name=f"n{n}-task", version="0.1.0", description="test")
         task_metadata = task_meta
-        task_config_class = MockCubeTaskConfig
-        benchmark_class = MockCubeBenchmark
 
     return _NTaskBenchmarkConfig()
 
