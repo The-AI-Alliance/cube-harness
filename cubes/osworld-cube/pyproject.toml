@@ -78,7 +78,7 @@ markers = [
 override-dependencies = ["protobuf>=6.33.5"]
 
 [tool.uv.sources]
-cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool" }
+cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "fix/computer-tool-stepError-on-execute-action", subdirectory = "cube-tools/cube-computer-tool" }
 cube-vm-backend = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-vm-backend" }
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure" }
 cube-infra-aws = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-aws" }
