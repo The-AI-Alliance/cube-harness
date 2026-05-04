@@ -25,7 +25,6 @@ from cube.core import EnvironmentOutput
 from PIL import Image
 
 from cube_harness import EXP_DIR
-from cube_harness.agent import AgentConfig
 from cube_harness.analyze import inspect_results, xray_utils
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.storage import FileStorage
@@ -139,7 +138,7 @@ class XRayState:
         """Read experiment_config.json and store per-storage config JSON strings.
 
         Populates _storage_configs[id(storage)] with (agent_config_json, exp_config_json)
-        and _backfill_names[id(storage)] with the agent class short name for backwards compat.
+        and _backfill_names[id(storage)] with the resolved AgentConfig.agent_name.
 
         Falls back to the first episode_configs/*.json when experiment_config.json
         is absent (e.g. experiments run before save_config() was added).
@@ -169,13 +168,7 @@ class XRayState:
                         break
                 except Exception:
                     continue
-        derived_name: str | None = None
-        if agent_cfg:
-            try:
-                derived_name = AgentConfig.model_validate(dict(agent_cfg)).agent_name
-            except Exception:
-                agent_type = agent_cfg.get("_type", "")
-                derived_name = agent_type.split(".")[-1] if agent_type else None
+        derived_name = xray_utils.agent_name_from_config(agent_cfg) or None
         self._backfill_names[id(storage)] = derived_name
         self._storage_configs[id(storage)] = (
             json.dumps(agent_cfg, indent=2) if agent_cfg else None,
