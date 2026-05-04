@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 _project_env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
-from cube_harness.agents.genny2 import Genny2Config  # noqa: E402
+from cube_harness.agents.genny2 import BudgetConfig, Genny2Config  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 from cube_harness.llm import LLMConfig  # noqa: E402
@@ -244,10 +244,8 @@ def run(
         goal_template=INSTANCE_TEMPLATES[template],
         flat_history=True,
         step_prompt="",
-        cost_limit=cost_limit,
-        budget_hint_interval_usd=1.0 if cost_limit is not None else None,
         max_format_errors=3,
-        max_actions=max_actions,
+        budget=BudgetConfig(max_actions=max_actions, cost_limit=cost_limit),
     )
 
     infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
