@@ -90,7 +90,7 @@ def main(debug: bool, agent: str, level: int, model: str, name: str | None) -> N
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
-        max_steps=15,
+        max_steps=25,
     )
 
     if debug:

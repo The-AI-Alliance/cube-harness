@@ -4,7 +4,7 @@ from cube.infra_local import LocalInfraConfig
 from cube.tool import ToolboxConfig
 from cube_browser_playwright import PlaywrightSessionConfig
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmarkConfig
-from webarena_verified_cube.resources import WEBARENA_ALL
+from webarena_verified_cube.resources import WEBARENA_SHOPPING_ADMIN
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 from cube_harness import make_experiment_output_dir
@@ -17,7 +17,7 @@ from cube_harness.llm import LLMConfig
 def main(debug: bool) -> None:
     output_dir = make_experiment_output_dir("react", "webarena-verified")
 
-    llm_config = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
+    llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
     tool_config = ToolboxConfig(
@@ -29,20 +29,20 @@ def main(debug: bool) -> None:
     # Automatic mode: declare the DockerServiceConfig in resources= and let make() provision + launch on demand.
     # Swap LocalInfraConfig() for any other InfraConfig (e.g., AWSInfraConfig()) for cloud users.
     # Swap WEBARENA_ALL for any other entry in webarena_verified_cube.resources (e.g. WEBARENA_SHOPPING_ADMIN for a specific site).
-    benchmark = (
+    benchmark_config = (
         WebArenaVerifiedBenchmarkConfig(
             tool_config=tool_config,
-            resources=[WEBARENA_ALL],
+            resources=[WEBARENA_SHOPPING_ADMIN],
         )
         .subset_from_glob("sites", "*shopping_admin*")
-        .make(infra=LocalInfraConfig())
     )
 
     exp = Experiment(
         name="webarena-verified",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
+        infra=LocalInfraConfig(),
         max_steps=30,
     )
 
