@@ -726,23 +726,23 @@ class TestBudgetConfig:
     def test_msg_cost_usage_percentage(self) -> None:
         b = BudgetConfig(cost_limit=4.0, display_every_k=5)
         msg, _ = b.check(1.0, 0, 5)  # 25%
-        assert msg == "cumulative episode budget: 25% token usage."
+        assert msg == "cumulative episode budget: 25.0% token usage."
 
     def test_msg_token_usage_percentage(self) -> None:
         b = BudgetConfig(token_limit=1000, display_every_k=5)
         msg, _ = b.check(0.0, 500, 5)  # 50%
-        assert msg == "cumulative episode budget: 50% token usage."
+        assert msg == "cumulative episode budget: 50.0% token usage."
 
     def test_msg_uses_max_of_cost_and_token_pct(self) -> None:
         b = BudgetConfig(cost_limit=4.0, token_limit=1000, display_every_k=5)
         # cost 10%, tokens 50% → should report 50%
         msg, _ = b.check(0.4, 500, 5)
-        assert msg == "cumulative episode budget: 50% token usage."
+        assert msg == "cumulative episode budget: 50.0% token usage."
 
     def test_msg_steps_and_usage_combined(self) -> None:
         b = BudgetConfig(max_actions=100, cost_limit=2.0, display_every_k=5)
         msg, _ = b.check(1.0, 0, 10)  # 50% cost
-        assert msg == "cumulative episode budget: 10/100 steps, 50% token usage."
+        assert msg == "cumulative episode budget: 10/100 steps, 50.0% token usage."
 
     def test_no_msg_when_no_limits_configured(self) -> None:
         b = BudgetConfig(display_every_k=5)
