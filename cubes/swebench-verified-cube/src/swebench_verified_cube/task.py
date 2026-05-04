@@ -20,6 +20,16 @@ logger = logging.getLogger(__name__)
 # Works with both bash (Daytona/Modal/Toolkit backends) and sh/dash (LocalContainer).
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
 
+# Appended to every task description so the agent knows the evaluation constraints
+# and submission protocol without requiring them in the recipe template.
+_TASK_INSTRUCTIONS = """\
+Do not modify test files (tests/ directory, test_*.py files) or configuration files.
+
+When your fix is complete:
+1. Verify: `git diff > patch.txt && cat patch.txt`
+2. Confirm the patch only contains source file changes, then call `final_step`.\
+"""
+
 
 class SWEBenchVerifiedTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for SWE-bench Verified tasks.
@@ -84,6 +94,11 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
     oracle_mode: bool = False
     """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
 
+    append_submission_instructions: bool = True
+    """If True, append evaluation constraints and final_step submission instructions
+    to the problem statement. Disable for raw-benchmark comparisons where the task
+    description must match the original SWE-bench problem statement exactly."""
+
     @property
     def _exec(self) -> SWEBenchVerifiedExecutionInfo:
         """Typed view on execution_info — fails fast if it was not populated."""
@@ -147,6 +162,8 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         instruction = self._exec.problem_statement
         if self.include_hints and self._exec.hints_text:
             instruction += f"\n\n## Hints\n{self._exec.hints_text}"
+        if self.append_submission_instructions:
+            instruction += f"\n\n{_TASK_INSTRUCTIONS}"
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
@@ -322,6 +339,7 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
 
     include_hints: bool = False
     oracle_mode: bool = False
+    append_submission_instructions: bool = True
 
     def verify_installed(self) -> None:
         """Fail fast if the per-task execution cache is empty."""
@@ -357,4 +375,5 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
             container_backend=container_backend,
             include_hints=self.include_hints,
             oracle_mode=self.oracle_mode,
+            append_submission_instructions=self.append_submission_instructions,
         )
