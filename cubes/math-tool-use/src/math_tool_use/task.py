@@ -17,7 +17,6 @@ class RewardTable(BaseModel):
     unparsable_finished: float
     correct_answer_not_finished: float
     correct_answer_finished: float
-    buffer_tokens: int = 0 # 0 means no overlong reward shaping
 
     def get_reward_range(self) -> tuple[float, float]:
         values = [
