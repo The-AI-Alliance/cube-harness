@@ -256,8 +256,11 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
         # clear it. Prepending working_dir (and src/ for src-layout packages) ensures
         # source files patched in working_dir take precedence over site-packages.
         pythonpath = f"export PYTHONPATH={working_dir}:{working_dir}/src:${{PYTHONPATH:-}}"
+        # Redirect tika log to a fresh writable path to avoid PermissionError when
+        # the container image pre-bakes /tmp/tika.log with root-only permissions.
+        tika_log = "export TIKA_LOG_PATH=/tmp/tika_cube_eval.log"
         for cmd in test_cmds:
-            full_cmd = f"{CONDA_ACTIVATE} && {pythonpath} && {cmd}"
+            full_cmd = f"{CONDA_ACTIVATE} && {pythonpath} && {tika_log} && {cmd}"
             output = self.tool.bash_unlimited(full_cmd, timeout=timeout)
             outputs.append(output)
         return "\n".join(outputs)
