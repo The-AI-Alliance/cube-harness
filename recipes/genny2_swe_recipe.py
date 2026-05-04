@@ -284,9 +284,9 @@ if __name__ == "__main__":
     parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS))
     parser.add_argument(
         "--template",
-        default="minimal",
+        default="thought-workflow",
         choices=list(INSTANCE_TEMPLATES),
-        help="Instance template variant (default: minimal)",
+        help="Instance template variant (default: thought-workflow)",
     )
     parser.add_argument("--debug", action="store_true", help="Run debug oracle tasks sequentially")
     parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
