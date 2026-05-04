@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 from typing import Any
 
 from cube.container import ContainerBackend, relocate_if_readonly
@@ -286,17 +287,26 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             #   verbose (-v):  "test_id PASSED [ X%]"   (test_id then status)
             #   summary (-rA): "PASSED test_id"          (status then test_id)
             #   legacy/other:  "test_id::PASSED"
-            # test_ids from the dataset may be truncated prefix strings (e.g.
-            # "test_validate[Invalid") which still work as substring matches.
+            # test_ids may be truncated prefix strings (e.g. "test_validate[Invalid")
+            # that match any parameterized variant. Use a negative lookahead on
+            # word chars to avoid false positives when one test name is a plain
+            # identifier prefix of another (e.g. "test_foo" matching "test_foo_bar").
+            _NO_WORD = r"(?![a-zA-Z0-9_])"
             for test_id in fail_to_pass:
-                if f"{test_id} PASSED" in output or f"{test_id}::PASSED" in output or f"PASSED {test_id}" in output:
+                tid = re.escape(test_id)
+                if (
+                    f"{test_id} PASSED" in output
+                    or f"{test_id}::PASSED" in output
+                    or re.search(r"PASSED " + tid + _NO_WORD, output)
+                ):
                     f2p_passed += 1
             for test_id in pass_to_pass:
+                tid = re.escape(test_id)
                 if (
                     f"{test_id} FAILED" in output
                     or f"{test_id} ERROR" in output
-                    or f"FAILED {test_id}" in output
-                    or f"ERROR {test_id}" in output
+                    or re.search(r"FAILED " + tid + _NO_WORD, output)
+                    or re.search(r"ERROR " + tid + _NO_WORD, output)
                 ):
                     p2p_failed += 1
         else:
