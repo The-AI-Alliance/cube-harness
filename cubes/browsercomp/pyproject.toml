@@ -1,0 +1,45 @@
+[project]
+name = "browsercomp-cube"
+version = "0.1.0"
+description = "BrowseComp benchmark — web browsing information retrieval"
+requires-python = ">=3.12"
+authors = [
+    { name = "Jason Wei" },
+    { name = "Zhiqing Sun" },
+    { name = "Spencer Papay" },
+    { name = "Scott McKinney" },
+    { name = "Jeffrey Han" },
+    { name = "Isa Fulford" },
+    { name = "Hyung Won Chung" },
+    { name = "Alex Tachard Passos" },
+    { name = "William Fedus" },
+    { name = "Mia Glaese" },
+]
+dependencies = [
+    "cube-standard>=0.1.0rc8",
+    "cube-web-tool",
+    "litellm",
+]
+
+[project.entry-points."cube.benchmarks"]
+browsercomp-cube = "browsercomp_cube.benchmark:BrowseCompBenchmarkConfig"
+
+[build-system]
+requires = ["uv_build>=0.8,<0.9"]
+build-backend = "uv_build"
+
+[tool.uv-build]
+include = ["src/browsercomp_cube/task_metadata.json"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+fix = true
+line-length = 120
+indent-width = 4

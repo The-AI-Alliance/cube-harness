@@ -1,0 +1,15 @@
+{
+  "status": "COMPLETED",
+  "task_id": "task_1",
+  "episode_id": 0,
+  "started_at": 1000.0,
+  "ended_at": 1010.0,
+  "last_heartbeat_at": 1009.0,
+  "current_step": 5,
+  "reward": 1.0,
+  "had_step_errors": false,
+  "error_type": null,
+  "error_message": null,
+  "retry_count": 0,
+  "extra": {}
+}
