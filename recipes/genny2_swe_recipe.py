@@ -297,8 +297,8 @@ if __name__ == "__main__":
     parser.add_argument("--eai-profile", default="yul101")
     parser.add_argument("--eai-path", default="eai")
     parser.add_argument("--preemptable", action="store_true")
-    parser.add_argument("--max-actions", type=int, default=250)
-    parser.add_argument("--cost-limit", type=float, default=3.0)
+    parser.add_argument("--max-actions", type=int, default=150)
+    parser.add_argument("--cost-limit", type=float, default=1.0)
     args = parser.parse_args()
 
     run(
