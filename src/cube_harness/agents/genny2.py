@@ -303,7 +303,7 @@ class Genny2(Agent):
         self._total_cost: float = 0.0
         self._total_tokens: int = 0
         self._compacted_summary: str = ""  # injected into system message after compaction
-        self._last_budget_hint_usd: float = 0.0
+        self._last_budget_hint_usd: float = 0.0  # last interval threshold at which a hint was injected
 
     _MAGIC_SUBMIT = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
 
@@ -633,6 +633,8 @@ class Genny2(Agent):
             messages = self._build_base_prompt()
             messages.extend(self._latest_obs)
             final_prompt = self.config.react_prompt
+        # Budget hint: inject once per interval threshold crossing so the model can self-regulate.
+        budget_hint = ""
         if (
             self.config.cost_limit is not None
             and self.config.budget_hint_interval_usd is not None
@@ -647,7 +649,11 @@ class Genny2(Agent):
                     f"[Budget: ${self._total_cost:.2f}/${self.config.cost_limit:.2f} spent"
                     f" — ${remaining:.2f} remaining]"
                 )
-                final_prompt = f"{budget_hint}\n\n{final_prompt}" if final_prompt else budget_hint
+
+        if budget_hint:
+            final_prompt = f"{budget_hint}\n\n{final_prompt}" if final_prompt else budget_hint
+
+
         if final_prompt:
             if self.config.max_actions is not None:
                 final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
