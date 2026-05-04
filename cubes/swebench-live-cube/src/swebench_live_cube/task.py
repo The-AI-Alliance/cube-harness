@@ -250,11 +250,12 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
 
         outputs = []
         working_dir = self.tool._config.working_dir
-        # Prepend working_dir (and src/ for src-layout packages) to PYTHONPATH so that
-        # source files patched in working_dir take precedence over any site-packages copy.
+        # Activate conda first, then set PYTHONPATH so that conda activation cannot
+        # clear it. Prepending working_dir (and src/ for src-layout packages) ensures
+        # source files patched in working_dir take precedence over site-packages.
         pythonpath = f"export PYTHONPATH={working_dir}:{working_dir}/src:${{PYTHONPATH:-}}"
         for cmd in test_cmds:
-            full_cmd = f"{pythonpath}; {CONDA_ACTIVATE} && {cmd}"
+            full_cmd = f"{CONDA_ACTIVATE} && {pythonpath} && {cmd}"
             output = self.tool.bash_unlimited(full_cmd, timeout=timeout)
             outputs.append(output)
         return "\n".join(outputs)
