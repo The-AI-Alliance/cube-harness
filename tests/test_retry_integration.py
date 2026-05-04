@@ -21,6 +21,7 @@ import fcntl
 import time
 from pathlib import Path
 
+import litellm
 import pytest
 import ray
 from cube.benchmark import Benchmark as CubeBenchmark
@@ -173,6 +174,12 @@ class DebugAgent(Agent):
         if behavior == "loop":
             # Non-terminating action — drives the runner toward max_steps.
             return AgentOutput(actions=[Action(name="click", arguments={"element_id": "x"})])
+        if behavior == "bad_model":
+            raise litellm.NotFoundError(
+                message="model 'gpt-5-mini-typo-this-model-does-not-exist' does not exist",
+                model="gpt-5-mini-typo-this-model-does-not-exist",
+                llm_provider="openai",
+            )
         raise ValueError(f"Unknown behavior: {behavior}")
 
 
@@ -483,6 +490,46 @@ def test_max_retries_zero_disables_auto_retry(tmp_dir: Path) -> None:
     assert final.status == "FAILED"
     assert final.retry_count == 0
     assert _archive_count(tmp_dir, traj_id) == 0  # only one attempt was ever made
+    assert traj_id in result.failures
+
+
+def test_bad_model_does_not_waste_retries(tmp_dir: Path) -> None:
+    """A permanent LLM provider error (e.g. typo'd model name) must not be retried.
+
+    Today every exception raised inside the episode loop becomes status=FAILED, which
+    is in RETRIABLE_STATUSES. So a permanent error like `litellm.NotFoundError`
+    ("model does not exist") gets retried max_retries times — wasting compute, money,
+    and wall-clock with zero chance of success. This test pins the desired behaviour:
+    permanent provider errors should terminate the episode with retry_count=0.
+    """
+    scenarios = {"task_bad_model": ["bad_model"]}
+    benchmark = make_debug_benchmark(scenarios)
+    agent_config = DebugAgentConfig(
+        counter_dir=str(tmp_dir / "_counters"),
+        scenarios=scenarios,
+        hang_seconds=0.0,
+    )
+    exp = Experiment(
+        name="bad_model_retry_waste",
+        output_dir=tmp_dir,
+        agent_config=agent_config,
+        benchmark_config=benchmark,
+        max_retries=3,
+    )
+
+    result = run_sequentially(exp)
+
+    storage = FileStorage(tmp_dir)
+    statuses = storage.list_episode_statuses()
+    traj_id, final = next(iter(statuses.items()))
+
+    assert final.status == "FAILED"
+    assert final.error_type == "NotFoundError"
+    assert final.retry_count == 0, (
+        f"permanent provider error was retried {final.retry_count} times; "
+        f"the harness must classify NotFoundError as non-retriable"
+    )
+    assert _archive_count(tmp_dir, traj_id) == 0
     assert traj_id in result.failures
 
 
