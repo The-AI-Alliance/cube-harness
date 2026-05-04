@@ -8,7 +8,7 @@ from webarena_verified_cube.resources import WEBARENA_SHOPPING_ADMIN
 from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
 
 from cube_harness import make_experiment_output_dir
-from cube_harness.agents.react import ReactAgentConfig
+from cube_harness.agents.genny2 import Genny2Config
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
@@ -18,7 +18,7 @@ def main(debug: bool) -> None:
     output_dir = make_experiment_output_dir("react", "webarena-verified")
 
     llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
-    agent_config = ReactAgentConfig(llm_config=llm_config)
+    agent_config = Genny2Config(llm_config=llm_config)
 
     tool_config = ToolboxConfig(
         tool_configs=[
