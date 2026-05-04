@@ -378,9 +378,12 @@ def parse_exp_config(exp_cfg: dict) -> dict[str, str]:
     identifiers from a serialized Experiment config. Used by both the experiments
     selector table (xray_utils) and the XRay viewer state (xray.XRayState) so the
     agent identifier shown in every UI surface comes from the same logic.
+
+    Accepts both the current (`benchmark_config`) and the pre-split (`benchmark`)
+    key names so historical experiment dirs still resolve a benchmark name.
     """
     agent_cfg = exp_cfg.get("agent_config") or {}
-    bench_cfg = exp_cfg.get("benchmark_config") or {}
+    bench_cfg = exp_cfg.get("benchmark_config") or exp_cfg.get("benchmark") or {}
     return {
         "agent": agent_name_from_config(agent_cfg),
         "model": (agent_cfg.get("llm_config") or {}).get("model_name") or "",
