@@ -172,7 +172,11 @@ def _make_benchmark_config(
     else:
         raise ValueError(f"mini_swe_recipe supports swebench-verified and swebench-live, got {benchmark_name!r}")
 
-    if subset:
+    if subset == "live-golden-30":
+        from swebench_live_cube.gold_patch_recipe import _LIVE_GOLDEN_30
+
+        config = config.subset_from_list(list(_LIVE_GOLDEN_30))
+    elif subset:
         config = config.named_subset(subset)
     if task_ids:
         config = config.subset_from_list(task_ids)

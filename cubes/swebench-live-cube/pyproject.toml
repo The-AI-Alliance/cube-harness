@@ -8,6 +8,10 @@ dependencies = [
     "datasets",
 ]
 
+[project.optional-dependencies]
+# Required to run gold_patch_agent.py and gold_patch_recipe.py
+eval = ["cube-harness"]
+
 [project.entry-points."cube.benchmarks"]
 swebench-live-cube = "swebench_live_cube.benchmark:SWEBenchLiveBenchmarkConfig"
 

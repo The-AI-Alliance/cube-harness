@@ -20,6 +20,7 @@ Usage:
     .venv/bin/python recipes/genny2_swe_live_recipe.py haiku --debug
 """
 
+import json
 import logging
 from pathlib import Path
 
@@ -149,6 +150,7 @@ def _make_benchmark_config(
     task_ids: list[str] | None,
     subset: str | None,
     n_tasks: int | None,
+    solvable_from: Path | None = None,
 ) -> object:
     from swebench_live_cube.benchmark import SWEBenchLiveBenchmarkConfig
 
@@ -158,6 +160,8 @@ def _make_benchmark_config(
         return get_debug_benchmark()
 
     config = SWEBenchLiveBenchmarkConfig()
+    if solvable_from is not None:
+        task_ids = json.loads(solvable_from.read_text())
     if subset == "live30":
         config = config.subset_from_list(list(_LIVE_30_SAMPLE))
     elif subset:
@@ -188,6 +192,7 @@ def run(
     eai_profile: str,
     eai_path: str,
     preemptable: bool,
+    solvable_from: Path | None = None,
     max_actions: int = 250,
     cost_limit: float = 3.0,
 ) -> None:
@@ -209,7 +214,7 @@ def run(
     )
 
     infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
-    benchmark_config = _make_benchmark_config(debug, task_ids, subset, n_tasks)
+    benchmark_config = _make_benchmark_config(debug, task_ids, subset, n_tasks, solvable_from)
 
     output_dir = retry_dir if retry_dir is not None else None
     resume = retry_dir is not None
@@ -259,6 +264,12 @@ if __name__ == "__main__":
     parser.add_argument("--preemptable", action="store_true")
     parser.add_argument("--max-actions", type=int, default=250)
     parser.add_argument("--cost-limit", type=float, default=3.0)
+    parser.add_argument(
+        "--solvable-from",
+        metavar="PATH",
+        default=None,
+        help="JSON file of solvable task IDs (output of gold_patch_baseline_recipe --dump-solvable)",
+    )
     args = parser.parse_args()
 
     run(
@@ -273,6 +284,7 @@ if __name__ == "__main__":
         eai_profile=args.eai_profile,
         eai_path=args.eai_path,
         preemptable=args.preemptable,
+        solvable_from=Path(args.solvable_from) if args.solvable_from else None,
         max_actions=args.max_actions,
         cost_limit=args.cost_limit,
     )
