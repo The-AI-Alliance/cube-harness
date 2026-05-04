@@ -238,6 +238,8 @@ def _run_with_ray_impl(
                 cancel_grace_s=cancel_grace_s,
             )
             exp.print_stats(results)
+            for traj in results.trajectories.values():
+                traj.steps.clear()
             return results
         finally:
             ray.shutdown()
