@@ -34,7 +34,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import cast
 
-from cube.core import Action, ActionSchema, Observation
+from cube.core import Action, ActionSchema, Observation, TypedBaseModel
 from cube.task import STOP_ACTION
 from litellm import Message
 from pydantic import Field
@@ -155,6 +155,54 @@ def _truncate_message(msg: dict, max_chars: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Budget config
+# ---------------------------------------------------------------------------
+
+
+class BudgetConfig(TypedBaseModel):
+    """Episode budget limits and periodic status display.
+
+    Single entry point: check(cost, tokens, step) -> (status_msg | None, busted).
+    - busted=True when any configured limit is exceeded → caller should STOP.
+    - status_msg is a human-readable summary injected into the prompt every
+      display_every_k steps; None when it is not a display step or nothing is configured.
+
+    Format: "cumulative episode budget: 34/150 steps, 35% token usage."
+    Token usage % = max(cost/cost_limit, tokens/token_limit) across whichever limits are set.
+    """
+
+    max_actions: int | None = None
+    cost_limit: float | None = None
+    token_limit: int | None = None
+    display_every_k: int = 5
+
+    def check(self, cost: float, tokens: int, step: int) -> tuple[str | None, bool]:
+        """Return (status_message_or_None, is_over_budget)."""
+        busted = (
+            (self.max_actions is not None and step >= self.max_actions)
+            or (self.cost_limit is not None and cost >= self.cost_limit)
+            or (self.token_limit is not None and tokens >= self.token_limit)
+        )
+        if busted:
+            return None, True
+        msg: str | None = None
+        if step > 0 and step % self.display_every_k == 0:
+            parts: list[str] = []
+            if self.max_actions is not None:
+                parts.append(f"{step}/{self.max_actions} steps")
+            if self.cost_limit is not None or self.token_limit is not None:
+                pct = 0.0
+                if self.cost_limit is not None and self.cost_limit > 0:
+                    pct = max(pct, cost / self.cost_limit)
+                if self.token_limit is not None and self.token_limit > 0:
+                    pct = max(pct, tokens / self.token_limit)
+                parts.append(f"{int(pct * 100)}% token usage")
+            if parts:
+                msg = "cumulative episode budget: " + ", ".join(parts) + "."
+        return msg, False
+
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -216,16 +264,8 @@ class Genny2Config(AgentConfig):
 
     # Misc
     max_obs_chars: int | None = None  # None = no truncation
-    max_actions: int | None = None  # None = unlimited
-    # Hard per-episode cost cap in USD. Checked before each act call; triggers a STOP when hit.
-    cost_limit: float | None = None
-    # Hard per-episode token cap (prompt + completion across all LLM calls). Checked before
-    # each act call; triggers a STOP when hit. Useful as a proxy budget when pricing is unknown.
-    token_limit: int | None = None
-    # Budget hint injection: when set, a "[Budget: $X.XX/$Y.YY — $Z.ZZ remaining]" message is
-    # appended to the trailing user message every time spending crosses a new multiple of this
-    # value. Only active when cost_limit is also set. Example: 1.0 = hint every $1 spent.
-    budget_hint_interval_usd: float | None = None
+    # Episode budget: step/cost/token limits + periodic status display.
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
     # Retry budget when the model returns no tool calls. On each retry the empty response
     # and a correction user message are appended; if still no tool calls after all retries,
     # a STOP action is returned. 0 = no retry (preserves current behavior).
@@ -303,21 +343,18 @@ class Genny2(Agent):
         self._total_cost: float = 0.0
         self._total_tokens: int = 0
         self._compacted_summary: str = ""  # injected into system message after compaction
-        self._last_budget_hint_usd: float = 0.0  # last interval threshold at which a hint was injected
 
     _MAGIC_SUBMIT = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
 
     def step(self, obs: Observation) -> AgentOutput:
-        if self.config.max_actions is not None and self._actions_cnt >= self.config.max_actions:
-            logger.info("Max actions reached, issuing STOP action.")
-            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
-        if self.config.cost_limit is not None and self._total_cost >= self.config.cost_limit:
+        budget_msg, busted = self.config.budget.check(self._total_cost, self._total_tokens, self._actions_cnt)
+        if busted:
             logger.info(
-                f"Cost limit ${self.config.cost_limit:.2f} reached (${self._total_cost:.4f} spent), issuing STOP."
+                "Budget limit reached (step=%d cost=$%.4f tokens=%d), issuing STOP.",
+                self._actions_cnt,
+                self._total_cost,
+                self._total_tokens,
             )
-            return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
-        if self.config.token_limit is not None and self._total_tokens >= self.config.token_limit:
-            logger.info(f"Token limit {self.config.token_limit} reached ({self._total_tokens} used), issuing STOP.")
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         # Magic-string submission detection (mini-swe-agent compatibility).
@@ -351,7 +388,7 @@ class Genny2(Agent):
             self.summaries.append(summary)
 
         with profiler("act"):
-            response, act_calls = self._act()
+            response, act_calls = self._act(budget_msg)
         actions = _decode_actions(response)
 
         # Format error exhaustion: _act() retried max_format_errors times but still no tool calls.
@@ -555,9 +592,9 @@ class Genny2(Agent):
         logger.info(f"Summaries compacted to 1 entry ({self._history_chars()} chars)")
         return llm_call
 
-    def _act(self) -> tuple[Message, list[LLMCall]]:
+    def _act(self, budget_msg: str | None = None) -> tuple[Message, list[LLMCall]]:
         """Build context, encode tools, call act LLM; retry up to max_format_errors times on no tool calls."""
-        messages = self._choose_context()
+        messages = self._choose_context(budget_msg)
         api_tools = _encode_tools(self.action_schemas)
         prompt = Prompt(messages=messages, tools=api_tools)
         logger.info(f"Act pass — estimated prompt tokens: {self.token_counter(messages=messages)}")
@@ -602,7 +639,7 @@ class Genny2(Agent):
             )
         return response.message, llm_calls
 
-    def _choose_context(self) -> list[dict | Message]:
+    def _choose_context(self, budget_msg: str | None = None) -> list[dict | Message]:
         """Build the act-pass prompt.
 
         Flat mode (flat_history=True): base_prefix (flat history) + latest_obs.
@@ -616,8 +653,6 @@ class Genny2(Agent):
 
         Mode A (enable_summarize=False, flat_history=False):
           base_prefix (completed history) + latest_obs + react_prompt.
-          Step counter prepended to final user message only so preceding messages
-          stay byte-for-byte identical across steps.
         """
         if self.config.flat_history:
             messages = self._build_base_prompt()
@@ -633,29 +668,8 @@ class Genny2(Agent):
             messages = self._build_base_prompt()
             messages.extend(self._latest_obs)
             final_prompt = self.config.react_prompt
-        # Budget hint: inject once per interval threshold crossing so the model can self-regulate.
-        budget_hint = ""
-        if (
-            self.config.cost_limit is not None
-            and self.config.budget_hint_interval_usd is not None
-            and self._total_cost > 0
-        ):
-            interval = self.config.budget_hint_interval_usd
-            crossed = (self._total_cost // interval) * interval
-            if crossed > self._last_budget_hint_usd:
-                self._last_budget_hint_usd = crossed
-                remaining = max(0.0, self.config.cost_limit - self._total_cost)
-                budget_hint = (
-                    f"[Budget: ${self._total_cost:.2f}/${self.config.cost_limit:.2f} spent"
-                    f" — ${remaining:.2f} remaining]"
-                )
-
-        if budget_hint:
-            final_prompt = f"{budget_hint}\n\n{final_prompt}" if final_prompt else budget_hint
-
-
+        if budget_msg:
+            final_prompt = f"{budget_msg}\n\n{final_prompt}" if final_prompt else budget_msg
         if final_prompt:
-            if self.config.max_actions is not None:
-                final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
             messages.append({"role": "user", "content": final_prompt})
         return messages
