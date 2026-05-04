@@ -233,8 +233,8 @@ def run(
     eai_profile: str,
     eai_path: str,
     preemptable: bool,
-    max_actions: int = 250,
-    cost_limit: float = 3.0,
+    max_actions: int = 150,
+    cost_limit: float = 1.0,
 ) -> None:
     llm_config = MODEL_CONFIGS[model_key]
 

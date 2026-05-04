@@ -196,7 +196,7 @@ class BudgetConfig(TypedBaseModel):
                     pct = max(pct, cost / self.cost_limit)
                 if self.token_limit is not None and self.token_limit > 0:
                     pct = max(pct, tokens / self.token_limit)
-                parts.append(f"{int(pct * 100)}% token usage")
+                parts.append(f"{pct * 100:.1f}% token usage")
             if parts:
                 msg = "cumulative episode budget: " + ", ".join(parts) + "."
         return msg, False
