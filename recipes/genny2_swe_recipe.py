@@ -114,10 +114,10 @@ _THOUGHT_BLOCK = "Before acting, take time to understand the task: read the rele
 
 _WORKFLOW_BLOCK = """\
 Suggested approach:
-1. Reproduce: confirm the current behavior — run relevant commands or tests to observe the issue.
-2. Explore: read relevant source files to understand the code or system.
+1. Reproduce: confirm the current behavior — run the relevant test or command to observe the issue.
+2. Explore: read the relevant source files directly with `cat`, `grep`, or `find` to locate the root cause.
 3. Fix: apply the minimal change needed to resolve the issue.
-4. Verify: run commands or tests to confirm the fix works and nothing else broke. If it does not, diagnose and try again.\
+4. Verify: run the relevant test or command to confirm the fix works and nothing else broke. If it does not, make a focused adjustment and try again.\
 """
 
 # minimal — bare task description only (benchmark instructions are appended by the cube)
@@ -245,6 +245,7 @@ def run(
         flat_history=True,
         step_prompt="",
         cost_limit=cost_limit,
+        budget_hint_interval_usd=1.0 if cost_limit is not None else None,
         max_format_errors=3,
         max_actions=max_actions,
     )
