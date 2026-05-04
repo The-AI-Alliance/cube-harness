@@ -219,7 +219,9 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             "fail_to_pass_total": len(fail_to_pass),
             "pass_to_pass_failed": p2p_failed,
             "pass_to_pass_total": len(pass_to_pass),
-            "test_output": test_output[:2000],
+            "test_output": test_output
+            if len(test_output) <= 30000
+            else test_output[:5000] + "\n...[truncated]...\n" + test_output[-25000:],
         }
 
     # ── Private helpers ────────────────────────────────────────────
