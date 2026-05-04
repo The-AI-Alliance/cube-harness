@@ -249,11 +249,20 @@ class XRayState:
                 # Skip missing stubs — they have no trajectory file to load
                 if traj.metadata.get("_missing"):
                     continue
+                # Skip completed trajectories that already have summary_stats persisted —
+                # the metadata stub already contains everything needed for table display.
+                if traj.summary_stats is not None and traj.end_time is not None:
+                    continue
                 storage = my_storages[i]
                 try:
                     full = storage.load_trajectory(traj.id)
                     self._apply_agent_name(full, storage)
                     self._apply_exp_tag(full, storage)
+                    # Cache summary stats then drop steps immediately — we only loaded
+                    # steps to compute live stats for in-progress trajectories.
+                    if full.summary_stats is None:
+                        full.summary_stats = xray_utils.compute_trajectory_stats(full)
+                    full.steps = []
                     if self._bg_gen == my_gen:
                         my_trajs[i] = full
                         if self.current_trajectory is not None and self.current_trajectory.id == traj.id:
@@ -291,6 +300,13 @@ class XRayState:
                     full = storage.load_trajectory(traj_id)
                     self._apply_agent_name(full, storage)
                     self._apply_exp_tag(full, storage)
+                    # Cache stats then drop steps — refresh only updates table stats,
+                    # not the currently-displayed trajectory content.
+                    if full.summary_stats is None:
+                        full.summary_stats = xray_utils.compute_trajectory_stats(full)
+                    is_current = self.current_trajectory is not None and self.current_trajectory.id == traj_id
+                    if not is_current:
+                        full.steps = []
                     self._traj_mtimes[traj_id] = mtime
                     changed = True
                     # Find the existing slot owned by this storage (avoids ID collision)
@@ -305,7 +321,7 @@ class XRayState:
                     if idx is not None:
                         self.trajectories[idx] = full
                         self._traj_storages[idx] = storage
-                        if self.current_trajectory is not None and self.current_trajectory.id == traj_id:
+                        if is_current:
                             self.current_trajectory = full
                             self._env_step_indices = self._build_env_indices()
                     else:
@@ -347,6 +363,9 @@ class XRayState:
 
         When multiple experiments share the same task/episode IDs, prefers the trajectory
         whose agent_name matches selected_agent_key, falling back to the first match.
+
+        Previously-loaded trajectories have their steps evicted to free RAM — only the
+        currently selected trajectory keeps its steps in memory.
         """
         # Prefer the slot whose agent matches the current selection (multi-experiment safety)
         idx = next(
@@ -377,6 +396,15 @@ class XRayState:
                 self._traj_storages[idx] = storage
             except Exception:
                 pass  # keep stub; renders will show empty state gracefully
+        # Evict steps from all other trajectories to keep RAM bounded.
+        # summary_stats is preserved so table stats remain accurate after eviction.
+        prev_idx = next(
+            (i for i, t in enumerate(self.trajectories) if t is self.current_trajectory and i != idx),
+            None,
+        )
+        if prev_idx is not None and self.trajectories[prev_idx].steps:
+            prev = self.trajectories[prev_idx]
+            prev.steps = []
         self.current_trajectory = traj
         self.step = 0
         self._env_step_indices = self._build_env_indices()
