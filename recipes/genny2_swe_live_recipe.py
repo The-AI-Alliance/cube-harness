@@ -31,7 +31,7 @@ _project_env = Path(__file__).resolve().parents[1] / ".env"
 if _project_env.exists():
     load_dotenv(_project_env, override=True)
 
-from cube_harness.agents.genny2 import Genny2Config  # noqa: E402
+from cube_harness.agents.genny2 import BudgetConfig, Genny2Config  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 from cube_harness.llm import LLMConfig  # noqa: E402
@@ -82,15 +82,36 @@ _LIVE_30_SAMPLE: frozenset[str] = frozenset(
 # System prompt — verbatim from upstream mini-swe-agent swebench.yaml
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks."
+_SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
 
-# ---------------------------------------------------------------------------
-# Instance template — minimal: task + constraints + submit block.
-# Earlier verbose mini-swe-agent template buried `final_step` 100+ lines deep
-# and weaker models (haiku) never reached it before looping out at MAX_STEPS.
-# ---------------------------------------------------------------------------
+# Template variants — ablation over two orthogonal axes:
+#   THOUGHT  — instructs the model to understand the problem before acting
+#   WORKFLOW — provides structured explore→plan→execute→iterate steps
+#
+# All variants are benchmark-agnostic: benchmark-specific constraints and
+# submission instructions are owned by the cube and appended in task.reset().
 
-_INSTANCE_TEMPLATE = "{{task}}"
+_THOUGHT_BLOCK = "Before acting, take time to understand the task: read the relevant files, reproduce or confirm the issue, and identify the root cause before making changes."
+
+_WORKFLOW_BLOCK = """\
+Suggested approach:
+1. Reproduce: confirm the current behavior — run the relevant test or command to observe the issue.
+2. Explore: read the relevant source files directly with `cat`, `grep`, or `find` to locate the root cause.
+3. Fix: apply the minimal change needed to resolve the issue.
+4. Verify: run the relevant test or command to confirm the fix works and nothing else broke. If it does not, make a focused adjustment and try again.\
+"""
+
+_INSTANCE_TEMPLATE_MINIMAL = "{{task}}"
+_INSTANCE_TEMPLATE_THOUGHT = f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}"
+_INSTANCE_TEMPLATE_WORKFLOW = f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}"
+_INSTANCE_TEMPLATE_THOUGHT_WORKFLOW = f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}\n\n{_WORKFLOW_BLOCK}"
+
+INSTANCE_TEMPLATES: dict[str, str] = {
+    "minimal": _INSTANCE_TEMPLATE_MINIMAL,
+    "thought": _INSTANCE_TEMPLATE_THOUGHT,
+    "workflow": _INSTANCE_TEMPLATE_WORKFLOW,
+    "thought-workflow": _INSTANCE_TEMPLATE_THOUGHT_WORKFLOW,
+}
 
 # ---------------------------------------------------------------------------
 # Model configs
@@ -197,22 +218,21 @@ def run(
     eai_path: str,
     preemptable: bool,
     solvable_from: Path | None = None,
-    max_actions: int = 250,
-    cost_limit: float = 3.0,
+    max_actions: int = 150,
+    cost_limit: float = 1.0,
+    template: str = "thought-workflow",
 ) -> None:
     llm_config = MODEL_CONFIGS[model_key]
 
     agent_config = Genny2Config(
         llm_config=llm_config,
         system_prompt=_SYSTEM_PROMPT,
-        goal_template=_INSTANCE_TEMPLATE,
+        goal_template=INSTANCE_TEMPLATES[template],
         flat_history=True,
         step_prompt="",
         obs_format="raw",
-        cost_limit=cost_limit,
-        budget_hint_interval_usd=1.0 if cost_limit is not None else None,
+        budget=BudgetConfig(max_actions=max_actions, cost_limit=cost_limit, display_every_k=5),
         max_format_errors=3,
-        max_actions=max_actions,
         max_obs_chars=20_000,
         compact_threshold_chars=400_000,
     )
@@ -266,8 +286,14 @@ if __name__ == "__main__":
     parser.add_argument("--eai-profile", default="yul101")
     parser.add_argument("--eai-path", default="eai")
     parser.add_argument("--preemptable", action="store_true")
-    parser.add_argument("--max-actions", type=int, default=250)
-    parser.add_argument("--cost-limit", type=float, default=3.0)
+    parser.add_argument("--max-actions", type=int, default=150)
+    parser.add_argument("--cost-limit", type=float, default=1.0)
+    parser.add_argument(
+        "--template",
+        default="thought-workflow",
+        choices=list(INSTANCE_TEMPLATES),
+        help="Instance template variant (default: thought-workflow)",
+    )
     parser.add_argument(
         "--solvable-from",
         metavar="PATH",
@@ -291,4 +317,5 @@ if __name__ == "__main__":
         solvable_from=Path(args.solvable_from) if args.solvable_from else None,
         max_actions=args.max_actions,
         cost_limit=args.cost_limit,
+        template=args.template,
     )
