@@ -222,6 +222,10 @@ class Genny2Config(AgentConfig):
     # Hard per-episode token cap (prompt + completion across all LLM calls). Checked before
     # each act call; triggers a STOP when hit. Useful as a proxy budget when pricing is unknown.
     token_limit: int | None = None
+    # Budget hint injection: when set, a "[Budget: $X.XX/$Y.YY — $Z.ZZ remaining]" message is
+    # appended to the trailing user message every time spending crosses a new multiple of this
+    # value. Only active when cost_limit is also set. Example: 1.0 = hint every $1 spent.
+    budget_hint_interval_usd: float | None = None
     # Retry budget when the model returns no tool calls. On each retry the empty response
     # and a correction user message are appended; if still no tool calls after all retries,
     # a STOP action is returned. 0 = no retry (preserves current behavior).
@@ -299,6 +303,7 @@ class Genny2(Agent):
         self._total_cost: float = 0.0
         self._total_tokens: int = 0
         self._compacted_summary: str = ""  # injected into system message after compaction
+        self._last_budget_hint_usd: float = 0.0
 
     _MAGIC_SUBMIT = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
 
@@ -628,6 +633,21 @@ class Genny2(Agent):
             messages = self._build_base_prompt()
             messages.extend(self._latest_obs)
             final_prompt = self.config.react_prompt
+        if (
+            self.config.cost_limit is not None
+            and self.config.budget_hint_interval_usd is not None
+            and self._total_cost > 0
+        ):
+            interval = self.config.budget_hint_interval_usd
+            crossed = (self._total_cost // interval) * interval
+            if crossed > self._last_budget_hint_usd:
+                self._last_budget_hint_usd = crossed
+                remaining = max(0.0, self.config.cost_limit - self._total_cost)
+                budget_hint = (
+                    f"[Budget: ${self._total_cost:.2f}/${self.config.cost_limit:.2f} spent"
+                    f" — ${remaining:.2f} remaining]"
+                )
+                final_prompt = f"{budget_hint}\n\n{final_prompt}" if final_prompt else budget_hint
         if final_prompt:
             if self.config.max_actions is not None:
                 final_prompt = f"[Step {self._actions_cnt + 1}/{self.config.max_actions}]\n\n{final_prompt}"
