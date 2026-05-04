@@ -19,6 +19,10 @@ from cube_harness.storage import FileStorage, Storage
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
+# Default timeouts shared with xray_utils for ghost-episode detection.
+DEFAULT_STEP_TIMEOUT_S: float = 1800.0
+DEFAULT_CANCEL_GRACE_S: float = 120.0
+
 
 def _warn_if_ephemeral_venv() -> None:
     """Warn when VIRTUAL_ENV is set but the interpreter lives elsewhere.
@@ -87,8 +91,8 @@ def run_with_ray(
     *,
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
-    step_timeout_s: float = 1800.0,
-    cancel_grace_s: float = 120.0,
+    step_timeout_s: float = DEFAULT_STEP_TIMEOUT_S,
+    cancel_grace_s: float = DEFAULT_CANCEL_GRACE_S,
     orphan_threshold_s: float = 3600.0,
     max_retry_rounds: int = 3,
     otlp_endpoint: str | None = None,
@@ -362,8 +366,8 @@ def run_sequentially(
     exp: Experiment,
     debug_limit: int | None = None,
     *,
-    step_timeout_s: float = 1800.0,
-    cancel_grace_s: float = 120.0,
+    step_timeout_s: float = DEFAULT_STEP_TIMEOUT_S,
+    cancel_grace_s: float = DEFAULT_CANCEL_GRACE_S,
     orphan_threshold_s: float = 3600.0,
     max_retry_rounds: int = 3,
     otlp_endpoint: str | None = None,

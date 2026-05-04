@@ -38,23 +38,21 @@ def main(debug: bool) -> None:
             SubmitResponseConfig(),
         ]
     )
-    # Automatic mode: declare the DockerServiceConfig in resources= and let make() provision + launch on demand.
+    # Automatic mode: declare the DockerServiceConfig in resources= and let the runner
+    # provision + launch on demand via Experiment.infra.
     # Swap LocalInfraConfig() for any other InfraConfig (e.g., AWSInfraConfig()) for cloud users.
     # Swap WEBARENA_ALL for any other entry in webarena_verified_cube.resources (e.g. WEBARENA_SHOPPING_ADMIN for a specific site).
-    benchmark = (
-        WebArenaVerifiedBenchmarkConfig(
-            tool_config=tool_config,
-            resources=[WEBARENA_ALL],
-        )
-        .subset_from_glob("sites", "*shopping_admin*")
-        .make(infra=LocalInfraConfig())
-    )
+    benchmark_config = WebArenaVerifiedBenchmarkConfig(
+        tool_config=tool_config,
+        resources=[WEBARENA_ALL],
+    ).subset_from_glob("sites", "*shopping_admin*")
 
     exp = Experiment(
         name="webarena-verified",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
+        infra=LocalInfraConfig(),
         max_steps=30,
     )
 

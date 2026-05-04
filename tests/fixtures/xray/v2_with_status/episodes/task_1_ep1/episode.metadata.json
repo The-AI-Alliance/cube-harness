@@ -1,0 +1,9 @@
+{
+  "id": "task_1_ep1",
+  "metadata": {"task_id": "task_1", "agent_name": "test_agent"},
+  "start_time": null,
+  "end_time": null,
+  "reward_info": {"reward": 0.0},
+  "steps": [],
+  "summary_stats": null
+}
