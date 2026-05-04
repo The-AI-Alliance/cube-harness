@@ -24,6 +24,20 @@ logger = logging.getLogger(__name__)
 # Works with both bash (Daytona/Modal/Toolkit backends) and sh/dash (LocalContainer).
 CONDA_ACTIVATE = "if [ -f /opt/miniconda3/etc/profile.d/conda.sh ]; then . /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed; fi"
 
+# Appended to every task description so the agent knows evaluation constraints,
+# how to verify the fix, and how to submit.
+_TASK_INSTRUCTIONS_TEMPLATE = """\
+Modify source files only — do not modify test files or configuration files \
+(pyproject.toml, setup.cfg, etc.).
+
+Verify your fix by running:
+  {test_cmd}
+
+When ready to submit:
+1. Check: `git diff > patch.txt && cat patch.txt`
+2. Confirm the patch only modifies source files, then call `final_step`.\
+"""
+
 
 class SWEBenchLiveTaskMetadata(TaskMetadata):
     """TaskMetadata subclass for SWE-bench Live tasks.
@@ -95,6 +109,11 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
 
     oracle_mode: bool = False
     """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
+
+    append_submission_instructions: bool = True
+    """If True, append evaluation constraints, test command, and final_step
+    submission instructions to the problem statement. Set False for raw-benchmark
+    comparisons where the task description must match the original exactly."""
 
     @property
     def _exec(self) -> SWEBenchLiveExecutionInfo:
@@ -184,6 +203,9 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
         if self.include_hints and self._exec.hints_text:
             instruction += f"\n\n## Hints\n{self._exec.hints_text}"
         instruction += f"\n\n[Working directory: {self.tool._config.working_dir}]"
+        if self.append_submission_instructions:
+            test_cmd = self._exec.test_cmds[0] if self._exec.test_cmds else "pytest"
+            instruction += f"\n\n{_TASK_INSTRUCTIONS_TEMPLATE.format(test_cmd=test_cmd)}"
 
         return Observation.from_text(instruction), {
             "instance_id": self.metadata.id,
@@ -193,23 +215,42 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         assert isinstance(self.tool, SWEBenchTool)
 
-        # Apply test patch
-        self._apply_patch(self._exec.test_patch)
-
         fail_to_pass = self._exec.fail_to_pass
         pass_to_pass = self._exec.pass_to_pass
         test_cmds = self._exec.test_cmds
         eval_timeout = self._exec.eval_timeout
 
-        # Run tests using explicit test_cmds from the dataset
+        # Step 1: Baseline run — identify pre-existing p2p failures BEFORE test_patch.
+        # Some containers have broken environment-level tests (SSL errors, deprecated
+        # imports, etc.) completely unrelated to the task. Without a baseline, these
+        # show up as p2p regressions and cause correct fixes to score 0.
+        # Running before _apply_patch(test_patch) means f2p tests don't exist yet,
+        # so only p2p tests are relevant here.
+        baseline_output = self._run_test_cmds(test_cmds, timeout=eval_timeout)
+        pre_existing_p2p = self._get_failing_test_ids(baseline_output, pass_to_pass, self.metadata.log_parser)
+        if pre_existing_p2p:
+            logger.info(
+                "Pre-existing p2p failures (excluded from scoring): %d — %s",
+                len(pre_existing_p2p),
+                sorted(pre_existing_p2p),
+            )
+
+        # Step 2: Apply test patch (adds new f2p test cases)
+        self._apply_patch(self._exec.test_patch)
+
+        # Step 3: Run tests with agent's fix + test_patch applied
         test_output = self._run_test_cmds(test_cmds, timeout=eval_timeout)
 
-        # Use the typed log_parser field from metadata
+        # Step 4: Score — exclude pre-existing p2p failures from the count
         f2p_passed, p2p_failed = self._check_test_results(
-            test_output, fail_to_pass, pass_to_pass, self.metadata.log_parser
+            test_output,
+            fail_to_pass,
+            pass_to_pass,
+            self.metadata.log_parser,
+            exclude_p2p=pre_existing_p2p,
         )
 
-        # SWE-bench Live Linux: at least one FAIL_TO_PASS must pass, zero PASS_TO_PASS failures
+        # SWE-bench Live Linux: at least one FAIL_TO_PASS must pass, zero net PASS_TO_PASS failures
         resolved = f2p_passed > 0 and p2p_failed == 0
         reward = 1.0 if resolved else 0.0
 
@@ -220,6 +261,7 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
             "fail_to_pass_total": len(fail_to_pass),
             "pass_to_pass_failed": p2p_failed,
             "pass_to_pass_total": len(pass_to_pass),
+            "pre_existing_p2p_failures": len(pre_existing_p2p),
             "test_output": test_output
             if len(test_output) <= 30000
             else test_output[:5000] + "\n...[truncated]...\n" + test_output[-25000:],
@@ -243,7 +285,10 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
         if "[exit_code:" not in result and "[error]" not in result:
             return result
 
-        return self.tool.bash_unlimited("patch --batch --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        result = self.tool.bash_unlimited("patch --batch --forward --fuzz=5 -p1 -i /tmp/patch.diff 2>&1", timeout=60)
+        if "[exit_code:" in result or "[error]" in result:
+            logger.warning("_apply_patch: all methods failed.\npatch output:\n%s", result)
+        return result
 
     def _run_test_cmds(self, test_cmds: list[str], timeout: int = 1800) -> str:
         """Run the explicit test commands from the dataset."""
@@ -268,13 +313,36 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
         return "\n".join(outputs)
 
     @staticmethod
+    def _get_failing_test_ids(output: str, test_ids: list[str], log_parser: str) -> set[str]:
+        """Return the subset of test_ids that appear as FAILED or ERROR in output."""
+        failing: set[str] = set()
+        if log_parser != "pytest":
+            return failing
+        _NO_WORD = r"(?![a-zA-Z0-9_])"
+        for test_id in test_ids:
+            tid = re.escape(test_id)
+            if (
+                f"{test_id} FAILED" in output
+                or f"{test_id} ERROR" in output
+                or re.search(r"FAILED " + tid + _NO_WORD, output)
+                or re.search(r"ERROR " + tid + _NO_WORD, output)
+            ):
+                failing.add(test_id)
+        return failing
+
+    @staticmethod
     def _check_test_results(
         output: str,
         fail_to_pass: list[str],
         pass_to_pass: list[str],
         log_parser: str,
+        exclude_p2p: set[str] | None = None,
     ) -> tuple[int, int]:
-        """Check test results: count FAIL_TO_PASS successes and PASS_TO_PASS failures.
+        """Check test results: count FAIL_TO_PASS successes and net PASS_TO_PASS failures.
+
+        Args:
+            exclude_p2p: test IDs to skip in the p2p check (pre-existing failures
+                identified by a baseline run before test_patch was applied).
 
         Returns:
             (fail_to_pass_passed, pass_to_pass_failed)
@@ -301,6 +369,8 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
                 ):
                     f2p_passed += 1
             for test_id in pass_to_pass:
+                if exclude_p2p and test_id in exclude_p2p:
+                    continue  # pre-existing failure; not caused by agent's change
                 tid = re.escape(test_id)
                 if (
                     f"{test_id} FAILED" in output
@@ -331,6 +401,10 @@ class SWEBenchLiveTaskConfig(TaskConfig[SWEBenchLiveTaskMetadata]):
 
     oracle_mode: bool = False
     """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
+
+    append_submission_instructions: bool = True
+    """If True, append evaluation constraints, test command, and final_step
+    submission instructions to the problem statement."""
 
     def verify_installed(self) -> None:
         """Fail fast if the per-task execution cache is empty."""
@@ -366,4 +440,5 @@ class SWEBenchLiveTaskConfig(TaskConfig[SWEBenchLiveTaskMetadata]):
             container_backend=container_backend,
             include_hints=self.include_hints,
             oracle_mode=self.oracle_mode,
+            append_submission_instructions=self.append_submission_instructions,
         )
