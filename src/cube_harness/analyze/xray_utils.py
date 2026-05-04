@@ -1388,15 +1388,15 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         stats = compute_trajectory_stats(traj)
         status = trajectory_status(traj)
 
-        if status in ("success", "fail"):
+        if status in TERMINAL_OUTCOME_STATUSES:
             finished_rewards.append(stats["final_reward"])
             finished_steps.append(stats["n_env_steps"])
             if stats["duration"] is not None:
                 finished_durations.append(stats["duration"])
+            if status == "max_steps":
+                n_max_steps += 1
         elif status in IN_FLIGHT_STATUSES:
             n_in_flight += 1
-        elif status == "max_steps":
-            n_max_steps += 1
         elif status == "stale":
             n_stale += 1
         elif status == "cancelled":
@@ -1411,13 +1411,15 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         total_cost += stats["cost"]
 
     n_finished = len(finished_rewards)
-    n_completed = n_finished + n_max_steps  # all terminal outcomes
-    n_total = n_completed + n_in_flight + n_stale + n_cancelled + n_errored
+    n_success_fail = n_finished - n_max_steps
+    n_total = n_finished + n_in_flight + n_stale + n_cancelled + n_errored
 
     stats_parts = [f"📊 **{n_total}** trajectories"]
     summary_parts = []
-    if n_completed > 0:
-        summary_parts.append(f"✓ Completed: **{n_completed}**")
+    if n_success_fail > 0:
+        summary_parts.append(f"✓ Completed: **{n_success_fail}**")
+    if n_max_steps > 0:
+        summary_parts.append(f"🎬 Max steps: **{n_max_steps}**")
     if n_in_flight > 0:
         summary_parts.append(f"▶️ Running: **{n_in_flight}**")
     if n_stale > 0:
