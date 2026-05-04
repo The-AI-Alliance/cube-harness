@@ -341,17 +341,28 @@ def agent_name_from_config(agent_cfg: dict) -> str:
 
     `agent_name` is a `@property` on AgentConfig (not a Pydantic field), so it is
     NOT present in the JSON dump. We re-instantiate the concrete subclass via
-    TypedBaseModel's `_type` dispatch and read the property. Falls back to the
-    class short name when the type can't be imported (e.g. agent package missing
-    locally).
+    TypedBaseModel's `_type` dispatch and read the property. When the module is
+    unavailable locally (e.g. an experiment was produced on a branch that defines
+    a custom agent) we synthesize a name that follows the common
+    `<AgentName>-<model_name>` convention used by built-in agents — both so the
+    column stays informative and so multi-experiment loads remain
+    distinguishable when they only differ in model.
     """
     if not agent_cfg:
         return ""
     try:
         return AgentConfig.model_validate(dict(agent_cfg)).agent_name
     except Exception as exc:
-        logger.debug("Could not instantiate AgentConfig (%s); falling back to _type", exc)
-        return (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
+        logger.debug("Could not instantiate AgentConfig (%s); synthesizing fallback name", exc)
+        cls_name = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
+        # Drop the trailing "Config" so e.g. Genny2Config -> Genny2, matching the
+        # display convention of agent classes whose .agent_name we couldn't reach.
+        if cls_name.endswith("Config"):
+            cls_name = cls_name[: -len("Config")]
+        model = (agent_cfg.get("llm_config") or {}).get("model_name") or ""
+        if cls_name and model:
+            return f"{cls_name}-{model}".replace("/", "_")
+        return cls_name or model
 
 
 def benchmark_name_from_config(bench_cfg: dict) -> str:
