@@ -350,3 +350,193 @@ but doesn't produce the structured blame + hypothesis needed for the improvement
    purposes?
 4. Codebase map: should the per-cube skill check out a pinned git ref matching the
    experiment's run commit, or always use `HEAD`?
+
+---
+
+## Simulation: 6 real episodes judged by sub-agents
+
+To validate the schema and uncover design gaps, we ran the judge as sub-agents on 6
+real trajectories from a haiku-4-5 / thought-workflow / HAL-50 run
+(`20260503_231245`). Each sub-agent read the trajectory log from disk and produced a
+`JudgeOutput` JSON without access to the ground-truth evaluator internals.
+
+### Results
+
+**Episode 1 — `django__django-9296` · reward=1.0 · 110 steps**
+
+```json
+{
+  "outcome": "success",
+  "summary": "Agent correctly implemented Paginator.__iter__. After ~25 wasted steps finding the test runner invocation (pytest not installed, no manage.py), the fix was clean and all tests passed.",
+  "primary_blame": "none",
+  "primary_blame_confidence": 5,
+  "other_blames": ["agent_scaffolding"],
+  "evidence": [
+    {"step": 17, "quote": "python -m pytest tests/pagination/tests.py\nNo module named pytest"},
+    {"step": 63, "quote": "def __iter__(self):\n    for page_num in self.page_range:\n        yield self.page(page_num)"}
+  ],
+  "hypothesis": "none",
+  "hypothesis_confidence": 5
+}
+```
+
+**Episode 2 — `django__django-11790` · reward=0.0 · 230 steps**
+
+```json
+{
+  "outcome": "failure",
+  "summary": "Agent diagnosed and fixed the AuthenticationForm maxlength regression. All 79 tests passed and final_step was called — but reward=0.0. Evaluator likely expected a simpler one-line patch.",
+  "primary_blame": "eval_brittle",
+  "primary_blame_confidence": 3,
+  "other_blames": ["model_capability"],
+  "evidence": [
+    {"step": 206, "quote": "Ran 79 tests in 0.122s\n\nOK"},
+    {"step": 228, "quote": "[228 DONE] reward=0.0"}
+  ],
+  "hypothesis": "Evaluator expected widget.attrs['maxlength'] = ... directly; agent's fix called widget_attrs() which re-sets other attributes, producing a different patch shape.",
+  "hypothesis_confidence": 3
+}
+```
+
+**Episode 3 — `sphinx-doc__sphinx-7590` · reward=0.0 · 482 steps**
+
+```json
+{
+  "outcome": "failure",
+  "summary": "Agent identified the C++ UDL parsing bug, then entered a ~350-step loop trying to count characters on a source line via an ever-growing awk/sed/xargs pipeline. Never made a code change.",
+  "primary_blame": "model_capability",
+  "primary_blame_confidence": 5,
+  "other_blames": ["agent_scaffolding"],
+  "evidence": [
+    {"step": 151, "quote": "awk '...' | od -c | tail -1 | awk '{print $1}' | xargs printf '%d\\n' | xargs -I {} echo \"Line 4667 has {} characters\""},
+    {"step": 152, "quote": "Line 4667 has 67 characters"},
+    {"step": 391, "quote": "[same pipeline + additional xargs stages, still returns 67]"}
+  ],
+  "hypothesis": "A scaffold-level guard detecting N consecutive near-identical commands would interrupt this loop. The anti-loop prompt clause did not trigger because the commands always returned a result — just always the same one.",
+  "hypothesis_confidence": 4
+}
+```
+
+**Episode 4 — `django__django-12262` · reward=0.0 · 76 steps**
+
+```json
+{
+  "outcome": "failure",
+  "summary": "Agent correctly identified the bug AND the exact fix (change `param not in unhandled_kwargs` to `param not in kwonly`) but never wrote it to any file. It looped through analysis scripts for ~30 steps then the budget ran out.",
+  "primary_blame": "model_capability",
+  "primary_blame_confidence": 5,
+  "other_blames": ["agent_scaffolding"],
+  "evidence": [
+    {"step": 54, "quote": "The fix should check:\n  param not in kwonly: False\n  Overall: False"},
+    {"step": 73, "quote": "[073 BASH id=toolu_013xZN]\n\n\n[074 DONE] reward=0.0"}
+  ],
+  "hypothesis": "Explore-to-fix phase transition failed: agent simulated the fix in a Python script instead of writing it to the source file. Explicit scaffolding ('once confirmed in a script, apply to the file immediately') would help.",
+  "hypothesis_confidence": 5
+}
+```
+
+**Episode 5 — `sphinx-doc__sphinx-10435` · reward=0.0 · 106 steps**
+
+```json
+{
+  "outcome": "failure",
+  "summary": "Agent confirmed the failing test and the newline symptom, then entered a ~60-step loop analyzing a hardcoded LaTeX string instead of opening latex.py. No source file was ever modified.",
+  "primary_blame": "model_capability",
+  "primary_blame_confidence": 5,
+  "other_blames": ["agent_scaffolding"],
+  "evidence": [
+    {"step": 40, "quote": "tests/test_build_latex.py::test_latex_code_role FAILED"},
+    {"step": 58, "quote": "0: '\\n'\n1: '\\\\'\n2: 'P'"},
+    {"step": 103, "quote": "[103 BASH id=toolu_012kqY]\n\n\n[104 DONE] reward=0.0"}
+  ],
+  "hypothesis": "A codebase map pointing to sphinx/writers/latex.py:visit_literal as the entry point would have shortcut the exploration failure that led to the loop.",
+  "hypothesis_confidence": 4
+}
+```
+
+**Episode 6 — `django__django-12304` · reward=1.0 · 406 steps**
+
+```json
+{
+  "outcome": "success",
+  "summary": "Agent applied the correct one-line fix (do_not_call_in_templates = True on ChoicesMeta) at step 95 and verified it immediately. Then wasted ~300 steps: ~140 on irrelevant git history and ~50+ repetitions of the same git diff check before calling final_step at step 403.",
+  "primary_blame": "agent_scaffolding",
+  "primary_blame_confidence": 4,
+  "other_blames": ["model_capability"],
+  "evidence": [
+    {"step": 95, "quote": "class ChoicesMeta(enum.EnumMeta):\n    do_not_call_in_templates = True"},
+    {"step": 97, "quote": "Result: 'FR'\nExpected: 'FR'\nStatus: PASS"},
+    {"step": 395, "quote": "cd /testbed && git diff | grep -E \"^diff\""}
+  ],
+  "hypothesis": "Submission instructions should say 'call final_step immediately after confirming the patch' — the current wording leaves the agent free to verify indefinitely.",
+  "hypothesis_confidence": 4
+}
+```
+
+---
+
+### Interpretation and design implications
+
+**Dominant failure mode: degenerate loops.** 5 of 6 episodes contained a loop — either
+in the explore phase (episodes 3, 4, 5), the verify phase (episode 6), or both.
+Crucially, all of these loops violated the spirit of the anti-loop prompt clause ("avoid
+retrying if no apparent effect") without triggering it, because the commands *did*
+return output — just always the same output. The prompt clause only guards against
+actions with no result; it does not guard against actions with a stale, non-progressing
+result.
+
+**Two distinct loop subtypes identified:**
+
+| Subtype | Description | Episodes |
+|---|---|---|
+| *Exploration lock* | Agent knows the symptom but loops on diagnostics instead of transitioning to writing a fix | 3, 4, 5 |
+| *Verification lock* | Agent has the fix but loops on `git diff` / patch confirmation instead of calling `final_step` | 1 (minor), 6 (severe) |
+
+Both subtypes are invisible to the current scaffolding. A scaffold-level identical-command
+detector (independent of the LLM) would catch both.
+
+**`eval_brittle` is hard to judge without evaluator access.** Episode 2 produced the
+only uncertain attribution (confidence 3): all tests passed, final_step was called,
+reward=0.0. The judge correctly suspected `eval_brittle` but could not confirm without
+seeing the expected patch or the evaluator's `evaluate()` method. The codebase map
+should include a pointer to the evaluator source so the judge can reason about whether
+a valid solution was unfairly rejected.
+
+**Successes reveal inefficiency that reward alone misses.** Episodes 1 and 6 both
+succeeded but wasted 25 and 300 steps respectively. The blame taxonomy captures this via
+`agent_scaffolding` as secondary blame, and the `hypothesis` field surfaces actionable
+fixes (test-runner in codebase map; tightened submission instruction). The judge is
+therefore useful on *successes* too — not just failures.
+
+**Phase-transition failures are a distinct pattern.** Episodes 4 and 5 share a specific
+failure mode: the agent diagnosed the problem correctly but never transitioned from
+analysis to editing a file. This is distinct from `model_capability` in the general sense
+— the agent had the right answer but couldn't act on it. A future `stuck_phase` field
+(values: `reproduce`, `explore`, `fix`, `verify`, `submit`) would make this pattern
+queryable across runs.
+
+**New design ideas from this simulation:**
+
+1. **Scaffold-level loop detector as a pre-judge input.** Run a cheap heuristic before
+   the LLM judge: count consecutive near-identical tool calls (edit distance < threshold)
+   and report the longest run, its start step, and the repeated command. This gives the
+   judge structured evidence to quote rather than having it re-discover the loop by
+   reading the full log.
+
+2. **Evaluator source in codebase map.** For `eval_brittle` attribution to be
+   high-confidence, the judge needs to see how the evaluator decides reward. The codebase
+   map should include the path to the benchmark's `evaluate()` method.
+
+3. **`stuck_phase` field (V2).** Values: `reproduce | explore | fix | verify | submit`.
+   Captures the explore-to-fix and verify-to-submit transition failures as a first-class
+   queryable field, enabling aggregate queries like "what fraction of failures got stuck
+   in verify?".
+
+4. **`steps_before_fix` and `steps_after_fix` (V2).** For successful episodes, these
+   measure scaffold efficiency independently of reward. Episodes 1 and 6 both have
+   reward=1.0 but very different efficiency profiles.
+
+5. **Prompt wording for submission.** Episode 6's 300-step verification loop traces
+   directly to the submission instruction wording. The instruction "verify with
+   `git diff > patch.txt && cat patch.txt`, then call `final_step`" should be sharpened
+   to "call `final_step` immediately after the patch looks correct — do not re-verify."
