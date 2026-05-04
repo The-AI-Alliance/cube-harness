@@ -100,7 +100,7 @@ _HAL_MINI_TASK_IDS: frozenset[str] = frozenset(
 # Prompts
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks."
+_SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
 
 # Template variants — ablation over two orthogonal axes:
 #   THOUGHT  — instructs the model to understand the problem before acting
