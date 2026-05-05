@@ -1,9 +1,11 @@
-"""Shared Genny2 agent configuration for SWE-bench recipes."""
+"""Shared Genny2 agent configuration for SWE-bench and TerminalBench recipes."""
 
 from cube_harness.agents.genny2 import BudgetConfig, Genny2Config
 from cube_harness.llm import LLMConfig
 
 SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
+
+TBENCH_SYSTEM_PROMPT = "You are a helpful assistant operating in a Linux terminal environment. Work through the task by running shell commands. When your solution is ready, call final_step — the system will verify it automatically. If an action seems to have no effect, avoid retrying it."
 
 _WORKFLOW_BLOCK = """\
 Suggested approach:
@@ -20,14 +22,24 @@ Suggested approach:
 3. Verify: confirm the result meets the requirement. If it does not, make a focused adjustment and try again.\
 """
 
+_WORKFLOW_BLOCK_TBENCH = """\
+Suggested approach:
+1. Explore: read the task, inspect /app and any relevant files to understand the environment.
+2. Implement: write, modify, or install what is needed to satisfy the task.
+3. Verify: run a quick sanity check to confirm your solution works.
+4. Finish: call final_step when you are done.\
+"""
+
 INSTANCE_TEMPLATES: dict[str, str] = {
     "minimal": "{{task}}",
     "workflow": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}",
     "workflow-generic": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK_GENERIC}",
+    "workflow-tbench": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK_TBENCH}",
 }
 
 # Production default: generic 3-step workflow, works across SWE-bench, TerminalBench, and similar.
 DEFAULT_TEMPLATE = "workflow-generic"
+DEFAULT_TBENCH_TEMPLATE = "workflow-tbench"
 
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(
@@ -68,6 +80,23 @@ def make_agent_config(
     return Genny2Config(
         llm_config=MODEL_CONFIGS[model_key],
         system_prompt=SYSTEM_PROMPT,
+        goal_template=INSTANCE_TEMPLATES[template],
+        flat_history=True,
+        step_prompt="",
+        max_format_errors=3,
+        budget=BudgetConfig(max_actions=max_actions, cost_limit=cost_limit),
+    )
+
+
+def make_tbench_agent_config(
+    model_key: str,
+    template: str = DEFAULT_TBENCH_TEMPLATE,
+    max_actions: int = 100,
+    cost_limit: float = 1.0,
+) -> Genny2Config:
+    return Genny2Config(
+        llm_config=MODEL_CONFIGS[model_key],
+        system_prompt=TBENCH_SYSTEM_PROMPT,
         goal_template=INSTANCE_TEMPLATES[template],
         flat_history=True,
         step_prompt="",
