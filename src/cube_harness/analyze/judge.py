@@ -534,7 +534,7 @@ async def _run_claude_code(
         include_partial_messages=False,
     )
     if verbose:
-        logger.info("Running judge with model %s and options: %s", model, json.dumps(options, indent=2))
+        logger.info("Running judge with model %s and options: %r", model, options)
 
     final_text: list[str] = []
     prompt_tokens = 0
