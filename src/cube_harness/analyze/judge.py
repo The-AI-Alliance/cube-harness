@@ -49,7 +49,7 @@ from cube_harness.experiment import Experiment
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-opus-4-7"
+DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_SAMPLE_FRACTION = 0.10
 EXPERIMENT_JUDGE_SUMMARY_FILENAME = "experiment_judge_summary.json"
 
