@@ -1479,10 +1479,11 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     """Build one row per unique agent for the top-level agent table.
 
     Groups trajectories by metadata.get('agent_name', 'unknown').
-    Columns: agent_name, avg_reward, status, total_cost
+    Columns: agent_name, avg_reward, avg_step, status, total_cost
 
     status — ``[count][symbol] + ... = total`` cell, e.g. ``15✓ + 4▶️ + 2🎬 = 21``.
              success and fail both collapse to ✓ (avg_reward already captures the breakdown).
+    avg_step — mean n_env_steps across finished trajectories ("-" if none finished).
     total_cost shows "-" when no cost data is available (e.g. unloaded trajectory stubs).
     """
     groups: dict[str, list[Trajectory]] = {}
@@ -1496,14 +1497,21 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
         all_stats = [compute_trajectory_stats(t) for t in agent_trajs]
         statuses = [trajectory_status(t) for t in agent_trajs]
         finished = _finished_rewards(agent_trajs)
+        finished_steps = [
+            s["n_env_steps"]
+            for s, t in zip(all_stats, agent_trajs)
+            if trajectory_status(t) in ("success", "fail", "max_steps")
+        ]
         total_cost = sum(float(s["cost"]) for s in all_stats)
         mean, stderr = _reward_mean_stderr(finished)
+        avg_step_str = f"{sum(finished_steps) / len(finished_steps):.1f}" if finished_steps else "-"
         cost_str = f"${total_cost:.4f}" if total_cost > 0 else "-"
 
         rows.append(
             {
                 "agent_name": agent_key,
                 "avg_reward": f"{mean:.3f} ± {stderr:.3f}",
+                "avg_step": avg_step_str,
                 "status": _build_status_cell(statuses),
                 "total_cost": cost_str,
             }
