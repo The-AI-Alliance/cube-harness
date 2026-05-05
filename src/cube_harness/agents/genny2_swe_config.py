@@ -5,8 +5,6 @@ from cube_harness.llm import LLMConfig
 
 SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
 
-_THOUGHT_BLOCK = "Before acting, take time to understand the task: read the relevant files, reproduce or confirm the issue, and identify the root cause before making changes."
-
 _WORKFLOW_BLOCK = """\
 Suggested approach:
 1. Reproduce: confirm the current behavior — run the relevant test or command to observe the issue.
@@ -15,12 +13,21 @@ Suggested approach:
 4. Verify: run the relevant test or command to confirm the fix works and nothing else broke. If it does not, make a focused adjustment and try again.\
 """
 
+_WORKFLOW_BLOCK_GENERIC = """\
+Suggested approach:
+1. Explore: inspect the environment — read relevant files, run diagnostic commands, or reproduce the issue before making changes.
+2. Act: execute the minimal steps needed to complete the task.
+3. Verify: confirm the result meets the requirement. If it does not, make a focused adjustment and try again.\
+"""
+
 INSTANCE_TEMPLATES: dict[str, str] = {
     "minimal": "{{task}}",
-    "thought": f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}",
     "workflow": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}",
-    "thought-workflow": f"{{{{task}}}}\n\n{_THOUGHT_BLOCK}\n\n{_WORKFLOW_BLOCK}",
+    "workflow-generic": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK_GENERIC}",
 }
+
+# Production default: generic 3-step workflow, works across SWE-bench, TerminalBench, and similar.
+DEFAULT_TEMPLATE = "workflow-generic"
 
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(
@@ -54,7 +61,7 @@ MODEL_CONFIGS: dict[str, LLMConfig] = {
 
 def make_agent_config(
     model_key: str,
-    template: str = "thought-workflow",
+    template: str = DEFAULT_TEMPLATE,
     max_actions: int = 150,
     cost_limit: float = 1.0,
 ) -> Genny2Config:

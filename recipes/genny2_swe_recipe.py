@@ -30,7 +30,12 @@ from dotenv import load_dotenv
 _project_env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
-from cube_harness.agents.genny2_swe_config import INSTANCE_TEMPLATES, MODEL_CONFIGS, make_agent_config  # noqa: E402
+from cube_harness.agents.genny2_swe_config import (  # noqa: E402
+    DEFAULT_TEMPLATE,
+    INSTANCE_TEMPLATES,
+    MODEL_CONFIGS,
+    make_agent_config,
+)
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 
@@ -146,7 +151,7 @@ def _make_benchmark_config(
 def run(
     model_key: str,
     *,
-    template: str,
+    template: str = DEFAULT_TEMPLATE,
     debug: bool,
     task_ids: list[str] | None,
     subset: str | None,
@@ -197,9 +202,9 @@ if __name__ == "__main__":
     parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS))
     parser.add_argument(
         "--template",
-        default="thought-workflow",
+        default=DEFAULT_TEMPLATE,
         choices=list(INSTANCE_TEMPLATES),
-        help="Instance template variant (default: thought-workflow)",
+        help=f"Instance template variant (default: {DEFAULT_TEMPLATE})",
     )
     parser.add_argument("--debug", action="store_true", help="Run debug oracle tasks sequentially")
     parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")

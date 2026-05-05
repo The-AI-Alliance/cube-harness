@@ -147,7 +147,7 @@ def run(
     solvable_from: Path | None = None,
     max_actions: int = 150,
     cost_limit: float = 1.0,
-    template: str = "thought-workflow",
+    template: str = "workflow-generic",
     launch_timeout: int = 900,
 ) -> None:
     agent_config = make_agent_config(model_key, template, max_actions, cost_limit)
@@ -203,9 +203,9 @@ if __name__ == "__main__":
     parser.add_argument("--launch-timeout", type=int, default=900)
     parser.add_argument(
         "--template",
-        default="thought-workflow",
+        default="workflow-generic",
         choices=list(INSTANCE_TEMPLATES),
-        help="Instance template variant (default: thought-workflow)",
+        help="Instance template variant (default: workflow-generic)",
     )
     parser.add_argument(
         "--solvable-from",
