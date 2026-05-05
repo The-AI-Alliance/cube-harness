@@ -329,6 +329,14 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         # --no-header requires pytest>=6.0; many SWE-bench containers ship older versions.
         return f"python -m pytest -rN -p no:cacheprovider {tests}"
 
+    def close(self) -> None:
+        super().close()
+        if self._container is not None:
+            try:
+                self._container.stop()
+            except Exception:
+                logger.warning("Failed to stop container for task %s", self.metadata.id, exc_info=True)
+
 
 class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
     """Serializable factory that produces a SWEBenchVerifiedTask.
