@@ -166,6 +166,21 @@ def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, launch_timeout: 
 # ---------------------------------------------------------------------------
 
 
+def extract_cancelled(run_dir: Path) -> list[str]:
+    """Task IDs whose every episode ended CANCELLED (never completed)."""
+    eps = Path(run_dir) / "episodes"
+    task_statuses: dict[str, set[str]] = {}
+    for ep_dir in eps.iterdir():
+        if not ep_dir.is_dir():
+            continue
+        task = ep_dir.name.rsplit("_ep", 1)[0]
+        status_f = ep_dir / "status.json"
+        if status_f.exists():
+            s = json.loads(status_f.read_text())
+            task_statuses.setdefault(task, set()).add(s.get("status", ""))
+    return sorted(t for t, ss in task_statuses.items() if ss == {"CANCELLED"})
+
+
 def run_once(
     *,
     subset: str | None = None,
@@ -179,7 +194,18 @@ def run_once(
     debug: bool = False,
     retry_dir: Path | None = None,
 ) -> tuple[Path, ExpResult]:
-    """Single gold pass. Returns (output_dir, ExpResult)."""
+    """Single gold pass. Returns (output_dir, ExpResult).
+
+    If retry_dir is set, re-runs only the tasks that were CANCELLED in every
+    attempt (never completed) — bypasses the max_retries gate.
+    """
+    if retry_dir is not None:
+        cancelled = extract_cancelled(retry_dir)
+        if not cancelled:
+            logger.info("No CANCELLED-only tasks found in %s — nothing to retry.", retry_dir)
+            return retry_dir, ExpResult(exp_id="retry-noop", tasks_num=0)
+        logger.info("Retrying %d CANCELLED task(s) from %s", len(cancelled), retry_dir)
+        task_ids = cancelled
     infra = _make_infra(toolkit, eai_profile, eai_path, launch_timeout)
     benchmark = _make_benchmark(subset, task_ids)
     infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
@@ -190,8 +216,6 @@ def run_once(
         benchmark_config=benchmark,
         infra=infra,
         max_steps=5,
-        output_dir=retry_dir,
-        resume=retry_dir is not None,
     )
     logger.info("Gold pass%s | %s | subset=%s", label, infra_label, subset or task_ids or "debug")
     if debug:
