@@ -120,7 +120,17 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
             # runs the agent installs its own deps; we don't add overhead there.
             self._ensure_uv_preinstalled()
 
-        return Observation.from_text(self._exec.instruction), {
+        instruction = self._exec.instruction
+        # Mirror the test-script rewrite: when /app is read-only and we relocated
+        # the working dir to /tmp/app, the agent's instructions still reference
+        # /app verbatim (from terminal-bench task.yaml).  Rewrite so the agent
+        # writes to the same path the evaluator checks.
+        assert isinstance(self.tool, TerminalBenchTool)
+        app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
+        if app_dir != "/app":
+            instruction = re.sub(r"/app(?=[\s/.,;:)\]'\"]|$)", app_dir, instruction)
+
+        return Observation.from_text(instruction), {
             "task_id": self.metadata.id,
             "difficulty": self.metadata.difficulty,
             "category": self.metadata.category,
@@ -232,6 +242,28 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         marker = "/tmp/fakehome/.local/bin/uv"
         probe = self.tool.bash(f"test -x {marker} && echo EXISTS || echo MISSING", timeout=15)
         if "EXISTS" in probe:
+            return
+
+        # Fast path: cube_assets EAI data mount (see ToolkitInfraConfig.assets_data).
+        # When the harness mounts /opt/cube-assets/ with a uv binary, copy it
+        # directly — bypasses the python3-bootstrap path that fails on minimal
+        # images lacking python3, curl, AND apt sources.  Note: EAI data mounts
+        # are read-only and strip the execute bit (mode 0600), so we use ``-f``
+        # for the probe and ``chmod +x`` after copying into the writable HOME.
+        assets_probe = self.tool.bash(
+            "test -f /opt/cube-assets/uv && test -f /opt/cube-assets/uvx && echo YES || echo NO",
+            timeout=15,
+        )
+        if "YES" in assets_probe:
+            logger.info("Using mounted /opt/cube-assets/uv for uv install")
+            self.tool.bash(
+                "export HOME=/tmp/fakehome && "
+                "mkdir -p $HOME/.local/bin && "
+                "cp /opt/cube-assets/uv /opt/cube-assets/uvx $HOME/.local/bin/ && "
+                "chmod +x $HOME/.local/bin/uv $HOME/.local/bin/uvx && "
+                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env",
+                timeout=30,
+            )
             return
 
         # Some minimal images (e.g. bare LaTeX) ship without python3.
