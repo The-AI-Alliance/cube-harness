@@ -648,6 +648,19 @@ document.addEventListener('keydown', shortcuts, false);
 # ---------------------------------------------------------------------------
 
 
+def _sort_key(row: dict[str, Any], col: str) -> Any:
+    """Sort key for an experiments-table row.
+
+    avg_reward is parsed as a float (the leading number of "0.500 ± 0.123");
+    other columns sort as lowercase strings. Missing values sort last.
+    """
+    val = row.get(col, "")
+    if col == "avg_reward":
+        m = re.match(r"-?\d+(\.\d+)?", str(val))
+        return float(m.group()) if m else float("-inf")
+    return str(val).lower()
+
+
 def _render_goal_panel(text: str) -> str:
     """Render the task goal as a styled HTML panel with a fixed title bar."""
     safe = html_lib.escape(text)
@@ -1270,6 +1283,27 @@ def run_xray(
                         show_label=False,
                         container=False,
                     )
+                    exp_sort = gr.Dropdown(
+                        choices=[
+                            ("date ↓", "date_desc"),
+                            ("date ↑", "date_asc"),
+                            ("experiment ↑", "experiment_asc"),
+                            ("experiment ↓", "experiment_desc"),
+                            ("agent ↑", "agent_asc"),
+                            ("agent ↓", "agent_desc"),
+                            ("model ↑", "model_asc"),
+                            ("model ↓", "model_desc"),
+                            ("benchmark ↑", "benchmark_asc"),
+                            ("benchmark ↓", "benchmark_desc"),
+                            ("avg_reward ↓", "avg_reward_desc"),
+                            ("avg_reward ↑", "avg_reward_asc"),
+                        ],
+                        value="date_desc",
+                        scale=0,
+                        min_width=140,
+                        show_label=False,
+                        container=False,
+                    )
                     exp_archive_btn = gr.Button("🗃 Archive selected", scale=0, size="sm", variant="secondary")
                 exp_table = gr.DataFrame(
                     headers=["", "experiment", "date", "agent", "model", "benchmark", "status", "avg_reward"],
@@ -1418,7 +1452,11 @@ def run_xray(
         # Event wiring
         # ------------------------------------------------------------------
 
-        def _exp_table_rows(auto_select_first: bool = False, search: str = "") -> list[list[Any]]:
+        def _exp_table_rows(
+            auto_select_first: bool = False,
+            search: str = "",
+            sort: str = "date_desc",
+        ) -> list[list[Any]]:
             rows = xray_utils.get_experiments_table_rows(state.results_dir)
             if search:
                 terms = search.lower().split()
@@ -1438,6 +1476,8 @@ def run_xray(
                         for term in terms
                     )
                 ]
+            col, _, direction = sort.rpartition("_")
+            rows.sort(key=lambda r: _sort_key(r, col), reverse=(direction == "desc"))
             if auto_select_first and rows:
                 rows[0]["selected"] = True
             return [
@@ -1454,8 +1494,8 @@ def run_xray(
                 for r in rows
             ]
 
-        def _exp_table_value(search: str = "") -> list[list[Any]]:
-            return _exp_table_rows(auto_select_first=False, search=search)
+        def _exp_table_value(search: str = "", sort: str = "date_desc") -> list[list[Any]]:
+            return _exp_table_rows(auto_select_first=False, search=search, sort=sort)
 
         _hierarchy_outputs = [
             experiment_stats,
@@ -1470,8 +1510,9 @@ def run_xray(
         ]
 
         exp_table.change(fn=on_experiments_change, inputs=exp_table, outputs=_hierarchy_outputs)
-        exp_refresh_btn.click(fn=_exp_table_value, inputs=exp_search, outputs=exp_table)
-        exp_search.change(fn=_exp_table_value, inputs=exp_search, outputs=exp_table)
+        exp_refresh_btn.click(fn=_exp_table_value, inputs=[exp_search, exp_sort], outputs=exp_table)
+        exp_search.change(fn=_exp_table_value, inputs=[exp_search, exp_sort], outputs=exp_table)
+        exp_sort.change(fn=_exp_table_value, inputs=[exp_search, exp_sort], outputs=exp_table)
         exp_archive_btn.click(fn=on_archive_selected, outputs=[exp_table, *_hierarchy_outputs])
 
         bg_timer.tick(
