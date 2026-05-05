@@ -240,9 +240,7 @@ def select_episodes(
     """
     if ids:
         wanted = set(ids)
-        return [
-            r for r in refs if r.trajectory_id in wanted or r.trajectory_id.split("_ep")[0] in wanted
-        ]
+        return [r for r in refs if r.trajectory_id in wanted or r.trajectory_id.split("_ep")[0] in wanted]
 
     pool = refs
     if failures_only:
@@ -524,9 +522,7 @@ async def _run_claude_code(
             query,
         )
     except ImportError as e:
-        raise RuntimeError(
-            "claude-agent-sdk not installed. Run: pip install 'cube-harness[judge]'"
-        ) from e
+        raise RuntimeError("claude-agent-sdk not installed. Run: pip install 'cube-harness[judge]'") from e
 
     options = ClaudeAgentOptions(
         system_prompt=system_prompt,
@@ -674,24 +670,13 @@ def _validate_invariants(obj: JudgeOutput) -> None:
         obj.primary_blame = obj.primary_blame.__class__("none")
 
 
-def judge_episode(
+async def _judge_episode_impl(
     episode_dir: Path,
-    *,
-    experiment_dir: Path | None = None,
-    model: str = DEFAULT_MODEL,
-    verbose: bool = False,
+    experiment_dir: Path,
+    model: str,
+    verbose: bool,
 ) -> tuple[JudgeOutput, JudgeMetadata]:
-    """Run a post-hoc judge on a single episode trajectory directory.
-
-    `experiment_dir` is needed only to locate `experiment_config.json`; if omitted,
-    we look one level up from `episode_dir`.
-    """
-    episode_dir = Path(episode_dir).resolve()
-    if experiment_dir is None:
-        experiment_dir = episode_dir.parent.parent  # episodes/<id>/ → up to experiment dir
-    experiment_dir = Path(experiment_dir).resolve()
-
-    # Decode transcript into a sibling temp dir under the episode.
+    """Async core shared by judge_episode (single) and judge_experiment (parallel)."""
     transcript_dir = episode_dir / "_judge_transcript"
     extract_transcript(episode_dir, transcript_dir)
 
@@ -710,17 +695,14 @@ def judge_episode(
     else:
         task_id, reward, total_steps, task_description = "unknown", None, None, ""
 
-    agent_name = view.agent_dotted
-    benchmark_name = view.benchmark_dotted
     source_paths = collect_source_paths(view)
-
     user_prompt = build_user_prompt(
         trajectory_id=episode_dir.name,
         task_id=task_id,
         reward=reward,
         total_steps=total_steps,
-        agent_name=agent_name,
-        benchmark_name=benchmark_name,
+        agent_name=view.agent_dotted,
+        benchmark_name=view.benchmark_dotted,
         transcript_dir=transcript_dir,
         episode_metadata_path=metadata_path,
         episode_config_path=config_path,
@@ -730,15 +712,13 @@ def judge_episode(
 
     logger.info("Judging %s (reward=%s, steps=%s) with %s", episode_dir.name, reward, total_steps, model)
 
-    result = asyncio.run(
-        _run_claude_code(
-            system_prompt=JUDGE_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            cwd=episode_dir,
-            additional_dirs=list(source_paths.values()) + [transcript_dir],
-            model=model,
-            verbose=verbose,
-        )
+    result = await _run_claude_code(
+        system_prompt=JUDGE_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        cwd=episode_dir,
+        additional_dirs=list(source_paths.values()) + [transcript_dir],
+        model=model,
+        verbose=verbose,
     )
 
     obj = _extract_json_block(result.output_text)
@@ -755,6 +735,24 @@ def judge_episode(
         judge_schema_version=JUDGE_SCHEMA_VERSION,
     )
     return judge_output, judge_metadata
+
+
+def judge_episode(
+    episode_dir: Path,
+    *,
+    experiment_dir: Path | None = None,
+    model: str = DEFAULT_MODEL,
+    verbose: bool = False,
+) -> tuple[JudgeOutput, JudgeMetadata]:
+    """Run a post-hoc judge on a single episode trajectory directory.
+
+    `experiment_dir` is needed only to locate `experiment_config.json`; if omitted,
+    we look one level up from `episode_dir`.
+    """
+    episode_dir = Path(episode_dir).resolve()
+    if experiment_dir is None:
+        experiment_dir = episode_dir.parent.parent
+    return asyncio.run(_judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose))
 
 
 def _persist_judgment(
@@ -794,11 +792,13 @@ def judge_experiment(
     overwrite: bool = False,
     seed: int | None = None,
     verbose: bool = False,
+    n_parallel: int = 1,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
     Selection (default): all episodes that don't already have a judge_output.
     With `--sample 0.1`: 10% of those, randomly. With `--ids`: exactly those.
+    With `n_parallel > 1`: run that many judge sub-processes concurrently.
 
     Writes per-episode results into `episode_record.json` (or a sidecar if missing)
     and aggregate stats into `experiment_judge_summary.json`.
@@ -819,23 +819,58 @@ def judge_experiment(
         logger.info("No episodes selected to judge in %s", experiment_dir)
         return {}
 
-    logger.info("Judging %d / %d episodes in %s", len(selected), len(refs), experiment_dir.name)
+    logger.info(
+        "Judging %d / %d episodes in %s (n_parallel=%d)",
+        len(selected),
+        len(refs),
+        experiment_dir.name,
+        n_parallel,
+    )
 
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
-    for ref in selected:
-        try:
-            judge_output, judge_metadata = judge_episode(
-                ref.episode_dir, experiment_dir=experiment_dir, model=model, verbose=verbose
-            )
-        except Exception as e:
-            logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
-            continue
-        # Refresh ref.record so the persisted file reflects the latest version.
-        ref.record = _load_episode_record(ref.record_path)
-        _persist_judgment(ref, judge_output, judge_metadata)
-        results[ref.trajectory_id] = (judge_output, judge_metadata)
+    if n_parallel > 1:
+        results = asyncio.run(_judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel))
+    else:
+        for ref in selected:
+            try:
+                judge_output, judge_metadata = judge_episode(
+                    ref.episode_dir, experiment_dir=experiment_dir, model=model, verbose=verbose
+                )
+            except Exception as e:
+                logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
+                continue
+            ref.record = _load_episode_record(ref.record_path)
+            _persist_judgment(ref, judge_output, judge_metadata)
+            results[ref.trajectory_id] = (judge_output, judge_metadata)
 
     _write_summary(experiment_dir, results, model=model)
+    return results
+
+
+async def _judge_experiment_parallel(
+    selected: list[EpisodeRef],
+    experiment_dir: Path,
+    model: str,
+    verbose: bool,
+    n_parallel: int,
+) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
+    semaphore = asyncio.Semaphore(n_parallel)
+    results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
+
+    async def _one(ref: EpisodeRef) -> None:
+        async with semaphore:
+            try:
+                judge_output, judge_metadata = await _judge_episode_impl(
+                    ref.episode_dir, experiment_dir, model, verbose
+                )
+            except Exception as e:
+                logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
+                return
+            ref.record = _load_episode_record(ref.record_path)
+            _persist_judgment(ref, judge_output, judge_metadata)
+            results[ref.trajectory_id] = (judge_output, judge_metadata)
+
+    await asyncio.gather(*[_one(ref) for ref in selected])
     return results
 
 
@@ -904,9 +939,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     sel = p.add_argument_group("episode selection (mutually exclusive)")
     g = sel.add_mutually_exclusive_group()
-    g.add_argument(
-        "--ids", default=None, help="Comma-separated trajectory IDs (or task IDs) to judge exactly."
-    )
+    g.add_argument("--ids", default=None, help="Comma-separated trajectory IDs (or task IDs) to judge exactly.")
     g.add_argument(
         "--sample",
         type=float,
@@ -921,6 +954,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--overwrite", action="store_true", help="Re-judge episodes that already have judge_output.")
     p.add_argument("--seed", type=int, default=None, help="Seed for sampling reproducibility.")
     p.add_argument("--summary", action="store_true", help="Print aggregate blame/outcome distribution.")
+    p.add_argument("--n-parallel", type=int, default=1, help="Number of episodes to judge concurrently (default: 1).")
     p.add_argument(
         "-v",
         "--verbose",
@@ -958,6 +992,7 @@ def main(argv: list[str] | None = None) -> int:
         overwrite=args.overwrite,
         seed=args.seed,
         verbose=args.verbose,
+        n_parallel=args.n_parallel,
     )
 
     if args.summary:
