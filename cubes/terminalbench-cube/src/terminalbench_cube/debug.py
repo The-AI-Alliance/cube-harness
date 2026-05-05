@@ -101,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--eai-profile", default="yul101", help="EAI profile (default: yul101)")
     parser.add_argument("--eai-path", default="eai", help="Path to eai CLI (default: eai)")
     parser.add_argument("--preemptable", action="store_true", help="Request preemptable resources")
+    parser.add_argument("--sidecar-data", default=None, help="EAI data name for the exec-relay sidecar binary")
     cli = parser.parse_args()
 
     infra = None
@@ -112,6 +113,7 @@ if __name__ == "__main__":
             eai_path=cli.eai_path,
             preemptable=cli.preemptable,
             launch_timeout_seconds=3000,
+            sidecar_data=cli.sidecar_data,
         )
 
     results = run_debug_suite("terminalbench-cube", _this_module, workers=1, infra=infra)
