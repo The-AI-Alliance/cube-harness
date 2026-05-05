@@ -377,6 +377,7 @@ def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
 
 
 GHOST_TIMEOUT = DEFAULT_STEP_TIMEOUT_S + DEFAULT_CANCEL_GRACE_S  # mirrors runner's kill threshold
+DEFAULT_ORPHAN_THRESHOLD_S = 3600.0  # mirrors run_with_ray orphan_threshold_s default
 _XRAY_CACHE_FILENAME = ".xray_summary.json"
 
 
@@ -385,6 +386,11 @@ def _promote_ghost_episodes(exp_dir: Path) -> None:
 
     Fixes experiments where the runner crashed without marking episodes terminal.
     This lets the cache machinery treat the experiment as finished so it can be frozen.
+
+    RUNNING episodes: use GHOST_TIMEOUT (step_timeout + cancel_grace ≈ 32 min).
+    QUEUED episodes: use the orphan threshold (1 h) — a large batch may leave episodes
+    legitimately waiting in the Ray queue well beyond GHOST_TIMEOUT, so using the short
+    timeout would falsely stale every unstarted episode after 32 min.
     """
     episodes_dir = exp_dir / "episodes"
     if not episodes_dir.exists():
@@ -396,8 +402,15 @@ def _promote_ghost_episodes(exp_dir: Path) -> None:
         status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
         if status is None or status.status not in ("RUNNING", "QUEUED"):
             continue
-        hb = status.last_heartbeat_at or status.started_at
-        if now - hb > GHOST_TIMEOUT:
+        if status.status == "QUEUED":
+            # QUEUED episodes have no heartbeat; use started_at with the longer orphan
+            # threshold so legitimately-waiting episodes are not falsely promoted.
+            timeout = DEFAULT_ORPHAN_THRESHOLD_S
+            hb = status.started_at
+        else:
+            timeout = GHOST_TIMEOUT
+            hb = status.last_heartbeat_at or status.started_at
+        if now - hb > timeout:
             status.status = "STALE"
             if status.ended_at is None:
                 status.ended_at = hb

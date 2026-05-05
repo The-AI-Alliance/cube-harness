@@ -340,6 +340,8 @@ class Genny2(Agent):
                 self._total_tokens,
             )
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
+        if budget_msg:
+            logger.info("Budget status: %s", budget_msg)
 
         # Magic-string submission detection (mini-swe-agent compatibility).
         # When obs_format="magic_submit", the agent submits by running:
