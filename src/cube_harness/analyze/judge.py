@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import importlib.util
 import json
 import logging
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_SAMPLE_FRACTION = 0.10
 EXPERIMENT_JUDGE_SUMMARY_FILENAME = "experiment_judge_summary.json"
+EXPERIMENT_JUDGE_REPORT_FILENAME = "experiment_judge_report.csv"
 
 # Tools the judge needs: read transcript files, grep through cube/agent source,
 # inspect screenshots if any. No write/edit — the judge only produces a JSON answer.
@@ -843,7 +845,7 @@ def judge_experiment(
             _persist_judgment(ref, judge_output, judge_metadata)
             results[ref.trajectory_id] = (judge_output, judge_metadata)
 
-    _write_summary(experiment_dir, results, model=model)
+    _write_summary(experiment_dir, selected, results, model=model)
     return results
 
 
@@ -876,6 +878,7 @@ async def _judge_experiment_parallel(
 
 def _write_summary(
     experiment_dir: Path,
+    selected: list[EpisodeRef],
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]],
     *,
     model: str,
@@ -888,6 +891,16 @@ def _write_summary(
     total_prompt = sum(m.prompt_tokens for _, m in results.values())
     total_completion = sum(m.completion_tokens for _, m in results.values())
     n = len(results)
+
+    judged_episodes = [
+        {
+            "trajectory_id": ref.trajectory_id,
+            "episode_record": str(ref.record_path.relative_to(experiment_dir)),
+        }
+        for ref in selected
+        if ref.trajectory_id in results
+    ]
+
     summary = {
         "n_judged": n,
         "model": model,
@@ -899,8 +912,65 @@ def _write_summary(
         "total_judge_completion_tokens": total_completion,
         "outcomes": dict(outcomes),
         "primary_blame": dict(blames),
+        "report_csv": EXPERIMENT_JUDGE_REPORT_FILENAME,
+        "judged_episodes": judged_episodes,
     }
     (experiment_dir / EXPERIMENT_JUDGE_SUMMARY_FILENAME).write_text(json.dumps(summary, indent=2))
+    _write_csv_report(experiment_dir, selected, results)
+
+
+def _write_csv_report(
+    experiment_dir: Path,
+    selected: list[EpisodeRef],
+    results: dict[str, tuple[JudgeOutput, JudgeMetadata]],
+) -> None:
+    """Write one row per judged episode for spreadsheet-friendly inspection."""
+    fields = [
+        "trajectory_id",
+        "episode_record",
+        "reward",
+        "n_steps",
+        "outcome",
+        "primary_blame",
+        "primary_blame_confidence",
+        "other_blames",
+        "hypothesis_confidence",
+        "summary",
+        "hypothesis",
+        "cost_usd",
+        "prompt_tokens",
+        "completion_tokens",
+        "duration_s",
+    ]
+    path = experiment_dir / EXPERIMENT_JUDGE_REPORT_FILENAME
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for ref in selected:
+            if ref.trajectory_id not in results:
+                continue
+            o, m = results[ref.trajectory_id]
+            reward = ref.record.reward if ref.record is not None else None
+            n_steps = (ref.record.summary_stats or {}).get("n_agent_steps") if ref.record is not None else None
+            w.writerow(
+                {
+                    "trajectory_id": ref.trajectory_id,
+                    "episode_record": str(ref.record_path.relative_to(experiment_dir)),
+                    "reward": reward,
+                    "n_steps": n_steps,
+                    "outcome": o.outcome.value,
+                    "primary_blame": o.primary_blame.value,
+                    "primary_blame_confidence": o.primary_blame_confidence,
+                    "other_blames": ";".join(b.value for b in o.other_blames),
+                    "hypothesis_confidence": o.hypothesis_confidence,
+                    "summary": o.summary,
+                    "hypothesis": o.hypothesis,
+                    "cost_usd": round(m.cost_usd, 4),
+                    "prompt_tokens": m.prompt_tokens,
+                    "completion_tokens": m.completion_tokens,
+                    "duration_s": round(m.duration_s, 2),
+                }
+            )
 
 
 # ---------------------------------------------------------------------------
