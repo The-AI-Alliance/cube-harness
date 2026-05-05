@@ -187,11 +187,13 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         # Run PASS_TO_PASS tests — these must remain passing.
         # strict=False: exit-4 "no tests collected" treated as passed (truncated test IDs
         # in SWE-bench data cannot be collected; agent is not responsible for that).
+        # 2x timeout: p2p often runs 10-100x more tests than f2p (whole-suite
+        # regression check), so the f2p budget is far too tight for big repos.
         p2p_passed = True
         p2p_output = ""
         if pass_to_pass:
             p2p_passed, p2p_output = self._run_tests(
-                self.metadata.repo, pass_to_pass, timeout=eval_timeout, strict=False
+                self.metadata.repo, pass_to_pass, timeout=eval_timeout * 2, strict=False
             )
 
         resolved = f2p_passed and p2p_passed
@@ -303,6 +305,11 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive)
         if m:
             method, class_path = m.group(1), m.group(2)
+            # Python 3.11+ unittest verbose format already includes the method
+            # inside the parens: "test_foo (mod.Class.test_foo)". Returning
+            # f"{class_path}.{method}" would double-append → loader error.
+            if class_path.endswith(f".{method}"):
+                return class_path
             return f"{class_path}.{method}"
         # A valid Python dotted path has no spaces or special chars.
         if re.search(r"[\s#'\"]", directive):
