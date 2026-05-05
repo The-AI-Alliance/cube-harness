@@ -88,6 +88,7 @@ def make_debug_agent(task_id: str) -> DebugAgent:
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
     import terminalbench_cube.debug as _this_module
@@ -95,6 +96,26 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    results = run_debug_suite("terminalbench-cube", _this_module)
+    parser = argparse.ArgumentParser(description="terminalbench-cube debug suite")
+    parser.add_argument("--toolkit", action="store_true", help="Use EAI Toolkit infra instead of local Docker")
+    parser.add_argument("--eai-profile", default="yul101", help="EAI profile (default: yul101)")
+    parser.add_argument("--eai-path", default="eai", help="Path to eai CLI (default: eai)")
+    parser.add_argument("--preemptable", action="store_true", help="Request preemptable resources")
+    parser.add_argument("--sidecar-data", default=None, help="EAI data name for the exec-relay sidecar binary")
+    cli = parser.parse_args()
+
+    infra = None
+    if cli.toolkit:
+        from cube_infra_toolkit import ToolkitInfraConfig
+
+        infra = ToolkitInfraConfig(
+            profile=cli.eai_profile,
+            eai_path=cli.eai_path,
+            preemptable=cli.preemptable,
+            launch_timeout_seconds=3000,
+            sidecar_data=cli.sidecar_data,
+        )
+
+    results = run_debug_suite("terminalbench-cube", _this_module, workers=1, infra=infra)
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
     sys.exit(1 if failed else 0)
