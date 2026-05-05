@@ -34,7 +34,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import cast
 
-from cube.core import Action, ActionSchema, Observation, TypedBaseModel
+from cube.core import Action, ActionSchema, Observation, StepError, TypedBaseModel
 from cube.task import STOP_ACTION
 from litellm import Message
 from pydantic import Field
@@ -107,19 +107,19 @@ def _encode_tools(tools: list[ActionSchema]) -> list[dict]:
     return [t.as_dict() for t in tools]
 
 
-def _decode_actions(response: "Message") -> "list[Action]":
+def _decode_actions(response: "Message") -> tuple["list[Action]", StepError | None]:
     actions = []
     for tc in getattr(response, "tool_calls", None) or []:
         args = tc.function.arguments
         if isinstance(args, str):
             try:
                 args = json.loads(args)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
                 logger.warning("Malformed tool call arguments for %s: %s", tc.function.name, args[:200])
-                return []
+                return [], StepError.from_exception(e)
         if tc.function.name:
             actions.append(Action(id=tc.id, name=tc.function.name, arguments=args))
-    return actions
+    return actions, None
 
 
 def _format_action_list(actions: "list[Action]") -> str:
@@ -373,7 +373,7 @@ class Genny2(Agent):
 
         with profiler("act"):
             response, act_calls = self._act(budget_msg)
-        actions = _decode_actions(response)
+        actions, decode_error = _decode_actions(response)
 
         # Format error exhaustion: _act() retried max_format_errors times but still no tool calls.
         if not actions and self.config.max_format_errors > 0:
@@ -401,6 +401,7 @@ class Genny2(Agent):
         return AgentOutput(
             actions=actions,
             llm_calls=llm_calls,
+            error=decode_error,
             profiling=profiler.data,
             thoughts=thoughts or None,
         )
