@@ -1,18 +1,19 @@
-.PHONY: help install ci-install update format lint lint-check test coverage hello debug xray review
+.PHONY: help install ci-install install-toolkit update format lint lint-check test coverage hello debug xray review
 
 help:
-	@echo "make install       - Install dependencies in editable mode"
-	@echo "make ci-install    - Install dependencies with locked versions (for CI)"
-	@echo "make update        - Update dependencies"
-	@echo "make format        - Format code"
-	@echo "make lint          - Lint and auto-fix (modifies files)"
-	@echo "make lint-check    - Check lint without fixing (read-only, what CI runs)"
-	@echo "make test          - Run unit tests"
-	@echo "make coverage      - Run tests with coverage report"
-	@echo "make hello         - Run hello_miniwob recipe"
-	@echo "make debug         - Run hello_miniwob recipe in debug mode"
-	@echo "make xray          - Run AL2 XRay viewer in debug mode"
-	@echo "make review PR=<n> - Check out a PR and set up any cross-repo cube-standard dependency"
+	@echo "make install          - Install dependencies in editable mode"
+	@echo "make ci-install       - Install dependencies with locked versions (for CI)"
+	@echo "make install-toolkit  - Install extras for Toolkit/EAI runs (run after make install)"
+	@echo "make update           - Update dependencies"
+	@echo "make format           - Format code"
+	@echo "make lint             - Lint and auto-fix (modifies files)"
+	@echo "make lint-check       - Check lint without fixing (read-only, what CI runs)"
+	@echo "make test             - Run unit tests"
+	@echo "make coverage         - Run tests with coverage report"
+	@echo "make hello            - Run hello_miniwob recipe"
+	@echo "make debug            - Run hello_miniwob recipe in debug mode"
+	@echo "make xray             - Run AL2 XRay viewer in debug mode"
+	@echo "make review PR=<n>    - Check out a PR and set up any cross-repo cube-standard dependency"
 
 hello:
 	@echo "🤖 Running hello_miniwob recipe"
@@ -33,6 +34,19 @@ install:
 	uv sync --all-extras
 	uv run playwright install chromium --with-deps
 	pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg
+
+install-toolkit:
+	@echo "🔧 Installing Toolkit/EAI extras (cube_infra_toolkit + SWE-bench cubes)"
+	@echo "   Expects cube-standard at ../cube-standard (sibling of this repo)."
+	@if [ ! -d "../cube-standard/cube-resources/cube-infra-toolkit" ]; then \
+	    echo "❌ cube-infra-toolkit not found at ../cube-standard/cube-resources/cube-infra-toolkit"; \
+	    echo "   Clone cube-standard alongside this repo first."; \
+	    exit 1; \
+	fi
+	uv pip install -e "../cube-standard/cube-resources/cube-infra-toolkit"
+	uv pip install -e "cubes/swebench-verified-cube"
+	uv pip install -e "cubes/swebench-live-cube"
+	@echo "✅ Toolkit extras installed. Re-run 'make install-toolkit' after any 'make install'."
 
 ci-install:
 	uv sync --frozen --all-extras
