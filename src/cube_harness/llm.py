@@ -1,9 +1,10 @@
 """LLM interaction abstractions, LiteLLM based."""
 
 import pprint
+from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
-from typing import Callable, List, Literal
+from typing import Any, Callable, List, Literal, Protocol
 from uuid import uuid4
 
 from cube.core import TypedBaseModel
@@ -83,12 +84,35 @@ class LLMResponse(TypedBaseModel):
     finish_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class LLMRouteLease:
+    """A temporary route assignment for one generation request."""
+
+    route_id: str
+    api_base: str | None = None
+    api_key: str | None = None
+    model_name: str | None = None
+
+
+class LLMRouter(Protocol):
+    """Routes individual LLM calls for `RoutedLLM`."""
+
+    def acquire(self, config: LLMConfig, prompt: Prompt) -> LLMRouteLease: ...
+
+    def release(
+        self,
+        lease: LLMRouteLease,
+        response: LLMResponse | None = None,
+        error: BaseException | None = None,
+    ) -> None: ...
+
+
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
 
-    def __call__(self, prompt: Prompt) -> LLMResponse:
-        kwargs = {
+    def _completion_kwargs(self, prompt: Prompt) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
             "model": self.config.model_name,
             "temperature": self.config.temperature,
             "max_completion_tokens": self.config.max_completion_tokens,
@@ -116,7 +140,22 @@ class LLM:
             kwargs["include_stop_str_in_output"] = self.config.include_stop_str_in_output
         if self.config.skip_special_tokens is not None:
             kwargs["skip_special_tokens"] = self.config.skip_special_tokens
+        return kwargs
+
+    def __call__(self, prompt: Prompt) -> LLMResponse:
+        kwargs = self._completion_kwargs(prompt)
         response = completion_with_retries(**kwargs)
+        usage = self._extract_usage(response)
+        completion_logprobs = self._extract_completion_logprobs(response)
+        return LLMResponse(
+            message=response.choices[0].message,
+            usage=usage,
+            logprobs=[entry["logprob"] for entry in completion_logprobs] if completion_logprobs else None,
+            completion_token_ids=[entry["token_id"] for entry in completion_logprobs] if completion_logprobs else None,
+            finish_reason=getattr(response.choices[0], "finish_reason", None),
+        )
+
+    def _response_from_completion(self, response: Any) -> LLMResponse:
         usage = self._extract_usage(response)
         completion_logprobs = self._extract_completion_logprobs(response)
         return LLMResponse(
@@ -198,6 +237,56 @@ class LLM:
             result.append({"token_id": token_id, "logprob": float(logprob)})
         return result
 
+
+class RoutedLLMConfig(LLMConfig):
+    """LLM config variant that routes each generation through a router.
+
+    The router is intentionally excluded from serialization so existing episode
+    configs and result artifacts stay portable.
+    """
+
+    router: Any = Field(default=None, exclude=True)
+
+    def make(self) -> "RoutedLLM":
+        return RoutedLLM(config=self)
+
+
+class RoutedLLM(LLM):
+    """LLM wrapper with per-request routing and admission control."""
+
+    config: RoutedLLMConfig
+
+    def __init__(self, config: RoutedLLMConfig):
+        super().__init__(config=config)
+
+    def __call__(self, prompt: Prompt) -> LLMResponse:
+        if self.config.router is None:
+            return super().__call__(prompt)
+
+        lease: LLMRouteLease | None = None
+        response_obj: LLMResponse | None = None
+        error: BaseException | None = None
+        try:
+            lease = self.config.router.acquire(self.config, prompt)
+            kwargs = self._completion_kwargs(prompt)
+            if lease.api_base is not None:
+                kwargs["api_base"] = lease.api_base
+            if lease.api_key is not None:
+                kwargs["api_key"] = lease.api_key
+            if lease.model_name is not None:
+                kwargs["model"] = lease.model_name
+
+            raw_response = completion_with_retries(**kwargs)
+            response_obj = self._response_from_completion(raw_response)
+            return response_obj
+        except BaseException as exc:
+            error = exc
+            raise
+        finally:
+            if lease is not None:
+                self.config.router.release(lease, response=response_obj, error=error)
+
+
 class LLMCall(TypedBaseModel):
     """Represents a call to an LLM model."""
 
@@ -206,7 +295,7 @@ class LLMCall(TypedBaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
     llm_config: LLMConfig
     prompt: Prompt
-    prompt_tokens: int = -1 # Number of tokens in the prompt; set to -1 if unknown or not applicable
+    prompt_tokens: int = -1  # Number of tokens in the prompt; set to -1 if unknown or not applicable
     output: Message
     output_tokens: int = -1  # Number of tokens in the output; set to -1 if unknown or not applicable
     usage: Usage = Field(default_factory=Usage)
