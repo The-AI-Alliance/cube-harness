@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 # Default timeouts shared with xray_utils for ghost-episode detection.
-DEFAULT_STEP_TIMEOUT_S: float = 1800.0
+DEFAULT_STEP_TIMEOUT_S: float = 9000.0
 DEFAULT_CANCEL_GRACE_S: float = 120.0
 
 
