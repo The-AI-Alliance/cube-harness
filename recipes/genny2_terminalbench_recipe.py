@@ -23,14 +23,19 @@ from dotenv import load_dotenv
 _project_env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
-from cube_harness.agents.genny2_swe_config import INSTANCE_TEMPLATES, MODEL_CONFIGS, make_agent_config  # noqa: E402
+from cube_harness.agents.genny2_swe_config import (  # noqa: E402
+    DEFAULT_TBENCH_TEMPLATE,
+    INSTANCE_TEMPLATES,
+    MODEL_CONFIGS,
+    make_tbench_agent_config,
+)
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
 
-def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: bool) -> object:
+def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: bool, sidecar_data: str | None) -> object:
     if toolkit:
         from cube_infra_toolkit import ToolkitInfraConfig
 
@@ -39,6 +44,7 @@ def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: boo
             eai_path=eai_path,
             preemptable=preemptable,
             launch_timeout_seconds=3000,
+            sidecar_data=sidecar_data,
         )
     from cube.infra_local import LocalInfraConfig
 
@@ -58,7 +64,10 @@ def _make_benchmark_config(
     if debug:
         from terminalbench_cube.debug import get_debug_benchmark
 
-        return get_debug_benchmark()
+        config = get_debug_benchmark()
+        if task_ids:
+            config = config.subset_from_list(task_ids)
+        return config
 
     TerminalBenchBenchmarkConfig.install()
     config = TerminalBenchBenchmarkConfig(
@@ -89,12 +98,13 @@ def run(
     eai_profile: str,
     eai_path: str,
     preemptable: bool,
+    sidecar_data: str | None = None,
     max_actions: int = 100,
     cost_limit: float = 1.0,
 ) -> None:
-    agent_config = make_agent_config(model_key, template, max_actions, cost_limit)
+    agent_config = make_tbench_agent_config(model_key, template, max_actions, cost_limit)
 
-    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable)
+    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable, sidecar_data)
     benchmark_config = _make_benchmark_config(debug, difficulty, category, task_ids, oracle_mode)
 
     output_dir = retry_dir if retry_dir is not None else None
@@ -126,9 +136,9 @@ if __name__ == "__main__":
     parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS))
     parser.add_argument(
         "--template",
-        default="thought-workflow",
+        default=DEFAULT_TBENCH_TEMPLATE,
         choices=list(INSTANCE_TEMPLATES),
-        help="Instance template variant (default: thought-workflow)",
+        help=f"Instance template variant (default: {DEFAULT_TBENCH_TEMPLATE})",
     )
     parser.add_argument("--debug", action="store_true", help="Run debug oracle tasks sequentially")
     parser.add_argument("--difficulty", default=None, help="Filter by difficulty (easy, medium, hard)")
@@ -141,6 +151,11 @@ if __name__ == "__main__":
     parser.add_argument("--eai-profile", default="yul101")
     parser.add_argument("--eai-path", default="eai")
     parser.add_argument("--preemptable", action="store_true")
+    parser.add_argument(
+        "--sidecar-data",
+        default=None,
+        help="EAI data name for the exec-relay sidecar binary (e.g. snow.allac.cube_sidecar)",
+    )
     parser.add_argument("--max-actions", type=int, default=100)
     parser.add_argument("--cost-limit", type=float, default=1.0)
     args = parser.parse_args()
@@ -159,6 +174,7 @@ if __name__ == "__main__":
         eai_profile=args.eai_profile,
         eai_path=args.eai_path,
         preemptable=args.preemptable,
+        sidecar_data=args.sidecar_data,
         max_actions=args.max_actions,
         cost_limit=args.cost_limit,
     )
