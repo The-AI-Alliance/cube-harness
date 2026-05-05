@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 def extract_solvable(run_dir: Path) -> list[str]:
     """Task IDs that resolved (reward == 1.0) in a completed gold run."""
     trajs = FileStorage(run_dir).load_all_trajectory_metadata()
-    return sorted(t.id for t in trajs if t.reward_info.get("reward") == 1.0)
+    return sorted(t.id.rsplit("_ep", 1)[0] for t in trajs if t.reward_info.get("reward") == 1.0)
 
 
 def intersect_solvable(run_dirs: list[Path]) -> tuple[list[str], list[str]]:
