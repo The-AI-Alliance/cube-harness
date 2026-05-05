@@ -12,6 +12,7 @@ from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 from swebench_verified_cube.debug import _TASK_ACTIONS, get_debug_benchmark
 from swebench_verified_cube.task import (
     SWEBenchVerifiedExecutionInfo,
+    SWEBenchVerifiedTask,
     SWEBenchVerifiedTaskConfig,
     SWEBenchVerifiedTaskMetadata,
 )
@@ -94,3 +95,27 @@ def test_execution_info_roundtrip():
     assert restored.problem_statement == "test issue"
     assert restored.fail_to_pass == ["test_a", "test_b"]
     assert restored.eval_timeout == 1800  # default preserved
+
+
+def test_normalize_django_directive_legacy_format() -> None:
+    """Pre-3.11 unittest verbose format: method outside parens."""
+    norm = SWEBenchVerifiedTask._normalize_django_directive
+    assert norm("test_foo (mod.path.MyTest)") == "mod.path.MyTest.test_foo"
+
+
+def test_normalize_django_directive_python_311_format() -> None:
+    """3.11+ unittest verbose format includes the method inside parens; must not double-append."""
+    norm = SWEBenchVerifiedTask._normalize_django_directive
+    assert norm("test_foo (mod.path.MyTest.test_foo)") == "mod.path.MyTest.test_foo"
+
+
+def test_normalize_django_directive_dotted_passthrough() -> None:
+    """Already-normalized dotted paths pass through unchanged."""
+    norm = SWEBenchVerifiedTask._normalize_django_directive
+    assert norm("mod.path.MyTest.test_foo") == "mod.path.MyTest.test_foo"
+
+
+def test_normalize_django_directive_malformed_returns_none() -> None:
+    """Human-readable test descriptions are dropped."""
+    norm = SWEBenchVerifiedTask._normalize_django_directive
+    assert norm("a thing that should work") is None
