@@ -44,25 +44,46 @@ class TerminalBenchTool(Tool):
         return self._container.exec(command, **kwargs)
 
     # ── Agent actions ──────────────────────────────────────────────
+    # bash() impl mirrors BashOnlySWEBenchTool (feat/swebench-verified-improvements).
+    # TODO: extract to a shared cube-tools package.
 
-    @tool_action
-    def bash(self, command: str, timeout: int = 120) -> str:
-        """Execute a bash command in the sandbox and return its output."""
-        result = self._exec(command, timeout=timeout)
+    _MAX_BASH_TIMEOUT: int = 900
+
+    def _run_bash(self, command: str, timeout: int = 120) -> str:
+        result = self._container.exec(command, timeout=timeout, workdir=self._config.working_dir)
         parts = []
         if result.stdout:
             parts.append(result.stdout)
         if result.stderr:
             parts.append(result.stderr)
         if result.exit_code == 124:
-            parts.append(f"[error] Command timed out after {timeout}s")
+            parts.append(f"[timed out after {timeout}s]")
         elif result.exit_code != 0:
             parts.append(f"[exit_code: {result.exit_code}]")
-        output = "\n".join(parts) if parts else "(no output)"
+        return "\n".join(parts) if parts else "(no output)"
+
+    @tool_action
+    def bash(self, command: str, timeout: int = 120) -> str:
+        """Execute a bash command in the sandbox and return its output.
+
+        Args:
+            command: Shell command. cwd=/app.
+            timeout: Seconds (NOT milliseconds), max 900.
+        """
+        if timeout > 3600:  # agent sent ms instead of seconds (e.g. 120000)
+            timeout = timeout // 1000
+        timeout = min(timeout, self._MAX_BASH_TIMEOUT)
+        output = self._run_bash(command, timeout=timeout)
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:
             return output
-        return encoded[: self._config.max_output_bytes].decode("utf-8", errors="ignore") + "\n[truncated]"
+        head = encoded[:5000].decode("utf-8", errors="ignore")
+        tail = encoded[-5000:].decode("utf-8", errors="ignore")
+        return f"{head}\n[... {len(encoded) - 10000} bytes elided ...]\n{tail}"
+
+    def bash_unlimited(self, command: str, timeout: int = 120) -> str:
+        """Unlimited bash for internal use (evaluate, test harness)."""
+        return self._run_bash(command, timeout=timeout)
 
     @tool_action
     def read_file(self, path: str) -> str:
@@ -70,14 +91,23 @@ class TerminalBenchTool(Tool):
         result = self._exec(f"cat {shlex.quote(path)}")
         if result.exit_code != 0:
             return f"Error reading {path}: {result.stderr or result.stdout}"
-        return result.stdout
+        encoded = result.stdout.encode("utf-8")
+        if len(encoded) <= self._config.max_output_bytes:
+            return result.stdout
+        head = encoded[:5000].decode("utf-8", errors="ignore")
+        tail = encoded[-5000:].decode("utf-8", errors="ignore")
+        return f"{head}\n[... {len(encoded) - 10000} bytes elided ...]\n{tail}"
 
     @tool_action
     def write_file(self, path: str, content: str) -> str:
         """Write content to a file in the sandbox."""
-        self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
+        mkdir = self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
+        if mkdir.exit_code != 0:
+            return f"Error creating parent dir for {path}: {mkdir.stderr or mkdir.stdout}"
         escaped = content.replace("'", "'\\''")
-        self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
+        write = self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
+        if write.exit_code != 0:
+            return f"Error writing {path}: {write.stderr or write.stdout}"
         return f"Wrote {len(content)} bytes to {path}"
 
     # ── Internal helpers (used by Task, not exposed to agent) ─────
