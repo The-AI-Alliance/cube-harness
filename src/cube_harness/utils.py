@@ -40,7 +40,8 @@ def parse_actions(llm_output: Message) -> list[Action]:
                 try:
                     arguments = json.loads(arguments)
                 except json.JSONDecodeError:
-                    raise ValueError(f"Invalid JSON arguments in tool call: {arguments}")
+                    logger.warning("Malformed tool call arguments for %s: %s", tc.function.name, arguments[:200])
+                    return []
             if tc.function.name is None:
                 raise ValueError("Tool call must have a function name.")
             actions.append(Action(id=tc.id, name=tc.function.name, arguments=arguments))

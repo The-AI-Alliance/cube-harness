@@ -112,7 +112,11 @@ def _decode_actions(response: "Message") -> "list[Action]":
     for tc in getattr(response, "tool_calls", None) or []:
         args = tc.function.arguments
         if isinstance(args, str):
-            args = json.loads(args)
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                logger.warning("Malformed tool call arguments for %s: %s", tc.function.name, args[:200])
+                return []
         if tc.function.name:
             actions.append(Action(id=tc.id, name=tc.function.name, arguments=args))
     return actions
