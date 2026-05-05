@@ -177,6 +177,7 @@ def run_once(
     launch_timeout: int = 900,
     run_label: str = "",
     debug: bool = False,
+    retry_dir: Path | None = None,
 ) -> tuple[Path, ExpResult]:
     """Single gold pass. Returns (output_dir, ExpResult)."""
     infra = _make_infra(toolkit, eai_profile, eai_path, launch_timeout)
@@ -189,6 +190,8 @@ def run_once(
         benchmark_config=benchmark,
         infra=infra,
         max_steps=5,
+        output_dir=retry_dir,
+        resume=retry_dir is not None,
     )
     logger.info("Gold pass%s | %s | subset=%s", label, infra_label, subset or task_ids or "debug")
     if debug:
@@ -273,6 +276,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
     parser.add_argument("--n-runs", type=int, default=1, help="Repeat N times for flakiness detection")
+    parser.add_argument("--retry", metavar="DIR", default=None, help="Re-run only CANCELLED/FAILED episodes from DIR")
     parser.add_argument("--existing-run-dir", metavar="DIR", nargs="+", default=None)
     parser.add_argument("--dump-solvable", metavar="PATH", default=None)
     parser.add_argument("--n-parallel", type=int, default=50)
@@ -295,4 +299,5 @@ if __name__ == "__main__":
         toolkit=args.toolkit,
         eai_profile=args.eai_profile,
         eai_path=args.eai_path,
+        retry_dir=Path(args.retry) if args.retry else None,
     )
