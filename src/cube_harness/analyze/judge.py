@@ -950,8 +950,8 @@ def _write_csv_report(
             if ref.trajectory_id not in results:
                 continue
             o, m = results[ref.trajectory_id]
-            reward = ref.record.reward if ref.record is not None else None
-            n_steps = (ref.record.summary_stats or {}).get("n_agent_steps") if ref.record is not None else None
+            reward = ref.record.score if ref.record is not None else None
+            n_steps = ref.record.n_agent_steps if ref.record is not None else None
             w.writerow(
                 {
                     "trajectory_id": ref.trajectory_id,
