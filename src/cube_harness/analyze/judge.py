@@ -53,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_SAMPLE_FRACTION = 0.10
+DEFAULT_JUDGE_MAX_TURNS = 40
+DEFAULT_PRE_JUDGE_MAX_TURNS = 80
 EXPERIMENT_JUDGE_SUMMARY_FILENAME = "experiment_judge_summary.json"
 EXPERIMENT_JUDGE_REPORT_FILENAME = "experiment_judge_report.csv"
 
@@ -176,17 +178,49 @@ def extract_transcript(episode_dir: Path, out_dir: Path) -> Path:
 
 
 def _write_episode_summary(out_dir: Path, all_steps: list[tuple[int, str, str]]) -> None:
-    """Write a short summary file: first obs (task description) + last 5 steps."""
-    parts: list[str] = ["# Episode summary (first obs + last 5 steps)\n"]
-    if all_steps:
-        first_obs = next((t for _, k, t in all_steps if k == "obs"), None)
-        if first_obs:
-            parts.append("## Task description (step 0 obs)\n")
-            parts.append(first_obs[:2000])
-            parts.append("\n...\n")
-        parts.append("\n## Last 5 steps\n")
-        for _, _, text in all_steps[-5:]:
-            parts.append(text)
+    """Write a content-aware summary: task + error steps + last K agent steps."""
+    if not all_steps:
+        (out_dir / "episode_summary.txt").write_text("# Episode summary\n\n(empty episode)\n")
+        return
+
+    # Sort by step idx (defensive — they should already be sorted)
+    by_idx = sorted(all_steps, key=lambda t: t[0])
+
+    # First obs
+    first_obs_text = next((t for idx, k, t in by_idx if k == "obs"), None)
+
+    # Error steps (heuristic: contains the literal "ERROR:" line we emit)
+    error_steps = [(idx, k, t) for idx, k, t in by_idx if "ERROR:" in t]
+
+    # Last K agent steps (act step + the obs that follows it).
+    K = 3
+    act_steps = [t for t in by_idx if t[1] == "act"]
+    last_k_acts = act_steps[-K:] if act_steps else []
+    last_k_idxs: set[int] = set()
+    for idx, _, _ in last_k_acts:
+        last_k_idxs.add(idx)
+        last_k_idxs.add(idx + 1)  # the obs that follows
+
+    # Collect, dedupe by step_idx, ordered
+    selected_idxs: set[int] = set(last_k_idxs) | {idx for idx, _, _ in error_steps}
+    selected = [(idx, k, t) for idx, k, t in by_idx if idx in selected_idxs]
+
+    parts: list[str] = ["# Episode summary\n"]
+    if first_obs_text:
+        parts.append("## Task description (step 0 obs, truncated)\n")
+        parts.append(first_obs_text[:2000])
+        parts.append("\n...\n")
+    if error_steps:
+        parts.append(f"\n## Error steps ({len(error_steps)} total)\n")
+    if last_k_acts:
+        parts.append(f"\n## Last {K} agent steps (act + following obs)\n")
+
+    body = "\n".join(t for _, _, t in selected)
+    # Cap total at 30 KB
+    if len(body) > 30_000:
+        body = body[:30_000] + "\n[... summary truncated at 30 KB ...]\n"
+    parts.append(body)
+
     (out_dir / "episode_summary.txt").write_text("\n".join(parts))
 
 
@@ -285,6 +319,37 @@ def select_episodes(
         k = max(1, int(round(len(pool) * sample))) if pool else 0
         return rng.sample(pool, k)
     return pool
+
+
+# ---------------------------------------------------------------------------
+# Stratified pre-judge sampling helpers
+# ---------------------------------------------------------------------------
+
+
+def _task_family(ref: "EpisodeRef") -> str:
+    """Best-effort prefix from a trajectory_id: 'django__django-14500_ep157' → 'django'."""
+    base = ref.trajectory_id.split("_ep")[0]
+    if "__" in base:
+        return base.split("__", 1)[0]
+    if "_" in base:
+        return base.split("_", 1)[0]
+    return base
+
+
+def _stratified_sample(refs: list["EpisodeRef"], correct: bool, max_n: int) -> list["EpisodeRef"]:
+    """Up to `max_n` refs, each from a different task family."""
+    pool = [r for r in refs if r.record is not None and r.record.is_correct == correct]
+    seen_families: set[str] = set()
+    out: list[EpisodeRef] = []
+    for r in pool:
+        fam = _task_family(r)
+        if fam in seen_families:
+            continue
+        seen_families.add(fam)
+        out.append(r)
+        if len(out) >= max_n:
+            break
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +540,37 @@ def build_user_prompt(
 # Pre-judge: experiment-level context document
 # ---------------------------------------------------------------------------
 
+
+def _validate_context(context_path: Path) -> bool:
+    """Return True if cited paths in judge_context.md still exist.
+
+    Scans for absolute paths (lines containing '/' patterns that look like file
+    references) and checks that a reasonable fraction still resolve. Returns
+    True (= valid) when ≥80% of cited absolute paths exist.
+    """
+    text = context_path.read_text()
+    # Heuristic: extract paths after backticks or in `path: /...` patterns.
+    paths = re.findall(r"`(/[^\s`]+)`", text)
+    paths += re.findall(
+        r"^\s+([^/\s][^\s:]*\.(?:py|json|md|txt|yaml))",
+        text,
+        flags=re.MULTILINE,
+    )
+    if not paths:
+        return True  # no cited paths to validate
+    existing = sum(1 for p in paths if Path(p).exists())
+    ratio = existing / len(paths)
+    if ratio < 0.8:
+        logger.warning(
+            "judge_context.md cites %d paths, only %d (%.0f%%) exist on disk; will regenerate.",
+            len(paths),
+            existing,
+            ratio * 100,
+        )
+        return False
+    return True
+
+
 PRE_JUDGE_SYSTEM_PROMPT = """You are an experiment analyst. Your job is to read an agent \
 experiment's configuration and source code, then write a concise reference document that \
 downstream episode judges will read before analyzing individual trajectory failures.
@@ -600,6 +696,7 @@ async def _run_pre_judge_impl(
     sample_refs: list["EpisodeRef"],
     model: str,
     verbose: bool,
+    max_turns: int | None = DEFAULT_PRE_JUDGE_MAX_TURNS,
 ) -> Path:
     """Run the pre-judge agent and return the path to judge_context.md."""
     output_path = experiment_dir / PRE_JUDGE_CONTEXT_FILENAME
@@ -620,6 +717,7 @@ async def _run_pre_judge_impl(
         verbose=verbose,
         trace_mode="off",
         allowed_tools=PRE_JUDGE_ALLOWED_TOOLS,
+        max_turns=max_turns,
     )
     return output_path
 
@@ -630,6 +728,7 @@ def run_pre_judge(
     model: str = DEFAULT_PRE_JUDGE_MODEL,
     verbose: bool = False,
     overwrite: bool = False,
+    max_turns: int | None = DEFAULT_PRE_JUDGE_MAX_TURNS,
 ) -> Path | None:
     """Build (or reuse) the experiment-level judge_context.md.
 
@@ -640,8 +739,10 @@ def run_pre_judge(
     experiment_dir = Path(experiment_dir).resolve()
     output_path = experiment_dir / PRE_JUDGE_CONTEXT_FILENAME
     if output_path.exists() and not overwrite:
-        logger.info("Pre-judge context already exists at %s — reusing.", output_path)
-        return output_path
+        if _validate_context(output_path):
+            logger.info("Pre-judge context already exists at %s — reusing.", output_path)
+            return output_path
+        logger.info("Pre-judge context exists but cited paths are stale; regenerating.")
 
     config_path = experiment_dir / "experiment_config.json"
     view = _load_experiment_view(config_path)
@@ -651,19 +752,15 @@ def run_pre_judge(
     refs: list[EpisodeRef] = []
     if episodes_dir.exists():
         all_refs = discover_episodes(experiment_dir)
-        failed = [r for r in all_refs if r.record and not r.record.is_correct]
-        succeeded = [r for r in all_refs if r.record and r.record.is_correct]
-        # Pick 1 failed + 1 succeeded for contrast; fall back to first 2 overall.
-        sample: list[EpisodeRef] = []
-        if failed:
-            sample.append(failed[0])
-        if succeeded:
-            sample.append(succeeded[0])
+        # Stratified sample: up to 2 from different families, failed + succeeded.
+        sample = _stratified_sample(all_refs, correct=False, max_n=2) + _stratified_sample(
+            all_refs, correct=True, max_n=2
+        )
         if not sample:
             sample = all_refs[:2]
         refs = sample
 
-    asyncio.run(_run_pre_judge_impl(experiment_dir, view, source_paths, refs, model, verbose))
+    asyncio.run(_run_pre_judge_impl(experiment_dir, view, source_paths, refs, model, verbose, max_turns))
     return output_path if output_path.exists() else None
 
 
@@ -752,6 +849,7 @@ async def _run_claude_code(
     verbose: bool = False,
     trace_mode: TraceMode = "actions",
     allowed_tools: list[str] | None = None,
+    max_turns: int | None = None,
 ) -> _SDKResult:
     """Invoke Claude Code via the SDK and return the assistant text + usage.
 
@@ -779,6 +877,7 @@ async def _run_claude_code(
         add_dirs=[str(p) for p in additional_dirs],
         model=model,
         include_partial_messages=False,
+        max_turns=max_turns,
     )
     if verbose:
         logger.info("Running judge with model %s and options: %r", model, options)
@@ -941,6 +1040,7 @@ async def _judge_episode_impl(
     verbose: bool,
     trace_mode: TraceMode = "actions",
     context_path: Path | None = None,
+    max_turns: int | None = DEFAULT_JUDGE_MAX_TURNS,
 ) -> tuple[JudgeOutput, JudgeMetadata, list[dict[str, Any]]]:
     """Async core shared by judge_episode (single) and judge_experiment (parallel)."""
     transcript_dir = episode_dir / "_judge_transcript"
@@ -987,6 +1087,7 @@ async def _judge_episode_impl(
         model=model,
         verbose=verbose,
         trace_mode=trace_mode,
+        max_turns=max_turns,
     )
     _cleanup_transcript(transcript_dir)
 
@@ -1014,6 +1115,7 @@ def judge_episode(
     verbose: bool = False,
     trace_mode: TraceMode = "actions",
     context_path: Path | None = None,
+    max_turns: int | None = None,
 ) -> tuple[JudgeOutput, JudgeMetadata]:
     """Run a post-hoc judge on a single episode trajectory directory.
 
@@ -1024,7 +1126,15 @@ def judge_episode(
     if experiment_dir is None:
         experiment_dir = episode_dir.parent.parent
     judge_output, judge_metadata, _ = asyncio.run(
-        _judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose, trace_mode, context_path)
+        _judge_episode_impl(
+            episode_dir,
+            Path(experiment_dir).resolve(),
+            model,
+            verbose,
+            trace_mode,
+            context_path,
+            max_turns,
+        )
     )
     return judge_output, judge_metadata
 
@@ -1110,6 +1220,8 @@ def judge_experiment(
     trace_mode: TraceMode = "actions",
     pre_judge_model: str = DEFAULT_PRE_JUDGE_MODEL,
     skip_pre_judge: bool = False,
+    max_turns: int | None = None,
+    pre_judge_max_turns: int | None = None,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
@@ -1146,18 +1258,27 @@ def judge_experiment(
 
     context_path: Path | None = None
     if not skip_pre_judge:
-        context_path = run_pre_judge(experiment_dir, model=pre_judge_model, verbose=verbose)
+        context_path = run_pre_judge(
+            experiment_dir,
+            model=pre_judge_model,
+            verbose=verbose,
+            max_turns=pre_judge_max_turns,
+        )
 
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
     if n_parallel > 1:
         results = asyncio.run(
-            _judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel, trace_mode, context_path)
+            _judge_experiment_parallel(
+                selected, experiment_dir, model, verbose, n_parallel, trace_mode, context_path, max_turns
+            )
         )
     else:
         for ref in selected:
             try:
                 judge_output, judge_metadata, actions = asyncio.run(
-                    _judge_episode_impl(ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path)
+                    _judge_episode_impl(
+                        ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
+                    )
                 )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
@@ -1178,6 +1299,7 @@ async def _judge_experiment_parallel(
     n_parallel: int,
     trace_mode: TraceMode = "actions",
     context_path: Path | None = None,
+    max_turns: int | None = None,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     semaphore = asyncio.Semaphore(n_parallel)
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
@@ -1186,7 +1308,7 @@ async def _judge_experiment_parallel(
         async with semaphore:
             try:
                 judge_output, judge_metadata, actions = await _judge_episode_impl(
-                    ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path
+                    ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
                 )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
@@ -1370,6 +1492,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "'off': nothing stored."
         ),
     )
+    p.add_argument(
+        "--max-turns",
+        type=int,
+        default=DEFAULT_JUDGE_MAX_TURNS,
+        dest="max_turns",
+        help=f"Max turns for each episode judge call (default: {DEFAULT_JUDGE_MAX_TURNS}).",
+    )
     pj = p.add_argument_group("pre-judge (experiment-level context)")
     pj.add_argument(
         "--pre-judge-model",
@@ -1385,6 +1514,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--overwrite-context",
         action="store_true",
         help="Re-run the pre-judge even if judge_context.md already exists.",
+    )
+    pj.add_argument(
+        "--pre-judge-max-turns",
+        type=int,
+        default=DEFAULT_PRE_JUDGE_MAX_TURNS,
+        dest="pre_judge_max_turns",
+        help=f"Max turns for the pre-judge context call (default: {DEFAULT_PRE_JUDGE_MAX_TURNS}).",
     )
     return p.parse_args(argv)
 
@@ -1429,6 +1565,8 @@ def main(argv: list[str] | None = None) -> int:
         trace_mode=args.trace_mode,
         pre_judge_model=args.pre_judge_model,
         skip_pre_judge=args.no_pre_judge,
+        max_turns=args.max_turns,
+        pre_judge_max_turns=args.pre_judge_max_turns,
     )
 
     if args.summary:

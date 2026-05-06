@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import msgpack
 import pytest
 import zstandard
 
+from cube_harness.analyze.judge import EpisodeRef as _EpisodeRef
 from cube_harness.analyze.judge import (
     _extract_json_block,
+    _run_claude_code,
+    _stratified_sample,
+    _task_family,
+    _validate_context,
+    _write_episode_summary,
     discover_episodes,
     extract_transcript,
     select_episodes,
@@ -149,13 +158,13 @@ def test_extract_transcript_decompresses_obs_and_act(tmp_path: Path) -> None:
 
     obs_text = (out / "steps" / "000_obs.txt").read_text()
     act_text = (out / "steps" / "001_act.txt").read_text()
-    transcript = (out / "transcript.txt").read_text()
+    summary = (out / "episode_summary.txt").read_text()
 
     assert "Hello task description." in obs_text
     assert "ACTION bash" in act_text
     assert "ls /testbed" in act_text
-    assert "Hello task description." in transcript
-    assert "ls /testbed" in transcript
+    assert "Hello task description." in summary
+    assert "ls /testbed" in summary
 
 
 # ---------------------------------------------------------------------------
@@ -259,3 +268,226 @@ def test_select_episodes_n_caps_at_pool_size(tmp_path: Path) -> None:
     refs = discover_episodes(exp)
     selected = select_episodes(refs, n=99)
     assert len(selected) == 2
+
+
+# ---------------------------------------------------------------------------
+# Helpers for new tests (Round 1+)
+# ---------------------------------------------------------------------------
+
+
+def _async_iter(items: list[Any]) -> Any:
+    """Return an async generator factory that yields items from `items`."""
+
+    async def _gen(*args: Any, **kwargs: Any) -> Any:
+        for x in items:
+            yield x
+
+    return _gen
+
+
+def _make_ref(trajectory_id: str, correct: bool = False) -> _EpisodeRef:
+    """Build a minimal EpisodeRef with a stub EpisodeRecord."""
+    record = EpisodeRecord(
+        evaluation_id="eval-1",
+        sample_id=trajectory_id.split("_ep")[0],
+        is_correct=correct,
+        score=1.0 if correct else 0.0,
+        num_turns=1,
+        n_agent_steps=1,
+        n_env_steps=0,
+        usage=UsageSummary(),
+        trajectory_id=trajectory_id,
+        timestamp=0.0,
+    )
+    return _EpisodeRef(
+        trajectory_id=trajectory_id,
+        episode_dir=Path("/fake") / trajectory_id,
+        record_path=Path("/fake") / trajectory_id / EPISODE_RECORD_FILENAME,
+        record=record,
+    )
+
+
+# ---------------------------------------------------------------------------
+# R1.1 — Turn budget
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeResult:
+    usage: dict[str, int]
+    total_cost_usd: float
+    duration_ms: int
+
+
+def test_run_claude_code_passes_max_turns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When max_turns is set, it must reach ClaudeAgentOptions."""
+    captured: dict[str, Any] = {}
+
+    class _FakeOptions:
+        def __init__(self, **kw: Any) -> None:
+            captured.update(kw)
+
+    monkeypatch.setattr("claude_agent_sdk.ClaudeAgentOptions", _FakeOptions)
+    monkeypatch.setattr(
+        "claude_agent_sdk.query",
+        _async_iter([_FakeResult(usage={}, total_cost_usd=0.0, duration_ms=0)]),
+    )
+    asyncio.run(
+        _run_claude_code(
+            system_prompt="x",
+            user_prompt="y",
+            cwd=Path("."),
+            additional_dirs=[],
+            model="m",
+            max_turns=42,
+        )
+    )
+    assert captured.get("max_turns") == 42
+
+
+def test_run_claude_code_default_max_turns_is_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default behavior unchanged — max_turns=None means no cap passed to SDK."""
+    captured: dict[str, Any] = {}
+
+    class _FakeOptions:
+        def __init__(self, **kw: Any) -> None:
+            captured.update(kw)
+
+    monkeypatch.setattr("claude_agent_sdk.ClaudeAgentOptions", _FakeOptions)
+    monkeypatch.setattr(
+        "claude_agent_sdk.query",
+        _async_iter([_FakeResult(usage={}, total_cost_usd=0.0, duration_ms=0)]),
+    )
+    asyncio.run(
+        _run_claude_code(
+            system_prompt="x",
+            user_prompt="y",
+            cwd=Path("."),
+            additional_dirs=[],
+            model="m",
+        )
+    )
+    assert captured.get("max_turns") is None
+
+
+# ---------------------------------------------------------------------------
+# R1.2 — Smarter episode_summary.txt
+# ---------------------------------------------------------------------------
+
+
+def test_episode_summary_includes_first_obs(tmp_path: Path) -> None:
+    """First obs (truncated to 2KB) appears at the top."""
+    out = tmp_path / "out"
+    out.mkdir()
+    steps: list[tuple[int, str, str]] = [(0, "obs", "### Step 000 OBS\nSolve task X" + "y" * 5000)]
+    _write_episode_summary(out, steps)
+    text = (out / "episode_summary.txt").read_text()
+    assert "Solve task X" in text
+    assert len(text) < 10_000  # truncation enforced
+
+
+def test_episode_summary_includes_error_steps(tmp_path: Path) -> None:
+    """Steps containing 'ERROR:' must be in the summary."""
+    out = tmp_path / "out"
+    out.mkdir()
+    steps: list[tuple[int, str, str]] = [
+        (0, "obs", "### Step 000 OBS\nstart"),
+        (15, "act", "### Step 015 ACT\nERROR: tool exception"),
+        (50, "act", "### Step 050 ACT\nclean step"),
+    ]
+    _write_episode_summary(out, steps)
+    text = (out / "episode_summary.txt").read_text()
+    assert "ERROR: tool exception" in text
+
+
+def test_episode_summary_includes_last_k_acts(tmp_path: Path) -> None:
+    """Last 3 act + their following obs must appear."""
+    out = tmp_path / "out"
+    out.mkdir()
+    steps: list[tuple[int, str, str]] = []
+    for i in range(10):
+        kind = "obs" if i % 2 == 0 else "act"
+        steps.append((i, kind, f"### Step {i:03d} {kind.upper()}\nbody-{i}"))
+    _write_episode_summary(out, steps)
+    text = (out / "episode_summary.txt").read_text()
+    # Last 3 acts are at idx 5, 7, 9 → with following obs idx 6, 8 (10 doesn't exist)
+    for i in [5, 6, 7, 8, 9]:
+        assert f"body-{i}" in text
+
+
+def test_episode_summary_caps_at_30kb(tmp_path: Path) -> None:
+    """When error steps balloon, total summary stays bounded."""
+    out = tmp_path / "out"
+    out.mkdir()
+    big_body = "x" * 20_000
+    steps: list[tuple[int, str, str]] = [(i, "act", f"### Step {i:03d} ACT\nERROR: " + big_body) for i in range(1, 11)]
+    steps.insert(0, (0, "obs", "### Step 000 OBS\nstart"))
+    _write_episode_summary(out, steps)
+    text = (out / "episode_summary.txt").read_text()
+    assert len(text) < 35_000  # 30KB body + headers
+
+
+def test_episode_summary_handles_empty(tmp_path: Path) -> None:
+    """Empty steps list → file still written with placeholder."""
+    out = tmp_path / "out"
+    out.mkdir()
+    _write_episode_summary(out, [])
+    assert (out / "episode_summary.txt").exists()
+
+
+# ---------------------------------------------------------------------------
+# R1.3 — Stratified pre-judge sampling
+# ---------------------------------------------------------------------------
+
+
+def test_task_family_extraction() -> None:
+    assert _task_family(_make_ref("django__django-14500_ep1")) == "django"
+    assert _task_family(_make_ref("matplotlib__matplotlib-24149_ep5")) == "matplotlib"
+    assert _task_family(_make_ref("simple_task_ep2")) == "simple"
+
+
+def test_stratified_sample_picks_distinct_families() -> None:
+    """Two failed episodes from same family + two from different family →
+    pick one from each, not two from the same."""
+    refs = [
+        _make_ref("django__django-1_ep1", correct=False),
+        _make_ref("django__django-2_ep2", correct=False),  # same family
+        _make_ref("astropy__astropy-3_ep3", correct=False),
+        _make_ref("matplotlib__plot-4_ep4", correct=False),
+    ]
+    sample = _stratified_sample(refs, correct=False, max_n=2)
+    families = {_task_family(r) for r in sample}
+    assert len(families) == 2
+    assert "django" in families  # first django wins
+
+
+def test_stratified_sample_falls_back_when_one_family() -> None:
+    """When all refs share one family, only one episode is returned per call."""
+    refs = [_make_ref(f"django__django-{i}_ep{i}", correct=False) for i in range(3)]
+    sample = _stratified_sample(refs, correct=False, max_n=2)
+    assert len(sample) == 1  # only one family available
+
+
+# ---------------------------------------------------------------------------
+# R1.4 — Context validation
+# ---------------------------------------------------------------------------
+
+
+def test_validate_context_returns_true_when_paths_exist(tmp_path: Path) -> None:
+    real = tmp_path / "exists.py"
+    real.write_text("x")
+    ctx = tmp_path / "judge_context.md"
+    ctx.write_text(f"See `{real}` for details.")
+    assert _validate_context(ctx) is True
+
+
+def test_validate_context_returns_false_when_paths_stale(tmp_path: Path) -> None:
+    ctx = tmp_path / "judge_context.md"
+    ctx.write_text("`/nonexistent/a.py` `/nonexistent/b.py` `/nonexistent/c.py`")
+    assert _validate_context(ctx) is False
+
+
+def test_validate_context_returns_true_when_no_paths_cited(tmp_path: Path) -> None:
+    ctx = tmp_path / "judge_context.md"
+    ctx.write_text("No file paths in here, just prose.")
+    assert _validate_context(ctx) is True
