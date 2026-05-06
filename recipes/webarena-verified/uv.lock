@@ -462,7 +462,7 @@ wheels = [
 [[package]]
 name = "cube-browser-tool"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-browser-tool&branch=task_artifacts_genny2#1fc21221c36f22102d2175eea9f3fec9e8caab27" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-browser-tool&branch=task_artifacts_genny2#14dbe61bd43b9fdde862d58a9d0bddb6c5896b6d" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "cube-browser-playwright" },
@@ -540,7 +540,7 @@ dev = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc8"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts_genny2#1fc21221c36f22102d2175eea9f3fec9e8caab27" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts_genny2#14dbe61bd43b9fdde862d58a9d0bddb6c5896b6d" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
