@@ -145,7 +145,6 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     def close(self) -> None:
         if self._session is not None and not getattr(self._session, "_closed", False):
-            self._flush_playwright_trace()
             self._session.stop()
         self._last_obs = None
         self._last_info = None
@@ -181,37 +180,8 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     def _close_runtime(self) -> None:
         if self._session is not None:
-            self._flush_playwright_trace()
             self.session.stop()
             self._session = None
-
-    def _flush_playwright_trace(self) -> None:
-        """Export Playwright context tracing to the session's trace file if possible.
-
-        cube-browser-playwright sessions expose a private ``_trace_out_file`` and a
-        public ``trace_path()`` accessor, but some versions do not persist the trace
-        unless ``context.tracing.stop(path=...)`` is called explicitly.
-        """
-        if self._session is None:
-            return
-        trace_out_file = getattr(self._session, "_trace_out_file", None)
-        if trace_out_file is None:
-            return
-        trace_out_file = Path(trace_out_file)
-        if trace_out_file.suffix != ".zip":
-            trace_out_file = trace_out_file.with_suffix(".zip")
-            # Keep session.trace_path() aligned with the actual on-disk trace output path.
-            setattr(self._session, "_trace_out_file", trace_out_file)
-        context = getattr(self._session, "context", None)
-        if context is None:
-            return
-        tracing = getattr(context, "tracing", None)
-        if tracing is None:
-            return
-        try:
-            tracing.stop(path=trace_out_file)
-        except Exception as e:
-            logger.debug("Unable to flush Playwright tracing before session stop: %s", e)
 
     def _wait_dom_loaded(self) -> None:
         if self._session is None:
