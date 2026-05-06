@@ -1,11 +1,17 @@
 """WAA × Tool 1 (Screenshot+Axtree → pyautogui) × GPT-5.4 (Azure)."""
 
-import logging
 import os
+
+# gpt-5.4 rejects `tool_choice`; drop unsupported params silently.
+# Set before cube_harness.llm imports litellm so the env var is in effect at import time.
+os.environ.setdefault("LITELLM_DROP_PARAMS", "true")
+
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
 
+import litellm  # noqa: E402
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from waa_cube.benchmark import WAABenchmark
@@ -16,6 +22,8 @@ from cube_harness.agents.genny import GennyConfig
 from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+
+litellm.drop_params = True
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _prompts import WAA_TOOL1_AXTREE_PYAUTOGUI  # noqa: E402
@@ -51,7 +59,7 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_TOOL1_AXTREE_PYAUTOGUI.format(today=today)
 
-    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0)
+    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0, timeout=300.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
@@ -80,9 +88,10 @@ def main() -> None:
 
     print("--- pre-warm Azure CLI token cache ---")
     from cube_infra_azure.azure import _get_cached_cred
+
     cred = _get_cached_cred()
     tok = cred.get_token("https://management.azure.com/.default")
-    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time())/60:.1f}min")
+    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time()) / 60:.1f}min")
 
     bench_config = WAABenchmark(tool_config=tool_config, infra=INFRA)
     logging.info("WAA eval: %d tasks", len(bench_config.task_metadata))

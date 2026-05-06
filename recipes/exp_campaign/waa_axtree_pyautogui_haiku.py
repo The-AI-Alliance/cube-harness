@@ -11,6 +11,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import litellm  # noqa: E402
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from waa_cube.benchmark import WAABenchmark
@@ -22,7 +23,6 @@ from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 
-import litellm  # noqa: E402
 litellm.drop_params = True
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -89,9 +89,10 @@ def main() -> None:
     # Pre-warm Azure CLI token cache to dodge the worker-startup `az` storm.
     print("--- pre-warm Azure CLI token cache ---")
     from cube_infra_azure.azure import _get_cached_cred
+
     cred = _get_cached_cred()
     tok = cred.get_token("https://management.azure.com/.default")
-    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time())/60:.1f}min")
+    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time()) / 60:.1f}min")
 
     bench_config = WAABenchmark(tool_config=tool_config, infra=INFRA)
     logging.info("WAA eval: %d tasks", len(bench_config.task_metadata))

@@ -1,9 +1,9 @@
-"""WAA × Tool 1 (Screenshot+Axtree → pyautogui) × GPT-5.4-mini (Azure)."""
+"""WAA × Tool 1 (Screenshot+Axtree → pyautogui) × Claude Sonnet 4.6 (Anthropic)."""
 
 import os
 
-# gpt-5.4-mini rejects `tool_choice`; drop unsupported params silently.
-# Set before cube_harness.llm imports litellm so the env var is in effect at import time.
+# Some Azure models (gpt-5.4-nano/-mini) reject `tool_choice`; drop unsupported params
+# silently across the campaign for consistency. Harmless on models that accept them.
 os.environ.setdefault("LITELLM_DROP_PARAMS", "true")
 
 import logging
@@ -44,8 +44,8 @@ INFRA = AzureInfraConfig(
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
 
-MODEL_NAME = "azure/gpt-5.4-mini"
-EXP_NAME = "waa_axtree_pyautogui_gpt54mini"
+MODEL_NAME = "claude-sonnet-4-6"
+EXP_NAME = "waa_axtree_pyautogui_sonnet"
 
 
 def main() -> None:
@@ -59,7 +59,7 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_TOOL1_AXTREE_PYAUTOGUI.format(today=today)
 
-    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0, timeout=300.0)
+    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,

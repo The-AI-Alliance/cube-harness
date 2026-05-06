@@ -9,6 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
+import litellm  # noqa: E402
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from osworld_cube.benchmark import OSWorldBenchmarkConfig
@@ -20,7 +21,6 @@ from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 
-import litellm  # noqa: E402
 litellm.drop_params = True
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -74,7 +74,9 @@ def main() -> None:
     benchmark_config = OSWorldBenchmarkConfig(tool_config=tool_config, use_som=False)
     OSWorldBenchmarkConfig.install()
     benchmark_config = benchmark_config.named_subset(SUBSET)
-    logging.info("OSWorld eval: subset=%s, %d tasks", SUBSET, len(benchmark_config.task_ids or benchmark_config.task_metadata))
+    logging.info(
+        "OSWorld eval: subset=%s, %d tasks", SUBSET, len(benchmark_config.task_ids or benchmark_config.task_metadata)
+    )
 
     print("--- pre-run cleanup ---")
     pre = INFRA.cleanup_orphaned_resources()
@@ -84,9 +86,10 @@ def main() -> None:
 
     print("--- pre-warm Azure CLI token cache ---")
     from cube_infra_azure.azure import _get_cached_cred
+
     cred = _get_cached_cred()
     tok = cred.get_token("https://management.azure.com/.default")
-    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time())/60:.1f}min")
+    print(f"Pre-warmed token, expires in {(tok.expires_on - __import__('time').time()) / 60:.1f}min")
 
     exp = Experiment(
         name=EXP_NAME,

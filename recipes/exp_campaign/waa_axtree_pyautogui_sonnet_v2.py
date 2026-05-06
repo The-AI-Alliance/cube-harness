@@ -1,9 +1,7 @@
-"""WAA × Tool 1 (Screenshot+Axtree → pyautogui) × GPT-5.4-mini (Azure)."""
+"""WAA × Tool 1 (Screenshot+Axtree → pyautogui) × Claude Sonnet 4.6 (Genny2)."""
 
 import os
 
-# gpt-5.4-mini rejects `tool_choice`; drop unsupported params silently.
-# Set before cube_harness.llm imports litellm so the env var is in effect at import time.
 os.environ.setdefault("LITELLM_DROP_PARAMS", "true")
 
 import logging
@@ -11,19 +9,17 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import litellm  # noqa: E402
+from cube_computer_tool.computer import ActionSpace
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
-from cube_harness.agents.genny import GennyConfig
+from cube_harness.agents.genny2 import Genny2Config
 from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
-
-litellm.drop_params = True
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _prompts import WAA_TOOL1_AXTREE_PYAUTOGUI  # noqa: E402
@@ -44,8 +40,8 @@ INFRA = AzureInfraConfig(
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
 
-MODEL_NAME = "azure/gpt-5.4-mini"
-EXP_NAME = "waa_axtree_pyautogui_gpt54mini"
+MODEL_NAME = "claude-sonnet-4-6"
+EXP_NAME = "waa_axtree_pyautogui_sonnet_v2"
 
 
 def main() -> None:
@@ -59,18 +55,16 @@ def main() -> None:
     today = datetime.today().strftime("%A, %B %d, %Y")
     system_prompt = WAA_TOOL1_AXTREE_PYAUTOGUI.format(today=today)
 
-    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0, timeout=300.0)
-    agent_config = GennyConfig(
+    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0, timeout=300.0, set_cache_control="auto")
+    agent_config = Genny2Config(
         llm_config=llm_config,
         system_prompt=system_prompt,
         max_actions=100,
-        render_last_n_obs=3,
         enable_summarize=False,
-        tools_as_text=False,
     )
 
     tool_config = ComputerConfig(
-        action_space="pyautogui",
+        action_space=ActionSpace("pyautogui"),
         require_a11y_tree=True,
         require_obs_winagent=True,
         observe_after_action=True,
@@ -86,7 +80,6 @@ def main() -> None:
         n = sum(len(v) for v in pre.values())
         print(f"Cleaned up {n} orphaned resources from prior runs")
 
-    # Pre-warm Azure CLI token cache to dodge the worker-startup `az` storm.
     print("--- pre-warm Azure CLI token cache ---")
     from cube_infra_azure.azure import _get_cached_cred
 
@@ -109,8 +102,8 @@ def main() -> None:
 
     try:
         print(f"\n=== {EXP_NAME} === output: {output_dir}")
-        print(f"Model: {MODEL_NAME}, n_cpus=50, max_steps=100")
-        run_with_ray(exp, n_cpus=50)
+        print(f"Model: {MODEL_NAME} (Genny2, set_cache_control=auto), n_cpus=50, max_steps=100")
+        run_with_ray(exp, n_cpus=10, max_retry_rounds=1)
     finally:
         print("\n--- post-run cleanup ---")
         leftover = INFRA.cleanup_orphaned_resources()

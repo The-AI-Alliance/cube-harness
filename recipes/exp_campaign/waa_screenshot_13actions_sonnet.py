@@ -1,9 +1,9 @@
-"""WAA × Tool 1 (Screenshot+Axtree → pyautogui) × GPT-5.4-mini (Azure)."""
+"""WAA × Tool 2 (Screenshot only → 13 discrete actions) × Claude Sonnet 4.6 (Anthropic)."""
 
 import os
 
-# gpt-5.4-mini rejects `tool_choice`; drop unsupported params silently.
-# Set before cube_harness.llm imports litellm so the env var is in effect at import time.
+# Some Azure models (gpt-5.4-nano/-mini) reject `tool_choice`; drop unsupported params
+# silently across the campaign for consistency. Harmless on models that accept them.
 os.environ.setdefault("LITELLM_DROP_PARAMS", "true")
 
 import logging
@@ -26,7 +26,7 @@ from cube_harness.llm import LLMConfig
 litellm.drop_params = True
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _prompts import WAA_TOOL1_AXTREE_PYAUTOGUI  # noqa: E402
+from _prompts import WAA_TOOL2_SCREENSHOT_13ACTIONS  # noqa: E402
 
 load_dotenv()
 
@@ -44,8 +44,8 @@ INFRA = AzureInfraConfig(
     source_cache_blob="sources/waa-windows-prepared-lo.qcow2",
 )
 
-MODEL_NAME = "azure/gpt-5.4-mini"
-EXP_NAME = "waa_axtree_pyautogui_gpt54mini"
+MODEL_NAME = "claude-sonnet-4-6"
+EXP_NAME = "waa_screenshot_13actions_sonnet"
 
 
 def main() -> None:
@@ -57,9 +57,9 @@ def main() -> None:
         output_dir = make_experiment_output_dir(EXP_NAME, "waa-cube")
 
     today = datetime.today().strftime("%A, %B %d, %Y")
-    system_prompt = WAA_TOOL1_AXTREE_PYAUTOGUI.format(today=today)
+    system_prompt = WAA_TOOL2_SCREENSHOT_13ACTIONS.format(today=today)
 
-    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0, timeout=300.0)
+    llm_config = LLMConfig(model_name=MODEL_NAME, temperature=1.0)
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
@@ -69,10 +69,11 @@ def main() -> None:
         tools_as_text=False,
     )
 
+    # Tool 2 = computer_13 action space, screenshot-only (no a11y tree).
     tool_config = ComputerConfig(
-        action_space="pyautogui",
-        require_a11y_tree=True,
-        require_obs_winagent=True,
+        action_space="computer_13",
+        require_a11y_tree=False,
+        require_obs_winagent=False,
         observe_after_action=True,
     )
 
@@ -86,7 +87,6 @@ def main() -> None:
         n = sum(len(v) for v in pre.values())
         print(f"Cleaned up {n} orphaned resources from prior runs")
 
-    # Pre-warm Azure CLI token cache to dodge the worker-startup `az` storm.
     print("--- pre-warm Azure CLI token cache ---")
     from cube_infra_azure.azure import _get_cached_cred
 
@@ -109,7 +109,7 @@ def main() -> None:
 
     try:
         print(f"\n=== {EXP_NAME} === output: {output_dir}")
-        print(f"Model: {MODEL_NAME}, n_cpus=50, max_steps=100")
+        print(f"Model: {MODEL_NAME}, n_cpus=50, max_steps=100, action_space=computer_13")
         run_with_ray(exp, n_cpus=50)
     finally:
         print("\n--- post-run cleanup ---")
