@@ -162,6 +162,7 @@ def test_judge_experiment_end_to_end(
     # 4. Aggregate summary + CSV written
     summary = json.loads((fake_experiment / "experiment_judge_summary.json").read_text())
     assert summary["n_judged"] == 2
+    assert "interventions" in summary
     csv_path = fake_experiment / "experiment_judge_report.csv"
     assert csv_path.exists()
     csv_text = csv_path.read_text()
