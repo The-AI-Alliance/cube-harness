@@ -371,7 +371,7 @@ Step files (one per step, targeted access):
   {transcript_dir}/steps/NNN_act.txt  — agent action (tool call + thinking)
   List with: ls {transcript_dir}/steps/ | tail -20
 
-Episode metadata (reward_info.fail_to_pass_output, fail_to_pass_passed, pass_to_pass_passed, summary_stats):
+Episode metadata (reward and evaluation output, action schemas, usage stats):
   {episode_metadata_path}
 
 Episode config (agent prompts, model, budget, task_config):
@@ -528,23 +528,23 @@ strategy, how the agent decides to stop / submit, any hard budget limits.
 3. **Benchmark & evaluation** — find the `evaluate()` or reward function in the benchmark \
 source. Provide the exact file path and relevant line numbers. Summarise: what the task \
 asks the agent to do, the precise condition for reward=1 vs reward=0, and what the \
-golden target is (ground-truth patch, test suite, expected output). Also note where \
-per-task metadata lives (FAIL_TO_PASS / PASS_TO_PASS test IDs, golden patch, etc.) — \
-either in the dataset files, the task class, or the episode artifacts. \
-Episode judges will find the actual test run output in \
-`episode.metadata.json → reward_info → fail_to_pass_output` / `fail_to_pass_passed` / \
-`pass_to_pass_passed`; make sure judges know this and understand what those fields mean.
+golden target is (ground-truth patch, test suite, expected output, etc.). \
+Then read `episode.metadata.json` from one of the sample episodes to discover what fields \
+`reward_info` actually contains — document those field names and what they mean so \
+episode judges know exactly where to find evaluation output without having to guess.
 
 4. **Tools & action space** — find the tool config class and its implementation. List \
 available tool names; note output truncation, missing capabilities, or known failure modes.
 
 5. **Infrastructure** — note container reset behaviour, timeouts, retry caps, resource limits.
 
-6. **Transcript format** — peek at one sample episode's `_judge_transcript/transcript.txt` \
-(first + last 50 lines) so judges know what obs/act blocks look like and where to look \
-for final errors. Also note: individual steps are accessible as \
-`_judge_transcript/steps/NNN_obs.txt` / `NNN_act.txt` — judges can sample end steps \
-directly without reading the full transcript.
+6. **Episode artifact format** — read one sample episode's \
+`_judge_transcript/episode_summary.txt` (task description + last 5 steps) so judges \
+know what obs/act blocks look like. Note: individual steps are at \
+`_judge_transcript/steps/NNN_obs.txt` / `NNN_act.txt`; `ls steps/ | tail -20` shows \
+the final steps. Document any fields in `reward_info` that contain evaluation output \
+(e.g. test run logs, error messages) that judges should read to understand why the agent \
+failed or succeeded.
 
 7. **Suspicious patterns** — flag anything that looks fragile, hardcoded, or likely to \
 cause systematic failures across many episodes.
