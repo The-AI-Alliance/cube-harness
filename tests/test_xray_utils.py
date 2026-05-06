@@ -227,6 +227,26 @@ class TestGetExperimentsTableRows:
         row = next(r for r in rows if r["experiment"] == "exp_a")
         assert row["agent"] == "react_agent"
 
+    def test_agent_uses_agent_name_property_not_class(self, tmp_path: Path) -> None:
+        """`AgentConfig.agent_name` is a @property — it isn't in the JSON dump.
+
+        The experiments table must still surface it (e.g. "ReactAgent-gpt-4o") rather
+        than the class short name ("ReactAgentConfig"). Same fix powers the agent tab
+        identifier so multi-experiment loads stay distinct.
+        """
+        from cube_harness.agents.react import ReactAgentConfig
+        from cube_harness.llm import LLMConfig
+
+        cfg = ReactAgentConfig(llm_config=LLMConfig(model_name="gpt-4o"))
+        exp_dir = tmp_path / "exp_react"
+        (exp_dir / "episodes").mkdir(parents=True)
+        (exp_dir / "experiment_config.json").write_text(
+            json.dumps({"agent_config": json.loads(cfg.model_dump_json(serialize_as_any=True))})
+        )
+        rows = xray_utils.get_experiments_table_rows(tmp_path)
+        row = next(r for r in rows if r["experiment"] == "exp_react")
+        assert row["agent"] == "ReactAgent-gpt-4o"
+
     def test_status_cell_from_status_json(self, tmp_path: Path) -> None:
         now = time.time()
         status_data = [

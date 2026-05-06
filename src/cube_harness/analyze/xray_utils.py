@@ -15,10 +15,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from cube.benchmark import BenchmarkConfig
 from cube.core import EnvironmentOutput
 from PIL import Image
 from pydantic import BaseModel
 
+from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
 from cube_harness.episode_status import TERMINAL_STATUSES as _EPISODE_TERMINAL_STATUSES
@@ -334,6 +336,72 @@ def _parse_exp_date(dir_path: Path) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def agent_name_from_config(agent_cfg: dict) -> str:
+    """Resolve `AgentConfig.agent_name` from a serialized agent_config dict.
+
+    `agent_name` is a `@property` on AgentConfig (not a Pydantic field), so it is
+    NOT present in the JSON dump. We re-instantiate the concrete subclass via
+    TypedBaseModel's `_type` dispatch and read the property. When the module is
+    unavailable locally (e.g. an experiment was produced on a branch that defines
+    a custom agent) we synthesize a name that follows the common
+    `<AgentName>-<model_name>` convention used by built-in agents — both so the
+    column stays informative and so multi-experiment loads remain
+    distinguishable when they only differ in model.
+    """
+    if not agent_cfg:
+        return ""
+    try:
+        return AgentConfig.model_validate(dict(agent_cfg)).agent_name
+    except Exception as exc:
+        logger.debug("Could not instantiate AgentConfig (%s); synthesizing fallback name", exc)
+        cls_name = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
+        # Drop the trailing "Config" so e.g. Genny2Config -> Genny2, matching the
+        # display convention of agent classes whose .agent_name we couldn't reach.
+        if cls_name.endswith("Config"):
+            cls_name = cls_name[: -len("Config")]
+        model = (agent_cfg.get("llm_config") or {}).get("model_name") or ""
+        if cls_name and model:
+            return f"{cls_name}-{model}".replace("/", "_")
+        return cls_name or model
+
+
+def benchmark_name_from_config(bench_cfg: dict) -> str:
+    """Resolve `BenchmarkConfig.benchmark_metadata.name` from a benchmark_config dict.
+
+    `benchmark_metadata` is a `ClassVar` on BenchmarkConfig subclasses (declared at
+    class definition time), so it is NOT serialized. We re-instantiate via `_type`
+    dispatch and read the class-level metadata. Falls back to the class short name
+    when the type can't be imported.
+    """
+    if not bench_cfg:
+        return ""
+    try:
+        return BenchmarkConfig.model_validate(dict(bench_cfg)).benchmark_metadata.name
+    except Exception as exc:
+        logger.debug("Could not instantiate BenchmarkConfig (%s); falling back to _type", exc)
+        return (bench_cfg.get("_type") or "").rsplit(".", 1)[-1]
+
+
+def parse_exp_config(exp_cfg: dict) -> dict[str, str]:
+    """Return {agent, model, benchmark} display strings from a parsed experiment_config dict.
+
+    Single source of truth for extracting human-readable agent/model/benchmark
+    identifiers from a serialized Experiment config. Used by both the experiments
+    selector table (xray_utils) and the XRay viewer state (xray.XRayState) so the
+    agent identifier shown in every UI surface comes from the same logic.
+
+    Accepts both the current (`benchmark_config`) and the pre-split (`benchmark`)
+    key names so historical experiment dirs still resolve a benchmark name.
+    """
+    agent_cfg = exp_cfg.get("agent_config") or {}
+    bench_cfg = exp_cfg.get("benchmark_config") or exp_cfg.get("benchmark") or {}
+    return {
+        "agent": agent_name_from_config(agent_cfg),
+        "model": (agent_cfg.get("llm_config") or {}).get("model_name") or "",
+        "benchmark": benchmark_name_from_config(bench_cfg),
+    }
+
+
 def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
     """Return {agent, model, benchmark} from experiment_config.json.
 
@@ -341,24 +409,18 @@ def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
     experiment_config.json is absent (e.g. synthetic test data).
     """
     config_path = exp_dir / "experiment_config.json"
-    agent = model = benchmark = ""
+    info = {"agent": "", "model": "", "benchmark": ""}
 
     if config_path.exists():
         try:
             with open(config_path) as f:
                 cfg = json.load(f)
-            agent_cfg = cfg.get("agent_config", {})
-            agent = agent_cfg.get("agent_name") or agent_cfg.get("name") or ""
-            if not agent:
-                agent = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
-            model = (agent_cfg.get("llm_config") or {}).get("model_name") or ""
-            bm_meta = (cfg.get("benchmark_config") or {}).get("benchmark_metadata") or {}
-            benchmark = bm_meta.get("name") or ""
+            info = parse_exp_config(cfg)
         except Exception as exc:
             logger.debug("Failed to parse experiment_config.json at %s: %s", config_path, exc)
 
-    if not agent:
-        # Fallback: read agent_name from first episode metadata
+    if not info["agent"]:
+        # Fallback: read agent_name from first episode metadata (legacy / synthetic data)
         episodes_dir = exp_dir / "episodes"
         if episodes_dir.exists():
             for ep_dir in episodes_dir.iterdir():
@@ -369,11 +431,12 @@ def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
                             data = json.load(f)
                         agent = data.get("metadata", {}).get("agent_name", "")
                         if agent:
+                            info["agent"] = agent
                             break
                     except Exception as exc:
                         logger.debug("Failed to parse %s: %s", meta, exc)
 
-    return {"agent": agent, "model": model, "benchmark": benchmark}
+    return info
 
 
 GHOST_TIMEOUT = DEFAULT_STEP_TIMEOUT_S + DEFAULT_CANCEL_GRACE_S  # mirrors runner's kill threshold
