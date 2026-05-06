@@ -59,6 +59,11 @@ EXPERIMENT_JUDGE_REPORT_FILENAME = "experiment_judge_report.csv"
 # inspect screenshots if any. No write/edit — the judge only produces a JSON answer.
 JUDGE_ALLOWED_TOOLS = ["Read", "Glob", "Grep", "Bash"]
 
+# Pre-judge also needs Write to save judge_context.md.
+PRE_JUDGE_ALLOWED_TOOLS = ["Read", "Glob", "Grep", "Bash", "Write"]
+PRE_JUDGE_CONTEXT_FILENAME = "judge_context.md"
+DEFAULT_PRE_JUDGE_MODEL = "claude-opus-4-7"
+
 
 # ---------------------------------------------------------------------------
 # Step decoding (msgpack.zst → readable transcript)
@@ -328,7 +333,7 @@ No other text after the closing fence."""
 
 
 JUDGE_USER_PROMPT_TEMPLATE = """Judge this episode.
-
+{context_section}
 # Episode
 
 trajectory_id: {trajectory_id}
@@ -355,8 +360,12 @@ Episode config (agent prompts, model, budget):
 Task description:
   {task_description}
 
-Source code (use Glob/Grep — do NOT pre-read all of it):
+Source code (use Glob/Grep, consult experiment context for specific files):
 {source_paths_block}
+
+Reading strategy: start from the END of the transcript to see the final outcome
+and error, then read earlier sections as needed. The most diagnostic steps are
+almost always the last few actions before the episode terminates.
 
 # Output schema
 
@@ -413,13 +422,19 @@ def build_user_prompt(
     episode_config_path: Path,
     task_description: str,
     source_paths: dict[str, Path],
+    context_path: Path | None = None,
 ) -> str:
     src_block = (
         "\n".join(f"  {name}: {p}" for name, p in source_paths.items())
         if source_paths
         else "  (none resolved — judge from transcript only)"
     )
+    if context_path is not None and context_path.exists():
+        context_section = f"\n# Experiment context (read this first)\n  {context_path}\n"
+    else:
+        context_section = ""
     return JUDGE_USER_PROMPT_TEMPLATE.format(
+        context_section=context_section,
         trajectory_id=trajectory_id,
         task_id=task_id,
         reward=reward if reward is not None else "unknown",
@@ -438,6 +453,193 @@ def build_user_prompt(
 # Claude Code SDK invocation
 # ---------------------------------------------------------------------------
 
+
+# ---------------------------------------------------------------------------
+# Pre-judge: experiment-level context document
+# ---------------------------------------------------------------------------
+
+PRE_JUDGE_SYSTEM_PROMPT = """You are an experiment analyst. Your job is to read an agent \
+experiment's configuration and source code, then write a concise reference document that \
+downstream episode judges will read before analyzing individual trajectory failures.
+
+You have access to Read/Glob/Grep/Bash/Write tools. Use them to explore, then call Write \
+to save the finished document.
+
+Guidelines:
+- Be benchmark-agnostic: the document must help judges reason about any failure category.
+- Be concise: target 150–250 lines of Markdown.
+- Cite exact file paths for every claim so judges can verify or dig deeper.
+- Flag suspicious patterns proactively (hardcoded timeouts, fragile evaluators, unusual configs).
+- Do NOT assess individual episode quality — that is the episode judge's job.
+- When done exploring, call Write to save the document, then stop."""
+
+PRE_JUDGE_USER_PROMPT_TEMPLATE = """Build a reference context document for the downstream \
+episode judges in this experiment.
+
+Save the finished document to:
+  {output_path}
+
+# Experiment
+
+Name:       {exp_name}
+Agent:      {agent_name}
+Benchmark:  {benchmark_name}
+Infra:      {infra_name}
+Episodes:   {n_episodes} total  |  pass rate: {pass_rate}
+
+Experiment config:
+  {experiment_config_path}
+
+# Source packages (explore — do NOT read everything)
+
+{source_paths_block}
+
+# Sample episode directories (for format reference)
+
+{sample_dirs_block}
+
+# Exploration checklist
+
+Work through these in order:
+
+1. **Experiment config** — read `experiment_config.json` to confirm agent/benchmark/infra \
+types and key parameters (model used, max_steps, tool config class).
+
+2. **Agent** — find the agent class. Summarise: LLM prompt structure, context management \
+strategy, how the agent decides to stop / submit, any hard budget limits.
+
+3. **Benchmark & evaluation** — find `evaluate()` or the reward function. Summarise: \
+what the task asks the agent to do, how reward=1 is earned vs reward=0, any known \
+fragility in the evaluator.
+
+4. **Tools & action space** — find the tool config class and its implementation. List \
+available tool names; note output truncation, missing capabilities, or known failure modes.
+
+5. **Infrastructure** — note container reset behaviour, timeouts, retry caps, resource limits.
+
+6. **Transcript format** — peek at one sample episode's `_judge_transcript/transcript.txt` \
+(first + last 50 lines) so judges know what obs/act blocks look like and where to look \
+for final errors.
+
+7. **Suspicious patterns** — flag anything that looks fragile, hardcoded, or likely to \
+cause systematic failures across many episodes.
+
+Write the document to {output_path} once done."""
+
+
+def _build_pre_judge_user_prompt(
+    output_path: Path,
+    experiment_dir: Path,
+    view: "_ExperimentView",
+    source_paths: dict[str, Path],
+    sample_refs: list["EpisodeRef"],
+) -> str:
+    src_block = "\n".join(f"  {name}: {p}" for name, p in source_paths.items()) if source_paths else "  (none resolved)"
+    sample_block = "\n".join(f"  {ref.episode_dir}" for ref in sample_refs) if sample_refs else "  (none available)"
+    summary_path = experiment_dir / "experiment_summary.json"
+    pass_rate = "unknown"
+    n_episodes = "unknown"
+    if summary_path.exists():
+        try:
+            s = json.loads(summary_path.read_text())
+            n_done = s.get("n_completed", 0) + s.get("n_failed", 0)
+            n_correct = s.get("n_correct", s.get("n_success", 0))
+            n_episodes = str(n_done)
+            if n_done:
+                pass_rate = f"{n_correct / n_done:.1%} ({n_correct}/{n_done})"
+        except Exception:
+            pass
+    return PRE_JUDGE_USER_PROMPT_TEMPLATE.format(
+        output_path=output_path,
+        exp_name=view.raw.get("name", experiment_dir.name),
+        agent_name=view.agent_dotted,
+        benchmark_name=view.benchmark_dotted,
+        infra_name=view.infra_dotted or "unknown",
+        n_episodes=n_episodes,
+        pass_rate=pass_rate,
+        experiment_config_path=experiment_dir / "experiment_config.json",
+        source_paths_block=src_block,
+        sample_dirs_block=sample_block,
+    )
+
+
+async def _run_pre_judge_impl(
+    experiment_dir: Path,
+    view: "_ExperimentView",
+    source_paths: dict[str, Path],
+    sample_refs: list["EpisodeRef"],
+    model: str,
+    verbose: bool,
+) -> Path:
+    """Run the pre-judge agent and return the path to judge_context.md."""
+    output_path = experiment_dir / PRE_JUDGE_CONTEXT_FILENAME
+    user_prompt = _build_pre_judge_user_prompt(
+        output_path=output_path,
+        experiment_dir=experiment_dir,
+        view=view,
+        source_paths=source_paths,
+        sample_refs=sample_refs,
+    )
+    logger.info("Running pre-judge for %s → %s", experiment_dir.name, output_path.name)
+    await _run_claude_code(
+        system_prompt=PRE_JUDGE_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        cwd=experiment_dir,
+        additional_dirs=list(source_paths.values()),
+        model=model,
+        verbose=verbose,
+        trace_mode="off",
+        allowed_tools=PRE_JUDGE_ALLOWED_TOOLS,
+    )
+    return output_path
+
+
+def run_pre_judge(
+    experiment_dir: Path,
+    *,
+    model: str = DEFAULT_PRE_JUDGE_MODEL,
+    verbose: bool = False,
+    overwrite: bool = False,
+) -> Path | None:
+    """Build (or reuse) the experiment-level judge_context.md.
+
+    Returns the path if the file exists after the call, or None if the run failed
+    to produce it.  Skips the agent call if the file already exists and `overwrite`
+    is False.
+    """
+    experiment_dir = Path(experiment_dir).resolve()
+    output_path = experiment_dir / PRE_JUDGE_CONTEXT_FILENAME
+    if output_path.exists() and not overwrite:
+        logger.info("Pre-judge context already exists at %s — reusing.", output_path)
+        return output_path
+
+    config_path = experiment_dir / "experiment_config.json"
+    view = _load_experiment_view(config_path)
+    source_paths = collect_source_paths(view)
+
+    episodes_dir = experiment_dir / "episodes"
+    refs: list[EpisodeRef] = []
+    if episodes_dir.exists():
+        all_refs = discover_episodes(experiment_dir)
+        failed = [r for r in all_refs if r.record and not r.record.is_correct]
+        succeeded = [r for r in all_refs if r.record and r.record.is_correct]
+        # Pick 1 failed + 1 succeeded for contrast; fall back to first 2 overall.
+        sample: list[EpisodeRef] = []
+        if failed:
+            sample.append(failed[0])
+        if succeeded:
+            sample.append(succeeded[0])
+        if not sample:
+            sample = all_refs[:2]
+        refs = sample
+
+    asyncio.run(_run_pre_judge_impl(experiment_dir, view, source_paths, refs, model, verbose))
+    return output_path if output_path.exists() else None
+
+
+# ---------------------------------------------------------------------------
+# JSON extraction
+# ---------------------------------------------------------------------------
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
@@ -519,6 +721,7 @@ async def _run_claude_code(
     model: str,
     verbose: bool = False,
     trace_mode: TraceMode = "actions",
+    allowed_tools: list[str] | None = None,
 ) -> _SDKResult:
     """Invoke Claude Code via the SDK and return the assistant text + usage.
 
@@ -540,7 +743,7 @@ async def _run_claude_code(
 
     options = ClaudeAgentOptions(
         system_prompt=system_prompt,
-        allowed_tools=JUDGE_ALLOWED_TOOLS,
+        allowed_tools=allowed_tools if allowed_tools is not None else JUDGE_ALLOWED_TOOLS,
         permission_mode="bypassPermissions",
         cwd=str(cwd),
         add_dirs=[str(p) for p in additional_dirs],
@@ -707,6 +910,7 @@ async def _judge_episode_impl(
     model: str,
     verbose: bool,
     trace_mode: TraceMode = "actions",
+    context_path: Path | None = None,
 ) -> tuple[JudgeOutput, JudgeMetadata, list[dict[str, Any]]]:
     """Async core shared by judge_episode (single) and judge_experiment (parallel)."""
     transcript_dir = episode_dir / "_judge_transcript"
@@ -740,6 +944,7 @@ async def _judge_episode_impl(
         episode_config_path=config_path,
         task_description=task_description,
         source_paths=source_paths,
+        context_path=context_path,
     )
 
     logger.info("Judging %s (reward=%s, steps=%s) with %s", episode_dir.name, reward, total_steps, model)
@@ -777,6 +982,7 @@ def judge_episode(
     model: str = DEFAULT_MODEL,
     verbose: bool = False,
     trace_mode: TraceMode = "actions",
+    context_path: Path | None = None,
 ) -> tuple[JudgeOutput, JudgeMetadata]:
     """Run a post-hoc judge on a single episode trajectory directory.
 
@@ -787,7 +993,7 @@ def judge_episode(
     if experiment_dir is None:
         experiment_dir = episode_dir.parent.parent
     judge_output, judge_metadata, _ = asyncio.run(
-        _judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose, trace_mode)
+        _judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose, trace_mode, context_path)
     )
     return judge_output, judge_metadata
 
@@ -840,6 +1046,8 @@ def judge_experiment(
     verbose: bool = False,
     n_parallel: int = 1,
     trace_mode: TraceMode = "actions",
+    pre_judge_model: str = DEFAULT_PRE_JUDGE_MODEL,
+    skip_pre_judge: bool = False,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
@@ -874,16 +1082,20 @@ def judge_experiment(
         n_parallel,
     )
 
+    context_path: Path | None = None
+    if not skip_pre_judge:
+        context_path = run_pre_judge(experiment_dir, model=pre_judge_model, verbose=verbose)
+
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
     if n_parallel > 1:
         results = asyncio.run(
-            _judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel, trace_mode)
+            _judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel, trace_mode, context_path)
         )
     else:
         for ref in selected:
             try:
                 judge_output, judge_metadata, actions = asyncio.run(
-                    _judge_episode_impl(ref.episode_dir, experiment_dir, model, verbose, trace_mode)
+                    _judge_episode_impl(ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path)
                 )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
@@ -903,6 +1115,7 @@ async def _judge_experiment_parallel(
     verbose: bool,
     n_parallel: int,
     trace_mode: TraceMode = "actions",
+    context_path: Path | None = None,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     semaphore = asyncio.Semaphore(n_parallel)
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
@@ -911,7 +1124,7 @@ async def _judge_experiment_parallel(
         async with semaphore:
             try:
                 judge_output, judge_metadata, actions = await _judge_episode_impl(
-                    ref.episode_dir, experiment_dir, model, verbose, trace_mode
+                    ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path
                 )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
@@ -1095,6 +1308,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "'off': nothing stored."
         ),
     )
+    pj = p.add_argument_group("pre-judge (experiment-level context)")
+    pj.add_argument(
+        "--pre-judge-model",
+        default=DEFAULT_PRE_JUDGE_MODEL,
+        help=f"Model for the pre-judge context pass (default: {DEFAULT_PRE_JUDGE_MODEL}).",
+    )
+    pj.add_argument(
+        "--no-pre-judge",
+        action="store_true",
+        help="Skip the pre-judge context pass (use existing judge_context.md if present).",
+    )
+    pj.add_argument(
+        "--overwrite-context",
+        action="store_true",
+        help="Re-run the pre-judge even if judge_context.md already exists.",
+    )
     return p.parse_args(argv)
 
 
@@ -1116,6 +1345,14 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sample = DEFAULT_SAMPLE_FRACTION
 
+    # When --no-pre-judge is set, still pass the existing context file if present.
+    if args.no_pre_judge:
+        existing = args.path / PRE_JUDGE_CONTEXT_FILENAME
+        if existing.exists():
+            logger.info("--no-pre-judge set; reusing existing %s", existing)
+    elif args.overwrite_context:
+        run_pre_judge(args.path, model=args.pre_judge_model, verbose=args.verbose, overwrite=True)
+
     results = judge_experiment(
         args.path,
         model=args.model,
@@ -1128,6 +1365,8 @@ def main(argv: list[str] | None = None) -> int:
         verbose=args.verbose,
         n_parallel=args.n_parallel,
         trace_mode=args.trace_mode,
+        pre_judge_model=args.pre_judge_model,
+        skip_pre_judge=args.no_pre_judge,
     )
 
     if args.summary:
