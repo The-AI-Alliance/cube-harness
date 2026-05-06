@@ -1,23 +1,26 @@
 """Run WebArena-Verified benchmark with cube-harness.
 
 Usage:
-    # Shopping subset, debug mode
-    .venv/bin/python recipes/webarena-verified/webarena.py --subset shopping --debug
+    # BrowserGym test split (381 tasks, all sites) — the standard eval
+    .venv/bin/python recipes/webarena-verified/webarena.py --bgym-test --model anthropic/claude-sonnet-4-6
 
-    # Shopping admin with Sonnet
+    # Single site subset
     .venv/bin/python recipes/webarena-verified/webarena.py --subset shopping_admin --model anthropic/claude-sonnet-4-6
 
-    # Gitlab with custom name
-    .venv/bin/python recipes/webarena-verified/webarena.py --subset gitlab --name my-experiment
+    # Debug mode
+    .venv/bin/python recipes/webarena-verified/webarena.py --subset shopping --debug
 """
 
 import argparse
+import json
+from importlib.resources import files
 
 from cube.infra_local import LocalInfraConfig
 from cube.tool import ToolboxConfig
 from cube_browser_playwright import PlaywrightSessionConfig
 from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmarkConfig
 from webarena_verified_cube.resources import (
+    WEBARENA_ALL,
     WEBARENA_GITLAB,
     WEBARENA_MAP,
     WEBARENA_REDDIT,
@@ -45,15 +48,13 @@ _SUBSETS = {
 }
 
 
-def main(debug: bool, subset: str, model: str, name: str | None, n_cpus: int) -> None:
-    resource, sites_glob = _SUBSETS[subset]
+def _load_bgym_test_ids() -> list[str]:
+    data = files("webarena_verified_cube").joinpath("bgym_test_split.json").read_text()
+    return json.loads(data)
 
+
+def main(debug: bool, subset: str | None, bgym_test: bool, model: str, name: str | None, n_cpus: int) -> None:
     model_short = model.split("/")[-1]
-    exp_name = name if name is not None else f"webarena-verified-{subset}/genny2-{model_short}"
-    output_dir = make_experiment_output_dir("genny2", f"webarena-verified-{subset}")
-
-    llm_config = LLMConfig(model_name=model, temperature=1.0, set_cache_control="auto")
-    agent_config = Genny2Config(llm_config=llm_config)
 
     tool_config = ToolboxConfig(
         tool_configs=[
@@ -61,13 +62,35 @@ def main(debug: bool, subset: str, model: str, name: str | None, n_cpus: int) ->
             SubmitResponseConfig(),
         ]
     )
-    benchmark_config = (
-        WebArenaVerifiedBenchmarkConfig(
-            tool_config=tool_config,
-            resources=[resource],
+
+    if bgym_test:
+        tag = "bgym-test"
+        exp_name = name if name is not None else f"webarena-verified-bgym-test/genny2-{model_short}"
+        output_dir = make_experiment_output_dir("genny2", "webarena-verified-bgym-test")
+        test_ids = _load_bgym_test_ids()
+        benchmark_config = (
+            WebArenaVerifiedBenchmarkConfig(
+                tool_config=tool_config,
+                resources=[WEBARENA_ALL],
+            )
+            .subset_from_list(test_ids)
         )
-        .subset_from_glob("sites", sites_glob)
-    )
+    else:
+        assert subset is not None
+        resource, sites_glob = _SUBSETS[subset]
+        tag = subset
+        exp_name = name if name is not None else f"webarena-verified-{subset}/genny2-{model_short}"
+        output_dir = make_experiment_output_dir("genny2", f"webarena-verified-{subset}")
+        benchmark_config = (
+            WebArenaVerifiedBenchmarkConfig(
+                tool_config=tool_config,
+                resources=[resource],
+            )
+            .subset_from_glob("sites", sites_glob)
+        )
+
+    llm_config = LLMConfig(model_name=model, temperature=1.0, set_cache_control="auto")
+    agent_config = Genny2Config(llm_config=llm_config)
 
     exp = Experiment(
         name=exp_name,
@@ -87,9 +110,11 @@ def main(debug: bool, subset: str, model: str, name: str | None, n_cpus: int) ->
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run WebArena-Verified benchmark.")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode (headed browser, limited tasks)")
-    parser.add_argument("--subset", choices=list(_SUBSETS), required=True, help="Site subset to run")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--subset", choices=list(_SUBSETS), help="Site subset to run")
+    group.add_argument("--bgym-test", action="store_true", help="Run the 381-task BrowserGym test split (all sites)")
     parser.add_argument("--model", default=_DEFAULT_MODEL, help=f"LLM model (default: {_DEFAULT_MODEL})")
     parser.add_argument("--name", default=None, help="Experiment name (default: auto-generated)")
     parser.add_argument("--n-cpus", type=int, default=4, help="Number of parallel Ray workers (default: 4)")
     args = parser.parse_args()
-    main(debug=args.debug, subset=args.subset, model=args.model, name=args.name, n_cpus=args.n_cpus)
+    main(debug=args.debug, subset=args.subset, bgym_test=args.bgym_test, model=args.model, name=args.name, n_cpus=args.n_cpus)
