@@ -49,6 +49,7 @@ class LLMConfig(TypedBaseModel):
     include_stop_str_in_output: bool | None = None
     skip_special_tokens: bool | None = None
     top_p: float | None = None
+    top_k: int | None = None
     training: bool = False  # whether the call is for training (vs inference); may affect caching and logging behavior
     extra_body: dict = Field(default_factory=dict)
     num_retries: int = 5
@@ -110,6 +111,8 @@ class LLM:
             kwargs["logprobs"] = True
         if self.config.top_p is not None:
             kwargs["top_p"] = self.config.top_p
+        if self.config.top_k is not None:
+            kwargs["top_k"] = self.config.top_k
         if self.config.extra_body:
             kwargs["extra_body"] = self.config.extra_body
         if self.config.reasoning_effort is not None:
