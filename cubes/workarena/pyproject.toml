@@ -29,6 +29,7 @@ include = ["src/workarena_cube/task_metadata.json"]
 #cube-standard = { path = "../../../cube-standard/", editable = true}
 cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts_genny2" }
 cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-browser-tool", branch = "task_artifacts_genny2" }
+cube-browser-playwright = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-browser-playwright", branch = "task_artifacts_genny2" }
 
 [tool.ruff]
 fix = true

@@ -454,14 +454,10 @@ wheels = [
 [[package]]
 name = "cube-browser-playwright"
 version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-browser-playwright&branch=task_artifacts_genny2#14dbe61bd43b9fdde862d58a9d0bddb6c5896b6d" }
 dependencies = [
     { name = "cube-standard" },
     { name = "playwright" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/97/ea/242458b185592a2afd11f05b89c7788a6f85294e6a0395b7a3d3baa369bc/cube_browser_playwright-0.2.0.tar.gz", hash = "sha256:a8fba62c2befc3c4fd0ec19af2ea1a6ce71f179e2ef96122d018cf46a01214c7", size = 3243, upload-time = "2026-03-26T13:38:03.058Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/76/d9f533e709fee812ea77dab2ee4ab5e88be193f8be8effdff256d25a67c9/cube_browser_playwright-0.2.0-py3-none-any.whl", hash = "sha256:6612166e1db80d93829e7131313f685e8e4dae814564a1e1faf55b3b4e6c8f47", size = 6470, upload-time = "2026-03-26T13:38:02.061Z" },
 ]
 
 [[package]]
@@ -3014,7 +3010,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "browsergym-workarena" },
-    { name = "cube-browser-playwright", specifier = ">=0.2.0" },
+    { name = "cube-browser-playwright", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-browser-playwright&branch=task_artifacts_genny2" },
     { name = "cube-browser-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-browser-tool&branch=task_artifacts_genny2" },
     { name = "cube-chat-tool", specifier = ">=0.1.0" },
     { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=task_artifacts_genny2" },

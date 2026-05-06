@@ -25,6 +25,7 @@ include = ["src/webarena_verified_cube/task_metadata.json", "src/webarena_verifi
 #cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "7711c73e67653eef05682f3caad067f636bf7596" }
 cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts_genny2" }
 cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-browser-tool", branch = "task_artifacts_genny2" }
+cube-browser-playwright = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-browser-playwright", branch = "task_artifacts_genny2" }
 
 [tool.ruff]
 fix = true
