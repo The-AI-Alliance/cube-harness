@@ -27,6 +27,7 @@ import json
 import logging
 import random
 import re
+import shutil
 import sys
 import time
 from collections import Counter
@@ -135,8 +136,9 @@ def _format_act(step_idx: int, raw: dict[str, Any]) -> str:
 def extract_transcript(episode_dir: Path, out_dir: Path) -> Path:
     """Decompress every step file in `<episode_dir>/steps/` into readable .txt files.
 
-    Writes one file per step into `<out_dir>/steps/NNN_(obs|act).txt` plus a
-    consolidated `transcript.txt`. Returns `out_dir`.
+    Writes one file per step into `<out_dir>/steps/NNN_(obs|act).txt` and a
+    lightweight `episode_summary.txt` with the first obs + last 5 steps.
+    Returns `out_dir`.
     """
     steps_dir = episode_dir / "steps"
     if not steps_dir.exists():
@@ -145,7 +147,7 @@ def extract_transcript(episode_dir: Path, out_dir: Path) -> Path:
     out_steps = out_dir / "steps"
     out_steps.mkdir(parents=True, exist_ok=True)
 
-    consolidated: list[str] = []
+    all_steps: list[tuple[int, str, str]] = []  # (idx, kind, text)
     for step_file in sorted(steps_dir.iterdir()):
         if not step_file.name.endswith(".msgpack.zst"):
             continue
@@ -160,16 +162,32 @@ def extract_transcript(episode_dir: Path, out_dir: Path) -> Path:
             continue
         if "_obs" in step_file.name:
             text = _format_obs(step_idx, raw)
-            (out_steps / f"{step_idx:03d}_obs.txt").write_text(text)
+            kind = "obs"
         elif "_act" in step_file.name:
             text = _format_act(step_idx, raw)
-            (out_steps / f"{step_idx:03d}_act.txt").write_text(text)
+            kind = "act"
         else:
             continue
-        consolidated.append(text)
+        (out_steps / f"{step_idx:03d}_{kind}.txt").write_text(text)
+        all_steps.append((step_idx, kind, text))
 
-    (out_dir / "transcript.txt").write_text("\n".join(consolidated))
+    _write_episode_summary(out_dir, all_steps)
     return out_dir
+
+
+def _write_episode_summary(out_dir: Path, all_steps: list[tuple[int, str, str]]) -> None:
+    """Write a short summary file: first obs (task description) + last 5 steps."""
+    parts: list[str] = ["# Episode summary (first obs + last 5 steps)\n"]
+    if all_steps:
+        first_obs = next((t for _, k, t in all_steps if k == "obs"), None)
+        if first_obs:
+            parts.append("## Task description (step 0 obs)\n")
+            parts.append(first_obs[:2000])
+            parts.append("\n...\n")
+        parts.append("\n## Last 5 steps\n")
+        for _, _, text in all_steps[-5:]:
+            parts.append(text)
+    (out_dir / "episode_summary.txt").write_text("\n".join(parts))
 
 
 # ---------------------------------------------------------------------------
@@ -345,16 +363,18 @@ benchmark: {benchmark_name}
 
 # Files you can read
 
-Transcript (one file per step — prefer these for targeted access):
-  {transcript_dir}/steps/
+Episode summary (task description + last 5 steps — start here):
+  {transcript_dir}/episode_summary.txt
 
-Consolidated transcript (full linear text):
-  {transcript_dir}/transcript.txt
+Step files (one per step, targeted access):
+  {transcript_dir}/steps/NNN_obs.txt  — environment observation / tool result
+  {transcript_dir}/steps/NNN_act.txt  — agent action (tool call + thinking)
+  List with: ls {transcript_dir}/steps/ | tail -20
 
-Episode metadata (reward_info with fail_to_pass_output/fail_to_pass_passed/pass_to_pass_passed, action_schemas, summary_stats):
+Episode metadata (reward_info.fail_to_pass_output, fail_to_pass_passed, pass_to_pass_passed, summary_stats):
   {episode_metadata_path}
 
-Episode config (agent prompts, model, budget, task_config with container image):
+Episode config (agent prompts, model, budget, task_config):
   {episode_config_path}
 
 Task description:
@@ -968,6 +988,7 @@ async def _judge_episode_impl(
         verbose=verbose,
         trace_mode=trace_mode,
     )
+    _cleanup_transcript(transcript_dir)
 
     obj = _extract_json_block(result.output_text)
     judge_output = JudgeOutput.model_validate(obj)
@@ -1006,6 +1027,20 @@ def judge_episode(
         _judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose, trace_mode, context_path)
     )
     return judge_output, judge_metadata
+
+
+def _cleanup_transcript(transcript_dir: Path) -> None:
+    """Delete the unpacked step files after judging to avoid disk accumulation.
+
+    Removes steps/ and episode_summary.txt but leaves the directory itself intact
+    so that the path is still visible if someone inspects the episode folder.
+    """
+    steps_dir = transcript_dir / "steps"
+    if steps_dir.exists():
+        shutil.rmtree(steps_dir)
+    summary = transcript_dir / "episode_summary.txt"
+    if summary.exists():
+        summary.unlink()
 
 
 def _archive_versioned(path: Path) -> None:
