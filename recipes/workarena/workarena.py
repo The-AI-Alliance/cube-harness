@@ -42,6 +42,7 @@ from cube_harness.llm import LLMConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
 
 _DEFAULT_MODEL = "openai/gpt-5-nano"
+_MAX_STEPS_BY_LEVEL = {1: 15, 2: 50, 3: 50}
 
 
 def make_agents(model: str) -> dict[str, GennyConfig | ReactAgentConfig]:
@@ -90,7 +91,7 @@ def main(debug: bool, agent: str, level: int, model: str, name: str | None) -> N
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
-        max_steps=25,
+        max_steps=_MAX_STEPS_BY_LEVEL[level],
     )
 
     if debug:
