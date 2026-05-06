@@ -445,10 +445,17 @@ _XRAY_CACHE_FILENAME = ".xray_summary.json"
 
 
 def _promote_ghost_episodes(exp_dir: Path) -> None:
-    """Write STALE into status.json for RUNNING/QUEUED episodes whose heartbeat is dead.
+    """Write STALE into status.json for RUNNING episodes whose heartbeat has gone silent.
 
     Fixes experiments where the runner crashed without marking episodes terminal.
     This lets the cache machinery treat the experiment as finished so it can be frozen.
+
+    Only RUNNING episodes are promoted — QUEUED episodes are legitimately waiting for
+    a Ray worker slot and must not be touched here.  In a large batch (e.g. 89 tasks,
+    --n-parallel 10) the last tasks can sit QUEUED for many hours; promoting them from
+    the viewer would silently kill tasks that the runner is about to dispatch.
+    QUEUED orphan cleanup is handled exclusively by sweep_stale_statuses() in
+    experiment.py, which runs either at resume-time or on runner shutdown.
     """
     episodes_dir = exp_dir / "episodes"
     if not episodes_dir.exists():
@@ -458,7 +465,7 @@ def _promote_ghost_episodes(exp_dir: Path) -> None:
         if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
             continue
         status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
-        if status is None or status.status not in ("RUNNING", "QUEUED"):
+        if status is None or status.status != "RUNNING":
             continue
         hb = status.last_heartbeat_at or status.started_at
         if now - hb > GHOST_TIMEOUT:

@@ -280,7 +280,7 @@ def _poll_ray(
         for task_ref in done:
             traj_id = ref_to_traj_id[task_ref]
             try:
-                traj: Trajectory = ray.get(task_ref)
+                traj: Trajectory = ray.get(task_ref, timeout=step_timeout_s + cancel_grace_s)
                 logger.info(
                     "Completed trajectory %s with %d steps (%d agent steps, %d environment steps)",
                     traj_id,
