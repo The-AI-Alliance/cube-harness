@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cube-harness",
     "webarena-verified-cube",
+    "cube-browser-playwright",
 ]
 
 [tool.uv]
@@ -13,4 +14,6 @@ package = false
 [tool.uv.sources]
 cube-harness = { path = "../..", editable = true }
 webarena-verified-cube = { path = "../../cubes/webarena-verified", editable = true }
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", rev = "task_artifacts_genny2" }
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts_genny2" }
+cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-browser-tool", branch = "task_artifacts_genny2" }
+cube-browser-playwright = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-browser-playwright", branch = "task_artifacts_genny2" }

@@ -2354,12 +2354,14 @@ name = "recipe-env-workarena"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "cube-browser-playwright" },
     { name = "cube-harness" },
     { name = "workarena-cube" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cube-browser-playwright", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-browser-playwright&branch=task_artifacts_genny2" },
     { name = "cube-harness", editable = "../../" },
     { name = "workarena-cube", editable = "../../cubes/workarena" },
 ]
