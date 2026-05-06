@@ -143,11 +143,25 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_terminated = False
 
     def close(self) -> None:
-        self._close_runtime()
+        if self._session is not None and not self._session._closed:
+            self._session.stop()
         self._last_obs = None
         self._last_info = None
         self._last_reward = 0.0
         self._last_terminated = False
+
+    def network_trace(self) -> "NetworkTrace":
+        """Return network trace from the Playwright session's trace ZIP.
+
+        Requires close() to have been called first (Playwright flushes the
+        trace on context close). Satisfies the WAVBrowserTool protocol so
+        BrowsergymTool can be used with WebArena-Verified evaluation.
+        """
+        from webarena_verified.types.tracing import NetworkTrace
+
+        if self._session is None:
+            raise RuntimeError("No session — call close() before network_trace()")
+        return NetworkTrace.from_content(self._session.trace_path())
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser.make()
