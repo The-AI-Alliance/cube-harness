@@ -18,17 +18,62 @@ Episode directories are named like `<task_id>_ep<N>/` and live under `<experimen
 
 ## Step 1 — Decode the trajectory
 
-Use the existing `inspect_episode.py` tool (run from the repo root):
+Each episode directory contains a `steps/` folder with `NNN_obs.msgpack.zst` and `NNN_act.msgpack.zst` files. Use this script to extract a readable transcript:
 
-```bash
-# Episode directory:
-.venv/bin/python meta_agent/tools/inspect_episode.py <episode_dir> --full
+```python
+import zstandard, msgpack, json
+from pathlib import Path
 
-# Experiment dir + task substring:
-.venv/bin/python meta_agent/tools/inspect_episode.py <experiment_dir> --task <task_id> --full
+def decode_step(p: Path) -> dict:
+    with open(p, 'rb') as f:
+        data = zstandard.ZstdDecompressor().decompress(f.read())
+    return msgpack.unpackb(data, raw=False)
+
+def extract_transcript(episode_dir: Path) -> str:
+    steps_dir = episode_dir / "steps"
+    lines = []
+    task_desc = None
+
+    for step_file in sorted(steps_dir.iterdir()):
+        obj = decode_step(step_file)
+        output = obj.get("output", obj)  # handle both wrapped and unwrapped
+        step_idx = int(step_file.name[:3])
+
+        if "_obs" in step_file.name:
+            obs = output.get("obs", output)
+            contents = obs.get("contents", []) if isinstance(obs, dict) else []
+            for c in contents:
+                data = c.get("data", "") if isinstance(c, dict) else str(c)
+                tool_call_id = c.get("tool_call_id") if isinstance(c, dict) else None
+                if tool_call_id is None and task_desc is None:
+                    task_desc = data  # first obs with no tool_call_id = task description
+                    lines.append(f"[Step {step_idx}] TASK:\n{data[:2000]}")
+                else:
+                    lines.append(f"[Step {step_idx}] OBS (tool_call_id={tool_call_id}):\n{str(data)[:1500]}")
+
+        elif "_act" in step_file.name:
+            actions = output.get("actions", [])
+            llm_calls = output.get("llm_calls", [])
+            for llm_call in llm_calls:
+                thinking = llm_call.get("thinking", "")
+                if thinking:
+                    lines.append(f"[Step {step_idx}] THINKING:\n{thinking[:800]}")
+            for action in actions:
+                name = action.get("name", "?")
+                args = action.get("arguments", {})
+                if name == "bash":
+                    lines.append(f"[Step {step_idx}] ACTION bash:\n{args.get('command', '')[:800]}")
+                elif name == "final_step":
+                    lines.append(f"[Step {step_idx}] ACTION final_step (DONE)")
+                else:
+                    lines.append(f"[Step {step_idx}] ACTION {name}:\n{json.dumps(args, default=str)[:600]}")
+
+    return "\n\n".join(lines)
 ```
 
-Output format: `  N A  <action>` for agent actions, `  N O  <obs>` for observations, `  N O* <obs>` for terminal success, `  N Ox <obs>` for terminal failure.
+Run with the project venv python (e.g. `.venv/bin/python3`). The `zstandard` and `msgpack` packages are installed as part of `cube-harness`.
+
+> **For batch / non-interactive judging**, prefer the Python module: `pip install 'cube-harness[judge]'` then `ch-judge <experiment_dir> [--sample 0.1 | --ids ...] [--summary]`. It calls Claude Code via the `claude-agent-sdk`, persists `JudgeOutput` into `episode_record.json`, and writes an aggregate `experiment_judge_summary.json`. This slash command is for interactive ad-hoc deep-dives.
 
 ## Step 2 — Read episode metadata
 

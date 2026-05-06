@@ -85,25 +85,30 @@ prompt-stuffing cannot:
 ### Codebase map
 
 The judge needs enough context to distinguish a scaffolding failure from a model
-capability failure. Rather than the caller constructing this context manually, a
-**per-cube claude-code skill** runs once to produce a `codebase_map.json` that the judge
-loads.
+capability failure. Two designs were considered:
 
-The map's job is not to summarize the codebase — it is to give the judge the right entry
-points and keywords so it can run targeted greps. Contents:
+**(a) Per-cube `codebase_map.json` produced by a claude-code skill.** The map records
+primary source files (agent prompt template, tool definitions, benchmark task
+description, reward function), key symbols to grep for, and a pointer to the
+git-cloned cube source (preferred over pip-installed wheels, which strip context).
+Triggered once per (cube, agent config) pair and cached alongside the experiment
+directory.
 
-- Primary source files the agent interacts with (agent prompt template path, tool
-  definition paths, benchmark task description path, reward function path).
-- Key symbols and strings to grep for (tool names, error message patterns,
-  submission action names).
-- Pointers to the installed cube package — **git-cloned source is preferred** over
-  pip-installed distributions. Git-cloned packages are greppable, navigable with
-  line-number references, and show blame history; pip-installed wheels strip source
-  context. The per-cube skill should record the git clone path or the editable install
-  root so the judge can read actual source rather than `.pyc` artifacts.
+**(b) Resolve source paths from the venv at judge time** via `importlib.util.find_spec`.
+The judge reads `experiment_config.json`, extracts the dotted `_type` for the agent
+config, benchmark config, and infra config, and resolves each to a directory on
+disk against whatever's installed in the judge's venv. Packages that aren't
+importable (e.g. an old run referenced `cube_harness.agents.genny2` which has since
+been renamed, or an agent class defined in a `__main__` script) are silently
+skipped — the judge falls back to whatever resolved successfully plus the
+trajectory transcript itself.
 
-The skill is triggered once per (cube, agent config) pair and its output cached alongside
-the experiment directory.
+V1 ships **(b)** because it works for any experiment without per-cube setup, and
+because in practice the `_type` strings in `experiment_config.json` are sufficient
+to point the judge at the right packages. The map (a) remains a useful follow-up
+for cubes where the on-disk source is too large for naive grep — at that point the
+map adds curated entry points on top of (b)'s resolved roots, rather than
+replacing them.
 
 ### Hallucination resistance
 
@@ -224,28 +229,42 @@ src/cube_harness/analyze/
 
 ```python
 def judge_episode(
-    trajectory_dir: Path,
+    episode_dir: Path,
     *,
-    agent_config: AgentConfig,
-    task_description: str,
-    codebase_map: Path | None = None,
-    related_trajectory_dirs: list[Path] | None = None,
+    experiment_dir: Path | None = None,
     model: str = "claude-opus-4-7",
+    verbose: bool = False,
 ) -> tuple[JudgeOutput, JudgeMetadata]:
     """Run a post-hoc judge on a single episode trajectory directory.
+
+    `experiment_dir` defaults to `episode_dir.parent.parent`. Source paths
+    (cube package, agent package, cube-harness, cube-standard) are resolved
+    via `importlib.util.find_spec` against the current venv — see
+    "Codebase map" below.
 
     Returns both the judgment and its billing/provenance metadata.
     """
     ...
 
 def judge_experiment(
-    output_dir: Path,
+    experiment_dir: Path,
     *,
     model: str = "claude-opus-4-7",
-    n_parallel: int = 4,
+    ids: list[str] | None = None,
+    sample: float | None = None,
+    n: int | None = None,
+    failures_only: bool = False,
     overwrite: bool = False,
+    seed: int | None = None,
+    verbose: bool = False,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
-    """Batch judge all episodes in an experiment output directory.
+    """Batch judge selected episodes in an experiment output directory.
+
+    Selection: `ids` is an explicit override (returned verbatim, ignoring
+    other filters). Otherwise the pool is filtered by `failures_only` and
+    already-judged status (skipped unless `overwrite=True`), then narrowed
+    by `sample` (random fraction) or `n` (random count). With no selector
+    the default is `sample=0.10` (set by the CLI).
 
     Writes judge_output and judge_metadata into each episode_record.json.
     Writes experiment_judge_summary.json with aggregate cost.
@@ -253,6 +272,12 @@ def judge_experiment(
     """
     ...
 ```
+
+The CLI (`ch-judge` / `python -m cube_harness.analyze.judge`) wires these
+arguments through and adds `--summary` (aggregate table to stdout) and
+`--verbose` (stream per-tool-call progress to stderr while the judge runs).
+Parallel execution (`n_parallel`) is **not** in V1 — `judge_experiment` is
+sequential — and is tracked as a follow-up.
 
 ### Prompt structure
 
@@ -407,12 +432,26 @@ but doesn't produce the structured blame + hypothesis needed for the improvement
 
 1. How many related trajectory directories to pass before the judge's navigation overhead
    exceeds the signal from contrastive analysis?
-2. Should `judge_experiment()` write a single aggregated `experiment_judge_summary.json`,
-   or only per-episode files? (Proposed: both.)
-3. Confidence calibration: should scores 0–1 be treated as `none` for aggregation
+2. Confidence calibration: should scores 0–1 be treated as `none` for aggregation
    purposes?
-4. Codebase map: should the per-cube skill check out a pinned git ref matching the
-   experiment's run commit, or always use `HEAD`?
+3. **Schema duplication.** The taxonomy and output schema currently live in four
+   places: this proposal, `deltas.md`, the `JUDGE_SYSTEM_PROMPT` /
+   `JUDGE_USER_PROMPT_TEMPLATE` constants in `analyze/judge.py`, and the
+   `.claude/commands/judge-traces.md` slash command. They are aligned in V1 but will
+   drift the moment the taxonomy evolves. Post-V1, factor the prompt content into a
+   single source — most likely a Markdown asset under `openspec/specs/` that the
+   Python prompt template `read_text()`s and the slash command includes. Until then,
+   any change to the taxonomy must update all four sites.
+
+### Resolved
+
+- ~~`judge_experiment()` summary output~~ → V1 writes both per-episode
+  `judge_output` + `judge_metadata` into `episode_record.json` AND an aggregate
+  `experiment_judge_summary.json`.
+- ~~Codebase map: pinned git ref vs HEAD~~ → V1 sidesteps the question: source
+  paths are resolved at judge time via `importlib.util.find_spec` against the
+  judge's venv, with a graceful skip when the package isn't installed. A curated
+  per-cube map remains a useful follow-up but is not required for V1.
 
 ---
 
