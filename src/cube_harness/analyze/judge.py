@@ -998,6 +998,19 @@ def judge_episode(
     return judge_output, judge_metadata
 
 
+def _archive_versioned(path: Path) -> None:
+    """Rename `path` to `<stem>_old_v<N><ext>` if it exists, incrementing N until free."""
+    if not path.exists():
+        return
+    n = 1
+    while True:
+        candidate = path.parent / f"{path.stem}_old_v{n}{path.suffix}"
+        if not candidate.exists():
+            path.rename(candidate)
+            return
+        n += 1
+
+
 def _persist_judgment(
     ref: EpisodeRef,
     judge_output: JudgeOutput,
@@ -1012,12 +1025,16 @@ def _persist_judgment(
 
     When `actions` is non-empty, writes a `judge_trace.json` sidecar alongside the
     episode record with the judge's tool-call sequence.
+
+    Existing `judge_output.json` and `judge_trace.json` sidecars are never clobbered;
+    they are renamed to `<stem>_old_v<N><ext>` before the new file is written.
     """
     if ref.record is not None:
         updated = ref.record.model_copy(update={"judge_output": judge_output, "judge_metadata": judge_metadata})
         ref.record_path.write_text(updated.model_dump_json(indent=2))
     else:
         sidecar = ref.episode_dir / "judge_output.json"
+        _archive_versioned(sidecar)
         sidecar.write_text(
             json.dumps(
                 {
@@ -1028,9 +1045,9 @@ def _persist_judgment(
             )
         )
     if actions:
-        (ref.episode_dir / "judge_trace.json").write_text(
-            json.dumps({"trace_mode": trace_mode, "actions": actions}, indent=2)
-        )
+        trace_path = ref.episode_dir / "judge_trace.json"
+        _archive_versioned(trace_path)
+        trace_path.write_text(json.dumps({"trace_mode": trace_mode, "actions": actions}, indent=2))
 
 
 def judge_experiment(
