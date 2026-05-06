@@ -25,8 +25,10 @@ include = ["src/workarena_cube/task_metadata.json"]
 
 [tool.uv.sources]
 # TODO: drop once cube-standard 0.1.0rc7 ships to PyPI
-cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts" }
+#cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts" }
 #cube-standard = { path = "../../../cube-standard/", editable = true}
+cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "task_artifacts_genny2" }
+cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-browser-tool", branch = "task_artifacts_genny2" }
 
 [tool.ruff]
 fix = true
