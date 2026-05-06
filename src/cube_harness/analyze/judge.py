@@ -30,9 +30,9 @@ import re
 import sys
 import time
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import msgpack
 import zstandard
@@ -463,6 +463,9 @@ def _extract_json_block(text: str) -> dict[str, Any]:
     return json.loads(candidate[: end + 1])
 
 
+TraceMode = Literal["actions", "full", "off"]
+
+
 @dataclass
 class _SDKResult:
     output_text: str
@@ -470,6 +473,7 @@ class _SDKResult:
     completion_tokens: int
     cost_usd: float
     duration_s: float
+    actions: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _summarise_tool_input(name: str, raw_input: dict[str, Any]) -> str:
@@ -507,6 +511,7 @@ async def _run_claude_code(
     additional_dirs: list[Path],
     model: str,
     verbose: bool = False,
+    trace_mode: TraceMode = "actions",
 ) -> _SDKResult:
     """Invoke Claude Code via the SDK and return the assistant text + usage.
 
@@ -539,6 +544,7 @@ async def _run_claude_code(
         logger.info("Running judge with model %s and options: %r", model, options)
 
     final_text: list[str] = []
+    collected_actions: list[dict[str, Any]] = []
     prompt_tokens = 0
     completion_tokens = 0
     cost_usd = 0.0
@@ -557,8 +563,23 @@ async def _run_claude_code(
                     if verbose and block.text.strip():
                         first_line = block.text.strip().splitlines()[0][:140]
                         _emit(f"  · {first_line}")
-                elif isinstance(block, ToolUseBlock) and verbose:
-                    _emit(f"  > {block.name}({_summarise_tool_input(block.name, block.input)})")
+                elif isinstance(block, ToolUseBlock):
+                    if verbose:
+                        _emit(f"  > {block.name}({_summarise_tool_input(block.name, block.input)})")
+                    if trace_mode == "actions":
+                        collected_actions.append(
+                            {"tool": block.name, "input": _summarise_tool_input(block.name, block.input)}
+                        )
+                    elif trace_mode == "full":
+                        collected_actions.append(
+                            {
+                                "tool": block.name,
+                                "input": _summarise_tool_input(block.name, block.input),
+                                "raw_input": block.input
+                                if isinstance(block.input, dict)
+                                else {"value": str(block.input)},
+                            }
+                        )
         elif isinstance(message, ResultMessage):
             usage = getattr(message, "usage", None) or {}
             prompt_tokens = (
@@ -577,6 +598,7 @@ async def _run_claude_code(
         completion_tokens=completion_tokens,
         cost_usd=cost_usd,
         duration_s=duration_s,
+        actions=collected_actions if trace_mode != "off" else [],
     )
 
 
@@ -677,7 +699,8 @@ async def _judge_episode_impl(
     experiment_dir: Path,
     model: str,
     verbose: bool,
-) -> tuple[JudgeOutput, JudgeMetadata]:
+    trace_mode: TraceMode = "actions",
+) -> tuple[JudgeOutput, JudgeMetadata, list[dict[str, Any]]]:
     """Async core shared by judge_episode (single) and judge_experiment (parallel)."""
     transcript_dir = episode_dir / "_judge_transcript"
     extract_transcript(episode_dir, transcript_dir)
@@ -721,6 +744,7 @@ async def _judge_episode_impl(
         additional_dirs=list(source_paths.values()) + [transcript_dir],
         model=model,
         verbose=verbose,
+        trace_mode=trace_mode,
     )
 
     obj = _extract_json_block(result.output_text)
@@ -736,7 +760,7 @@ async def _judge_episode_impl(
         timestamp=time.time(),
         judge_schema_version=JUDGE_SCHEMA_VERSION,
     )
-    return judge_output, judge_metadata
+    return judge_output, judge_metadata, result.actions
 
 
 def judge_episode(
@@ -745,6 +769,7 @@ def judge_episode(
     experiment_dir: Path | None = None,
     model: str = DEFAULT_MODEL,
     verbose: bool = False,
+    trace_mode: TraceMode = "actions",
 ) -> tuple[JudgeOutput, JudgeMetadata]:
     """Run a post-hoc judge on a single episode trajectory directory.
 
@@ -754,18 +779,26 @@ def judge_episode(
     episode_dir = Path(episode_dir).resolve()
     if experiment_dir is None:
         experiment_dir = episode_dir.parent.parent
-    return asyncio.run(_judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose))
+    judge_output, judge_metadata, _ = asyncio.run(
+        _judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose, trace_mode)
+    )
+    return judge_output, judge_metadata
 
 
 def _persist_judgment(
     ref: EpisodeRef,
     judge_output: JudgeOutput,
     judge_metadata: JudgeMetadata,
+    actions: list[dict[str, Any]] | None = None,
+    trace_mode: TraceMode = "actions",
 ) -> None:
     """Write `judge_output` and `judge_metadata` into the episode_record.json.
 
     If the record file does not exist yet (older runs without atlas-eval-log enabled),
     write a sidecar `judge_output.json` so the result is not lost.
+
+    When `actions` is non-empty, writes a `judge_trace.json` sidecar alongside the
+    episode record with the judge's tool-call sequence.
     """
     if ref.record is not None:
         updated = ref.record.model_copy(update={"judge_output": judge_output, "judge_metadata": judge_metadata})
@@ -781,6 +814,10 @@ def _persist_judgment(
                 indent=2,
             )
         )
+    if actions:
+        (ref.episode_dir / "judge_trace.json").write_text(
+            json.dumps({"trace_mode": trace_mode, "actions": actions}, indent=2)
+        )
 
 
 def judge_experiment(
@@ -795,6 +832,7 @@ def judge_experiment(
     seed: int | None = None,
     verbose: bool = False,
     n_parallel: int = 1,
+    trace_mode: TraceMode = "actions",
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
@@ -831,18 +869,20 @@ def judge_experiment(
 
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
     if n_parallel > 1:
-        results = asyncio.run(_judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel))
+        results = asyncio.run(
+            _judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel, trace_mode)
+        )
     else:
         for ref in selected:
             try:
-                judge_output, judge_metadata = judge_episode(
-                    ref.episode_dir, experiment_dir=experiment_dir, model=model, verbose=verbose
+                judge_output, judge_metadata, actions = asyncio.run(
+                    _judge_episode_impl(ref.episode_dir, experiment_dir, model, verbose, trace_mode)
                 )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
                 continue
             ref.record = _load_episode_record(ref.record_path)
-            _persist_judgment(ref, judge_output, judge_metadata)
+            _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
             results[ref.trajectory_id] = (judge_output, judge_metadata)
 
     _write_summary(experiment_dir, selected, results, model=model)
@@ -855,6 +895,7 @@ async def _judge_experiment_parallel(
     model: str,
     verbose: bool,
     n_parallel: int,
+    trace_mode: TraceMode = "actions",
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     semaphore = asyncio.Semaphore(n_parallel)
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
@@ -862,14 +903,14 @@ async def _judge_experiment_parallel(
     async def _one(ref: EpisodeRef) -> None:
         async with semaphore:
             try:
-                judge_output, judge_metadata = await _judge_episode_impl(
-                    ref.episode_dir, experiment_dir, model, verbose
+                judge_output, judge_metadata, actions = await _judge_episode_impl(
+                    ref.episode_dir, experiment_dir, model, verbose, trace_mode
                 )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
                 return
             ref.record = _load_episode_record(ref.record_path)
-            _persist_judgment(ref, judge_output, judge_metadata)
+            _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
             results[ref.trajectory_id] = (judge_output, judge_metadata)
 
     await asyncio.gather(*[_one(ref) for ref in selected])
@@ -1035,6 +1076,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Stream the judge's tool calls and assistant text to stderr while it runs.",
     )
+    p.add_argument(
+        "--trace",
+        choices=["actions", "full", "off"],
+        default="actions",
+        dest="trace_mode",
+        help=(
+            "Judge action trace level stored in judge_metadata.judge_actions. "
+            "'actions' (default): compact list of (tool, summarised_input). "
+            "'full': also includes raw_input dict. "
+            "'off': nothing stored."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -1067,6 +1120,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         verbose=args.verbose,
         n_parallel=args.n_parallel,
+        trace_mode=args.trace_mode,
     )
 
     if args.summary:
