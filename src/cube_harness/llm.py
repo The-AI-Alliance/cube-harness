@@ -11,6 +11,7 @@ from cube.core import TypedBaseModel
 from litellm import Message, completion_with_retries
 from litellm.utils import token_counter
 from pydantic import Field
+from transformers import AutoTokenizer
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
@@ -82,29 +83,6 @@ class LLMResponse(TypedBaseModel):
     logprobs: list[float] | None = None
     completion_token_ids: list[int] | None = None
     finish_reason: str | None = None
-
-
-@dataclass(frozen=True)
-class LLMRouteLease:
-    """A temporary route assignment for one generation request."""
-
-    route_id: str
-    api_base: str | None = None
-    api_key: str | None = None
-    model_name: str | None = None
-
-
-class LLMRouter(Protocol):
-    """Routes individual LLM calls for `RoutedLLM`."""
-
-    def acquire(self, config: LLMConfig, prompt: Prompt) -> LLMRouteLease: ...
-
-    def release(
-        self,
-        lease: LLMRouteLease,
-        response: LLMResponse | None = None,
-        error: BaseException | None = None,
-    ) -> None: ...
 
 
 class LLM:
@@ -237,6 +215,59 @@ class LLM:
             result.append({"token_id": token_id, "logprob": float(logprob)})
         return result
 
+@dataclass(frozen=True)
+class LLMRouteLease:
+    """A temporary route assignment for one generation request."""
+
+    route_id: str
+    api_base: str | None = None
+    api_key: str | None = None
+    model_name: str | None = None
+
+
+class LLMRouter(Protocol):
+    """Routes individual LLM calls for `RoutedLLM`."""
+
+    def acquire(self, config: LLMConfig, prompt: Prompt) -> LLMRouteLease: ...
+
+    def release(
+        self,
+        lease: LLMRouteLease,
+        response: LLMResponse | None = None,
+        error: BaseException | None = None,
+    ) -> None: ...
+
+class DummyRouter(LLMRouter):
+    """A dummy router that performs no routing and returns an empty lease."""
+
+    def acquire(self, config: LLMConfig, prompt: Prompt) -> LLMRouteLease:
+        return LLMRouteLease(route_id="dummy")
+
+    def release(
+        self,
+        lease: LLMRouteLease,
+        response: LLMResponse | None = None,
+        error: BaseException | None = None,
+    ) -> None:
+        pass
+
+class VLLMTokenCounter:
+    def __init__(self, tokenizer_name: str):
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name,
+            trust_remote_code=True,
+        )
+
+    def count_prompt_tokens(self, messages, tools=None) -> int:
+        token_ids = self.tokenizer.apply_chat_template(
+            messages,
+            tools=tools,
+            add_special_tokens=True,
+            add_generation_prompt=True,
+            tokenize=True,
+        )
+        return len(token_ids)
+
 
 class RoutedLLMConfig(LLMConfig):
     """LLM config variant that routes each generation through a router.
@@ -245,10 +276,15 @@ class RoutedLLMConfig(LLMConfig):
     configs and result artifacts stay portable.
     """
 
+    tokenizer_name: str # used for token counting; can differ from model_name in LLMConfig when routing to different models
     router: Any = Field(default=None, exclude=True)
 
     def make(self) -> "RoutedLLM":
         return RoutedLLM(config=self)
+
+    def make_counter(self) -> Callable[..., int]:
+        """Get a token counter function for the LLM model."""
+        return VLLMTokenCounter(tokenizer_name=self.tokenizer_name).count_prompt_tokens
 
 
 class RoutedLLM(LLM):
