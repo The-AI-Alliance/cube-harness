@@ -13,7 +13,7 @@ from pydantic import PrivateAttr
 
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
+from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
@@ -58,6 +58,10 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
     accept_agent_stop: bool = True
     oracle_mode: bool = False
 
+    @property
+    def action_set(self) -> list:
+        return super().action_set + [STOP_ACTION]
+
     # Container-side paths — always under /tmp so logic works uniformly on root
     # and non-root backends (EAI Toolkit images have /tmp mode 1777).
     _solution_dir: str = PrivateAttr(default="/tmp/solution")
@@ -94,6 +98,12 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
+
+        # Fast-fail if the container sandbox is broken (all bash commands return
+        # exit_code=1 with no output). Avoids wasting 100 agent steps on a dead env.
+        health = self.tool.bash("echo ok", timeout=15)
+        if "ok" not in health:
+            raise RuntimeError(f"Container health check failed for {self.metadata.id!r}: {health!r}")
 
         # Extract task archive to a temp dir (kept alive until close())
         self._temp_dir = tempfile.TemporaryDirectory()
