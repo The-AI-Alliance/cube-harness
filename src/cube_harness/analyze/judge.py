@@ -58,6 +58,8 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_SAMPLE_FRACTION = 0.10
 DEFAULT_JUDGE_MAX_TURNS = 40
 DEFAULT_PRE_JUDGE_MAX_TURNS = 80
+DEFAULT_JUDGE_MAX_BUDGET_USD = 1.0
+PRE_JUDGE_METADATA_FILENAME = "pre_judge_metadata.json"
 EXPERIMENT_JUDGE_SUMMARY_FILENAME = "experiment_judge_summary.json"
 EXPERIMENT_JUDGE_REPORT_FILENAME = "experiment_judge_report.csv"
 
@@ -719,8 +721,8 @@ async def _run_pre_judge_impl(
     model: str,
     verbose: bool,
     max_turns: int | None = DEFAULT_PRE_JUDGE_MAX_TURNS,
-) -> Path:
-    """Run the pre-judge agent and return the path to judge_context.md."""
+) -> tuple[Path, _SDKResult]:
+    """Run the pre-judge agent and return (context_path, sdk_result)."""
     output_path = experiment_dir / PRE_JUDGE_CONTEXT_FILENAME
     user_prompt = _build_pre_judge_user_prompt(
         output_path=output_path,
@@ -730,7 +732,7 @@ async def _run_pre_judge_impl(
         sample_refs=sample_refs,
     )
     logger.info("Running pre-judge for %s → %s", experiment_dir.name, output_path.name)
-    await _run_claude_code(
+    result = await _run_claude_code(
         system_prompt=PRE_JUDGE_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         cwd=experiment_dir,
@@ -741,7 +743,7 @@ async def _run_pre_judge_impl(
         allowed_tools=PRE_JUDGE_ALLOWED_TOOLS,
         max_turns=max_turns,
     )
-    return output_path
+    return output_path, result
 
 
 def run_pre_judge(
@@ -757,6 +759,9 @@ def run_pre_judge(
     Returns the path if the file exists after the call, or None if the run failed
     to produce it.  Skips the agent call if the file already exists and `overwrite`
     is False.
+
+    Writes `pre_judge_metadata.json` alongside `judge_context.md` so cost and
+    token usage are captured for the Opus pre-judge call.
     """
     experiment_dir = Path(experiment_dir).resolve()
     output_path = experiment_dir / PRE_JUDGE_CONTEXT_FILENAME
@@ -782,7 +787,25 @@ def run_pre_judge(
             sample = all_refs[:2]
         refs = sample
 
-    asyncio.run(_run_pre_judge_impl(experiment_dir, view, source_paths, refs, model, verbose, max_turns))
+    _, result = asyncio.run(_run_pre_judge_impl(experiment_dir, view, source_paths, refs, model, verbose, max_turns))
+    if output_path.exists():
+        meta = JudgeMetadata(
+            model=model,
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+            cost_usd=result.cost_usd,
+            duration_s=result.duration_s,
+            timestamp=time.time(),
+            judge_schema_version=JUDGE_SCHEMA_VERSION,
+        )
+        (experiment_dir / PRE_JUDGE_METADATA_FILENAME).write_text(meta.model_dump_json(indent=2))
+        logger.info(
+            "Pre-judge cost: $%.4f  tokens: %dp + %dc  duration: %.0fs",
+            result.cost_usd,
+            result.prompt_tokens,
+            result.completion_tokens,
+            result.duration_s,
+        )
     return output_path if output_path.exists() else None
 
 
@@ -872,6 +895,7 @@ async def _run_claude_code(
     trace_mode: TraceMode = "actions",
     allowed_tools: list[str] | None = None,
     max_turns: int | None = None,
+    max_budget_usd: float | None = None,
 ) -> _SDKResult:
     """Invoke Claude Code via the SDK and return the assistant text + usage.
 
@@ -900,6 +924,7 @@ async def _run_claude_code(
         model=model,
         include_partial_messages=False,
         max_turns=max_turns,
+        max_budget_usd=max_budget_usd,
     )
     if verbose:
         logger.info("Running judge with model %s and options: %r", model, options)
@@ -1082,36 +1107,73 @@ def _find_quote_in_text(quote: str, step_text: str) -> tuple[bool, float | None]
     return False, round(best, 3)
 
 
+def _build_artifact_text(episode_dir: Path) -> str:
+    """Concatenate episode artifact files that judges commonly quote from.
+
+    Includes episode.metadata.json (contains reward_info.fail_to_pass_output)
+    and episode_record.json. These are the source of evaluator-side quotes
+    that cannot appear in agent step files.
+    """
+    text = ""
+    for name in ("episode.metadata.json", "episode_record.json"):
+        p = episode_dir / name
+        if p.exists():
+            text += p.read_text() + "\n"
+    return text
+
+
 def _verify_evidence(judge_output: JudgeOutput, transcript_dir: Path) -> None:
     """Mutate JudgeOutput.evidence in place: set `verified` and `match_ratio`.
 
-    If any evidence item fails verification, downgrade primary_blame_confidence
+    Search order for each quoted item:
+    1. The cited step files (NNN_obs.txt / NNN_act.txt) — agent-side content.
+    2. Episode artifact files (episode.metadata.json, episode_record.json) —
+       evaluator-side content such as fail_to_pass_output that the judge reads
+       but the agent never sees in its steps.
+
+    If any evidence item fails both searches, downgrade primary_blame_confidence
     by 1 (clamped at 0). This is a soft signal — it doesn't refuse the judgment.
     """
     if not judge_output.evidence:
         return
     steps_dir = transcript_dir / "steps"
+    episode_dir = transcript_dir.parent
+    artifact_text = _build_artifact_text(episode_dir)
     n_unverified = 0
     for item in judge_output.evidence:
-        # Step files are written as NNN_obs.txt or NNN_act.txt. Try both.
-        candidates = [
-            steps_dir / f"{item.step:03d}_obs.txt",
-            steps_dir / f"{item.step:03d}_act.txt",
-        ]
-        text = ""
-        for c in candidates:
-            if c.exists():
-                text += c.read_text() + "\n"
-        if not text:
-            item.verified = False
-            item.match_ratio = None
-            n_unverified += 1
-            continue
-        verified, ratio = _find_quote_in_text(item.quote, text)
-        item.verified = verified
-        item.match_ratio = ratio
-        if not verified:
-            n_unverified += 1
+        # 1. Check agent step files (obs + act for the cited step index).
+        step_text = ""
+        for suffix in ("obs", "act"):
+            f = steps_dir / f"{item.step:03d}_{suffix}.txt"
+            if f.exists():
+                step_text += f.read_text() + "\n"
+
+        if step_text:
+            verified, ratio = _find_quote_in_text(item.quote, step_text)
+            if verified:
+                item.verified = True
+                item.match_ratio = ratio
+                continue
+
+        # 2. Fall back to episode artifact files (evaluator output, reward_info, etc.).
+        if artifact_text:
+            verified, ratio = _find_quote_in_text(item.quote, artifact_text)
+            if verified:
+                item.verified = True
+                item.match_ratio = ratio
+                continue
+
+        # Not found in either source.
+        item.verified = False
+        item.match_ratio = (
+            ratio
+            if (not step_text and artifact_text)
+            else (
+                _find_quote_in_text(item.quote, step_text + artifact_text)[1] if (step_text or artifact_text) else None
+            )
+        )
+        n_unverified += 1
+
     if n_unverified > 0:
         logger.warning(
             "%d/%d evidence items failed verification; downgrading primary_blame_confidence.",
@@ -1154,6 +1216,7 @@ async def _judge_episode_impl(
     context_path: Path | None = None,
     max_turns: int | None = DEFAULT_JUDGE_MAX_TURNS,
     transcript_dir: Path | None = None,
+    max_budget_usd: float | None = DEFAULT_JUDGE_MAX_BUDGET_USD,
 ) -> tuple[JudgeOutput, JudgeMetadata, list[dict[str, Any]]]:
     """Async core shared by judge_episode (single) and judge_experiment (parallel).
 
@@ -1208,6 +1271,7 @@ async def _judge_episode_impl(
         verbose=verbose,
         trace_mode=trace_mode,
         max_turns=max_turns,
+        max_budget_usd=max_budget_usd,
     )
 
     obj = _extract_json_block(result.output_text)
@@ -1260,6 +1324,7 @@ async def _judge_episode_k_times(
     context_path: Path | None,
     max_turns: int | None,
     n_judges: int,
+    max_budget_usd: float | None = DEFAULT_JUDGE_MAX_BUDGET_USD,
 ) -> tuple[JudgeConsensus, list[JudgeOutput], list[JudgeMetadata], list[list[dict[str, Any]]]]:
     """Run K judge calls on the same episode, return consensus + raw outputs.
 
@@ -1279,6 +1344,7 @@ async def _judge_episode_k_times(
                 context_path,
                 max_turns,
                 transcript_dir=shared_transcript,
+                max_budget_usd=max_budget_usd,
             )
             for _ in range(n_judges)
         ]
@@ -1311,6 +1377,7 @@ def judge_episode(
     trace_mode: TraceMode = "actions",
     context_path: Path | None = None,
     max_turns: int | None = None,
+    max_budget_usd: float | None = DEFAULT_JUDGE_MAX_BUDGET_USD,
 ) -> tuple[JudgeOutput, JudgeMetadata]:
     """Run a post-hoc judge on a single episode trajectory directory.
 
@@ -1329,6 +1396,7 @@ def judge_episode(
             trace_mode,
             context_path,
             max_turns,
+            max_budget_usd=max_budget_usd,
         )
     )
     return judge_output, judge_metadata
@@ -1337,15 +1405,21 @@ def judge_episode(
 def _cleanup_transcript(transcript_dir: Path) -> None:
     """Delete the unpacked step files after judging to avoid disk accumulation.
 
-    Removes steps/ and episode_summary.txt but leaves the directory itself intact
-    so that the path is still visible if someone inspects the episode folder.
+    Removes steps/, episode_summary.txt, and the legacy transcript.txt if present.
+    Then attempts to remove the directory itself (succeeds only when empty).
     """
-    steps_dir = transcript_dir / "steps"
-    if steps_dir.exists():
-        shutil.rmtree(steps_dir)
-    summary = transcript_dir / "episode_summary.txt"
-    if summary.exists():
-        summary.unlink()
+    for name in ("steps",):
+        d = transcript_dir / name
+        if d.exists():
+            shutil.rmtree(d)
+    for name in ("episode_summary.txt", "transcript.txt"):
+        f = transcript_dir / name
+        if f.exists():
+            f.unlink()
+    try:
+        transcript_dir.rmdir()  # only removes if now empty
+    except OSError:
+        pass  # non-empty (e.g. other files present) — leave it
 
 
 def _archive_versioned(path: Path) -> None:
@@ -1439,6 +1513,7 @@ def judge_experiment(
     pre_judge_max_turns: int | None = None,
     n_judges: int = 1,
     judges_parallel: int | None = None,
+    max_budget_usd: float | None = DEFAULT_JUDGE_MAX_BUDGET_USD,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
@@ -1489,7 +1564,16 @@ def judge_experiment(
     if n_parallel > 1:
         results = asyncio.run(
             _judge_experiment_parallel(
-                selected, experiment_dir, model, verbose, n_parallel, trace_mode, context_path, max_turns, n_judges
+                selected,
+                experiment_dir,
+                model,
+                verbose,
+                n_parallel,
+                trace_mode,
+                context_path,
+                max_turns,
+                n_judges,
+                max_budget_usd,
             )
         )
     else:
@@ -1508,6 +1592,7 @@ def judge_experiment(
                             context_path,
                             max_turns,
                             n_judges,
+                            max_budget_usd=max_budget_usd,
                         )
                     )
                     # Primary output: first from the modal-outcome group.
@@ -1522,7 +1607,14 @@ def judge_experiment(
                     consensus, all_judge_outputs, all_metas = None, None, None
                     judge_output, judge_metadata, actions = asyncio.run(
                         _judge_episode_impl(
-                            ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
+                            ref.episode_dir,
+                            experiment_dir,
+                            model,
+                            verbose,
+                            trace_mode,
+                            context_path,
+                            max_turns,
+                            max_budget_usd=max_budget_usd,
                         )
                     )
             except Exception as e:
@@ -1549,6 +1641,7 @@ async def _judge_experiment_parallel(
     context_path: Path | None = None,
     max_turns: int | None = None,
     n_judges: int = 1,
+    max_budget_usd: float | None = DEFAULT_JUDGE_MAX_BUDGET_USD,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     semaphore = asyncio.Semaphore(n_parallel)
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
@@ -1558,7 +1651,15 @@ async def _judge_experiment_parallel(
             try:
                 if n_judges > 1:
                     consensus, all_judge_outputs, all_metas, all_actions = await _judge_episode_k_times(
-                        ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns, n_judges
+                        ref.episode_dir,
+                        experiment_dir,
+                        model,
+                        verbose,
+                        trace_mode,
+                        context_path,
+                        max_turns,
+                        n_judges,
+                        max_budget_usd=max_budget_usd,
                     )
                     modal_output = next(
                         (o for o in all_judge_outputs if o.outcome == consensus.outcome),
@@ -1573,7 +1674,14 @@ async def _judge_experiment_parallel(
                     consensus = None
                     pairs = None
                     judge_output, judge_metadata, actions = await _judge_episode_impl(
-                        ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
+                        ref.episode_dir,
+                        experiment_dir,
+                        model,
+                        verbose,
+                        trace_mode,
+                        context_path,
+                        max_turns,
+                        max_budget_usd=max_budget_usd,
                     )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
@@ -1772,6 +1880,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="max_turns",
         help=f"Max turns for each episode judge call (default: {DEFAULT_JUDGE_MAX_TURNS}).",
     )
+    p.add_argument(
+        "--max-budget",
+        type=float,
+        default=DEFAULT_JUDGE_MAX_BUDGET_USD,
+        dest="max_budget_usd",
+        help=(
+            f"Max USD budget per episode judge call (default: ${DEFAULT_JUDGE_MAX_BUDGET_USD:.2f}). "
+            "With --n-judges K the total per episode is K × this value."
+        ),
+    )
     pj = p.add_argument_group("pre-judge (experiment-level context)")
     pj.add_argument(
         "--pre-judge-model",
@@ -1857,6 +1975,7 @@ def main(argv: list[str] | None = None) -> int:
         pre_judge_max_turns=args.pre_judge_max_turns,
         n_judges=args.n_judges,
         judges_parallel=args.judges_parallel,
+        max_budget_usd=args.max_budget_usd,
     )
 
     if args.summary:
