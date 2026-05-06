@@ -1572,6 +1572,7 @@ def _write_summary(
         return
     outcomes = Counter(o.outcome.value for o, _ in results.values())
     blames = Counter(o.primary_blame.value for o, _ in results.values())
+    interventions = Counter(o.intervention.value for o, _ in results.values())
     total_cost = sum(m.cost_usd for _, m in results.values())
     total_prompt = sum(m.prompt_tokens for _, m in results.values())
     total_completion = sum(m.completion_tokens for _, m in results.values())
@@ -1597,6 +1598,7 @@ def _write_summary(
         "total_judge_completion_tokens": total_completion,
         "outcomes": dict(outcomes),
         "primary_blame": dict(blames),
+        "interventions": dict(interventions),
         "report_csv": EXPERIMENT_JUDGE_REPORT_FILENAME,
         "judged_episodes": judged_episodes,
     }
