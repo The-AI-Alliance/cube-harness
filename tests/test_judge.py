@@ -13,11 +13,13 @@ import zstandard
 
 from cube_harness.analyze.judge import EpisodeRef as _EpisodeRef
 from cube_harness.analyze.judge import (
+    _build_consensus,
     _extract_json_block,
     _run_claude_code,
     _stratified_sample,
     _task_family,
     _validate_context,
+    _validate_invariants,
     _write_episode_summary,
     discover_episodes,
     extract_transcript,
@@ -75,7 +77,7 @@ def test_judge_output_rejects_unknown_blame() -> None:
 def test_judge_metadata_defaults() -> None:
     m = JudgeMetadata(model="claude-opus-4-7", timestamp=1234567890.0)
     assert m.cost_usd == 0.0
-    assert m.judge_schema_version == "v1"
+    assert m.judge_schema_version == "v2"
 
 
 def test_episode_record_with_judge_metadata_roundtrip(tmp_path: Path) -> None:
@@ -491,3 +493,83 @@ def test_validate_context_returns_true_when_no_paths_cited(tmp_path: Path) -> No
     ctx = tmp_path / "judge_context.md"
     ctx.write_text("No file paths in here, just prose.")
     assert _validate_context(ctx) is True
+
+
+# ---------------------------------------------------------------------------
+# R2.2 — Intervention taxonomy
+# ---------------------------------------------------------------------------
+
+
+def test_judge_output_accepts_intervention() -> None:
+    obj = _valid_judge_output(intervention="scaffold_change", intervention_confidence=4)
+    assert obj.intervention.value == "scaffold_change"
+
+
+def test_judge_output_rejects_unknown_intervention() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _valid_judge_output(intervention="invent_new_category", intervention_confidence=3)
+
+
+def test_judge_output_intervention_defaults_to_none_for_v1_records() -> None:
+    """Schema-v1 records (no intervention field) must still load."""
+    v1_payload = {
+        "analysis": "...",
+        "outcome": "success",
+        "summary": "Done.",
+        "primary_blame": "none",
+        "primary_blame_confidence": 5,
+        "other_blames": [],
+        "evidence": [],
+        "hypothesis": "n/a",
+        "hypothesis_confidence": 0,
+    }
+    obj = JudgeOutput.model_validate(v1_payload)
+    assert obj.intervention.value == "none"
+    assert obj.intervention_confidence == 0
+
+
+def test_validate_invariants_coerces_intervention_on_clean_success() -> None:
+    obj = _valid_judge_output(
+        outcome="success",
+        primary_blame="none",
+        evidence=[],
+        intervention="model_upgrade",
+        intervention_confidence=2,
+    )
+    _validate_invariants(obj)
+    assert obj.intervention.value == "none"
+
+
+# ---------------------------------------------------------------------------
+# R3.2 — Inter-judge consensus
+# ---------------------------------------------------------------------------
+
+
+def test_build_consensus_unanimous() -> None:
+    outputs = [_valid_judge_output() for _ in range(3)]
+    c = _build_consensus(outputs)
+    assert c.n_judges == 3
+    assert c.outcome_agreement == 1.0
+    assert c.blame_agreement == 1.0
+
+
+def test_build_consensus_two_one_split() -> None:
+    outputs = [
+        _valid_judge_output(outcome="failure"),
+        _valid_judge_output(outcome="failure"),
+        _valid_judge_output(outcome="almost"),
+    ]
+    c = _build_consensus(outputs)
+    assert c.outcome.value == "failure"
+    assert abs(c.outcome_agreement - 2 / 3) < 1e-9
+
+
+def test_build_consensus_avg_confidence() -> None:
+    outputs = [
+        _valid_judge_output(primary_blame_confidence=2),
+        _valid_judge_output(primary_blame_confidence=4),
+    ]
+    c = _build_consensus(outputs)
+    assert c.avg_primary_blame_confidence == 3.0

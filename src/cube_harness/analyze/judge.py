@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import difflib
 import importlib.util
 import json
 import logging
@@ -44,6 +45,8 @@ from cube_harness.eval_log import (
     EPISODE_RECORD_FILENAME,
     JUDGE_SCHEMA_VERSION,
     EpisodeRecord,
+    InterventionCategory,
+    JudgeConsensus,
     JudgeMetadata,
     JudgeOutput,
 )
@@ -462,7 +465,9 @@ Produce a single JSON object with these fields, in this order:
   "other_blames": [],
   "evidence": [{{"step": 0, "quote": "exact excerpt"}}],
   "hypothesis": "<1-2 sentences: what change would most likely fix this class of failure>",
-  "hypothesis_confidence": 0
+  "hypothesis_confidence": 0,
+  "intervention": "<scaffold_change|prompt_change|eval_fix|infra_fix|model_upgrade|tool_change|task_clarification|none>",
+  "intervention_confidence": 0
 }}
 ```
 
@@ -485,9 +490,26 @@ Blame:
   submission_format         — agent reached solution but submitted wrong way
   none                      — clean success or too ambiguous to attribute
 
+Intervention vs blame:
+  primary_blame describes WHAT went wrong (cause).
+  intervention describes WHERE the fix would land.
+  These often differ. Example: agent identifies the bug but loops without
+  editing → primary_blame=model_capability, intervention=scaffold_change
+  (add loop detection).
+
+Intervention categories:
+  scaffold_change     — loop detection, budget logic, context management, prompt
+  prompt_change       — system prompt or instruction text
+  eval_fix            — benchmark evaluator is wrong or brittle
+  infra_fix           — container, network, dependency issue
+  model_upgrade       — stronger model would solve it
+  tool_change         — add/remove/fix a tool
+  task_clarification  — task description ambiguous
+  none                — no intervention needed (clean success)
+
 Evidence MUST be non-empty when primary_blame != "none".
 other_blames MUST NOT repeat primary_blame.
-On clean success, primary_blame must be "none"."""
+On clean success, primary_blame must be "none" and intervention must be "none"."""
 
 
 def build_user_prompt(
@@ -1017,8 +1039,90 @@ def _load_trajectory_meta(path: Path) -> Trajectory | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Evidence verification (R2.1)
+# ---------------------------------------------------------------------------
+
+EVIDENCE_FUZZY_THRESHOLD = 0.85
+
+
+def _normalize_for_match(text: str) -> str:
+    """Whitespace-collapsed, case-folded for matching."""
+    return " ".join(text.split()).casefold()
+
+
+def _find_quote_in_text(quote: str, step_text: str) -> tuple[bool, float | None]:
+    """Try to locate `quote` in `step_text`. Returns (verified, match_ratio).
+
+    Strategy: exact case-insensitive substring first; if miss, slide a window
+    of len(quote) across step_text and take max difflib ratio. Accept if
+    ratio >= EVIDENCE_FUZZY_THRESHOLD.
+    """
+    q_norm = _normalize_for_match(quote)
+    t_norm = _normalize_for_match(step_text)
+    if not q_norm:
+        return False, None
+    if q_norm in t_norm:
+        return True, None  # exact (after normalization)
+
+    # Sliding window fuzzy match.
+    n = len(q_norm)
+    best = 0.0
+    # Sample windows at quarter-length stride to keep cost bounded.
+    stride = max(1, n // 4)
+    for start in range(0, max(1, len(t_norm) - n + 1), stride):
+        window = t_norm[start : start + n]
+        ratio = difflib.SequenceMatcher(None, q_norm, window).ratio()
+        if ratio > best:
+            best = ratio
+        if best >= 0.99:
+            break
+    if best >= EVIDENCE_FUZZY_THRESHOLD:
+        return True, round(best, 3)
+    return False, round(best, 3)
+
+
+def _verify_evidence(judge_output: JudgeOutput, transcript_dir: Path) -> None:
+    """Mutate JudgeOutput.evidence in place: set `verified` and `match_ratio`.
+
+    If any evidence item fails verification, downgrade primary_blame_confidence
+    by 1 (clamped at 0). This is a soft signal — it doesn't refuse the judgment.
+    """
+    if not judge_output.evidence:
+        return
+    steps_dir = transcript_dir / "steps"
+    n_unverified = 0
+    for item in judge_output.evidence:
+        # Step files are written as NNN_obs.txt or NNN_act.txt. Try both.
+        candidates = [
+            steps_dir / f"{item.step:03d}_obs.txt",
+            steps_dir / f"{item.step:03d}_act.txt",
+        ]
+        text = ""
+        for c in candidates:
+            if c.exists():
+                text += c.read_text() + "\n"
+        if not text:
+            item.verified = False
+            item.match_ratio = None
+            n_unverified += 1
+            continue
+        verified, ratio = _find_quote_in_text(item.quote, text)
+        item.verified = verified
+        item.match_ratio = ratio
+        if not verified:
+            n_unverified += 1
+    if n_unverified > 0:
+        logger.warning(
+            "%d/%d evidence items failed verification; downgrading primary_blame_confidence.",
+            n_unverified,
+            len(judge_output.evidence),
+        )
+        judge_output.primary_blame_confidence = max(0, judge_output.primary_blame_confidence - 1)
+
+
 def _validate_invariants(obj: JudgeOutput) -> None:
-    """Enforce the V1 invariants from the spec (post-parse, pre-write)."""
+    """Enforce the invariants from the spec (post-parse, pre-write)."""
     if obj.primary_blame.value != "none" and not obj.evidence:
         raise ValueError("evidence must be non-empty when primary_blame != 'none'")
     if obj.primary_blame in obj.other_blames:
@@ -1031,6 +1135,14 @@ def _validate_invariants(obj: JudgeOutput) -> None:
             obj.primary_blame.value,
         )
         obj.primary_blame = obj.primary_blame.__class__("none")
+    # When outcome is success/success_lucky, intervention should be 'none'.
+    if obj.outcome.value in ("success", "success_lucky") and obj.intervention.value != "none":
+        logger.warning(
+            "Judge returned outcome=%s with intervention=%s; coercing to 'none'.",
+            obj.outcome.value,
+            obj.intervention.value,
+        )
+        obj.intervention = InterventionCategory.none
 
 
 async def _judge_episode_impl(
@@ -1089,11 +1201,12 @@ async def _judge_episode_impl(
         trace_mode=trace_mode,
         max_turns=max_turns,
     )
-    _cleanup_transcript(transcript_dir)
 
     obj = _extract_json_block(result.output_text)
     judge_output = JudgeOutput.model_validate(obj)
     _validate_invariants(judge_output)
+    _verify_evidence(judge_output, transcript_dir)
+    _cleanup_transcript(transcript_dir)
 
     judge_metadata = JudgeMetadata(
         model=model,
@@ -1105,6 +1218,61 @@ async def _judge_episode_impl(
         judge_schema_version=JUDGE_SCHEMA_VERSION,
     )
     return judge_output, judge_metadata, result.actions
+
+
+# ---------------------------------------------------------------------------
+# Inter-judge consensus (R3.2)
+# ---------------------------------------------------------------------------
+
+
+def _build_consensus(outputs: list[JudgeOutput]) -> JudgeConsensus:
+    """Aggregate K JudgeOutputs into a JudgeConsensus via modal voting."""
+    n = len(outputs)
+    outcome_mode, outcome_count = Counter(o.outcome for o in outputs).most_common(1)[0]
+    blame_mode, blame_count = Counter(o.primary_blame for o in outputs).most_common(1)[0]
+    intervention_mode = Counter(o.intervention for o in outputs).most_common(1)[0][0]
+    return JudgeConsensus(
+        n_judges=n,
+        outcome=outcome_mode,
+        primary_blame=blame_mode,
+        intervention=intervention_mode,
+        outcome_agreement=outcome_count / n,
+        blame_agreement=blame_count / n,
+        avg_primary_blame_confidence=sum(o.primary_blame_confidence for o in outputs) / n,
+    )
+
+
+async def _judge_episode_k_times(
+    episode_dir: Path,
+    experiment_dir: Path,
+    model: str,
+    verbose: bool,
+    trace_mode: TraceMode,
+    context_path: Path | None,
+    max_turns: int | None,
+    n_judges: int,
+) -> tuple[JudgeConsensus, list[JudgeOutput], list[JudgeMetadata], list[list[dict[str, Any]]]]:
+    """Run K judge calls on the same episode, return consensus + raw outputs."""
+    tasks = [
+        _judge_episode_impl(episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns)
+        for _ in range(n_judges)
+    ]
+    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    outputs: list[JudgeOutput] = []
+    metas: list[JudgeMetadata] = []
+    actions: list[list[dict[str, Any]]] = []
+    for r in raw_results:
+        if isinstance(r, Exception):
+            logger.warning("One of K=%d judges failed: %s", n_judges, r)
+            continue
+        o, m, a = r  # type: ignore[misc]
+        outputs.append(o)
+        metas.append(m)
+        actions.append(a)
+    if not outputs:
+        raise RuntimeError(f"All {n_judges} judges failed for {episode_dir.name}")
+    consensus = _build_consensus(outputs)
+    return consensus, outputs, metas, actions
 
 
 def judge_episode(
@@ -1172,6 +1340,8 @@ def _persist_judgment(
     judge_metadata: JudgeMetadata,
     actions: list[dict[str, Any]] | None = None,
     trace_mode: TraceMode = "actions",
+    consensus: JudgeConsensus | None = None,
+    all_outputs: list[tuple[JudgeOutput, JudgeMetadata]] | None = None,
 ) -> None:
     """Write `judge_output` and `judge_metadata` into the episode_record.json.
 
@@ -1181,11 +1351,20 @@ def _persist_judgment(
     When `actions` is non-empty, writes a `judge_trace.json` sidecar alongside the
     episode record with the judge's tool-call sequence.
 
+    When `consensus` is set (n_judges > 1), also writes `judge_outputs.jsonl` sidecar
+    (one JSON line per judge output) and stores `judge_consensus` on the episode record.
+    The primary `judge_output` on the record is the first output from the modal-outcome
+    group (i.e., the first output matching consensus.outcome).
+
     Existing `judge_output.json` and `judge_trace.json` sidecars are never clobbered;
     they are renamed to `<stem>_old_v<N><ext>` before the new file is written.
     """
+    record_updates: dict[str, Any] = {"judge_output": judge_output, "judge_metadata": judge_metadata}
+    if consensus is not None:
+        record_updates["judge_consensus"] = consensus
+
     if ref.record is not None:
-        updated = ref.record.model_copy(update={"judge_output": judge_output, "judge_metadata": judge_metadata})
+        updated = ref.record.model_copy(update=record_updates)
         ref.record_path.write_text(updated.model_dump_json(indent=2))
     else:
         sidecar = ref.episode_dir / "judge_output.json"
@@ -1199,10 +1378,19 @@ def _persist_judgment(
                 indent=2,
             )
         )
+
     if actions:
         trace_path = ref.episode_dir / "judge_trace.json"
         _archive_versioned(trace_path)
         trace_path.write_text(json.dumps({"trace_mode": trace_mode, "actions": actions}, indent=2))
+
+    if all_outputs is not None:
+        jsonl_path = ref.episode_dir / "judge_outputs.jsonl"
+        lines = [
+            json.dumps({"judge_output": o.model_dump(mode="json"), "judge_metadata": m.model_dump(mode="json")})
+            for o, m in all_outputs
+        ]
+        jsonl_path.write_text("\n".join(lines) + "\n")
 
 
 def judge_experiment(
@@ -1222,12 +1410,16 @@ def judge_experiment(
     skip_pre_judge: bool = False,
     max_turns: int | None = None,
     pre_judge_max_turns: int | None = None,
+    n_judges: int = 1,
+    judges_parallel: int | None = None,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
     Selection (default): all episodes that don't already have a judge_output.
     With `--sample 0.1`: 10% of those, randomly. With `--ids`: exactly those.
     With `n_parallel > 1`: run that many judge sub-processes concurrently.
+    With `n_judges > 1`: run K independent judges per episode and aggregate into
+    a JudgeConsensus. Cost scales linearly with K.
 
     Writes per-episode results into `episode_record.json` (or a sidecar if missing)
     and aggregate stats into `experiment_judge_summary.json`.
@@ -1249,11 +1441,12 @@ def judge_experiment(
         return {}
 
     logger.info(
-        "Judging %d / %d episodes in %s (n_parallel=%d)",
+        "Judging %d / %d episodes in %s (n_parallel=%d, n_judges=%d)",
         len(selected),
         len(refs),
         experiment_dir.name,
         n_parallel,
+        n_judges,
     )
 
     context_path: Path | None = None
@@ -1269,22 +1462,50 @@ def judge_experiment(
     if n_parallel > 1:
         results = asyncio.run(
             _judge_experiment_parallel(
-                selected, experiment_dir, model, verbose, n_parallel, trace_mode, context_path, max_turns
+                selected, experiment_dir, model, verbose, n_parallel, trace_mode, context_path, max_turns, n_judges
             )
         )
     else:
         for ref in selected:
             try:
-                judge_output, judge_metadata, actions = asyncio.run(
-                    _judge_episode_impl(
-                        ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
+                if n_judges > 1:
+                    _j_parallel = judges_parallel if judges_parallel is not None else n_judges
+                    _ = _j_parallel  # reserved for future semaphore limiting per episode
+                    consensus, all_judge_outputs, all_metas, all_actions = asyncio.run(
+                        _judge_episode_k_times(
+                            ref.episode_dir,
+                            experiment_dir,
+                            model,
+                            verbose,
+                            trace_mode,
+                            context_path,
+                            max_turns,
+                            n_judges,
+                        )
                     )
-                )
+                    # Primary output: first from the modal-outcome group.
+                    modal_output = next(
+                        (o for o in all_judge_outputs if o.outcome == consensus.outcome),
+                        all_judge_outputs[0],
+                    )
+                    modal_meta = all_metas[all_judge_outputs.index(modal_output)]
+                    primary_actions = all_actions[all_judge_outputs.index(modal_output)]
+                    judge_output, judge_metadata, actions = modal_output, modal_meta, primary_actions
+                else:
+                    consensus, all_judge_outputs, all_metas = None, None, None
+                    judge_output, judge_metadata, actions = asyncio.run(
+                        _judge_episode_impl(
+                            ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
+                        )
+                    )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
                 continue
             ref.record = _load_episode_record(ref.record_path)
-            _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
+            pairs = list(zip(all_judge_outputs, all_metas)) if all_judge_outputs and all_metas else None
+            _persist_judgment(
+                ref, judge_output, judge_metadata, actions, trace_mode, consensus=consensus, all_outputs=pairs
+            )
             results[ref.trajectory_id] = (judge_output, judge_metadata)
 
     _write_summary(experiment_dir, selected, results, model=model)
@@ -1300,6 +1521,7 @@ async def _judge_experiment_parallel(
     trace_mode: TraceMode = "actions",
     context_path: Path | None = None,
     max_turns: int | None = None,
+    n_judges: int = 1,
 ) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
     semaphore = asyncio.Semaphore(n_parallel)
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
@@ -1307,14 +1529,32 @@ async def _judge_experiment_parallel(
     async def _one(ref: EpisodeRef) -> None:
         async with semaphore:
             try:
-                judge_output, judge_metadata, actions = await _judge_episode_impl(
-                    ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
-                )
+                if n_judges > 1:
+                    consensus, all_judge_outputs, all_metas, all_actions = await _judge_episode_k_times(
+                        ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns, n_judges
+                    )
+                    modal_output = next(
+                        (o for o in all_judge_outputs if o.outcome == consensus.outcome),
+                        all_judge_outputs[0],
+                    )
+                    idx = all_judge_outputs.index(modal_output)
+                    judge_output = modal_output
+                    judge_metadata = all_metas[idx]
+                    actions = all_actions[idx]
+                    pairs: list[tuple[JudgeOutput, JudgeMetadata]] | None = list(zip(all_judge_outputs, all_metas))
+                else:
+                    consensus = None
+                    pairs = None
+                    judge_output, judge_metadata, actions = await _judge_episode_impl(
+                        ref.episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns
+                    )
             except Exception as e:
                 logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
                 return
             ref.record = _load_episode_record(ref.record_path)
-            _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
+            _persist_judgment(
+                ref, judge_output, judge_metadata, actions, trace_mode, consensus=consensus, all_outputs=pairs
+            )
             results[ref.trajectory_id] = (judge_output, judge_metadata)
 
     await asyncio.gather(*[_one(ref) for ref in selected])
@@ -1386,6 +1626,8 @@ def _write_csv_report(
         "hypothesis_confidence",
         "summary",
         "hypothesis",
+        "intervention",
+        "intervention_confidence",
         "cost_usd",
         "prompt_tokens",
         "completion_tokens",
@@ -1414,6 +1656,8 @@ def _write_csv_report(
                     "hypothesis_confidence": o.hypothesis_confidence,
                     "summary": o.summary,
                     "hypothesis": o.hypothesis,
+                    "intervention": o.intervention.value,
+                    "intervention_confidence": o.intervention_confidence,
                     "cost_usd": round(m.cost_usd, 4),
                     "prompt_tokens": m.prompt_tokens,
                     "completion_tokens": m.completion_tokens,
@@ -1522,6 +1766,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="pre_judge_max_turns",
         help=f"Max turns for the pre-judge context call (default: {DEFAULT_PRE_JUDGE_MAX_TURNS}).",
     )
+    kj = p.add_argument_group("inter-judge agreement (--n-judges K)")
+    kj.add_argument(
+        "--n-judges",
+        type=int,
+        default=1,
+        dest="n_judges",
+        help="Number of independent judges per episode (default: 1). Cost scales linearly with K.",
+    )
+    kj.add_argument(
+        "--judges-parallel",
+        type=int,
+        default=None,
+        dest="judges_parallel",
+        help="Concurrency for K judges within a single episode (default: same as --n-judges).",
+    )
     return p.parse_args(argv)
 
 
@@ -1567,6 +1826,8 @@ def main(argv: list[str] | None = None) -> int:
         skip_pre_judge=args.no_pre_judge,
         max_turns=args.max_turns,
         pre_judge_max_turns=args.pre_judge_max_turns,
+        n_judges=args.n_judges,
+        judges_parallel=args.judges_parallel,
     )
 
     if args.summary:

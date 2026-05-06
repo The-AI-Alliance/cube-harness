@@ -294,7 +294,7 @@ class JudgeConfig(TypedBaseModel):
     judged_at: str | None = Field(default=None, description="ISO-8601 timestamp when judging was run.")
 
 
-JUDGE_SCHEMA_VERSION = "v1"
+JUDGE_SCHEMA_VERSION = "v2"
 
 
 class BlameCategory(str, Enum):
@@ -327,6 +327,31 @@ class EvidenceItem(TypedBaseModel):
 
     step: int = Field(description="Step index in the trajectory.")
     quote: str = Field(description="Verbatim excerpt from the agent or environment output.")
+    verified: bool = Field(
+        default=True,
+        description=(
+            "True iff the quote was found (exact or near-match via difflib) in the "
+            "cited step's text during post-judge verification. Default True for "
+            "backwards compatibility with v1 records."
+        ),
+    )
+    match_ratio: float | None = Field(
+        default=None,
+        description="difflib SequenceMatcher ratio in [0,1] when quote was matched fuzzily; None if exact.",
+    )
+
+
+class InterventionCategory(str, Enum):
+    """Where a fix should land. Independent from `primary_blame` (cause)."""
+
+    scaffold_change = "scaffold_change"  # loop detection, budget logic, prompt
+    prompt_change = "prompt_change"  # system prompt or instruction text
+    eval_fix = "eval_fix"  # benchmark evaluator is wrong/brittle
+    infra_fix = "infra_fix"  # container, network, dependency issue
+    model_upgrade = "model_upgrade"  # stronger model would solve it
+    tool_change = "tool_change"  # add/remove/fix a tool
+    task_clarification = "task_clarification"  # task description ambiguous
+    none = "none"  # no intervention needed (clean success)
 
 
 class JudgeOutput(TypedBaseModel):
@@ -356,6 +381,20 @@ class JudgeOutput(TypedBaseModel):
     hypothesis: str = Field(description="1-2 sentences: what change would most likely fix this class of failure.")
     hypothesis_confidence: int = Field(
         ge=0, le=5, description="Confidence in the proposed fix (0=pure guess, 5=certain)."
+    )
+    intervention: InterventionCategory = Field(
+        default=InterventionCategory.none,
+        description=(
+            "Where a fix should land if any. Distinct from primary_blame which "
+            "describes what went wrong. Many capability failures point at scaffold "
+            "interventions (loop detection, etc.)."
+        ),
+    )
+    intervention_confidence: int = Field(
+        default=0,
+        ge=0,
+        le=5,
+        description="Confidence in the proposed intervention (0=guess, 5=certain).",
     )
 
 
@@ -445,6 +484,33 @@ class ExperimentRecord(TypedBaseModel):
         logger.info(f"Saved experiment record to {path}")
 
 
+class JudgeConsensus(TypedBaseModel):
+    """Aggregated verdict from K independent judges on the same episode."""
+
+    n_judges: int = Field(ge=1, description="Number of independent judge runs.")
+    outcome: Outcome = Field(description="Modal outcome across the K judges.")
+    primary_blame: BlameCategory = Field(description="Modal primary_blame across K judges.")
+    intervention: InterventionCategory = Field(
+        default=InterventionCategory.none,
+        description="Modal intervention across K judges.",
+    )
+    outcome_agreement: float = Field(
+        ge=0,
+        le=1,
+        description="Fraction of judges agreeing with the modal outcome (1.0 = unanimous).",
+    )
+    blame_agreement: float = Field(
+        ge=0,
+        le=1,
+        description="Fraction of judges agreeing with the modal primary_blame.",
+    )
+    avg_primary_blame_confidence: float = Field(
+        ge=0,
+        le=5,
+        description="Mean of primary_blame_confidence across K judges.",
+    )
+
+
 class EpisodeRecord(TypedBaseModel):
     """Episode-level record. Written to episodes/<trajectory_id>/episode_record.json after each episode.
 
@@ -498,6 +564,10 @@ class EpisodeRecord(TypedBaseModel):
     judge_metadata: JudgeMetadata | None = Field(
         default=None,
         description="Billing/provenance for the judge invocation. None until a judge has run.",
+    )
+    judge_consensus: JudgeConsensus | None = Field(
+        default=None,
+        description=("Consensus from K independent judges when n_judges > 1. None when only a single judge was run."),
     )
 
     @classmethod
