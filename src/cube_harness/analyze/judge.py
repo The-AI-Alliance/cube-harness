@@ -39,6 +39,7 @@ from typing import Any, Literal
 import msgpack
 import zstandard
 from pydantic import ValidationError
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from cube_harness.core import Trajectory
 from cube_harness.eval_log import (
@@ -884,6 +885,24 @@ def _summarise_tool_input(name: str, raw_input: dict[str, Any]) -> str:
     return s if len(s) <= 100 else s[:97] + "..."
 
 
+def _is_retryable_sdk_error(exc: BaseException) -> bool:
+    """True for transient API errors (overload / rate-limit) that are worth retrying."""
+    msg = str(exc).lower()
+    return any(tok in msg for tok in ("529", "overload", "rate limit", "too many requests", "502", "503"))
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable_sdk_error),
+    wait=wait_exponential(multiplier=2, min=10, max=120),
+    stop=stop_after_attempt(4),
+    reraise=True,
+    before_sleep=lambda rs: logger.warning(
+        "Transient SDK error (attempt %d/4); retrying in %.0fs: %s",
+        rs.attempt_number,
+        rs.next_action.sleep,  # type: ignore[union-attr]
+        rs.outcome.exception(),
+    ),
+)
 async def _run_claude_code(
     *,
     system_prompt: str,
@@ -898,6 +917,10 @@ async def _run_claude_code(
     max_budget_usd: float | None = None,
 ) -> _SDKResult:
     """Invoke Claude Code via the SDK and return the assistant text + usage.
+
+    Retries up to 4 attempts with exponential backoff (10s → 120s) on transient
+    API errors (529 Overloaded, 503, rate-limit). Non-retryable errors propagate
+    immediately.
 
     When `verbose=True`, stream a one-line summary of each tool call and assistant
     text chunk to stderr as they arrive — useful to see what the judge is doing
