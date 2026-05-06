@@ -3,6 +3,7 @@
 # dependencies = [
 #     "cube-harness",
 #     "math-tool-use",
+#     "transformers>=4.51.0,<4.52.dev0",
 # ]
 #
 # [tool.uv.sources]
@@ -22,7 +23,7 @@ from math_tool_use import MathToolUseBenchmark, MathToolUseToolConfig
 
 from cube_harness.agents.tir import TirAgentConfig
 from cube_harness.episode import Episode, MAX_STEPS
-from cube_harness.llm import LLMConfig
+from cube_harness.llm import RoutedLLMConfig, DummyRouter
 
 _SYSTEM_PROMPT = """You are a math-focused AI Agent. Solve problems by combining clear symbolic reasoning
 with short, deterministic Python code.
@@ -49,8 +50,10 @@ Always verify with run_python_code before invoking MathAnswer."""
 def main(mode: str, model: str, base_url: str, sandbox_endpoint: str, max_completion_tokens: int) -> None:
     api_key = "EMPTY"
 
-    llm_config = LLMConfig(
+    llm_config = RoutedLLMConfig(
         model_name=model,
+        router=DummyRouter(),
+        tokenizer_name="/mnt/llmd/base_models/Qwen2.5-7B-Instruct",
         api_key=api_key,
         api_base=base_url,
         temperature=1.0,
