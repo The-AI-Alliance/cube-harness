@@ -45,6 +45,10 @@ class MathToolUseTool(Tool):
         self._last_python_output = None
 
     @tool_action
+    def _unknown_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        return f"Unknown tool '{name}' with arguments {arguments}"
+
+    @tool_action
     def run_python_code(self, code: str) -> str:
         """Execute Python code. Print only the final result.
 

@@ -69,6 +69,7 @@ class TirAgent(Agent):
         self.config = config
         self.llm = config.llm_config.make()
         self.tools: list[dict] = [tool.as_dict() for tool in tools]
+        self.tool_names = set([tool.name for tool in tools])
         self.token_counter = config.llm_config.make_counter()
         self.max_completion_tokens = config.llm_config.max_completion_tokens
         self.max_model_len = config.llm_config.max_model_len
@@ -127,4 +128,11 @@ class TirAgent(Agent):
             completion_token_ids=llm_response.completion_token_ids,
             finish_reason=llm_response.finish_reason,
         )
-        return AgentOutput(actions=tir_parse_actions_tolerant(llm_output), llm_calls=[llm_call])
+        actions = tir_parse_actions_tolerant(llm_output)
+        for i in range(len(actions)):
+            if actions[i].name not in self.tool_names:
+                logger.warning(f"LLM called unknown tool '{actions[i].name}'")
+                actions[i] = Action(id=actions[i].id, name="_unknown_tool", 
+                                arguments={"name": actions[i].name, "arguments": actions[i].arguments})
+
+        return AgentOutput(actions=actions, llm_calls=[llm_call])
