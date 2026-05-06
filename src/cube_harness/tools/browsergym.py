@@ -197,6 +197,11 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         trace_out_file = getattr(self._session, "_trace_out_file", None)
         if trace_out_file is None:
             return
+        trace_out_file = Path(trace_out_file)
+        if trace_out_file.suffix != ".zip":
+            trace_out_file = trace_out_file.with_suffix(".zip")
+            # Keep session.trace_path() aligned with the actual on-disk trace output path.
+            setattr(self._session, "_trace_out_file", trace_out_file)
         context = getattr(self._session, "context", None)
         if context is None:
             return
