@@ -13,7 +13,7 @@ from pydantic import PrivateAttr
 
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
-from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
+from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 from terminalbench_cube.pytest_parser import PytestParser
 from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
@@ -57,10 +57,6 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
     validate_per_step: bool = False
     accept_agent_stop: bool = True
     oracle_mode: bool = False
-
-    @property
-    def action_set(self) -> list:
-        return super().action_set + [STOP_ACTION]
 
     # Container-side paths — always under /tmp so logic works uniformly on root
     # and non-root backends (EAI Toolkit images have /tmp mode 1777).
