@@ -1153,10 +1153,18 @@ async def _judge_episode_impl(
     trace_mode: TraceMode = "actions",
     context_path: Path | None = None,
     max_turns: int | None = DEFAULT_JUDGE_MAX_TURNS,
+    transcript_dir: Path | None = None,
 ) -> tuple[JudgeOutput, JudgeMetadata, list[dict[str, Any]]]:
-    """Async core shared by judge_episode (single) and judge_experiment (parallel)."""
-    transcript_dir = episode_dir / "_judge_transcript"
-    extract_transcript(episode_dir, transcript_dir)
+    """Async core shared by judge_episode (single) and judge_experiment (parallel).
+
+    When `transcript_dir` is provided the caller owns extract/cleanup — this is
+    used by `_judge_episode_k_times` to share a single extracted transcript
+    across K concurrent judge calls without races.
+    """
+    owns_transcript = transcript_dir is None
+    if transcript_dir is None:
+        transcript_dir = episode_dir / "_judge_transcript"
+        extract_transcript(episode_dir, transcript_dir)
 
     metadata_path = episode_dir / "episode.metadata.json"
     config_path = episode_dir / "episode_config.json"
@@ -1206,7 +1214,8 @@ async def _judge_episode_impl(
     judge_output = JudgeOutput.model_validate(obj)
     _validate_invariants(judge_output)
     _verify_evidence(judge_output, transcript_dir)
-    _cleanup_transcript(transcript_dir)
+    if owns_transcript:
+        _cleanup_transcript(transcript_dir)
 
     judge_metadata = JudgeMetadata(
         model=model,
@@ -1252,12 +1261,30 @@ async def _judge_episode_k_times(
     max_turns: int | None,
     n_judges: int,
 ) -> tuple[JudgeConsensus, list[JudgeOutput], list[JudgeMetadata], list[list[dict[str, Any]]]]:
-    """Run K judge calls on the same episode, return consensus + raw outputs."""
-    tasks = [
-        _judge_episode_impl(episode_dir, experiment_dir, model, verbose, trace_mode, context_path, max_turns)
-        for _ in range(n_judges)
-    ]
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    """Run K judge calls on the same episode, return consensus + raw outputs.
+
+    Extracts the transcript once and shares it across all K concurrent judges.
+    Each judge reads the same step files; cleanup runs once after all finish.
+    """
+    shared_transcript = episode_dir / "_judge_transcript"
+    extract_transcript(episode_dir, shared_transcript)
+    try:
+        tasks = [
+            _judge_episode_impl(
+                episode_dir,
+                experiment_dir,
+                model,
+                verbose,
+                trace_mode,
+                context_path,
+                max_turns,
+                transcript_dir=shared_transcript,
+            )
+            for _ in range(n_judges)
+        ]
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        _cleanup_transcript(shared_transcript)
     outputs: list[JudgeOutput] = []
     metas: list[JudgeMetadata] = []
     actions: list[list[dict[str, Any]]] = []

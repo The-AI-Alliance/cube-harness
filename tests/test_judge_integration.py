@@ -211,21 +211,25 @@ def test_judge_experiment_with_n_judges_writes_consensus(
     monkeypatch.setattr("cube_harness.analyze.judge._judge_episode_impl", _mock_judge_episode_impl)
     monkeypatch.setattr("cube_harness.analyze.judge.collect_source_paths", lambda view: {})
 
+    # sample=1.0 judges all episodes deterministically (no random sampling needed)
     judge_experiment(
         fake_experiment,
         model="m",
-        n=1,
+        sample=1.0,
         n_parallel=1,
         skip_pre_judge=True,
         max_turns=5,
         n_judges=3,
     )
 
-    ep_dir = sorted((fake_experiment / "episodes").iterdir())[0]
-    record = EpisodeRecord.model_validate_json((ep_dir / "episode_record.json").read_text())
-    assert record.judge_consensus is not None
-    assert isinstance(record.judge_consensus, JudgeConsensus)
-    assert record.judge_consensus.n_judges == 3
-    assert record.judge_consensus.outcome_agreement == 1.0  # all canned same
-    sidecar_lines = (ep_dir / "judge_outputs.jsonl").read_text().splitlines()
-    assert len(sidecar_lines) == 3
+    # All episodes should have been judged with consensus
+    ep_dirs = sorted((fake_experiment / "episodes").iterdir())
+    assert len(ep_dirs) >= 1
+    for ep_dir in ep_dirs:
+        record = EpisodeRecord.model_validate_json((ep_dir / "episode_record.json").read_text())
+        assert record.judge_consensus is not None, f"{ep_dir.name} missing judge_consensus"
+        assert isinstance(record.judge_consensus, JudgeConsensus)
+        assert record.judge_consensus.n_judges == 3
+        assert record.judge_consensus.outcome_agreement == 1.0  # all canned same
+        sidecar_lines = (ep_dir / "judge_outputs.jsonl").read_text().splitlines()
+        assert len(sidecar_lines) == 3
