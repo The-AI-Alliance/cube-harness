@@ -452,15 +452,22 @@ def _extract_json_block(text: str) -> dict[str, Any]:
         if start == -1:
             raise ValueError("No JSON object found in judge output")
         candidate = text[start:]
-    # Try strict parse first, then trim trailing chatter.
+    # Try strict parse first, then scan backwards through all } positions.
+    # A single rfind isn't enough when the JSON is truncated mid-string and
+    # a stray } appears inside a string value before the real closing brace.
     try:
         return json.loads(candidate)
     except json.JSONDecodeError:
         pass
-    end = candidate.rfind("}")
-    if end == -1:
-        raise ValueError("No closing brace in judge output")
-    return json.loads(candidate[: end + 1])
+    end = len(candidate)
+    while True:
+        pos = candidate.rfind("}", 0, end)
+        if pos == -1:
+            raise ValueError("No valid JSON object found in judge output")
+        try:
+            return json.loads(candidate[: pos + 1])
+        except json.JSONDecodeError:
+            end = pos
 
 
 TraceMode = Literal["actions", "full", "off"]
