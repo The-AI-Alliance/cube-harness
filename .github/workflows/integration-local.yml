@@ -1,0 +1,68 @@
+name: integration (local)
+
+# Tier-1 integration tests: every cube's debug suite, end-to-end, on
+# LocalInfraConfig (plain Docker).  No cloud secrets required, so fork PRs
+# run safely.  Each cube gets its own runner via matrix strategy for
+# parallelism (wall-clock ~4 min instead of ~10 min sequential).
+#
+# Cloud-infra coverage (Daytona / Toolkit / Modal) is a separate, opt-in
+# workflow triggered by a label or workflow_dispatch; see integration-cloud.yml.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cubes/terminalbench-cube/**'
+      - 'cubes/swebench-verified-cube/**'
+      - 'cubes/swebench-live-cube/**'
+      - 'integration-tests/**'
+      - '.github/workflows/integration-local.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:  # manual trigger
+
+concurrency:
+  group: integration-local-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: ${{ matrix.cube }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false  # always run all three cubes so a single failure is scoped
+      matrix:
+        cube:
+          - terminalbench
+          - swebench_verified
+          - swebench_live
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.10.4"
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Sync integration-tests deps
+        working-directory: integration-tests
+        run: uv sync --group local --group dev
+
+      - name: Docker daemon info
+        run: docker info
+
+      - name: Run integration suite
+        working-directory: integration-tests
+        run: >-
+          uv run --group local --group dev pytest test_debug_matrix.py
+          -v --tb=short --log-cli-level=INFO
+          -k "${{ matrix.cube }} and local"
+
+      - name: Docker containers after run
+        if: always()
+        run: docker ps -a --filter "label=cube.launch" || true

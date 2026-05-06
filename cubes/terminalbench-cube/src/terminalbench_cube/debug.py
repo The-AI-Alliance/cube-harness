@@ -2,7 +2,7 @@
 
 Public API
 ----------
-get_debug_benchmark()         → TerminalBenchBenchmark
+get_debug_benchmark()         → TerminalBenchBenchmarkConfig
 make_debug_agent(task_id)     → DebugAgent
 """
 
@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import logging
 
-from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
-from cube.backends import LocalContainerBackend
-from terminalbench_cube.benchmark import TerminalBenchBenchmark
+from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +21,33 @@ logger = logging.getLogger(__name__)
 _FINAL = Action(name="final_step", arguments={})
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
+    # Relative `personal-site` works whether working_dir is /app (default) or
+    # /tmp/app (after _maybe_relocate_app on non-root backends).
+    # /tmp/solution is where TerminalBenchTask.reset() uploads the solution
+    # for any backend — /tmp is universally writable.
     "fix-git": [
-        Action(name="bash", arguments={"command": "cd /app/personal-site && bash /solution/solve.sh 2>&1"}),
+        Action(
+            name="bash",
+            arguments={"command": "cd personal-site && bash /tmp/solution/solve.sh 2>&1", "timeout": 600},
+        ),
         _FINAL,
     ],
     "overfull-hbox": [
-        Action(name="bash", arguments={"command": "bash /solution/solve.sh 2>&1"}),
+        # Prepend the apt-extracted python3 to PATH so solve.sh's `python3` call
+        # works on minimal images (e.g. bare LaTeX) that ship without python3.
+        # On images that already have python3 in PATH the prepended directory
+        # either doesn't exist (harmless) or provides a compatible python3.12.
+        Action(
+            name="bash",
+            arguments={
+                "command": (
+                    "export PATH=/tmp/python3_pkg/usr/bin:$PATH && "
+                    "export LD_LIBRARY_PATH=/tmp/python3_pkg/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH && "
+                    "bash /tmp/solution/solve.sh 2>&1"
+                ),
+                "timeout": 600,
+            },
+        ),
         _FINAL,
     ],
 }
@@ -55,22 +74,13 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> "Benchmark":
-    """Return a TerminalBenchBenchmark scoped to the debug tasks.
+def get_debug_benchmark() -> TerminalBenchBenchmarkConfig:
+    """Return a ``TerminalBenchBenchmarkConfig`` scoped to the debug tasks.
 
-    The harness will call benchmark.install() and benchmark.setup() on the
-    returned instance, iterate benchmark.get_task_configs() to discover tasks,
-    and call benchmark.close() at the end to free resources.
+    Pure factory — the harness owns ``config.install()`` and ``config.make(infra)``.
+    Debug tasks run in ``oracle_mode`` so reset() uploads the gold solution.
     """
-    container_backend = LocalContainerBackend()
-    bench = TerminalBenchBenchmark(
-        container_backend=container_backend,
-        task_ids=list(_TASK_ACTIONS),
-        oracle_mode=True,
-    )
-    bench.install()  # Ensure dataset is downloaded and available
-    bench.setup()  # Load dataset and populate task metadata
-    return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+    return TerminalBenchBenchmarkConfig(oracle_mode=True).subset_from_list(list(_TASK_ACTIONS))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

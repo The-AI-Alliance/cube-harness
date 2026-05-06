@@ -7,6 +7,7 @@ step) use MagicMock so the test suite stays fast.
 
 from unittest.mock import MagicMock
 
+import pytest
 from cube.core import Action, ActionSchema, Observation
 
 from cube_harness.agents.genny import (
@@ -342,6 +343,24 @@ class TestWindowedHistory:
         assert all(m.get("role") != "tool" for m in flat)
         assert flat[0]["content"] == "current_axtree"
 
+    def test_all_tool_obs_rewrapped_as_user(self) -> None:
+        """SWEBench-style: obs group is entirely tool messages — must be re-wrapped as user."""
+        agent = _make_agent(render_last_n_obs=2)
+        agent.goal = [{"role": "user", "content": "goal"}]
+        # Step 1: bash output (all tool messages, no trailing user message)
+        agent.history.append([{"role": "tool", "content": "total 84\ndrwxr-xr-x ...", "tool_call_id": "c1"}])
+        agent.history.append([{"role": "assistant", "content": "I ran ls", "tool_calls": [{"id": "c1"}]}])
+        # Step 2: another bash output
+        agent.history.append([{"role": "tool", "content": "src/\ntests/\n", "tool_call_id": "c2"}])
+        flat = agent._windowed_history()
+        # Both tool groups re-wrapped as user messages; no raw tool role in output
+        assert all(m.get("role") != "tool" for m in flat)
+        assert len(flat) == 2
+        assert flat[0]["role"] == "user"
+        assert "total 84" in flat[0]["content"]
+        assert flat[1]["role"] == "user"
+        assert "src/" in flat[1]["content"]
+
 
 class TestChooseContext:
     def test_always_starts_with_system(self) -> None:
@@ -573,3 +592,93 @@ class TestStep:
         agent.llm = MagicMock(return_value=_mock_llm_response(""))
         result = agent.step(Observation.from_text("goal text"))
         assert result.thoughts is None
+
+
+# ---------------------------------------------------------------------------
+# Hint / clarification resolution
+# ---------------------------------------------------------------------------
+
+
+def _llm_config() -> LLMConfig:
+    return LLMConfig(model_name="test")
+
+
+class TestHintResolution:
+    def test_task_hints_takes_precedence_over_hint(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), hint="general", task_hints={"t1": "specific"})
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        assert agent._task_hint == "specific"
+
+    def test_falls_back_to_hint_when_no_task_id_match(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), hint="general", task_hints={"other": "x"})
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        assert agent._task_hint == "general"
+
+    def test_empty_when_no_hint_and_no_match(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), task_hints={"other": "x"})
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        assert agent._task_hint == ""
+
+    def test_general_hint_applied_when_task_id_none(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), hint="fallback hint")
+        agent = Genny(config=config, action_schemas=[], task_id=None)
+        assert agent._task_hint == "fallback hint"
+
+    def test_task_hints_not_applied_when_task_id_none(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), hint="general", task_hints={"t1": "specific"})
+        agent = Genny(config=config, action_schemas=[], task_id=None)
+        assert agent._task_hint == "general"
+
+    def test_task_clarification_resolved_by_task_id(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), task_clarification={"t1": "answer format: numeric"})
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        assert agent._task_clarification == "answer format: numeric"
+
+    def test_task_clarification_empty_when_no_match(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), task_clarification={"other": "x"})
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        assert agent._task_clarification == ""
+
+    def test_task_clarification_empty_when_task_id_none(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), task_clarification={"t1": "x"})
+        agent = Genny(config=config, action_schemas=[], task_id=None)
+        assert agent._task_clarification == ""
+
+    def test_hint_injected_into_base_prompt(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), hint="use keyboard_type_into for dropdowns")
+        agent = Genny(config=config, action_schemas=[], task_id=None)
+        agent.goal = [{"role": "user", "content": "do the task"}]
+        messages = agent._build_base_prompt()
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        assert any("use keyboard_type_into for dropdowns" in c for c in contents)
+
+    def test_clarification_injected_into_base_prompt(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), task_clarification={"t1": "answer must be numeric"})
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        agent.goal = [{"role": "user", "content": "do the task"}]
+        messages = agent._build_base_prompt()
+        contents = [m.get("content", "") for m in messages if isinstance(m, dict)]
+        assert any("answer must be numeric" in c for c in contents)
+
+    def test_no_hint_messages_when_both_empty(self) -> None:
+        config = GennyConfig(llm_config=_llm_config())
+        agent = Genny(config=config, action_schemas=[], task_id="t1")
+        agent.goal = [{"role": "user", "content": "do the task"}]
+        messages = agent._build_base_prompt()
+        # No "Task Hint" or "Additional task details" sections
+        contents = " ".join(m.get("content", "") for m in messages if isinstance(m, dict))
+        assert "Task Hint" not in contents
+        assert "Additional task details" not in contents
+
+    def test_make_wires_task_id(self) -> None:
+        config = GennyConfig(llm_config=_llm_config(), task_hints={"t1": "my hint"})
+        agent = config.make(task_id="t1")
+        assert agent._task_hint == "my hint"
+
+    def test_none_task_id_logs_debug_when_hints_configured(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        config = GennyConfig(llm_config=_llm_config(), task_hints={"t1": "x"})
+        with caplog.at_level(logging.DEBUG, logger="cube_harness.agents.genny"):
+            Genny(config=config, action_schemas=[], task_id=None)
+        assert any("task_id is None" in r.message for r in caplog.records)

@@ -3,24 +3,21 @@ from typing import Any
 
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import ActionSchema, Content, Observation
-from cube.task import Task, TaskConfig, TaskMetadata
+from cube.core import Content, Observation
+from cube.task import Task, TaskConfig, TaskMetadata  # noqa: F401 — TaskMetadata kept for typing
 from cube.tools.browser import BrowserTool
 from PIL import Image
 
-logger = logging.getLogger(__name__)
 
-_SUPPORTED_ACTION_NAMES = frozenset(
-    {
-        "browser_press_key",
-        "browser_type",
-        "browser_click",
-        "browser_drag",
-        "browser_hover",
-        "browser_select_option",
-        "browser_mouse_click_xy",
-    }
-)
+class MiniWobTaskMetadata(TaskMetadata):
+    """TaskMetadata subclass for MiniWob++ tasks.
+    Adds cube-specific public fields that are safe to ship in task_metadata.json.
+    """
+
+    nondeterministic: bool = False
+
+
+logger = logging.getLogger(__name__)
 
 
 class MiniWobTask(Task):
@@ -45,18 +42,13 @@ class MiniWobTask(Task):
         obs = Observation.from_text(goal) + self.obs_postprocess(self.tool.page_obs())
         return obs, {**info, "task_id": self.id, "task_url": self.url, "goal": goal}
 
-    def evaluate(self, obs: Observation) -> tuple[float, dict[str, Any]]:
+    def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
         result = self.tool.evaluate_js("""() => {
 return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GLOBAL, WOB_EPISODE_ID, WOB_TASK_READY];}""")
         return _parse_validation_result(result)
 
-    def finished(self, obs: Observation) -> bool:
+    def finished(self, obs: Observation | None = None) -> bool:
         return self.tool.evaluate_js("() => {return WOB_DONE_GLOBAL;}")
-
-    def filter_actions(self, actions: list[ActionSchema]) -> list[ActionSchema]:
-        filtered = [a for a in actions if a.name in _SUPPORTED_ACTION_NAMES]
-        logger.info(f"Chosen {len(filtered)} out of {len(actions)} actions for MiniWob task.")
-        return filtered
 
     def obs_postprocess(self, obs: Observation) -> Observation:
         contents = []
@@ -70,7 +62,7 @@ return [WOB_REWARD_GLOBAL, WOB_RAW_REWARD_GLOBAL, WOB_REWARD_REASON, WOB_DONE_GL
         return obs
 
 
-class MiniWobTaskConfig(TaskConfig):
+class MiniWobTaskConfig(TaskConfig[MiniWobTaskMetadata]):
     base_url: str = "http://localhost:8000/miniwob"
     remove_human_display: bool = True
     episode_max_time: int = 1000000
@@ -80,14 +72,10 @@ class MiniWobTaskConfig(TaskConfig):
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
     ) -> MiniWobTask:
-        from miniwob_cube.benchmark import MiniWobBenchmark
-        # import here to avoid circular import (benchmark imports task)
-
         _ = runtime_context, container_backend
-        task_metadata: TaskMetadata = MiniWobBenchmark.task_metadata[self.task_id]
         assert self.tool_config is not None, "tool_config must be set"
         return MiniWobTask(
-            metadata=task_metadata,
+            metadata=self.metadata,
             tool_config=self.tool_config,
             base_url=self.base_url,
             remove_human_display=self.remove_human_display,

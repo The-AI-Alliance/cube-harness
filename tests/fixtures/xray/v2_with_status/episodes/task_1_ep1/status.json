@@ -1,0 +1,15 @@
+{
+  "status": "MAX_STEPS_REACHED",
+  "task_id": "task_1",
+  "episode_id": 1,
+  "started_at": 1020.0,
+  "ended_at": 1080.0,
+  "last_heartbeat_at": 1079.0,
+  "current_step": 50,
+  "reward": 0.0,
+  "had_step_errors": false,
+  "error_type": null,
+  "error_message": null,
+  "retry_count": 1,
+  "extra": {}
+}

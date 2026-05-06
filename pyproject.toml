@@ -11,11 +11,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc4",
+    "cube-standard>=0.1.0rc8",
     "cube-browser-playwright>=0.2.0",  # added back temporarily for browsergym.py, should be removed once browsergym.py is moved to cube-browser-tool package
     "pydantic~=2.0",
     "litellm~=1.80.8",
-    "playwright==1.44",
     "Pillow~=11.0",
     "beautifulsoup4~=4.14",
     "numpy~=2.3.5",
@@ -29,33 +28,16 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.39.1",
     "browsergym-core>=0.14.3",
     "mcp[cli]>=1.26",
+    "msgpack>=1.0.0",
+    "zstandard>=0.20.0",
+    "docker>=7.1.0",
 ]
 
 [project.optional-dependencies]
-# WorkArena benchmark dependencies
-workarena = [
-    "workarena-cube",
-]
-# Terminal-Bench cube dependencies
-terminalbench = [
-    "terminalbench-cube",
-]
-# Miniwob cube dependencies
-miniwob = [
-    "miniwob-cube",
-]
-# WebArena recipe dependency
-webarena = [
-    "webarena-verified-cube",
-]
 # XRay trajectory viewer
 analyze = [
     "gradio~=5.49",
-]
-# SWE-bench benchmarks
-swebench = [
-    "swebench-verified-cube",
-    "swebench-live-cube",
+    "pandas~=2.0",
 ]
 
 [build-system]
@@ -65,13 +47,6 @@ build-backend = "uv_build"
 [tool.uv]
 constraint-dependencies = ["pyasn1>=0.6.2", "cryptography>=46.0.5", "protobuf>=6.33.5"]
 
-[tool.uv.sources]
-swebench-verified-cube = { path = "cubes/swebench-verified-cube", editable = true }
-swebench-live-cube = { path = "cubes/swebench-live-cube", editable = true }
-terminalbench-cube = { path = "cubes/terminalbench-cube", editable = true }
-miniwob-cube = { path = "cubes/miniwob", editable = true }
-webarena-verified-cube = { path = "cubes/webarena-verified", editable = true }
-workarena-cube = { path = "cubes/workarena", editable = true }
 
 [tool.ruff]
 fix = true
@@ -87,9 +62,13 @@ line-ending = "auto"
 [tool.ruff.lint]
 extend-select = ["I"] # sort imports
 
+[tool.ruff.lint.per-file-ignores]
+"meta_agent/recipes/*.py" = ["E402"]
+
 [project.scripts]
 ch-mcp-server = "cube_harness.mcp.server:main"
 ch-xray = "cube_harness.analyze.xray:main"
+ch-trace = "cube_harness.analyze.trace:main"
 
 [dependency-groups]
 dev = [
@@ -98,12 +77,14 @@ dev = [
     "pytest-cov>=6.0",
     "pytest-xdist>=3.8.0",
     "pytest-asyncio>=1.3.0",
+    "pytest-playwright>=0.7.2",
 ]
 
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')"
+    "serial: mark test to be run sequantially (deselect with '-m \"not serial\"')",
+    "integration: requires a live browser (headless Chromium via Playwright)"
 ]
 
 [tool.setuptools.packages.find]

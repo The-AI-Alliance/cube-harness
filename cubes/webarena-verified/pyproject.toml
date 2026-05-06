@@ -4,18 +4,21 @@ version = "1.0.0"
 description = "WebArena-Verified benchmark cube — 812 verified web automation tasks"
 requires-python = ">=3.12"
 dependencies = [
-    "cube-standard>=0.1.0rc4",
+    "cube-standard>=0.1.0rc8",
     "cube-browser-tool>=0.2.0",
     "webarena-verified",
     "Pillow",
 ]
 
 [project.entry-points."cube.benchmarks"]
-webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmark"
+webarena-verified-cube = "webarena_verified_cube.benchmark:WebArenaVerifiedBenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
+
+[tool.uv-build]
+include = ["src/webarena_verified_cube/task_metadata.json"]
 
 [tool.ruff]
 fix = true

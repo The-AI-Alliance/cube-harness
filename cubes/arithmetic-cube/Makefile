@@ -1,8 +1,12 @@
-.PHONY: test install
+.PHONY: install debug test
 
-test:
-	uv run python -m arithmetic_cube.debug
 
 install:
 	uv sync --all-extras
-	pip install -e .
+	uv pip install -e .
+
+debug:
+	uv run python -m arithmetic_cube.debug
+
+test:
+	uv run cube test arithmetic-cube

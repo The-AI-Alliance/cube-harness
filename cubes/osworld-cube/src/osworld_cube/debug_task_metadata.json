@@ -1,0 +1,38 @@
+[
+  {
+    "id": "simple-create-file",
+    "split": "test",
+    "abstract_description": "Create a file on the Desktop.",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "domain": "os",
+    "test_sets": [
+      "debug"
+    ],
+    "instruction": "Create a file called 'hello.txt' on the Desktop with the content 'Hello World'.",
+    "snapshot": "init_state",
+    "os_type": "ubuntu",
+    "related_apps": [
+      "os"
+    ],
+    "_type": "osworld_cube.task.OSWorldTaskMetadata"
+  },
+  {
+    "id": "simple-make-directory",
+    "split": "test",
+    "abstract_description": "Create a folder on the Desktop.",
+    "recommended_max_steps": null,
+    "container_config": null,
+    "domain": "os",
+    "test_sets": [
+      "debug"
+    ],
+    "instruction": "Create a folder called 'my_folder' on the Desktop.",
+    "snapshot": "init_state",
+    "os_type": "ubuntu",
+    "related_apps": [
+      "os"
+    ],
+    "_type": "osworld_cube.task.OSWorldTaskMetadata"
+  }
+]

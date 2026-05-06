@@ -26,7 +26,7 @@ def trajectories_to_df(trajectories: list[Trajectory]) -> pd.DataFrame | None:
         record: dict[str, Any] = {"trajectory_id": traj.id}
         record.update(traj.metadata)
 
-        if traj.steps:
+        if traj.steps or traj.summary_stats:
             stats = compute_trajectory_stats(traj)
             record["cum_reward"] = stats["final_reward"]
             record["n_steps"] = stats["n_env_steps"]
@@ -35,12 +35,16 @@ def trajectories_to_df(trajectories: list[Trajectory]) -> pd.DataFrame | None:
             record["prompt_tokens"] = stats["prompt_tokens"]
             record["completion_tokens"] = stats["completion_tokens"]
 
-            last_env = None
-            for step in reversed(traj.steps):
-                if isinstance(step.output, EnvironmentOutput):
-                    last_env = step.output
-                    break
-            record["done"] = last_env.done if last_env else False
+            if traj.steps:
+                last_env = None
+                for step in reversed(traj.steps):
+                    if isinstance(step.output, EnvironmentOutput):
+                        last_env = step.output
+                        break
+                record["done"] = last_env.done if last_env else False
+            else:
+                reward = stats.get("final_reward", 0.0)
+                record["done"] = traj.reward_info.get("done", reward > 0)
         else:
             record["cum_reward"] = np.nan
             record["n_steps"] = np.nan
@@ -205,7 +209,7 @@ def global_report(
 
 def map_err_key(err_msg: str | None) -> str | None:
     if err_msg is None:
-        return err_msg
+        return None
     err_msg = err_msg[: err_msg.find("=== logs ===")] if "=== logs ===" in err_msg else err_msg
     err_msg = err_msg.rstrip()
     regex_replacements = [
@@ -220,7 +224,9 @@ def map_err_key(err_msg: str | None) -> str | None:
 def error_report(df: pd.DataFrame, max_stack_trace: int = 10) -> str:
     if "err_key" not in df.columns:
         df = df.copy()
-        df["err_key"] = df["err_msg"].map(map_err_key)
+        df["err_key"] = None
+        err_mask = df["err_msg"].notnull()
+        df.loc[err_mask, "err_key"] = df.loc[err_mask, "err_msg"].map(map_err_key)
 
     err_df = df[df["err_key"].notnull()]
     if err_df.empty:
@@ -257,25 +263,54 @@ def error_report(df: pd.DataFrame, max_stack_trace: int = 10) -> str:
     return "\n".join(report)
 
 
-def format_constants_and_variables(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    constants, variable_keys, _ = get_constants_and_variables(df)
+def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict[str, Any]:
+    """Recursively flatten a nested dictionary using dot-separated keys."""
+    items: list[tuple[str, Any]] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(_flatten_dict(v, new_key, sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def agent_configs_to_df(agents: list[tuple[str, dict]]) -> pd.DataFrame | None:
+    """Build a DataFrame with one row per agent from (agent_name, config_dict) pairs.
+
+    Config dicts are recursively flattened so nested keys become dot-separated columns,
+    e.g. ``llm_config.model_name``.
+    """
+    if not agents:
+        return None
+    rows = [{"agent_name": name, **_flatten_dict(cfg)} for name, cfg in agents]
+    return pd.DataFrame(rows)
+
+
+def format_agent_comparison(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split an agent config DataFrame into shared parameters and varying parameters.
+
+    ``df`` must have an ``agent_name`` column plus flattened config parameter columns,
+    as produced by :func:`agent_configs_to_df`.
+
+    Returns:
+        const_df: parameters that are identical across all agents (columns: parameter, value).
+        var_df: parameters that differ, pivoted so each agent is its own column
+                (columns: parameter, <agent_name>, ...).
+    """
+    param_cols = [c for c in df.columns if c != "agent_name"]
+    constants, variable_keys, _ = get_constants_and_variables(df[param_cols])
 
     const_records = [{"parameter": k, "value": str(v)} for k, v in constants.items()]
     const_df = pd.DataFrame(const_records) if const_records else pd.DataFrame(columns=["parameter", "value"])
 
-    var_records: list[dict[str, Any]] = []
-    for var in variable_keys:
-        try:
-            nuniq = df[var].nunique(dropna=False)
-        except TypeError:
-            nuniq = 0
-        unique_vals = df[var].value_counts().head(3)
-        sample = ", ".join(f"{v} ({c}x)" for v, c in unique_vals.items())
-        var_records.append({"parameter": var, "n_unique": nuniq, "sample_values": sample})
-    var_df = (
-        pd.DataFrame(var_records) if var_records else pd.DataFrame(columns=["parameter", "n_unique", "sample_values"])
-    )
+    if not variable_keys or "agent_name" not in df.columns:
+        return const_df, pd.DataFrame(columns=["parameter"])
 
+    var_records = [
+        {"parameter": var, **{row["agent_name"]: str(row[var]) for _, row in df.iterrows()}} for var in variable_keys
+    ]
+    var_df = pd.DataFrame(var_records) if var_records else pd.DataFrame(columns=["parameter"])
     return const_df, var_df
 
 

@@ -12,36 +12,26 @@ from cube_harness.episode import Episode
 class TestCubeEpisode:
     """Tests for Episode with the cube path (task_config=...)."""
 
-    def test_episode_requires_task_config_or_env_config(self, tmp_dir, mock_agent_config):
-        """Episode raises ValueError when neither task_config nor env_config is provided."""
-        with pytest.raises(ValueError, match="Provide either task_config"):
+    def test_episode_requires_task_config(self, tmp_dir, mock_agent_config):
+        """Episode raises ValueError when task_config is not provided."""
+        with pytest.raises((ValueError, TypeError)):
             Episode(id=0, output_dir=tmp_dir, agent_config=mock_agent_config)
 
-    def test_episode_rejects_both_task_config_and_env_config(
-        self, tmp_dir, mock_agent_config, mock_cube_task_config, mock_env_config
-    ):
-        """Episode raises ValueError when both task_config and env_config are provided."""
-        with pytest.raises(ValueError, match="Provide only one"):
-            Episode(
-                id=0,
-                output_dir=tmp_dir,
-                agent_config=mock_agent_config,
-                task_config=mock_cube_task_config,
-                env_config=mock_env_config,
-            )
-
     def test_episode_accepts_task_config(self, tmp_dir, mock_agent_config, mock_cube_task_config):
-        """Episode created with task_config= stores it correctly; tool_config is None."""
+        """Episode created with task_config= stores it correctly."""
         episode = Episode(
             id=0,
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="cube_test",
+            max_steps=5,
+            storage=None,
+            runtime_context=None,
+            container_backend=None,
         )
 
         assert episode.config.task_config == mock_cube_task_config
-        assert episode.config.tool_config is None
-        assert episode.config.task_id == mock_cube_task_config.task_id
 
     def test_episode_run_no_deprecation_warning(self, tmp_dir, mock_agent_config, mock_cube_task_config):
         """Episode.run() uses the cube path: no DeprecationWarning, trajectory is correct.
@@ -57,6 +47,11 @@ class TestCubeEpisode:
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
+            exp_name="cube_test",
+            max_steps=5,
+            storage=None,
+            runtime_context=None,
+            container_backend=None,
         )
 
         with warnings.catch_warnings():
@@ -78,6 +73,8 @@ class TestCubeEpisode:
         assert final_env_step.done is True
         assert final_env_step.reward == 1.0
 
+        assert "profiling" in trajectory.reward_info
+        trajectory.reward_info.pop("profiling")  # ignore profiling info for this test
         assert trajectory.reward_info == {"reward": 1.0, "done": True, "success": True}
 
     def test_episode_load_from_config_round_trip(self, tmp_dir, mock_agent_config, mock_cube_task_config):
@@ -88,26 +85,14 @@ class TestCubeEpisode:
             agent_config=mock_agent_config,
             task_config=mock_cube_task_config,
             exp_name="cube_test",
+            max_steps=5,
+            storage=None,
+            runtime_context=None,
+            container_backend=None,
         )
         episode.storage.save_episode_config(episode.config)
 
-        config_path = tmp_dir / f"episode_0_task_{mock_cube_task_config.task_id}.json"
+        config_path = tmp_dir / "episodes" / f"{mock_cube_task_config.task_id}_ep0" / "episode_config.json"
         reloaded = Episode.load_episode_from_config(config_path)  # no benchmark arg
 
         assert reloaded.config == episode.config
-
-    def test_episode_load_from_config_raises_for_legacy_without_benchmark(
-        self, tmp_dir, mock_agent_config, mock_env_config
-    ):
-        """load_episode_from_config raises ValueError for a legacy config when no benchmark is passed."""
-        episode = Episode(
-            id=0,
-            output_dir=tmp_dir,
-            agent_config=mock_agent_config,
-            env_config=mock_env_config,
-        )
-        episode.storage.save_episode_config(episode.config)
-
-        config_path = tmp_dir / f"episode_0_task_{mock_env_config.task.id}.json"
-        with pytest.raises(ValueError, match="benchmark must be a cube_harness.legacy.Benchmark instance"):
-            Episode.load_episode_from_config(config_path)  # no benchmark arg

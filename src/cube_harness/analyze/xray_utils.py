@@ -7,17 +7,27 @@ This makes them independently testable without any UI framework.
 import datetime
 import html as html_lib
 import json
+import logging
+import os
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
+from cube.benchmark import BenchmarkConfig
 from cube.core import EnvironmentOutput
 from PIL import Image
 from pydantic import BaseModel
 
+from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
+from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
+from cube_harness.episode_status import TERMINAL_STATUSES as _EPISODE_TERMINAL_STATUSES
+from cube_harness.exp_runner import DEFAULT_CANCEL_GRACE_S, DEFAULT_STEP_TIMEOUT_S
 from cube_harness.llm import LLMCall
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
@@ -44,23 +54,134 @@ def format_duration(seconds: float) -> str:
 
 
 def trajectory_status(traj: Trajectory) -> str:
-    """Return status string for a trajectory: 'running', 'success', 'error', or 'completed'."""
+    """Return a lifecycle status string for a trajectory.
+
+    Reads ``_episode_status`` injected by :meth:`FileStorage._maybe_inject_episode_status`
+    when a ``status.json`` file exists alongside the trajectory (post-PR#315 experiments).
+    Falls back to :func:`_infer_status_legacy` for older experiments that pre-date the
+    episode-status RFC.
+
+    Values (canonical set — driven by status.json):
+      'queued'         — QUEUED: claimed but not yet started
+      'running'        — RUNNING: worker actively executing
+      'success'        — COMPLETED with reward > 0
+      'fail'           — COMPLETED with reward = 0
+      'max_steps'      — MAX_STEPS_REACHED: step budget exhausted
+      'failed'         — FAILED: worker crashed / abnormal termination
+      'stale'          — STALE: heartbeat timeout, dead worker
+      'cancelled'      — CANCELLED: deliberately stopped
+
+    Legacy values (heuristic fallback — no status.json):
+      'system_error'   — crashed before trajectory was written (legacy heuristic)
+    """
+    raw = traj.metadata.get("_episode_status")
+    if raw is not None:
+        return _map_episode_status(raw, traj)
+    return _infer_status_legacy(traj)
+
+
+_RAW_STATUS_MAP: dict[str, str] = {
+    "QUEUED": "queued",
+    "RUNNING": "running",
+    "COMPLETED": "success",  # reward not available here; folds to ✓ either way
+    "MAX_STEPS_REACHED": "max_steps",
+    "FAILED": "failed",
+    "STALE": "stale",
+    "CANCELLED": "cancelled",
+}
+
+
+def _map_episode_status(raw: str, traj: Trajectory) -> str:
+    """Map a raw Status string from status.json to an xray display status."""
+    if raw == "COMPLETED":
+        return "success" if (traj.reward_info and traj.reward_info.get("reward", 0) > 0) else "fail"
+    mapped = _RAW_STATUS_MAP.get(raw)
+    return mapped if mapped is not None else _infer_status_legacy(traj)
+
+
+def _infer_status_legacy(traj: Trajectory) -> str:
+    # DEPRECATED: remove once status.json is guaranteed present for all loaded experiments.
+    # Used only when traj.metadata has no "_episode_status" key (pre-PR#315 experiments).
+    if traj.metadata.get("_missing"):
+        return "system_error" if traj.metadata.get("_failure_text") else "queued"
     if traj.end_time is None:
-        return "running"
+        return "system_error" if traj.metadata.get("_failure_text") else "running"
     if traj.reward_info and traj.reward_info.get("reward", 0) > 0:
         return "success"
-    for step in traj.steps:
-        if hasattr(step.output, "error") and step.output.error is not None:
-            return "error"
-    return "completed"
+    return "fail"
 
 
-_STATUS_EMOJI: dict[str, str] = {
-    "running": "⏳",
-    "success": "✅",
-    "error": "❌",
-    "completed": "⬜",
+# Statuses that count as terminal outcomes for reward/step statistics.
+TERMINAL_OUTCOME_STATUSES: frozenset[str] = frozenset({"success", "fail", "max_steps"})
+
+# Statuses that represent in-flight work (not yet terminal).
+IN_FLIGHT_STATUSES: frozenset[str] = frozenset({"queued", "running"})
+
+# All statuses that are terminal (episode will not run again).
+TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {"success", "fail", "max_steps", "failed", "stale", "cancelled", "system_error"}
+)
+
+_STATUS_HTML: dict[str, str] = {
+    # Canonical statuses (from status.json)
+    "queued": "<span title='Queued — not yet started'>🕐</span>",
+    "running": "<span title='Running'>▶️</span>",
+    "success": "<span title='Completed — reward > 0'>🟢</span>",
+    "fail": "<span title='Completed — no reward'>⚫</span>",
+    "max_steps": "<span title='Max steps reached — step budget exhausted'>🎬</span>",
+    "failed": "<span title='Failed — worker crashed'>⛔</span>",
+    "stale": "<span title='Stale — heartbeat lost, dead worker'>👻</span>",
+    "cancelled": "<span title='Cancelled'>🚫</span>",
+    # Legacy heuristic (no status.json — pre-PR#315 experiments)
+    "system_error": "<span title='System error — crashed (legacy inferred status)' style='color:#dc3545;font-weight:bold;font-size:14px'>✕</span>",
 }
+
+# Plain-text labels for the header bar and other non-HTML contexts.
+_STATUS_LABEL: dict[str, str] = {
+    "queued": "🕐 Queued",
+    "running": "▶️ Running",
+    "success": "🟢 Success",
+    "fail": "⚫ Completed (no reward)",
+    "max_steps": "🎬 Max steps reached",
+    "failed": "⛔ Failed",
+    "stale": "👻 Stale",
+    "cancelled": "🚫 Cancelled",
+    "system_error": "✕ System error (legacy)",
+}
+
+# Bare symbols for inline use (agent table status cell).
+# Terminal-outcome statuses collapsed to ✔ in the agent-level aggregate view.
+# success + fail + max_steps are all "ran to completion"; avg_reward captures the breakdown.
+_COMPLETED_AGGREGATE_HTML = "<span title='Terminal — success, fail, or max steps'>✅</span>"
+
+
+def _build_status_cell(statuses: list[str]) -> str:
+    """Build the agent-table status cell: ``(15✓ + 4▶️) / 19`` or ``15✓ / 15``.
+
+    All terminal-outcome statuses (success, fail, max_steps) collapse to ✓ so the
+    agent row stays readable. Per-status detail lives in the Trajectories tab.
+    Total always equals len(statuses). Parentheses only added when there are multiple parts.
+    """
+    n_terminal = sum(1 for s in statuses if s in TERMINAL_OUTCOME_STATUSES)
+    counts: dict[str, int] = {}
+    for s in statuses:
+        if s not in TERMINAL_OUTCOME_STATUSES:
+            counts[s] = counts.get(s, 0) + 1
+
+    order = ["running", "queued", "stale", "cancelled", "failed", "system_error"]
+    parts = []
+    if n_terminal:
+        parts.append(f"{n_terminal}{_COMPLETED_AGGREGATE_HTML}")
+    for key in order:
+        n = counts.get(key, 0)
+        if n:
+            parts.append(f"{n}{_STATUS_HTML.get(key, key)}")
+
+    total = len(statuses)
+    inner = " + ".join(parts)
+    if len(parts) > 1:
+        inner = f"({inner})"
+    return f"{inner} / {total}"
 
 
 def build_progress_html(
@@ -140,6 +261,8 @@ def _is_experiment_dir(dir_path: Path) -> bool:
     """Return True if dir_path is a valid (non-archived) experiment directory."""
     if not dir_path.is_dir() or dir_path.name.startswith("_"):
         return False
+    if (dir_path / "episodes").exists():
+        return True
     if (dir_path / "trajectories").exists():
         return True
     return any(
@@ -147,17 +270,17 @@ def _is_experiment_dir(dir_path: Path) -> bool:
     )
 
 
-def _count_trajectory_metadata_files(d: Path) -> int:
-    return len([f for f in d.glob("*.metadata.json") if ".archived_" not in f.name])
-
-
-def _n_trajectories_flat_then_legacy(exp_dir: Path) -> int:
-    n = _count_trajectory_metadata_files(exp_dir)
-    if n == 0:
-        traj_dir = exp_dir / "trajectories"
-        if traj_dir.exists():
-            n = _count_trajectory_metadata_files(traj_dir)
-    return n
+def _count_episodes(dir_path: Path) -> int:
+    episodes_dir = dir_path / "episodes"
+    if episodes_dir.exists():
+        return sum(1 for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name)
+    n = len([f for f in dir_path.glob("*.metadata.json") if ".archived_" not in f.name])
+    if n > 0:
+        return n
+    traj_dir = dir_path / "trajectories"
+    if traj_dir.exists():
+        return len([f for f in traj_dir.glob("*.metadata.json") if ".archived_" not in f.name])
+    return 0
 
 
 def get_directory_contents(results_dir: Path) -> list[str]:
@@ -176,9 +299,7 @@ def get_directory_contents(results_dir: Path) -> list[str]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = _n_trajectories_flat_then_legacy(dir_path)
-        if n_trajs == 0:
-            continue
+        n_trajs = _count_episodes(dir_path)
         exp_descriptions.append(f"{dir_path.name} ({n_trajs} trajectories)")
 
     return [sentinel] + sorted(exp_descriptions, reverse=True)
@@ -215,14 +336,253 @@ def _parse_exp_date(dir_path: Path) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def agent_name_from_config(agent_cfg: dict) -> str:
+    """Resolve `AgentConfig.agent_name` from a serialized agent_config dict.
+
+    `agent_name` is a `@property` on AgentConfig (not a Pydantic field), so it is
+    NOT present in the JSON dump. We re-instantiate the concrete subclass via
+    TypedBaseModel's `_type` dispatch and read the property. When the module is
+    unavailable locally (e.g. an experiment was produced on a branch that defines
+    a custom agent) we synthesize a name that follows the common
+    `<AgentName>-<model_name>` convention used by built-in agents — both so the
+    column stays informative and so multi-experiment loads remain
+    distinguishable when they only differ in model.
+    """
+    if not agent_cfg:
+        return ""
+    try:
+        return AgentConfig.model_validate(dict(agent_cfg)).agent_name
+    except Exception as exc:
+        logger.debug("Could not instantiate AgentConfig (%s); synthesizing fallback name", exc)
+        cls_name = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
+        # Drop the trailing "Config" so e.g. Genny2Config -> Genny2, matching the
+        # display convention of agent classes whose .agent_name we couldn't reach.
+        if cls_name.endswith("Config"):
+            cls_name = cls_name[: -len("Config")]
+        model = (agent_cfg.get("llm_config") or {}).get("model_name") or ""
+        if cls_name and model:
+            return f"{cls_name}-{model}".replace("/", "_")
+        return cls_name or model
+
+
+def benchmark_name_from_config(bench_cfg: dict) -> str:
+    """Resolve `BenchmarkConfig.benchmark_metadata.name` from a benchmark_config dict.
+
+    `benchmark_metadata` is a `ClassVar` on BenchmarkConfig subclasses (declared at
+    class definition time), so it is NOT serialized. We re-instantiate via `_type`
+    dispatch and read the class-level metadata. Falls back to the class short name
+    when the type can't be imported.
+    """
+    if not bench_cfg:
+        return ""
+    try:
+        return BenchmarkConfig.model_validate(dict(bench_cfg)).benchmark_metadata.name
+    except Exception as exc:
+        logger.debug("Could not instantiate BenchmarkConfig (%s); falling back to _type", exc)
+        return (bench_cfg.get("_type") or "").rsplit(".", 1)[-1]
+
+
+def parse_exp_config(exp_cfg: dict) -> dict[str, str]:
+    """Return {agent, model, benchmark} display strings from a parsed experiment_config dict.
+
+    Single source of truth for extracting human-readable agent/model/benchmark
+    identifiers from a serialized Experiment config. Used by both the experiments
+    selector table (xray_utils) and the XRay viewer state (xray.XRayState) so the
+    agent identifier shown in every UI surface comes from the same logic.
+
+    Accepts both the current (`benchmark_config`) and the pre-split (`benchmark`)
+    key names so historical experiment dirs still resolve a benchmark name.
+    """
+    agent_cfg = exp_cfg.get("agent_config") or {}
+    bench_cfg = exp_cfg.get("benchmark_config") or exp_cfg.get("benchmark") or {}
+    return {
+        "agent": agent_name_from_config(agent_cfg),
+        "model": (agent_cfg.get("llm_config") or {}).get("model_name") or "",
+        "benchmark": benchmark_name_from_config(bench_cfg),
+    }
+
+
+def _parse_experiment_config(exp_dir: Path) -> dict[str, str]:
+    """Return {agent, model, benchmark} from experiment_config.json.
+
+    Falls back to scanning the first episode.metadata.json for agent_name when
+    experiment_config.json is absent (e.g. synthetic test data).
+    """
+    config_path = exp_dir / "experiment_config.json"
+    info = {"agent": "", "model": "", "benchmark": ""}
+
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                cfg = json.load(f)
+            info = parse_exp_config(cfg)
+        except Exception as exc:
+            logger.debug("Failed to parse experiment_config.json at %s: %s", config_path, exc)
+
+    if not info["agent"]:
+        # Fallback: read agent_name from first episode metadata (legacy / synthetic data)
+        episodes_dir = exp_dir / "episodes"
+        if episodes_dir.exists():
+            for ep_dir in episodes_dir.iterdir():
+                meta = ep_dir / "episode.metadata.json"
+                if meta.exists():
+                    try:
+                        with open(meta) as f:
+                            data = json.load(f)
+                        agent = data.get("metadata", {}).get("agent_name", "")
+                        if agent:
+                            info["agent"] = agent
+                            break
+                    except Exception as exc:
+                        logger.debug("Failed to parse %s: %s", meta, exc)
+
+    return info
+
+
+GHOST_TIMEOUT = DEFAULT_STEP_TIMEOUT_S + DEFAULT_CANCEL_GRACE_S  # mirrors runner's kill threshold
+_XRAY_CACHE_FILENAME = ".xray_summary.json"
+
+
+def _promote_ghost_episodes(exp_dir: Path) -> None:
+    """Write STALE into status.json for RUNNING/QUEUED episodes whose heartbeat is dead.
+
+    Fixes experiments where the runner crashed without marking episodes terminal.
+    This lets the cache machinery treat the experiment as finished so it can be frozen.
+    """
+    episodes_dir = exp_dir / "episodes"
+    if not episodes_dir.exists():
+        return
+    now = time.time()
+    for ep_dir in episodes_dir.iterdir():
+        if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
+            continue
+        status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+        if status is None or status.status not in ("RUNNING", "QUEUED"):
+            continue
+        hb = status.last_heartbeat_at or status.started_at
+        if now - hb > GHOST_TIMEOUT:
+            status.status = "STALE"
+            if status.ended_at is None:
+                status.ended_at = hb
+            try:
+                status.write(ep_dir / STATUS_FILENAME)
+            except OSError:
+                pass  # best-effort: race with runner archiving the dir is harmless
+
+
+def _all_episodes_terminal(exp_dir: Path) -> bool:
+    """Return True when every non-archived episode has a terminal status.
+
+    Episodes with no status.json but an episode.metadata.json are treated as
+    terminal (pre-PR#315 legacy format — always completed by definition).
+    V1 experiments (no episodes/ dir) return True unconditionally.
+    """
+    episodes_dir = exp_dir / "episodes"
+    if not episodes_dir.exists():
+        return True  # V1 flat layout — always historical/done
+    for ep_dir in episodes_dir.iterdir():
+        if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
+            continue
+        status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+        if status is None:
+            # No status.json: terminal only if episode.metadata.json exists (legacy done)
+            if not (ep_dir / "episode.metadata.json").exists():
+                return False
+        elif status.status not in _EPISODE_TERMINAL_STATUSES:
+            return False
+    return True
+
+
+def _is_cache_valid(exp_dir: Path, cache_mtime: float) -> bool:
+    """Return False if episodes/ or any episode dir was modified after the cache was written.
+
+    Uses only stat() calls (no file reads). Catches:
+    - New episode dirs created (episodes/ dir mtime changes).
+    - Episode relaunched: runner archives old dir and creates new one → episodes/ mtime.
+    - Status.json written: EpisodeStatus.write() creates a .tmp sibling first, which
+      updates the episode dir mtime via the tmp-file creation step.
+    """
+    episodes_dir = exp_dir / "episodes"
+    if not episodes_dir.exists():
+        return True
+    if episodes_dir.stat().st_mtime > cache_mtime:
+        return False
+    for ep_dir in episodes_dir.iterdir():
+        if ep_dir.is_dir() and ".archived_" not in ep_dir.name:
+            if ep_dir.stat().st_mtime > cache_mtime:
+                return False
+    return True
+
+
+def _compute_exp_row(exp_dir: Path) -> dict[str, Any]:
+    """Compute display fields for one experiment by reading per-episode status.json files.
+
+    V2 (episodes/ dir): reads status.json per episode — O(N_episodes) JSON reads.
+    V1 (flat *.metadata.json): reads trajectory metadata per episode.
+    Returns: {date, agent, model, benchmark, status, avg_reward}.
+    """
+    cfg_info = _parse_experiment_config(exp_dir)
+    statuses: list[str] = []
+    rewards: list[float] = []
+
+    episodes_dir = exp_dir / "episodes"
+    if episodes_dir.exists():
+        for ep_dir in episodes_dir.iterdir():
+            if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
+                continue
+            status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+            if status is not None:
+                statuses.append(_RAW_STATUS_MAP.get(status.status, "system_error"))
+                if status.status in ("COMPLETED", "MAX_STEPS_REACHED") and status.reward is not None:
+                    rewards.append(float(status.reward))
+            elif (ep_dir / "episode.metadata.json").exists():
+                statuses.append("success")  # pre-status.json legacy episode
+            else:
+                statuses.append("queued")
+    else:
+        # V1: read flat *.metadata.json for status and reward
+        for search_dir in (exp_dir, exp_dir / "trajectories"):
+            if not search_dir.exists():
+                continue
+            for meta_file in search_dir.glob("*.metadata.json"):
+                if ".archived_" in meta_file.name:
+                    continue
+                try:
+                    with open(meta_file) as f:
+                        data = json.load(f)
+                    reward_info = data.get("reward_info") or {}
+                    reward = reward_info.get("reward")
+                    if data.get("end_time") is not None:
+                        statuses.append("success" if (reward or 0) > 0 else "fail")
+                        if reward is not None:
+                            rewards.append(float(reward))
+                    else:
+                        statuses.append("queued")
+                except Exception as exc:
+                    logger.debug("Failed to parse %s: %s", meta_file, exc)
+                    statuses.append("system_error")
+
+    status_html = _build_status_cell(statuses) if statuses else "—"
+    mean, stderr = _reward_mean_stderr(rewards)
+    avg_reward_str = f"{mean:.3f} ± {stderr:.3f}" if rewards else "—"
+
+    return {
+        "date": _parse_exp_date(exp_dir),
+        "agent": cfg_info["agent"],
+        "model": cfg_info["model"],
+        "benchmark": cfg_info["benchmark"],
+        "status": status_html,
+        "avg_reward": avg_reward_str,
+    }
+
+
 def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     """Return one row per experiment directory for the Experiments selector table.
 
-    Columns: selected (bool), experiment (str), date (str), n_trajs (int).
-    The date column contains "YYYY-MM-DD HH:MM" when a time is available.
-    Counts trajectories via ``*.metadata.json`` in the experiment dir (flat layout)
-    or under ``trajectories/`` (legacy), matching :func:`get_directory_contents`.
-    Sorted most-recent first (ISO datetime strings sort lexicographically).
+    Columns: selected, experiment, date, agent, model, benchmark, status, avg_reward.
+    Uses a per-experiment .xray_summary.json cache. Cache is written once all episodes
+    are terminal (including after ghost promotion) and invalidated via episode dir mtime.
+    Sorted most-recent first.
     """
     if not results_dir or not results_dir.exists():
         return []
@@ -231,17 +591,27 @@ def get_experiments_table_rows(results_dir: Path) -> list[dict[str, Any]]:
     for dir_path in results_dir.iterdir():
         if not _is_experiment_dir(dir_path):
             continue
-        n_trajs = _n_trajectories_flat_then_legacy(dir_path)
-        if n_trajs == 0:
-            continue
-        rows.append(
-            {
-                "selected": False,
-                "experiment": dir_path.name,
-                "date": _parse_exp_date(dir_path),
-                "n_trajs": n_trajs,
-            }
-        )
+        cache_path = dir_path / _XRAY_CACHE_FILENAME
+        if cache_path.exists():
+            try:
+                cache_mtime = cache_path.stat().st_mtime
+                if _is_cache_valid(dir_path, cache_mtime):
+                    with open(cache_path) as f:
+                        cached = json.load(f)
+                    rows.append({"selected": False, "experiment": dir_path.name, **cached})
+                    continue
+            except Exception as exc:
+                logger.debug("Cache read failed for %s: %s", cache_path, exc)
+        _promote_ghost_episodes(dir_path)
+        summary = _compute_exp_row(dir_path)
+        if _all_episodes_terminal(dir_path):
+            try:
+                tmp = cache_path.parent / (cache_path.name + ".tmp")
+                tmp.write_text(json.dumps(summary, indent=2))
+                os.replace(tmp, cache_path)
+            except Exception as exc:
+                logger.debug("Cache write failed for %s: %s", cache_path, exc)
+        rows.append({"selected": False, "experiment": dir_path.name, **summary})
     rows.sort(key=lambda r: r["date"], reverse=True)
     return rows
 
@@ -457,8 +827,18 @@ def _render_llm_call_html(llm_call: LLMCall) -> str:
         f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{config_json}</pre>"
         f"</details>\n"
     )
+    if llm_call.prompt.tools:
+        tools_json = html_lib.escape(json.dumps(llm_call.prompt.tools, indent=2))
+        n = len(llm_call.prompt.tools)
+        tools_html = (
+            f"<details><summary>🔧 <strong>tools</strong> ({n})</summary>"
+            f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0'>{tools_json}</pre>"
+            f"</details>\n"
+        )
+    else:
+        tools_html = ""
     messages = list(llm_call.prompt.messages) + [llm_call.output]
-    blocks: list[str] = [config_html]
+    blocks: list[str] = [config_html, tools_html]
 
     for i, msg in enumerate(messages):
         msg_dict = _msg_to_dict(msg)
@@ -741,9 +1121,24 @@ def get_step_logs_markdown(
 ) -> str:
     """Extract log information from a step and trajectory metadata.
 
-    Shows EnvironmentOutput.info entries (excluding 'error' and 'message') and trajectory metadata.
+    Shows failure stack trace prominently when present (_failure_text in metadata),
+    then EnvironmentOutput.info entries, then trajectory metadata.
+    For missing stubs, returns early after showing failure info.
     """
     parts = []
+
+    if traj:
+        failure_text = traj.metadata.get("_failure_text", "")
+        if failure_text:
+            parts.append(f"### ❌ System Error\n```\n{failure_text}\n```\n")
+        elif traj.metadata.get("_missing"):
+            parts.append(
+                "### ❌ Missing Trajectory\n\n"
+                "This task has no trajectory data. It may have crashed before any steps were recorded.\n"
+            )
+        # For missing stubs there are no steps, so return now
+        if traj.metadata.get("_missing"):
+            return "\n".join(parts)
 
     if isinstance(step, EnvironmentOutput) and step.info:
         log_entries = {k: v for k, v in step.info.items() if k not in ("error", "message")}
@@ -753,10 +1148,116 @@ def get_step_logs_markdown(
                 parts.append(f"**{k}**: `{v}`\n")
 
     if traj and traj.metadata:
-        meta_str = json.dumps(traj.metadata, indent=2)
-        parts.append(f"\n### Trajectory Metadata\n```json\n{meta_str}\n```\n")
+        # Exclude internal keys already displayed above
+        meta = {k: v for k, v in traj.metadata.items() if k not in ("_failure_text", "_missing")}
+        if meta:
+            meta_str = json.dumps(meta, indent=2)
+            parts.append(f"\n### Trajectory Metadata\n```json\n{meta_str}\n```\n")
 
     return "\n".join(parts) if parts else "No log information available."
+
+
+def get_logs_tab_markdown(traj: Trajectory | None, log_content: str) -> str:
+    """Render the Logs tab: episode log file content, with system error banner when present."""
+    if traj is None:
+        return "No trajectory selected."
+
+    parts = []
+
+    retry_count = traj.metadata.get("_retry_count", 0)
+    error_type = traj.metadata.get("_error_type")
+    error_message = traj.metadata.get("_error_message")
+    if retry_count or error_type or error_message:
+        detail_parts = []
+        if retry_count:
+            detail_parts.append(f"**Attempt:** {retry_count + 1} (retried {retry_count}×)")
+        if error_type:
+            detail_parts.append(f"**Error type:** `{error_type}`")
+        if error_message:
+            detail_parts.append(f"**Error message:** `{error_message}`")
+        parts.append("### Episode Status\n" + "\n\n".join(detail_parts) + "\n")
+
+    failure_text = traj.metadata.get("_failure_text", "")
+    if failure_text:
+        parts.append(f"### ❌ System Error\n```\n{failure_text}\n```\n")
+    elif traj.metadata.get("_missing"):
+        parts.append(
+            "### ❌ Missing Trajectory\n\n"
+            "This task has no trajectory data. It may have crashed before any steps were recorded.\n"
+        )
+
+    if log_content:
+        parts.append(f"```\n{log_content}\n```")
+    else:
+        parts.append("No episode log found.")
+
+    return "\n".join(parts)
+
+
+def load_retry_history(ep_dir: Path) -> list[dict[str, Any]]:
+    """Load error info from archived copies of an episode directory.
+
+    Archived dirs live at ``{ep_dir.parent}/{ep_dir.name}.archived_{timestamp}``.
+    Returns a list sorted by timestamp (oldest first), each entry containing:
+      timestamp, status, error_type, error_message, failure_text.
+    """
+    history: list[dict[str, Any]] = []
+    archived_prefix = f"{ep_dir.name}.archived_"
+    for candidate in ep_dir.parent.iterdir():
+        if not candidate.is_dir() or not candidate.name.startswith(archived_prefix):
+            continue
+        try:
+            ts = float(candidate.name[len(archived_prefix) :])
+        except ValueError:
+            ts = 0.0
+        entry: dict[str, Any] = {
+            "timestamp": ts,
+            "status": None,
+            "error_type": None,
+            "error_message": None,
+            "failure_text": None,
+        }
+        status_path = candidate / "status.json"
+        if status_path.exists():
+            try:
+                data = json.loads(status_path.read_text())
+                entry["status"] = data.get("status")
+                entry["error_type"] = data.get("error_type")
+                entry["error_message"] = data.get("error_message")
+            except Exception:
+                pass
+        failure_path = candidate / "failure.txt"
+        if failure_path.exists():
+            try:
+                entry["failure_text"] = failure_path.read_text()
+            except Exception:
+                pass
+        history.append(entry)
+    history.sort(key=lambda e: e["timestamp"])
+    return history
+
+
+def render_retry_history_md(history: list[dict[str, Any]], traj: Trajectory) -> str:
+    """Render retry history as markdown for the Retries tab."""
+    retry_count = traj.metadata.get("_retry_count", 0)
+    if not retry_count:
+        return "No retries for this trajectory."
+    if not history:
+        return f"This trajectory was retried {retry_count}× but no archived attempt data was found on disk."
+
+    parts: list[str] = [f"**{retry_count} retry attempt(s)** — showing oldest first.\n"]
+    for i, entry in enumerate(history, start=1):
+        status = entry["status"] or "unknown"
+        parts.append(f"---\n### Attempt {i} — `{status}`")
+        if entry["error_type"]:
+            parts.append(f"**Error type:** `{entry['error_type']}`")
+        if entry["error_message"]:
+            parts.append(f"**Error message:** {entry['error_message']}")
+        if entry["failure_text"]:
+            parts.append(f"**Stack trace:**\n```\n{entry['failure_text'].strip()}\n```")
+        if not entry["error_type"] and not entry["error_message"] and not entry["failure_text"]:
+            parts.append("*(No error detail recorded for this attempt.)*")
+    return "\n\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -792,6 +1293,8 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
     duration, prompt_tokens, completion_tokens, cached_tokens, cache_creation_tokens,
     cost, final_reward.
     """
+    if traj.summary_stats:
+        return traj.summary_stats
     n_env_steps = 0
     n_agent_steps = 0
     total_actions = 0
@@ -835,6 +1338,32 @@ def compute_trajectory_stats(traj: Trajectory) -> dict[str, Any]:
     }
 
 
+def _finished_rewards(trajectories: list[Trajectory]) -> list[float]:
+    """Return final rewards for trajectories that ran to completion.
+
+    Includes success, fail, and max_steps — all terminal outcomes where reward is meaningful.
+    """
+    return [
+        compute_trajectory_stats(t)["final_reward"]
+        for t in trajectories
+        if trajectory_status(t) in ("success", "fail", "max_steps")
+    ]
+
+
+def _reward_mean_stderr(rewards: list[float]) -> tuple[float, float]:
+    """Return (mean, sample_stderr) for a list of rewards using ddof=1."""
+    n = len(rewards)
+    if n == 0:
+        return 0.0, 0.0
+    mean = sum(rewards) / n
+    if n > 1:
+        var = sum((r - mean) ** 2 for r in rewards) / (n - 1)
+        stderr = (var / n) ** 0.5
+    else:
+        stderr = 0.0
+    return mean, stderr
+
+
 def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
     """Aggregate statistics across all trajectories and return as markdown."""
     if not trajectories:
@@ -843,7 +1372,10 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
     finished_rewards: list[float] = []
     finished_steps: list[int] = []
     finished_durations: list[float] = []
-    n_running = 0
+    n_in_flight = 0
+    n_max_steps = 0
+    n_stale = 0
+    n_cancelled = 0
     n_errored = 0
 
     total_prompt = 0
@@ -856,13 +1388,20 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         stats = compute_trajectory_stats(traj)
         status = trajectory_status(traj)
 
-        if status in ("success", "completed"):
+        if status in ("success", "fail"):
             finished_rewards.append(stats["final_reward"])
             finished_steps.append(stats["n_env_steps"])
-            finished_durations.append(stats["duration"])
-        elif status == "running":
-            n_running += 1
-        else:
+            if stats["duration"] is not None:
+                finished_durations.append(stats["duration"])
+        elif status in IN_FLIGHT_STATUSES:
+            n_in_flight += 1
+        elif status == "max_steps":
+            n_max_steps += 1
+        elif status == "stale":
+            n_stale += 1
+        elif status == "cancelled":
+            n_cancelled += 1
+        else:  # "failed" or legacy "system_error"
             n_errored += 1
 
         total_prompt += stats["prompt_tokens"]
@@ -872,18 +1411,23 @@ def compute_experiment_stats(trajectories: list[Trajectory]) -> str:
         total_cost += stats["cost"]
 
     n_finished = len(finished_rewards)
-    n_total = n_finished + n_running + n_errored
+    n_completed = n_finished + n_max_steps  # all terminal outcomes
+    n_total = n_completed + n_in_flight + n_stale + n_cancelled + n_errored
 
     stats_parts = [f"📊 **{n_total}** trajectories"]
-    if n_running > 0 or n_errored > 0:
-        parts = [f"✅ Finished: **{n_finished}**"]
-        if n_running > 0:
-            parts.append(f"⏳ Running: **{n_running}**")
-        if n_errored > 0:
-            parts.append(f"❌ Failed: **{n_errored}**")
-        stats_parts.append("│ " + " │ ".join(parts))
-    else:
-        stats_parts.append(f"│ ✅ All Finished: **{n_finished}**")
+    summary_parts = []
+    if n_completed > 0:
+        summary_parts.append(f"✓ Completed: **{n_completed}**")
+    if n_in_flight > 0:
+        summary_parts.append(f"▶️ Running: **{n_in_flight}**")
+    if n_stale > 0:
+        summary_parts.append(f"👻 Stale: **{n_stale}**")
+    if n_cancelled > 0:
+        summary_parts.append(f"🚫 Cancelled: **{n_cancelled}**")
+    if n_errored > 0:
+        summary_parts.append(f"⛔ Failed: **{n_errored}**")
+    if summary_parts:
+        stats_parts.append("│ " + " │ ".join(summary_parts))
 
     if n_finished > 0:
         avg_reward = sum(finished_rewards) / n_finished
@@ -935,8 +1479,10 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     """Build one row per unique agent for the top-level agent table.
 
     Groups trajectories by metadata.get('agent_name', 'unknown').
-    Columns: agent_name, n_tasks, n_trajs, avg_reward, total_cost
+    Columns: agent_name, avg_reward, status, total_cost
 
+    status — ``[count][symbol] + ... = total`` cell, e.g. ``15✓ + 4▶️ + 2🎬 = 21``.
+             success and fail both collapse to ✓ (avg_reward already captures the breakdown).
     total_cost shows "-" when no cost data is available (e.g. unloaded trajectory stubs).
     """
     groups: dict[str, list[Trajectory]] = {}
@@ -947,118 +1493,62 @@ def build_agent_table(trajectories: list[Trajectory]) -> list[dict[str, Any]]:
     rows = []
     for agent_key in sorted(groups.keys()):
         agent_trajs = groups[agent_key]
-        task_ids = {t.metadata.get("task_id", "unknown") for t in agent_trajs}
         all_stats = [compute_trajectory_stats(t) for t in agent_trajs]
-        rewards = [s["final_reward"] for s in all_stats]
+        statuses = [trajectory_status(t) for t in agent_trajs]
+        finished = _finished_rewards(agent_trajs)
         total_cost = sum(float(s["cost"]) for s in all_stats)
-        avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
+        mean, stderr = _reward_mean_stderr(finished)
         cost_str = f"${total_cost:.4f}" if total_cost > 0 else "-"
 
         rows.append(
             {
                 "agent_name": agent_key,
-                "n_tasks": len(task_ids),
-                "n_trajs": len(agent_trajs),
-                "avg_reward": round(avg_reward, 3),
+                "avg_reward": f"{mean:.3f} ± {stderr:.3f}",
+                "status": _build_status_cell(statuses),
                 "total_cost": cost_str,
             }
         )
     return rows
 
 
-def build_task_table(trajectories: list[Trajectory], agent_key: str) -> list[dict[str, Any]]:
-    """Build one row per unique task for a selected agent.
+def build_trajectory_table(trajectories: list[Trajectory], agent_key: str) -> list[dict[str, Any]]:
+    """Build one row per trajectory for a selected agent.
 
-    Mirrors seed table columns, showing averages across all seeds under each task.
     Filters trajectories to those matching agent_key.
-    Columns: task_id, n_seeds, avg_reward, avg_steps, avg_duration, avg_tokens, avg_cost
-
-    avg_duration is computed from Trajectory.start/end_time (available for metadata stubs).
-    avg_steps, avg_tokens, avg_cost show "-" when step data hasn't been loaded yet.
+    Displayed columns: status, task_id, [seed,] n_steps, duration, tokens, cost
+    The seed column is omitted when all trajectories have seed=None.
+    Hidden key _traj_id carries the full trajectory ID for selection.
+    Sorted by task_id then start_time within a task.
     """
     agent_trajs = [t for t in trajectories if t.metadata.get("agent_name", "unknown") == agent_key]
+    agent_trajs.sort(key=lambda t: (t.metadata.get("task_id", "unknown"), t.start_time is None, t.start_time or 0))
 
-    groups: dict[str, list[Trajectory]] = {}
+    include_seed = any(t.metadata.get("seed") is not None for t in agent_trajs)
+
+    rows = []
     for traj in agent_trajs:
-        task_id = traj.metadata.get("task_id", "unknown")
-        groups.setdefault(task_id, []).append(traj)
-
-    rows = []
-    for task_id in sorted(groups.keys()):
-        task_trajs = groups[task_id]
-        all_stats = [compute_trajectory_stats(t) for t in task_trajs]
-
-        rewards = [s["final_reward"] for s in all_stats]
-        avg_reward = sum(rewards) / len(rewards) if rewards else 0.0
-
-        durations = [
-            t.end_time - t.start_time for t in task_trajs if t.start_time is not None and t.end_time is not None
-        ]
-        avg_duration_str = format_duration(sum(durations) / len(durations)) if durations else "-"
-
-        n_steps_list = [s["n_env_steps"] for s in all_stats]
-        avg_steps = sum(n_steps_list) / len(n_steps_list) if n_steps_list else 0
-        avg_steps_str = f"{avg_steps:.1f}" if any(n > 0 for n in n_steps_list) else "-"
-
-        total_tokens_list = [int(s["prompt_tokens"]) + int(s["completion_tokens"]) for s in all_stats]
-        avg_tokens = sum(total_tokens_list) / len(total_tokens_list) if total_tokens_list else 0
-        avg_tokens_str = f"{avg_tokens:,.0f}" if avg_tokens > 0 else "-"
-
-        costs = [float(s["cost"]) for s in all_stats]
-        avg_cost = sum(costs) / len(costs) if costs else 0.0
-        avg_cost_str = f"${avg_cost:.4f}" if avg_cost > 0 else "-"
-
-        rows.append(
-            {
-                "task_id": task_id,
-                "n_seeds": len(task_trajs),
-                "avg_reward": round(avg_reward, 3),
-                "avg_steps": avg_steps_str,
-                "avg_duration": avg_duration_str,
-                "avg_tokens": avg_tokens_str,
-                "avg_cost": avg_cost_str,
-            }
-        )
-    return rows
-
-
-def build_seed_table(
-    trajectories: list[Trajectory],
-    agent_key: str,
-    task_id: str,
-) -> list[dict[str, Any]]:
-    """Build one row per trajectory (seed) for a selected agent + task.
-
-    Filters trajectories by agent_key and task_id.
-    Columns: status, traj_id, reward, n_steps, duration, tokens, cost
-    """
-    filtered = [
-        t
-        for t in trajectories
-        if t.metadata.get("agent_name", "unknown") == agent_key and t.metadata.get("task_id", "unknown") == task_id
-    ]
-
-    rows = []
-    for traj in sorted(filtered, key=lambda t: (t.start_time is None, t.start_time or 0)):
         stats = compute_trajectory_stats(traj)
+        task_id = traj.metadata.get("task_id", "unknown")
+        status = trajectory_status(traj)
+        retry_count = traj.metadata.get("_retry_count", 0)
+        retry_badge = f" <sup style='color:#888;font-size:9px'>×{retry_count}</sup>" if retry_count else ""
         duration_str = format_duration(stats["duration"]) if stats["duration"] is not None else "-"
         total_tokens = int(stats["prompt_tokens"]) + int(stats["completion_tokens"])
         tokens_str = f"{total_tokens:,}" if total_tokens > 0 else "-"
         cost_str = f"${float(stats['cost']):.4f}" if float(stats["cost"]) > 0 else "-"
-        n_steps = stats["n_env_steps"]
-        status = trajectory_status(traj)
+        row: dict[str, Any] = {
+            "_traj_id": traj.id,
+            "status": _STATUS_HTML[status] + retry_badge,
+            "task_id": html_lib.escape(task_id),
+        }
+        if include_seed:
+            row["seed"] = traj.metadata.get("seed")
+        row["n_steps"] = stats["n_env_steps"]
+        row["duration"] = duration_str
+        row["tokens"] = tokens_str
+        row["cost"] = cost_str
+        rows.append(row)
 
-        rows.append(
-            {
-                "status": _STATUS_EMOJI[status],
-                "traj_id": traj.id,
-                "reward": round(stats["final_reward"], 3),
-                "n_steps": n_steps,
-                "duration": duration_str,
-                "tokens": tokens_str,
-                "cost": cost_str,
-            }
-        )
     return rows
 
 

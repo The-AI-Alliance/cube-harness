@@ -51,6 +51,7 @@ Confirm adherence to the [cube-harness Constitution](/.claude/rules/constitution
 * [ ] Breaking API changes have RFC reference (Pillar I: Team Contract)
 * [ ] Uses standard integrations - LiteLLM, MCP, ADP (Pillar IV: Protocol Strategy)
 * [ ] New features work in single-process mode (Pillar III: Scalable Research)
+* [ ] If this PR changes a public contract, the corresponding `openspec/specs/` file is updated (or a change proposal exists in `openspec/changes/`)
 
 ## Additional Context
 Any additional context or information that might be helpful for reviewers:

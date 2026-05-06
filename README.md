@@ -8,7 +8,9 @@ Open source harness for building and evaluating AI agents using the [CUBE Standa
 
 > [!NOTE]
 > **cube-harness is in active development (alpha).** Interfaces may change. We welcome early adopters and contributors who want to shape the framework, not just use it.
-> See our [Roadmap](ROADMAP.md) and [Contributing Guide](CONTRIBUTING.md). Serious contributors can [apply here](https://forms.gle/JFiBi4ynfVLMghAH8).
+> See our [Roadmap](ROADMAP.md) and [Contributing Guide](CONTRIBUTING.md).
+>
+> **Have a benchmark to contribute?** [Fill out this short form](https://docs.google.com/forms/d/e/1FAIpQLSddMFyRXZJPpD0I2K27OEmIPUpj57w--u2NuMscrjNlkqy8rQ/viewform) — no commitment required. Want to go deeper? [Apply to join the core team](https://forms.gle/JFiBi4ynfVLMghAH8).
 
 <!-- [Published Documentation](https://the-ai-alliance.github.io/cube-harness/) -->
 
@@ -122,6 +124,16 @@ make help      # Show all commands
 make test      # Run tests
 make coverage  # Run tests with coverage report
 ```
+
+### Pre-commit hooks
+
+Install once after cloning to get ruff lint/format, trailing-whitespace checks, and DCO sign-off enforcement on every commit:
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type commit-msg --hook-type prepare-commit-msg
+```
+
+The `prepare-commit-msg` hook automatically appends `Signed-off-by: Your Name <email>` to every commit message (required by the DCO). You can also sign off manually with `git commit -s`.
 
 ## Project Structure
 

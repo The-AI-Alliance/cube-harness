@@ -1,11 +1,20 @@
+from osworld_cube._paths import OSWORLD_BASE_DIR, OSWORLD_CACHE_DIR, OSWORLD_REPO_DIR, OSWORLD_VM_DIR
 from osworld_cube.computer import (
     Computer13,
     ComputerBase,
     ComputerConfig,
     PyAutoGUIComputer,
 )
-from osworld_cube.task import OSWorldTask
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTaskConfig
+from osworld_cube.task import (
+    OSWorldExecutionInfo,
+    OSWorldTask,
+    OSWorldTaskMetadata,
+)
+from osworld_cube.benchmark import (
+    OSWorldBenchmark,
+    OSWorldBenchmarkConfig,
+    OSWorldTaskConfig,
+)
 from osworld_cube.debug import make_debug_agent, get_debug_benchmark
 
 __all__ = [
@@ -17,9 +26,17 @@ __all__ = [
     "ComputerConfig",
     # Task / benchmark
     "OSWorldTask",
+    "OSWorldTaskMetadata",
+    "OSWorldExecutionInfo",
     "OSWorldBenchmark",
+    "OSWorldBenchmarkConfig",
     "OSWorldTaskConfig",
     # Debug helpers
-    "make_debug_agent",
     "get_debug_benchmark",
+    "make_debug_agent",
+    # Paths
+    "OSWORLD_BASE_DIR",
+    "OSWORLD_REPO_DIR",
+    "OSWORLD_VM_DIR",
+    "OSWORLD_CACHE_DIR",
 ]

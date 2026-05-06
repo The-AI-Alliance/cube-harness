@@ -23,12 +23,9 @@ Usage:
 
 import sys
 from datetime import datetime
-from pathlib import Path
 
-import osworld_cube
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
+from osworld_cube.benchmark import OSWorldBenchmarkConfig
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -122,29 +119,26 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
-    benchmark = OSWorldBenchmark(
-        default_tool_config=tool_config,
+    benchmark_config = OSWorldBenchmarkConfig(
+        tool_config=tool_config,
         use_som=False,
-        tasks_file=tasks_file,
-        test_set_name=OSWorldTestSet.TEST_SMALL,
-        vm_backend=OSWorldQEMUVMBackend(),
     )
-    benchmark.setup()
-    keep_ids = [tid for tid in benchmark.task_metadata if tid not in GDRIVE_TASK_IDS]
-    benchmark = benchmark.subset_from_list(keep_ids)
+    OSWorldBenchmarkConfig.install()
+    benchmark_config = benchmark_config.named_subset("test_small")
+    keep_ids = [tid for tid in benchmark_config.tasks() if tid not in GDRIVE_TASK_IDS]
+    benchmark_config = benchmark_config.subset_from_list(keep_ids)
 
     exp = Experiment(
         name="osworld_genny_haiku_3obs_100actions_v2",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=100,
     )
 
     if debug:
         print("\n" + "=" * 60)
-        print("DEBUG MODE: Running debug_tasks.json sequentially")
+        print("DEBUG MODE: Running test_small sequentially")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")

@@ -1,0 +1,10 @@
+{
+  "class": "cube_infra_azure:AzureInfraConfig",
+  "kwargs": {
+    "resource_group": "ui_assist",
+    "storage_account": "cubeexpvhd",
+    "vnet_name": "vnet-westus2",
+    "nsg_name": "osworld-nsg",
+    "image_name_suffix": "-aj"
+  }
+}

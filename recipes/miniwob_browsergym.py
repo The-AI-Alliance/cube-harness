@@ -1,3 +1,15 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "cube-harness",
+#     "miniwob-cube",
+# ]
+#
+# [tool.uv.sources]
+# cube-harness = { path = "..", editable = true }
+# miniwob-cube = { path = "../cubes/miniwob", editable = true }
+# ///
+
 """
 Run MiniWoB benchmark using BrowserGym tool.
 
@@ -11,7 +23,7 @@ Usage:
 
 import sys
 
-from miniwob_cube.benchmark import MiniWobBenchmark
+from miniwob_cube.benchmark import MiniWobBenchmarkConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.react import ReactAgentConfig
@@ -27,8 +39,8 @@ def main(debug: bool) -> None:
     llm_config = LLMConfig(model_name="gpt-5-mini")
     agent_config = ReactAgentConfig(llm_config=llm_config)
 
-    benchmark = MiniWobBenchmark(
-        default_tool_config=BrowsergymConfig(
+    benchmark_config = MiniWobBenchmarkConfig(
+        tool_config=BrowsergymConfig(
             use_screenshot=True,
             use_html=True,
             use_axtree=False,
@@ -38,7 +50,7 @@ def main(debug: bool) -> None:
         name="miniwob_bgym",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=10,
     )
     if debug:

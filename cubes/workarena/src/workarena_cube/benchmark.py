@@ -1,95 +1,123 @@
 """WorkArena benchmark implementation for the CUBE framework."""
 
 import logging
-import random
-from typing import ClassVar, Generator, Literal
+from typing import ClassVar, Self
 
 from browsergym.workarena import get_all_tasks_agents
-from cube.benchmark import Benchmark, BenchmarkMetadata
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
+from cube.seed import AbstractSeedGenerator
 from cube.task import TaskConfig, TaskMetadata
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, model_validator
 
-from workarena_cube.task import WorkArenaTaskConfig
+from workarena_cube.task import WorkArenaTaskConfig, WorkArenaTaskMetadata
 
 logger = logging.getLogger(__name__)
 
 
-class WorkArenaBenchmark(Benchmark):
-    """CUBE Benchmark for WorkArena ServiceNow tasks.
+class WorkArenaSeedGenerator(AbstractSeedGenerator):
+    """Generates seeds for WorkArena tasks by delegating to get_all_tasks_agents().
 
-    Task levels:
-        - l1: Atomic tasks (~33 unique tasks x n_seeds_l1 seeds)
-        - l2: Compositional tasks built from atomic subtasks
-        - l3: Extended compositional tasks with company protocols
+    Covers all three levels (l1, l2, l3) so it works naturally with any subset
+    produced by named_subset() or subset_from_glob().
+
+    Seeds are derived from WorkArena's own RNG (seeded by meta_seed) to maintain
+    compatibility with the original benchmark's evaluation protocol.
+
+    Lazily loads on first call and caches {task_id: [seeds]} for the lifetime
+    of this generator.
+    """
+
+    meta_seed: int = 42
+    n_seeds_l1: int = 10
+    is_agent_curriculum: bool = True
+
+    _cache: dict[str, list[int]] | None = PrivateAttr(default=None)
+
+    def _ensure_loaded(self) -> None:
+        if self._cache is not None:
+            return
+        cache: dict[str, list[int]] = {}
+        for level in ("l1", "l2", "l3"):
+            for task_class, seed in get_all_tasks_agents(
+                filter=level,
+                meta_seed=self.meta_seed,
+                n_seed_l1=self.n_seeds_l1,
+                is_agent_curriculum=self.is_agent_curriculum,
+            ):
+                task_id = task_class.get_task_id()
+                cache.setdefault(task_id, []).append(seed)
+        self._cache = cache
+
+    def __call__(self, task_metadata: TaskMetadata) -> list[int]:
+        self._ensure_loaded()
+        assert self._cache
+        return self._cache.get(task_metadata.id, [])
+
+
+class WorkArenaBenchmark(Benchmark["WorkArenaBenchmarkConfig"]):
+    """Runtime pair — WorkArena tasks connect to a remote ServiceNow instance,
+    so there is no shared infrastructure to provision in _setup().
+    """
+
+    def _setup(self) -> None:
+        logger.info(f"WorkArena benchmark ready with {self.config.num_tasks} tasks")
+
+    def close(self) -> None:
+        logger.info("WorkArena benchmark closed.")
+
+
+class WorkArenaBenchmarkConfig(BenchmarkConfig[WorkArenaTaskMetadata]):
+    """CUBE BenchmarkConfig for WorkArena ServiceNow tasks.
+
+    By default loads all task types from all levels (l1, l2, l3).
+    Use named_subset() or subset_from_glob() in user-land to filter:
+
+        cfg.named_subset("l1")                                                  # L1 only
+        cfg.named_subset("l2").subset_from_glob("in_human_curriculum", "True")  # L2 human curriculum
 
     Required environment variables:
         SNOW_INSTANCE_URL, SNOW_INSTANCE_UNAME, SNOW_INSTANCE_PWD
         or HUGGING_FACE_HUB_TOKEN for the hosted instance pool.
+
+    task_metadata.json is a shipped package resource containing lightweight public fields
+    (level, in_human_curriculum, task_class_path). No heavy execution data exists — all
+    task logic is available from the browsergym-workarena library at runtime.
+
+    To regenerate task_metadata.json (developer use only), run:
+        scripts/generate_task_metadata.py
     """
 
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
         name="workarena-cube",
         version="1.0.0",
-        description="WorkArena ServiceNow benchmark tasks",
+        description=(
+            "WorkArena ServiceNow benchmark tasks across three levels. "
+            "By default all task types from all levels are loaded. "
+            "Use named_subset('l1'/'l2'/'l3') to filter by level. "
+            "For human curriculum: cfg.named_subset('l2').subset_from_glob('in_human_curriculum', 'True')."
+        ),
         tags=["browser", "web", "servicenow"],
+        named_subsets={
+            "l1": ("level", "l1"),
+            "l2": ("level", "l2"),
+            "l3": ("level", "l3"),
+        },
+        num_tasks=333,
     )
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = WorkArenaTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = WorkArenaBenchmark
 
-    level: Literal["l1", "l2", "l3"] = "l1"
     meta_seed: int = 42
-    n_seeds_l1: int = 5
-    shuffle: bool = True
-    shuffle_seed: int = 42
-    is_agent_curriculum: bool = False
+    n_seeds_l1: int = 10
+    is_agent_curriculum: bool = True
 
-    _task_tuples: list = PrivateAttr(default_factory=list)
-
-    def _setup(self) -> None:
-        """Enumerate WorkArena task classes and seeds for the configured level."""
-        # Check the instance-level shadow, not the class-level ClassVar — this ensures
-        # each instance sets up its own task_metadata independently, even if another
-        # instance already populated the class-level dict.
-        if "task_metadata" in self.__dict__:
-            logger.debug("WorkArena benchmark already set up, skipping.")
-            return
-        logger.info(f"Setting up WorkArena benchmark (level={self.level})")
-        task_tuples = get_all_tasks_agents(
-            filter=self.level,
-            meta_seed=self.meta_seed,
-            n_seed_l1=self.n_seeds_l1,
-            is_agent_curriculum=self.is_agent_curriculum,
-        )
-        if self.shuffle:
-            random.seed(self.shuffle_seed)
-            random.shuffle(task_tuples)
-        self._task_tuples = task_tuples
-        self._runtime_context = {"level": self.level, "n_tasks": len(task_tuples)}
-        metadata: dict[str, TaskMetadata] = {}
-        for task_class, _seed in task_tuples:
-            task_id = task_class.get_task_id()
-            task_class_path = f"{task_class.__module__}.{task_class.__qualname__}"
-            metadata[task_id] = TaskMetadata(
-                id=task_id,
-                extra_info={"task_class_path": task_class_path, "level": self.level},
+    @model_validator(mode="after")
+    def _init_seed_generator(self) -> Self:
+        """Initialize seed_generator at construction time from config fields."""
+        if self.seed_generator is None:
+            self.seed_generator = WorkArenaSeedGenerator(
+                meta_seed=self.meta_seed,
+                n_seeds_l1=self.n_seeds_l1,
+                is_agent_curriculum=self.is_agent_curriculum,
             )
-        # Populate instance-level shadow so each instance sees its own task view
-        # (e.g. after subset_from_list / subset_from_glob). Also update the class-level
-        # attr so TaskConfig.make() can look up tasks via the ClassVar without re-running setup().
-        object.__setattr__(self, "task_metadata", metadata)
-        type(self).task_metadata = metadata
-        logger.info(f"WorkArena benchmark setup complete: {len(task_tuples)} task(s)")
-
-    def get_task_configs(self) -> Generator[WorkArenaTaskConfig, None, None]:
-        """Yield one WorkArenaTaskConfig per (task_class, seed) tuple."""
-        for task_class, seed in self._task_tuples:
-            task_id = task_class.get_task_id()
-            yield WorkArenaTaskConfig(
-                task_id=task_id,
-                seed=seed,
-                tool_config=self.default_tool_config,
-            )
-
-    def close(self) -> None:
-        """No-op: WorkArena has no server process to shut down."""
-        logger.info("WorkArena benchmark closed.")
+        return self

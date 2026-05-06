@@ -2,8 +2,6 @@
 
 import warnings
 
-import pytest
-
 from cube_harness.experiment import Experiment
 from tests.conftest import MockCubeTaskConfig
 
@@ -11,62 +9,85 @@ from tests.conftest import MockCubeTaskConfig
 class TestCubeExperiment:
     """Tests for Experiment with the cube path (CubeBenchmark)."""
 
-    def test_cube_benchmark_creates_task_config_episodes(self, tmp_dir, mock_agent_config, mock_cube_benchmark):
+    def test_cube_benchmark_creates_task_config_episodes(self, tmp_dir, mock_agent_config, mock_cube_benchmark_config):
         """Experiment with CubeBenchmark creates episodes with task_config, no DeprecationWarning."""
         exp = Experiment(
             name="cube_experiment",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark=mock_cube_benchmark,
+            benchmark_config=mock_cube_benchmark_config,
         )
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
-            episodes = exp.get_episodes_to_run()
+        with mock_cube_benchmark_config.make() as benchmark:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", DeprecationWarning)
+                episodes = exp.get_episodes_to_run(benchmark)
 
-        assert len(episodes) == len(mock_cube_benchmark.task_metadata)
+        assert len(episodes) == len(mock_cube_benchmark_config.task_metadata)
         for episode in episodes:
             assert isinstance(episode.config.task_config, MockCubeTaskConfig)
-            assert episode.config.tool_config is None
 
-    def test_cube_benchmark_resume_reloads_without_benchmark_arg(self, tmp_dir, mock_agent_config, mock_cube_benchmark):
+    def test_cube_benchmark_resume_reloads_without_benchmark_arg(
+        self, tmp_dir, mock_agent_config, mock_cube_benchmark_config
+    ):
         """Experiment.resume with a cube benchmark reloads episodes without needing benchmark arg."""
         exp = Experiment(
             name="cube_resume",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark=mock_cube_benchmark,
+            benchmark_config=mock_cube_benchmark_config,
             resume=True,
         )
 
         # First call: no configs on disk yet, creates all episodes from scratch.
-        episodes = exp.get_episodes_to_run()
-        assert len(episodes) == 2
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
+            assert len(episodes) == 2
 
-        # Run only the first episode, leaving the second unstarted.
-        episodes[0].run()
+            # Run only the first episode, leaving the second unstarted.
+            episodes[0].run()
 
-        # resume=True: only the unstarted episode should be returned.
-        # _find_episodes_to_relaunch calls load_episode_from_config(path, self.benchmark)
-        # for each config; for cube episodes the benchmark arg is ignored.
-        resumed = exp.get_episodes_to_run()
+            # resume=True: only the unstarted episode should be returned.
+            resumed = exp.get_episodes_to_run(benchmark)
         assert len(resumed) == 1
         assert resumed[0].config.task_config is not None
-        assert resumed[0].config.task_id != episodes[0].config.task_id
+        assert resumed[0].config.task_config.task_id != episodes[0].config.task_config.task_id
 
-    def test_legacy_benchmark_emits_deprecation_warning(self, tmp_dir, mock_agent_config, mock_benchmark):
-        """Experiment with a legacy AL2Benchmark emits DeprecationWarning; episodes still created."""
+    def test_experiment_load_config_round_trip(self, tmp_dir, mock_agent_config, mock_cube_benchmark_config):
+        """Experiment.save_config / load_config round-trip preserves benchmark type."""
         exp = Experiment(
-            name="legacy_experiment",
+            name="cube_roundtrip",
             output_dir=tmp_dir,
             agent_config=mock_agent_config,
-            benchmark=mock_benchmark,
+            benchmark_config=mock_cube_benchmark_config,
         )
+        exp.save_config()
 
-        with pytest.warns(DeprecationWarning):
-            episodes = exp.get_episodes_to_run()
+        from cube_harness.experiment import Experiment as Exp
 
-        assert len(episodes) == len(mock_benchmark.env_configs())
-        for episode in episodes:
-            assert episode.config.task_config is None
-            assert episode.config.tool_config is not None
+        restored = Exp.load_config(str(tmp_dir / "experiment_config.json"))
+        assert restored.name == "cube_roundtrip"
+        assert type(restored.benchmark_config) is type(mock_cube_benchmark_config)
+
+    def test_episode_is_self_contained_without_benchmark(self, tmp_dir, mock_agent_config, mock_cube_benchmark_config):
+        """Episodes created from a cube benchmark can be reloaded without the benchmark arg."""
+        exp = Experiment(
+            name="self_contained",
+            output_dir=tmp_dir,
+            agent_config=mock_agent_config,
+            benchmark_config=mock_cube_benchmark_config,
+        )
+        with mock_cube_benchmark_config.make() as benchmark:
+            episodes = exp.get_episodes_to_run(benchmark)
+        assert len(episodes) > 0
+
+        # Pick the first episode config file and reload it without benchmark
+        from cube_harness.episode import Episode as Ep
+        from cube_harness.storage import FileStorage
+
+        storage = FileStorage(tmp_dir)
+        config_files = storage.list_episode_configs()
+        assert config_files
+
+        reloaded = Ep.load_episode_from_config(config_files[0])  # no benchmark
+        assert reloaded.config.task_config is not None

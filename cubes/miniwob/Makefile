@@ -1,6 +1,9 @@
-.PHONY: test install
+.PHONY: test install debug
 
 test:
+	uv run cube test miniwob-cube
+
+debug:
 	uv run python -m miniwob_cube.debug
 
 install:

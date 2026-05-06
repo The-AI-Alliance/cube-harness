@@ -2,7 +2,7 @@
 
 Public API
 ----------
-get_debug_benchmark()         -> SWEBenchVerifiedBenchmark
+get_debug_benchmark()         -> SWEBenchVerifiedBenchmarkConfig
 make_debug_agent(task_id)     -> DebugAgent
 """
 
@@ -10,18 +10,16 @@ from __future__ import annotations
 
 import logging
 
-from cube.backends import LocalContainerBackend
-from cube.benchmark import Benchmark
 from cube.core import Action, ActionSchema, Observation
 
-from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmark
+from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
 # Each debug task runs in oracle_mode: the gold patch is written to
 # /tmp/gold_patch.diff during reset(). The debug agent applies it
 # and calls final_step, which triggers evaluate() → tests → reward == 1.0.
-_APPLY_PATCH = Action(name="bash", arguments={"command": "cd /testbed && git apply /tmp/gold_patch.diff 2>&1"})
+_APPLY_PATCH = Action(name="bash", arguments={"command": "git apply /tmp/gold_patch.diff 2>&1"})
 _FINAL = Action(name="final_step", arguments={})
 
 _TASK_ACTIONS: dict[str, list[Action]] = {
@@ -51,17 +49,14 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> Benchmark:
-    """Return a SWEBenchVerifiedBenchmark scoped to the debug tasks."""
-    container_backend = LocalContainerBackend()
-    bench = SWEBenchVerifiedBenchmark(
-        container_backend=container_backend,
-        instance_ids=list(_TASK_ACTIONS),
-        oracle_mode=True,
-    )
-    bench.install()
-    bench.setup()
-    return bench.subset_from_list(list(_TASK_ACTIONS), benchmark_name_suffix="debug")
+def get_debug_benchmark() -> SWEBenchVerifiedBenchmarkConfig:
+    """Return a ``SWEBenchVerifiedBenchmarkConfig`` scoped to the debug tasks.
+
+    Pure factory — the harness owns ``config.install()`` and ``config.make(infra)``.
+    Debug tasks run in ``oracle_mode`` so reset() writes the gold patch to
+    /tmp/gold_patch.diff.
+    """
+    return SWEBenchVerifiedBenchmarkConfig(oracle_mode=True).subset_from_list(list(_TASK_ACTIONS))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:

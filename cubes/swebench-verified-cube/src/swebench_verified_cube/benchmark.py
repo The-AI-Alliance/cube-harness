@@ -1,30 +1,78 @@
 """Benchmark for swebench-verified-cube — SWE-bench Verified with test-based validation."""
 
+from __future__ import annotations
+
+import json
 import logging
 import shutil
-from pathlib import Path
-from random import Random
-from typing import Any, ClassVar
+from collections.abc import Generator
+from typing import Any, ClassVar, cast
 
-from cube.benchmark import Benchmark, BenchmarkMetadata
-from cube.container import ContainerConfig
-from cube.task import TaskConfig, TaskMetadata
-from datasets import load_dataset
+from cube import LocalInfraConfig
+from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
+from cube.resource import InfraConfig
+from cube.task import TaskConfig
 
-from swebench_verified_cube.task import SWEBenchVerifiedTaskConfig
+from swebench_verified_cube.task import SWEBenchVerifiedTaskConfig, SWEBenchVerifiedTaskMetadata
 
 logger = logging.getLogger(__name__)
 
-_DOCKER_NAMESPACE = "swebench"
-_IMAGE_TAG = "latest"
+_DATASET_NAME = "princeton-nlp/SWE-bench_Verified"
 
 
-def _normalize_instance_id(instance_id: str) -> str:
-    """Normalize instance_id for Docker image naming: replace __ with _1776_ and lowercase."""
-    return instance_id.replace("__", "_1776_").lower()
+def _build_execution_info(row: dict[str, Any]) -> dict[str, Any]:
+    """Extract execution-only fields from a HuggingFace dataset row.
+
+    These fields are only needed when a task runs; they are never loaded at
+    import time. Stored in the per-task execution cache by install().
+    """
+    return {
+        "problem_statement": row["problem_statement"],
+        "hints_text": row.get("hints_text", ""),
+        "patch": row["patch"],
+        "test_patch": row["test_patch"],
+        "fail_to_pass": json.loads(row["FAIL_TO_PASS"])
+        if isinstance(row["FAIL_TO_PASS"], str)
+        else row["FAIL_TO_PASS"],
+        "pass_to_pass": json.loads(row["PASS_TO_PASS"])
+        if isinstance(row["PASS_TO_PASS"], str)
+        else row["PASS_TO_PASS"],
+        "eval_timeout": 1800,
+    }
 
 
-class SWEBenchVerifiedBenchmark(Benchmark):
+# ---------------------------------------------------------------------------
+# SWEBenchVerifiedBenchmark (runtime pair)
+# ---------------------------------------------------------------------------
+
+
+class SWEBenchVerifiedBenchmark(Benchmark["SWEBenchVerifiedBenchmarkConfig"]):
+    """Runtime pair — publishes ``self._infra`` (stashed by the base
+    ``Benchmark.__init__``) into ``runtime_context["infra"]`` so per-task
+    container launches flow through ``Task.runtime_context``.
+    """
+
+    def _setup(self) -> None:
+        """Publish the shared InfraConfig to runtime_context; containers are launched per-task."""
+        if self._infra is not None:
+            self._infra.cleanup_stale()
+            self._runtime_context["infra"] = self._infra
+        logger.info(
+            "SWEBenchVerifiedBenchmark ready with %d tasks (infra=%s)",
+            self.config.num_tasks,
+            self._infra.fingerprint() if self._infra is not None else "<none>",
+        )
+
+    def close(self) -> None:
+        logger.info("SWE-bench Verified benchmark closed")
+
+
+# ---------------------------------------------------------------------------
+# SWEBenchVerifiedBenchmarkConfig
+# ---------------------------------------------------------------------------
+
+
+class SWEBenchVerifiedBenchmarkConfig(BenchmarkConfig[SWEBenchVerifiedTaskMetadata]):
     """SWE-bench Verified — 500 real-world GitHub issues with test-based validation."""
 
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
@@ -34,117 +82,82 @@ class SWEBenchVerifiedBenchmark(Benchmark):
         num_tasks=500,
         tags=["swe", "github", "docker"],
     )
-
-    task_metadata: ClassVar[dict[str, TaskMetadata]] = {}
     task_config_class: ClassVar[type[TaskConfig]] = SWEBenchVerifiedTaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = SWEBenchVerifiedBenchmark
 
     # User-configurable fields
-    dataset_name: str = "princeton-nlp/SWE-bench_Verified"
-    shuffle: bool = True
-    shuffle_seed: int = 42
-    max_tasks: int | None = None
-    difficulty_filter: str | None = None
-    repo_filter: str | None = None
-    instance_ids: list[str] | None = None
     include_hints: bool = False
     oracle_mode: bool = False
 
-    # ── Benchmark lifecycle ────────────────────────────────────────
+    # ------------------------------------------------------------------
+    # Data lifecycle
+    # ------------------------------------------------------------------
 
-    def _setup(self) -> None:
-        """Load dataset from HuggingFace, apply filters, and populate task_metadata."""
-        # Only skip loading if this instance already has its own shadow (i.e. was
-        # already set up).  We deliberately do NOT guard on the class-level attr
-        # because that would prevent a fresh instance from loading its own task
-        # set when a previous setup already populated the ClassVar with a different set.
-        if "task_metadata" in self.__dict__:
-            logger.info("SWE-bench Verified task_metadata already populated, skipping setup")
+    @classmethod
+    def install(cls) -> None:
+        """Populate the per-task execution cache from HuggingFace.
+
+        Downloads heavy fields (problem_statement, patch, test_patch, etc.) and writes
+        one JSON file per task into ``task_config_class.task_execution_cache_dir()``.
+        Idempotent: skips if the cache directory already exists and is non-empty. If
+        the HuggingFace data has not been downloaded yet, it is fetched into
+        ``cache_dir()/huggingface_cache/``.
+        """
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
+        if exec_cache_dir.exists() and any(exec_cache_dir.iterdir()):
+            logger.info("Execution cache already populated, skipping installation")
             return
-        ds = load_dataset(
-            self.dataset_name, split="test"
-        )  # swebench-verified is only a single "test" split of 500 tasks.
-        tasks_data = self._filter_tasks(list(ds))  # type: ignore[arg-type]
+        exec_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        metadata: dict[str, TaskMetadata] = {}
-        for t in tasks_data:
-            instance_id = t["instance_id"]
-            docker_image = self._get_docker_image(instance_id)
-            metadata[instance_id] = TaskMetadata(
-                id=instance_id,
-                abstract_description=t["problem_statement"][:200],
-                recommended_max_steps=100,
-                container_config=ContainerConfig(
-                    image=docker_image,
-                    cpu_cores=2.0,
-                    ram_gb=4.0,
-                    disk_gb=10.0,
-                ),
-                extra_info={
-                    "problem_statement": t["problem_statement"],
-                    "hints_text": t.get("hints_text", ""),
-                    "include_hints": self.include_hints,
-                    "repo": t["repo"],
-                    "base_commit": t["base_commit"],
-                    "patch": t["patch"],
-                    "test_patch": t["test_patch"],
-                    "fail_to_pass": t["FAIL_TO_PASS"],
-                    "pass_to_pass": t["PASS_TO_PASS"],
-                    "difficulty": t.get("difficulty", "unknown"),
-                    "version": t.get("version", ""),
-                    "eval_timeout": 1800,
-                    "oracle_mode": self.oracle_mode,
-                },
+        # Download into our own cache folder (not the default ~/.cache/huggingface).
+        # load_dataset is idempotent: if the data is already cached there, no download occurs.
+        from datasets import load_dataset
+
+        hf_cache = cls.cache_dir() / "huggingface_cache"
+        logger.info(f"Downloading {_DATASET_NAME} from HuggingFace (cache: {hf_cache})...")
+        ds = load_dataset(_DATASET_NAME, split="test", cache_dir=str(hf_cache))
+        logger.info(f"  {len(ds)} tasks loaded")  # type: ignore[arg-type]
+
+        n = 0
+        for row in ds:
+            iid = row["instance_id"]  # type: ignore
+            (exec_cache_dir / f"{iid}.json").write_text(json.dumps(_build_execution_info(row)))  # type: ignore
+            n += 1
+
+        logger.info(f"Saved {n} execution cache files to {exec_cache_dir}")
+
+    @classmethod
+    def uninstall(cls) -> None:
+        """Remove the per-task execution cache and the HuggingFace dataset cache.
+
+        The shipped task_metadata.json is not removed.
+        """
+        exec_cache_dir = cls.task_config_class.task_execution_cache_dir()
+        if exec_cache_dir.exists():
+            shutil.rmtree(exec_cache_dir)
+            logger.info(f"Removed execution cache at {exec_cache_dir}")
+
+        hf_cache = cls.cache_dir() / "huggingface_cache"
+        if hf_cache.exists():
+            shutil.rmtree(hf_cache)
+            logger.info(f"Removed HuggingFace dataset cache at {hf_cache}")
+
+    # ------------------------------------------------------------------
+    # Factory / task generation
+    # ------------------------------------------------------------------
+
+    def make(self, infra: InfraConfig | None = None) -> SWEBenchVerifiedBenchmark:
+        """Resolve a default infra of ``LocalInfraConfig`` if none provided, then
+        delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
+        """
+        return cast(SWEBenchVerifiedBenchmark, super().make(infra=infra or LocalInfraConfig()))
+
+    def get_task_configs(self) -> Generator[SWEBenchVerifiedTaskConfig, None, None]:
+        """Yield TaskConfigs with include_hints and oracle_mode forwarded from benchmark settings."""
+        for tm in self.tasks().values():
+            yield SWEBenchVerifiedTaskConfig(
+                metadata=tm,
+                tool_config=self.tool_config,
+                include_hints=self.include_hints,
+                oracle_mode=self.oracle_mode,
             )
-
-        # Populate instance-level shadow so each instance sees its own filtered view
-        # (e.g. after subset_from_list / subset_from_glob).
-        object.__setattr__(self, "task_metadata", metadata)
-        # Also update the class-level attr so TaskConfig.make() can look up tasks
-        # via the ClassVar in the same process without re-running setup().
-        type(self).task_metadata = metadata
-        logger.info(f"SWE-bench Verified setup complete: {len(metadata)} tasks")
-
-    def close(self) -> None:
-        # conainters are closed per-task in SWEBenchVerifiedTask.close(), so nothing to clean up here.
-        logger.info("SWE-bench Verified benchmark closed")
-
-    def install(self) -> None:
-        """Pre-download the SWE-bench Verified dataset from HuggingFace."""
-        logger.info(f"Downloading {self.dataset_name} from HuggingFace...")
-        load_dataset(self.dataset_name, split="test")
-        logger.info("Dataset download complete")
-
-    def uninstall(self) -> None:
-        """Remove cached HuggingFace dataset."""
-        from datasets import config as ds_config
-
-        cache_dir = Path(ds_config.HF_DATASETS_CACHE)
-        # HF datasets cache uses the dataset name with path separators replaced
-        dataset_dir = cache_dir / self.dataset_name.replace("/", "___")
-        if dataset_dir.exists():
-            shutil.rmtree(dataset_dir)
-            logger.info(f"Removed dataset cache at {dataset_dir}")
-        else:
-            logger.info(f"No dataset cache found at {dataset_dir}, nothing to uninstall")
-
-    # ── Private helpers ────────────────────────────────────────────
-
-    def _get_docker_image(self, instance_id: str) -> str:
-        """Get the Docker image name for a given instance."""
-        normalized = _normalize_instance_id(instance_id)
-        return f"{_DOCKER_NAMESPACE}/sweb.eval.x86_64.{normalized}:{_IMAGE_TAG}"
-
-    def _filter_tasks(self, tasks_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Apply filtering, shuffling, and slicing to raw task data."""
-        if self.instance_ids:
-            id_set = set(self.instance_ids)
-            tasks_data = [t for t in tasks_data if t["instance_id"] in id_set]
-        if self.difficulty_filter:
-            tasks_data = [t for t in tasks_data if t.get("difficulty", "").lower() == self.difficulty_filter.lower()]
-        if self.repo_filter:
-            tasks_data = [t for t in tasks_data if t.get("repo", "").lower() == self.repo_filter.lower()]
-        if self.shuffle:
-            Random(self.shuffle_seed).shuffle(tasks_data)
-        if self.max_tasks:
-            tasks_data = tasks_data[: self.max_tasks]
-        return tasks_data

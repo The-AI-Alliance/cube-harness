@@ -1,29 +1,25 @@
-"""OSWorld Eval — Genny agent with GPT-5 and accessibility tree observations.
+"""OSWorld Eval — Genny agent with GPT-5-mini and accessibility tree observations.
 
 Uses the Genny agent (explicit context management, rolling summaries) with
 the linearized accessibility tree for element coordinates, without screenshots
 or Set-of-Marks scaffolding.
 
 Prerequisites:
-    OSWorld repo cloned to ~/.cube/OSWorld/
-    (auto-cloned on first run if missing)
+    OSWorld benchmark metadata is shipped in cubes/osworld-cube/src/osworld_cube/task_metadata.json.
+    The OSWorld repo is cloned on first install to populate per-task execution cache files.
 
 Usage:
-    # Debug mode (2 tasks, sequential)
-    uv run recipes/eval_osworld.py debug
+    # Debug mode (test_small subset, sequential)
+    uv run recipes/osworld/eval_osworld.py debug
 
-    # Eval mode (all tasks, 3 workers)
-    uv run recipes/eval_osworld.py
-
-    # Custom task subset via tasks_file
-    TASKS_FILE=/path/to/tasks.json uv run recipes/eval_osworld.py
+    # Eval mode (test_small subset, 3 workers)
+    uv run recipes/osworld/eval_osworld.py
 """
 
 import sys
 
-from osworld_cube.benchmark import OSWorldBenchmark, OSWorldTestSet
+from osworld_cube.benchmark import OSWorldBenchmarkConfig
 from osworld_cube.computer import ComputerConfig
-from osworld_cube.vm_backend import OSWorldQEMUVMBackend
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny import GennyConfig
@@ -87,27 +83,24 @@ def main(debug: bool) -> None:
         observe_after_action=True,
     )
 
-    # tasks_file = str(Path(osworld_cube.__file__).parent / "debug_tasks.json") if debug else None
-    tasks_file = None  # Use all tasks in both debug and eval modes
-    benchmark = OSWorldBenchmark(
-        default_tool_config=tool_config,
+    benchmark_config = OSWorldBenchmarkConfig(
+        tool_config=tool_config,
         use_som=False,
-        tasks_file=tasks_file,
-        test_set_name=OSWorldTestSet.TEST_SMALL,
-        vm_backend=OSWorldQEMUVMBackend(),
     )
+    OSWorldBenchmarkConfig.install()
+    benchmark_config = benchmark_config.named_subset("test_small")
 
     exp = Experiment(
         name="osworld_genny_gpt5",
         output_dir=output_dir,
         agent_config=agent_config,
-        benchmark=benchmark,
+        benchmark_config=benchmark_config,
         max_steps=15,
     )
 
     if debug:
         print("\n" + "=" * 60)
-        print("DEBUG MODE: Running debug_tasks.json sequentially")
+        print("DEBUG MODE: Running test_small sequentially")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
@@ -115,7 +108,7 @@ def main(debug: bool) -> None:
         run_sequentially(exp)
     else:
         print("\n" + "=" * 60)
-        print("EVAL MODE: Running OSWorld tasks with Ray")
+        print("EVAL MODE: Running OSWorld test_small subset with Ray")
         print("=" * 60)
         print(f"Output directory: {output_dir}")
         print(f"Model: {llm_config.model_name}")
