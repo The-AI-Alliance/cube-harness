@@ -345,16 +345,16 @@ benchmark: {benchmark_name}
 
 # Files you can read
 
-Transcript (one file per step):
+Transcript (one file per step — prefer these for targeted access):
   {transcript_dir}/steps/
 
-Consolidated transcript (full text):
+Consolidated transcript (full linear text):
   {transcript_dir}/transcript.txt
 
-Episode metadata (reward_info, action_schemas, summary_stats):
+Episode metadata (reward_info with fail_to_pass_output/fail_to_pass_passed/pass_to_pass_passed, action_schemas, summary_stats):
   {episode_metadata_path}
 
-Episode config (agent prompts, model, budget):
+Episode config (agent prompts, model, budget, task_config with container image):
   {episode_config_path}
 
 Task description:
@@ -362,10 +362,6 @@ Task description:
 
 Source code (use Glob/Grep, consult experiment context for specific files):
 {source_paths_block}
-
-Reading strategy: start from the END of the transcript to see the final outcome
-and error, then read earlier sections as needed. The most diagnostic steps are
-almost always the last few actions before the episode terminates.
 
 # Output schema
 
@@ -430,7 +426,8 @@ def build_user_prompt(
         else "  (none resolved — judge from transcript only)"
     )
     if context_path is not None and context_path.exists():
-        context_section = f"\n# Experiment context (read this first)\n  {context_path}\n"
+        context_text = context_path.read_text()
+        context_section = f"\n# Experiment context\n\n{context_text}\n---\n"
     else:
         context_section = ""
     return JUDGE_USER_PROMPT_TEMPLATE.format(
@@ -508,9 +505,15 @@ types and key parameters (model used, max_steps, tool config class).
 2. **Agent** — find the agent class. Summarise: LLM prompt structure, context management \
 strategy, how the agent decides to stop / submit, any hard budget limits.
 
-3. **Benchmark & evaluation** — find `evaluate()` or the reward function. Summarise: \
-what the task asks the agent to do, how reward=1 is earned vs reward=0, any known \
-fragility in the evaluator.
+3. **Benchmark & evaluation** — find the `evaluate()` or reward function in the benchmark \
+source. Provide the exact file path and relevant line numbers. Summarise: what the task \
+asks the agent to do, the precise condition for reward=1 vs reward=0, and what the \
+golden target is (ground-truth patch, test suite, expected output). Also note where \
+per-task metadata lives (FAIL_TO_PASS / PASS_TO_PASS test IDs, golden patch, etc.) — \
+either in the dataset files, the task class, or the episode artifacts. \
+Episode judges will find the actual test run output in \
+`episode.metadata.json → reward_info → fail_to_pass_output` / `fail_to_pass_passed` / \
+`pass_to_pass_passed`; make sure judges know this and understand what those fields mean.
 
 4. **Tools & action space** — find the tool config class and its implementation. List \
 available tool names; note output truncation, missing capabilities, or known failure modes.
@@ -519,7 +522,9 @@ available tool names; note output truncation, missing capabilities, or known fai
 
 6. **Transcript format** — peek at one sample episode's `_judge_transcript/transcript.txt` \
 (first + last 50 lines) so judges know what obs/act blocks look like and where to look \
-for final errors.
+for final errors. Also note: individual steps are accessible as \
+`_judge_transcript/steps/NNN_obs.txt` / `NNN_act.txt` — judges can sample end steps \
+directly without reading the full transcript.
 
 7. **Suspicious patterns** — flag anything that looks fragile, hardcoded, or likely to \
 cause systematic failures across many episodes.
@@ -542,9 +547,14 @@ def _build_pre_judge_user_prompt(
     if summary_path.exists():
         try:
             s = json.loads(summary_path.read_text())
-            n_done = s.get("n_completed", 0) + s.get("n_failed", 0)
-            n_correct = s.get("n_correct", s.get("n_success", 0))
-            n_episodes = str(n_done)
+            n_done = s.get("n_completed", 0) + s.get("n_failed", 0) or s.get("n_episodes", 0)
+            n_correct = s.get("n_correct", s.get("n_success", -1))
+            if n_correct < 0 and n_done:
+                # Fallback: derive from avg_reward or total_reward
+                avg = s.get("avg_reward", 0.0)
+                total = s.get("total_reward")
+                n_correct = int(round(total)) if total is not None else int(round(avg * n_done))
+            n_episodes = str(n_done) if n_done else "unknown"
             if n_done:
                 pass_rate = f"{n_correct / n_done:.1%} ({n_correct}/{n_done})"
         except Exception:
