@@ -26,7 +26,7 @@ docker run -d --name webarena_gitlab \
     am1n3e/webarena-verified-gitlab
 
 # ── wikipedia (Kiwix — volume pre-populated by VolumeSpec) ────────────────────
-docker run -d --name webarena_wikipedia \
+docker run -d --platform linux/amd64 --name webarena_wikipedia \
     -p 8888:8080 -p 8889:8874 \
     -v webarena_wikipedia_data:/data \
     am1n3e/webarena-verified-wikipedia
