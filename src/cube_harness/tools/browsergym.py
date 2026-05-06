@@ -1,5 +1,7 @@
 import logging
+import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -77,6 +79,8 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_info: dict | None = None
         self._last_reward: float = 0.0
         self._last_terminated: bool = False
+        self._har_path: Path | None = None
+        self._owns_har_path: bool = False
 
     # === Action set: built from bgym's HighLevelActionSet ===
 
@@ -157,20 +161,57 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         trace on context close). Satisfies the WAVBrowserTool protocol so
         BrowsergymTool can be used with WebArena-Verified evaluation.
         """
-        from webarena_verified.types.tracing import NetworkTrace
+        from webarena_verified.types.eval import NetworkTrace
 
         if self._session is None:
             raise RuntimeError("No session — call close() before network_trace()")
-        return NetworkTrace.from_content(self._session.trace_path())
+
+        # Preferred path: HAR output (explicitly configured in _create_runtime).
+        if self._har_path is not None and self._har_path.exists():
+            try:
+                return NetworkTrace.from_har(self._har_path)
+            finally:
+                if self._owns_har_path:
+                    self._har_path.unlink(missing_ok=True)
+                    self._har_path = None
+                    self._owns_har_path = False
+
+        # Fallback for session implementations that expose a trace artifact path.
+        trace_path_fn = getattr(self._session, "trace_path", None)
+        if callable(trace_path_fn):
+            trace_path = Path(trace_path_fn())
+            if trace_path.exists():
+                return NetworkTrace.from_content(trace_path)
+
+        raise FileNotFoundError(
+            "No network trace artifact available. Expected HAR at "
+            f"{str(self._har_path)!r} or a session trace artifact."
+        )
 
     def _create_runtime(self) -> None:
-        self._session = self.config.browser.make()
+        pw_extra = dict(self.config.browser.pw_extra_kwargs)
+        configured_har_path = pw_extra.get("record_har_path")
+        if configured_har_path is None:
+            with tempfile.NamedTemporaryFile(suffix=".har", delete=False) as f:
+                self._har_path = Path(f.name)
+            self._owns_har_path = True
+            pw_extra["record_har_path"] = str(self._har_path)
+        else:
+            self._har_path = Path(str(configured_har_path))
+            self._owns_har_path = False
+
+        browser_cfg = self.config.browser.model_copy(update={"pw_extra_kwargs": pw_extra})
+        self._session = browser_cfg.make()
         self._session.playwright.selectors.set_test_id_attribute(BROWSERGYM_ID_ATTRIBUTE)
 
     def _close_runtime(self) -> None:
         if self._session is not None:
             self.session.stop()
             self._session = None
+        if self._owns_har_path and self._har_path is not None:
+            self._har_path.unlink(missing_ok=True)
+            self._har_path = None
+            self._owns_har_path = False
 
     def _wait_dom_loaded(self) -> None:
         if self._session is None:
