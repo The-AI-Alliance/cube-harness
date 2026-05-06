@@ -924,7 +924,11 @@ def _write_csv_report(
     selected: list[EpisodeRef],
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]],
 ) -> None:
-    """Write one row per judged episode for spreadsheet-friendly inspection."""
+    """Write one row per judged episode for spreadsheet-friendly inspection.
+
+    Excludes `analysis` and `evidence` — they're too verbose for LLM consumption.
+    Read them from the per-episode `episode_record.json` when needed.
+    """
     fields = [
         "trajectory_id",
         "episode_record",
@@ -937,8 +941,6 @@ def _write_csv_report(
         "hypothesis_confidence",
         "summary",
         "hypothesis",
-        "analysis",
-        "evidence",
         "cost_usd",
         "prompt_tokens",
         "completion_tokens",
@@ -967,8 +969,6 @@ def _write_csv_report(
                     "hypothesis_confidence": o.hypothesis_confidence,
                     "summary": o.summary,
                     "hypothesis": o.hypothesis,
-                    "analysis": o.analysis,
-                    "evidence": "\n\n".join(f"[step {e.step}] {e.quote}" for e in o.evidence),
                     "cost_usd": round(m.cost_usd, 4),
                     "prompt_tokens": m.prompt_tokens,
                     "completion_tokens": m.completion_tokens,
