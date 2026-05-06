@@ -285,6 +285,20 @@ def discover_episodes(experiment_dir: Path) -> list[EpisodeRef]:
     return refs
 
 
+_IN_FLIGHT_STATUSES: frozenset[str] = frozenset({"QUEUED", "RUNNING"})
+
+
+def _is_in_flight(episode_dir: Path) -> bool:
+    """Return True if the episode's status.json shows QUEUED or RUNNING."""
+    status_path = episode_dir / "status.json"
+    if not status_path.exists():
+        return False
+    try:
+        return json.loads(status_path.read_text()).get("status") in _IN_FLIGHT_STATUSES
+    except (json.JSONDecodeError, OSError):
+        return False
+
+
 def select_episodes(
     refs: list[EpisodeRef],
     *,
@@ -301,13 +315,20 @@ def select_episodes(
     verbatim regardless of `failures_only` / already-judged / sampling — the user
     typed exactly what they want.
 
-    Otherwise: failures-only → already-judged (unless `overwrite`) → sample/n.
+    Otherwise: in-flight (QUEUED/RUNNING) → failures-only → already-judged
+    (unless `overwrite`) → sample/n. In-flight episodes are always excluded to
+    avoid judging incomplete trajectories.
     """
     if ids:
         wanted = set(ids)
         return [r for r in refs if r.trajectory_id in wanted or r.trajectory_id.split("_ep")[0] in wanted]
 
-    pool = refs
+    # Always exclude episodes that haven't finished yet.
+    in_flight = [r for r in refs if _is_in_flight(r.episode_dir)]
+    if in_flight:
+        logger.info("Skipping %d in-flight episode(s) (QUEUED/RUNNING).", len(in_flight))
+    pool = [r for r in refs if not _is_in_flight(r.episode_dir)]
+
     if failures_only:
         pool = [r for r in pool if (r.record is not None and not r.record.is_correct)]
 
