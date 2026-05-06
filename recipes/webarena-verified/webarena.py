@@ -28,13 +28,14 @@ from webarena_verified_cube.resources import (
     WEBARENA_SHOPPING_ADMIN,
     WEBARENA_WIKIPEDIA,
 )
-from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
+from webarena_verified_cube.tool import SubmitResponseConfig
 
 from cube_harness import make_experiment_output_dir
 from cube_harness.agents.genny2 import Genny2Config
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
+from cube_harness.tools.browsergym import BrowsergymConfig
 
 _DEFAULT_MODEL = "openai/gpt-5.4-mini"
 
@@ -58,7 +59,12 @@ def main(debug: bool, subset: str | None, bgym_test: bool, model: str, name: str
 
     tool_config = ToolboxConfig(
         tool_configs=[
-            HarPlaywrightConfig(browser=PlaywrightSessionConfig(headless=not debug)),
+            BrowsergymConfig(
+                browser=PlaywrightSessionConfig(headless=not debug),
+                use_screenshot=True,
+                use_axtree=True,
+                use_html=False,
+            ),
             SubmitResponseConfig(),
         ]
     )
