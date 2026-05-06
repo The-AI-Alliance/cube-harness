@@ -75,6 +75,7 @@ ch-xray = "cube_harness.analyze.xray:main"
 ch-trace = "cube_harness.analyze.trace:main"
 ch-judge = "cube_harness.analyze.judge:main"
 ch-judge-report = "cube_harness.analyze.judge_report:main"
+ch-reset-episodes = "cube_harness.analyze.reset_episodes:main"
 
 [dependency-groups]
 dev = [
