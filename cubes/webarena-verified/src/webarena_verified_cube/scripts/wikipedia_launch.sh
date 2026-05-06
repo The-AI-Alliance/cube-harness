@@ -4,7 +4,7 @@
 set -euo pipefail
 
 docker run -d \
-    --platform linux/amd64 \
+    --platform linux/arm64/v8 \
     --name webarena_wikipedia \
     -p 8888:8080 \
     -p 8889:8874 \
