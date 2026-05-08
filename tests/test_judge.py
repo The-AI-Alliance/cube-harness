@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import msgpack
 import pytest
@@ -12,13 +13,16 @@ import zstandard
 
 from cube_harness.analyze.judge import (
     EXPERIMENT_JUDGE_REPORT_FILENAME,
+    EXPERIMENT_JUDGE_SUMMARY_FILENAME,
     _extract_json_block,
     _persist_judgment,
     _write_csv_report,
     discover_episodes,
     extract_transcript,
+    judge_experiment,
     select_episodes,
 )
+from cube_harness.analyze.judge.sdk import _SDKResult
 from cube_harness.analyze.judge.selection import EpisodeRef
 from cube_harness.eval_log import (
     EPISODE_RECORD_FILENAME,
@@ -350,3 +354,154 @@ def test_persist_judgment_writes_sidecar_when_no_record(tmp_path: Path) -> None:
     assert trace.exists()
     trace_payload = json.loads(trace.read_text())
     assert len(trace_payload["actions"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Integration: full judge_episode pipeline with mocked SDK
+# ---------------------------------------------------------------------------
+
+_VALID_JUDGE_JSON = json.dumps(
+    {
+        "analysis": "Agent ran `cat foo.py` but never attempted a fix.",
+        "outcome": "failure",
+        "summary": "Agent read the file but made no edit.",
+        "primary_blame": "model_capability",
+        "primary_blame_confidence": 4,
+        "other_blames": ["agent_scaffolding"],
+        "evidence": [{"step": 1, "quote": "cat foo.py"}],
+        "hypothesis": "Provide an explicit edit instruction in the system prompt.",
+        "hypothesis_confidence": 3,
+    }
+)
+
+
+def _make_episode_dir(tmp_path: Path, trajectory_id: str) -> tuple[Path, Path]:
+    """Create a minimal experiment dir with one episode, msgpack.zst steps, and an episode_record."""
+    exp = tmp_path / "exp"
+    ep = exp / "episodes" / trajectory_id
+    (ep / "steps").mkdir(parents=True)
+
+    _write_step(
+        ep / "steps",
+        "000_obs.msgpack.zst",
+        {
+            "output": {
+                "obs": {
+                    "contents": [{"data": "Fix the bug in foo.py.", "tool_call_id": None}],
+                    "reward": None,
+                    "done": False,
+                }
+            }
+        },
+    )
+    _write_step(
+        ep / "steps",
+        "001_act.msgpack.zst",
+        {
+            "output": {
+                "actions": [{"name": "Bash", "arguments": {"command": "cat foo.py"}}],
+                "llm_calls": [],
+                "error": None,
+            }
+        },
+    )
+
+    record = EpisodeRecord(
+        evaluation_id="eval-1",
+        sample_id=trajectory_id.split("_ep")[0],
+        is_correct=False,
+        score=0.0,
+        num_turns=2,
+        n_agent_steps=1,
+        n_env_steps=1,
+        usage=UsageSummary(),
+        trajectory_id=trajectory_id,
+        timestamp=0.0,
+    )
+    (ep / EPISODE_RECORD_FILENAME).write_text(record.model_dump_json(indent=2))
+    return exp, ep
+
+
+def test_judge_episode_pipeline(tmp_path: Path) -> None:
+    """Drive judge_experiment end-to-end with a mocked SDK boundary.
+
+    Exercises the full path: transcript extraction → experiment view loading
+    → prompt building → SDK (mocked) → JSON parsing → invariant validation
+    → _persist_judgment → _write_summary → _write_csv_report.
+
+    Note: judge_episode (the single-episode public API) returns the result but
+    does NOT persist — persistence lives in judge_experiment. Both are tested
+    here by calling judge_experiment with ids= to pin the episode.
+    """
+    exp, ep = _make_episode_dir(tmp_path, "task1_ep0")
+
+    mock_sdk_result = _SDKResult(
+        output_text=f"Here is my analysis:\n```json\n{_VALID_JUDGE_JSON}\n```",
+        prompt_tokens=1200,
+        completion_tokens=300,
+        cost_usd=0.042,
+        duration_s=8.5,
+        actions=[{"tool": "Read", "input": "transcript.txt"}, {"tool": "Grep", "input": "'bug' in foo.py"}],
+    )
+
+    with patch("cube_harness.analyze.judge.core._run_claude_code", new_callable=AsyncMock) as mock_sdk:
+        mock_sdk.return_value = mock_sdk_result
+        results = judge_experiment(exp, ids=["task1_ep0"])
+
+    assert "task1_ep0" in results
+    judge_out, judge_meta = results["task1_ep0"]
+
+    # -- Transcript was extracted into the episode dir --
+    assert (ep / "_judge_transcript" / "transcript.txt").exists()
+    assert (ep / "_judge_transcript" / "steps" / "000_obs.txt").read_text().startswith("### Step 000 OBS")
+    assert "cat foo.py" in (ep / "_judge_transcript" / "steps" / "001_act.txt").read_text()
+
+    # -- JudgeOutput fields round-tripped correctly --
+    assert judge_out.outcome == Outcome.failure
+    assert judge_out.primary_blame.value == "model_capability"
+    assert judge_out.primary_blame_confidence == 4
+    assert len(judge_out.evidence) == 1
+    assert judge_out.evidence[0].quote == "cat foo.py"
+
+    # -- JudgeMetadata reflects the mocked billing --
+    assert judge_meta.prompt_tokens == 1200
+    assert judge_meta.cost_usd == pytest.approx(0.042)
+    assert judge_meta.model == "claude-sonnet-4-6"
+
+    # -- episode_record.json updated in-place by _persist_judgment --
+    restored = EpisodeRecord.model_validate_json((ep / EPISODE_RECORD_FILENAME).read_text())
+    assert restored.judge_output is not None
+    assert restored.judge_output.outcome == Outcome.failure
+    assert restored.judge_metadata is not None
+    assert restored.judge_metadata.cost_usd == pytest.approx(0.042)
+
+    # -- judge_trace.json written because actions is non-empty --
+    trace = ep / "judge_trace.json"
+    assert trace.exists()
+    assert json.loads(trace.read_text())["trace_mode"] == "actions"
+    assert len(json.loads(trace.read_text())["actions"]) == 2
+
+    # -- experiment_judge_summary.json written by _write_summary --
+    summary = json.loads((exp / EXPERIMENT_JUDGE_SUMMARY_FILENAME).read_text())
+    assert summary["n_judged"] == 1
+    assert summary["outcomes"] == {"failure": 1}
+    assert summary["primary_blame"] == {"model_capability": 1}
+    assert summary["total_judge_cost_usd"] == pytest.approx(0.042)
+
+    # -- experiment_judge_report.csv written by _write_csv_report --
+    csv_path = exp / EXPERIMENT_JUDGE_REPORT_FILENAME
+    assert csv_path.exists()
+    rows = list(csv.DictReader(csv_path.open()))
+    assert len(rows) == 1
+    assert rows[0]["outcome"] == "failure"
+    assert rows[0]["primary_blame"] == "model_capability"
+
+    # -- SDK received the right arguments --
+    mock_sdk.assert_awaited_once()
+    call_kwargs = mock_sdk.call_args.kwargs
+    assert call_kwargs["model"] == "claude-sonnet-4-6"
+    assert call_kwargs["cwd"] == ep
+    # task_description comes from episode.metadata.json which we didn't create; the
+    # prompt still references the transcript dir and the episode id.
+    assert "task1_ep0" in call_kwargs["user_prompt"]
+    assert "_judge_transcript" in call_kwargs["user_prompt"]
