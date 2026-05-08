@@ -241,6 +241,11 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive.strip())
         if m:
             method, class_path = m.group(1), m.group(2)
+            # Some SWE-bench entries already include the method name as the last
+            # segment of class_path (e.g. "test_foo (module.Class.test_foo)").
+            # Avoid duplicating it into "module.Class.test_foo.test_foo".
+            if class_path.endswith(f".{method}"):
+                return class_path
             return f"{class_path}.{method}"
         return directive  # already in the right format or unrecognised — pass through
 
