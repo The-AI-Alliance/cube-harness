@@ -63,7 +63,13 @@ class SWEBenchTool(Tool):
         encoded = output.encode("utf-8")
         if len(encoded) <= self._config.max_output_bytes:
             return output
-        return encoded[: self._config.max_output_bytes].decode("utf-8", errors="ignore") + "\n[truncated]"
+        head = self._config.max_output_bytes // 5
+        tail = self._config.max_output_bytes - head
+        return (
+            encoded[:head].decode("utf-8", errors="ignore")
+            + f"\n[... {len(encoded) - self._config.max_output_bytes} bytes elided ...]\n"
+            + encoded[-tail:].decode("utf-8", errors="ignore")
+        )
 
     def bash_unlimited(self, command: str, timeout: int = 120) -> str:
         """Like bash() but without output truncation — for internal use (e.g. evaluate())."""
