@@ -78,7 +78,18 @@ _LIVE_30_SAMPLE: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: bool, launch_timeout: int = 900) -> object:
+def _make_infra(
+    toolkit: bool,
+    eai_profile: str,
+    eai_path: str,
+    preemptable: bool,
+    launch_timeout: int = 900,
+    daytona: bool = False,
+) -> object:
+    if daytona:
+        from cube_infra_daytona import DaytonaInfraConfig
+
+        return DaytonaInfraConfig(launch_timeout_seconds=launch_timeout)
     if toolkit:
         from cube_infra_toolkit import ToolkitInfraConfig
 
@@ -144,10 +155,12 @@ def run(
     n_tasks: int | None,
     n_parallel: int,
     retry_dir: Path | None,
+    output_dir: Path | None = None,
     toolkit: bool,
     eai_profile: str,
     eai_path: str,
     preemptable: bool,
+    daytona: bool = False,
     solvable_from: Path | None = None,
     max_actions: int = 150,
     cost_limit: float = 1.0,
@@ -156,13 +169,13 @@ def run(
 ) -> None:
     agent_config = make_agent_config(model_key, template, max_actions, cost_limit)
 
-    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable, launch_timeout)
+    infra = _make_infra(toolkit, eai_profile, eai_path, preemptable, launch_timeout, daytona=daytona)
     benchmark_config = _make_benchmark_config(debug, task_ids, subset, n_tasks, solvable_from)
 
-    infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
+    infra_label = "daytona" if daytona else (f"toolkit:{eai_profile}" if toolkit else "local")
     exp = Experiment(
         name=f"genny2-swe-live-{model_key}-{infra_label}",
-        output_dir=retry_dir,
+        output_dir=retry_dir or output_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
         infra=infra,
@@ -198,7 +211,14 @@ if __name__ == "__main__":
     parser.add_argument("--n-tasks", type=int, default=None, help="Take first N tasks from subset")
     parser.add_argument("--n-parallel", type=int, default=5)
     parser.add_argument("--retry", metavar="DIR", default=None, help="Resume from output dir")
+    parser.add_argument(
+        "--output-dir",
+        metavar="DIR",
+        default=None,
+        help="Write results into existing dir without resume (use with --tasks to fill gaps)",
+    )
     parser.add_argument("--toolkit", action="store_true")
+    parser.add_argument("--daytona", action="store_true", help="Use Daytona infra (requires DAYTONA_API_KEY)")
     parser.add_argument("--eai-profile", default="yul101")
     parser.add_argument("--eai-path", default="eai")
     parser.add_argument("--preemptable", action="store_true")
@@ -227,7 +247,9 @@ if __name__ == "__main__":
         n_tasks=args.n_tasks,
         n_parallel=args.n_parallel,
         retry_dir=Path(args.retry) if args.retry else None,
+        output_dir=Path(args.output_dir) if args.output_dir else None,
         toolkit=args.toolkit,
+        daytona=args.daytona,
         eai_profile=args.eai_profile,
         eai_path=args.eai_path,
         preemptable=args.preemptable,
