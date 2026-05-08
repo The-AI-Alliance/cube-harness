@@ -3,6 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+import tenacity
 from litellm import Message
 from litellm.types.utils import ChatCompletionMessageToolCall, Function
 
@@ -110,7 +112,7 @@ class TestLLM:
         llm = LLM(config=sample_llm_config)
         assert llm.config == sample_llm_config
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_llm_call(self, mock_completion, sample_llm_config, sample_prompt):
         """Test LLM call with mocked completion."""
         mock_message = Message(role="assistant", content="Hello! How can I help?")
@@ -129,7 +131,7 @@ class TestLLM:
         assert result.message.content == "Hello! How can I help?"
         assert result.usage.prompt_tokens == 0  # No usage info provided
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_llm_call_with_tools(self, mock_completion, sample_llm_config) -> None:
         """Test LLM call with tools."""
         tool_call = ChatCompletionMessageToolCall(
@@ -190,3 +192,63 @@ class TestLLMCall:
         assert "id" in data
         assert "timestamp" in data
         assert data["llm_config"]["model_name"] == "gpt-5-nano"
+
+
+class TestRetryBackoff:
+    """Tests for LLM._completion_with_retry tenacity-based retry."""
+
+    def _make_ok_response(self) -> MagicMock:
+        return MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="ok"))],
+            usage=None,
+        )
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_succeeds_on_first_attempt(self, mock_completion: MagicMock) -> None:
+        """No retry needed when the first call succeeds."""
+        mock_completion.return_value = self._make_ok_response()
+        llm = LLM(config=LLMConfig(model_name="gpt-5-nano", num_retries=3))
+        prompt = Prompt(messages=[{"role": "user", "content": "hi"}], tools=[])
+        llm(prompt)
+        assert mock_completion.call_count == 1
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_retries_on_transient_error_then_succeeds(self, mock_completion: MagicMock) -> None:
+        """Retries when first call raises a retriable error, then succeeds."""
+        from litellm.exceptions import InternalServerError
+
+        mock_completion.side_effect = [
+            InternalServerError("overloaded", llm_provider="anthropic", model="claude"),
+            self._make_ok_response(),
+        ]
+        llm = LLM(config=LLMConfig(model_name="gpt-5-nano", num_retries=3))
+        prompt = Prompt(messages=[{"role": "user", "content": "hi"}], tools=[])
+        with patch("tenacity.wait_exponential", return_value=tenacity.wait_none()):
+            result = llm(prompt)
+        assert mock_completion.call_count == 2
+        assert result.message.content == "ok"
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_does_not_retry_permanent_errors(self, mock_completion: MagicMock) -> None:
+        """Non-retriable errors (e.g. NotFoundError) are raised immediately without retry."""
+        from litellm.exceptions import NotFoundError
+
+        mock_completion.side_effect = NotFoundError("model not found", llm_provider="openai", model="bad-model")
+        llm = LLM(config=LLMConfig(model_name="bad-model", num_retries=3))
+        prompt = Prompt(messages=[{"role": "user", "content": "hi"}], tools=[])
+        with pytest.raises(NotFoundError):
+            llm(prompt)
+        assert mock_completion.call_count == 1
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_reraises_after_exhausting_retries(self, mock_completion: MagicMock) -> None:
+        """After num_retries attempts all failing, the exception is re-raised."""
+        from litellm.exceptions import RateLimitError
+
+        mock_completion.side_effect = RateLimitError("rate limited", llm_provider="openai", model="gpt-5-nano")
+        llm = LLM(config=LLMConfig(model_name="gpt-5-nano", num_retries=2))
+        prompt = Prompt(messages=[{"role": "user", "content": "hi"}], tools=[])
+        with patch("tenacity.wait_exponential", return_value=tenacity.wait_none()):
+            with pytest.raises(RateLimitError):
+                llm(prompt)
+        assert mock_completion.call_count == 2
