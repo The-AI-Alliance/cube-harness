@@ -194,6 +194,7 @@ class Episode:
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
+                        "seed": getattr(self.config.task_config, "seed", None),
                         **env_output.info,
                         **(extra_metadata or {}),
                     },
