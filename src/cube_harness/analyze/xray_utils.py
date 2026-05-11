@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from cube_harness.agent import AgentConfig
 from cube_harness.analyze.stats import reward_mean_stderr
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
-from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
+from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus, should_sweep_running_to_stale
 from cube_harness.episode_status import TERMINAL_STATUSES as _EPISODE_TERMINAL_STATUSES
 from cube_harness.exp_runner import DEFAULT_CANCEL_GRACE_S, DEFAULT_STEP_TIMEOUT_S
 from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus
@@ -445,20 +445,17 @@ GHOST_TIMEOUT = DEFAULT_STEP_TIMEOUT_S + DEFAULT_CANCEL_GRACE_S  # mirrors runne
 _XRAY_CACHE_FILENAME = ".xray_summary.json"
 
 
-def _driver_alive(exp_dir: Path) -> bool:
+def _driver_alive(exp_status: ExperimentStatus | None, exp_dir: Path) -> bool:
     """Return True if the experiment driver appears to be alive.
 
-    Reads `experiment_status.json`.  Returns True when the file is absent (old
-    experiments without a status file — we can't tell, so we don't promote).
-
-    Mode-aware liveness:
+    Takes the already-read `ExperimentStatus` (None = file absent → assume alive,
+    covers pre-heartbeat experiments). Mode-aware:
     - "ray": trusts the experiment heartbeat alone (driver polls every ~30 s).
     - "sequential": falls back to episode-level heartbeats when the experiment
       heartbeat is stale, because the driver heartbeats *between* episodes, not
       inside episode.run(), so a long-running episode makes the experiment
-      heartbeat appear old even when the driver is alive.
+      heartbeat look stale even when the driver is alive.
     """
-    exp_status = ExperimentStatus.read(exp_dir / EXPERIMENT_STATUS_FILENAME)
     if exp_status is None:
         return True  # no status file → assume alive (pre-heartbeat experiment)
     if exp_status.status in ("COMPLETED", "INTERRUPTED"):
@@ -467,7 +464,7 @@ def _driver_alive(exp_dir: Path) -> bool:
     if now - exp_status.last_heartbeat_at <= GHOST_TIMEOUT:
         return True  # fresh experiment heartbeat
     if exp_status.mode == "sequential":
-        # Stale experiment heartbeat but sequential mode: check episode heartbeats.
+        # Stale experiment heartbeat in sequential mode: check episode heartbeats.
         # A live RUNNING episode means the driver is mid-episode and alive.
         episodes_dir = exp_dir / "episodes"
         if episodes_dir.exists():
@@ -486,15 +483,17 @@ def _driver_alive(exp_dir: Path) -> bool:
 def _promote_ghost_episodes(exp_dir: Path) -> None:
     """Write STALE into status.json for in-flight episodes whose driver is dead.
 
-    RUNNING episodes: promoted when their heartbeat has been silent for > GHOST_TIMEOUT.
-    QUEUED episodes: promoted only when the driver is confirmed dead via
-    `experiment_status.json` — prevents silently killing tasks that are legitimately
-    waiting for a Ray worker slot in a large batch.
+    RUNNING + ray mode: promoted by per-episode heartbeat age (GHOST_TIMEOUT).
+    RUNNING + sequential mode + driver dead: promoted immediately — driver is the
+      worker, so process death kills both.
+    QUEUED + driver dead: promoted regardless of mode — no worker will ever pick
+      these up if the scheduler that queued them is gone.
     """
     episodes_dir = exp_dir / "episodes"
     if not episodes_dir.exists():
         return
-    driver_dead = not _driver_alive(exp_dir)
+    exp_status = ExperimentStatus.read(exp_dir / EXPERIMENT_STATUS_FILENAME)
+    driver_dead = not _driver_alive(exp_status, exp_dir)
     now = time.time()
     for ep_dir in episodes_dir.iterdir():
         if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
@@ -504,8 +503,15 @@ def _promote_ghost_episodes(exp_dir: Path) -> None:
             continue
         is_stale = False
         if status.status == "RUNNING":
-            hb = status.last_heartbeat_at or status.started_at
-            is_stale = now - hb > GHOST_TIMEOUT
+            if driver_dead and exp_status is not None and exp_status.mode == "sequential":
+                is_stale = True  # driver == worker; both dead
+            else:
+                is_stale = should_sweep_running_to_stale(
+                    status,
+                    now=now,
+                    step_timeout_s=DEFAULT_STEP_TIMEOUT_S,
+                    cancel_grace_s=DEFAULT_CANCEL_GRACE_S,
+                )
         elif status.status == "QUEUED" and driver_dead:
             is_stale = True
         if not is_stale:

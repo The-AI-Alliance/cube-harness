@@ -17,7 +17,7 @@ from cube_harness.agent import AgentConfig
 from cube_harness.core import Trajectory
 from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.episode_logs import trajectory_log_id
-from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus
+from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus, should_sweep_running_to_stale
 from cube_harness.eval_log import EvalLog, ExperimentRecord
 from cube_harness.storage import FileStorage
 
@@ -314,12 +314,14 @@ def sweep_stale_statuses(
     swept: list[str] = []
     for trajectory_id, status in storage.list_episode_statuses().items():
         is_stale = False
-        if status.status == "RUNNING" and status.last_heartbeat_at is not None:
-            if process_start_s is not None and status.last_heartbeat_at < process_start_s:
-                # Heartbeat predates this process — worker is provably dead.
-                is_stale = True
-            elif now - status.last_heartbeat_at > step_timeout_s + cancel_grace_s:
-                is_stale = True
+        if status.status == "RUNNING":
+            is_stale = should_sweep_running_to_stale(
+                status,
+                now=now,
+                step_timeout_s=step_timeout_s,
+                cancel_grace_s=cancel_grace_s,
+                process_start_s=process_start_s,
+            )
         elif status.status == "QUEUED":
             if now - status.started_at > orphan_threshold_s:
                 is_stale = True

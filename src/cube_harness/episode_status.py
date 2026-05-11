@@ -99,6 +99,30 @@ class EpisodeStatus:
         os.replace(tmp, path)
 
 
+def should_sweep_running_to_stale(
+    status: EpisodeStatus,
+    *,
+    now: float,
+    step_timeout_s: float,
+    cancel_grace_s: float,
+    process_start_s: float | None = None,
+) -> bool:
+    """Return True iff a RUNNING episode's worker appears dead and should become STALE.
+
+    Two cases:
+    - heartbeat predates `process_start_s` — worker is provably from a dead prior process.
+    - heartbeat age > `step_timeout_s + cancel_grace_s` — worker died without writing a
+      terminal status.
+
+    Returns False when `last_heartbeat_at` is None (episode never left QUEUED; no worker).
+    """
+    if status.last_heartbeat_at is None:
+        return False
+    if process_start_s is not None and status.last_heartbeat_at < process_start_s:
+        return True
+    return now - status.last_heartbeat_at > step_timeout_s + cancel_grace_s
+
+
 def next_retry_count(prior: "EpisodeStatus | None") -> int:
     """Return the retry_count for a new attempt, given the prior status (if any).
 
