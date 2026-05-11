@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Default timeouts shared with xray_utils for ghost-episode detection.
 DEFAULT_STEP_TIMEOUT_S: float = 9000.0
-DEFAULT_SETUP_TIMEOUT_S: float = 600.0
+DEFAULT_SETUP_TIMEOUT_S: float = 4 * DEFAULT_STEP_TIMEOUT_S  # container scheduling can queue
 DEFAULT_CANCEL_GRACE_S: float = 120.0
 
 # How often the driver updates experiment_status.json in Ray mode.
