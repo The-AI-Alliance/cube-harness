@@ -1,4 +1,6 @@
-"""Tool layer — bash, read_file, write_file backed by a CUBE Container."""
+"""Terminal tool for TerminalBench — extends TerminalTool with file upload helpers."""
+
+from __future__ import annotations
 
 import base64
 import io
@@ -6,21 +8,19 @@ import logging
 import shlex
 import tarfile
 from pathlib import Path
-from typing import Any
 
-from cube.container import Container, ExecResult
-from cube.tool import Tool, ToolConfig, tool_action
+from cube.container import Container
+from cube.tools.terminal import TerminalTool, TerminalToolConfig
 
 logger = logging.getLogger(__name__)
 
-MAX_OUTPUT_BYTES = 100_000
 
-
-class TerminalBenchToolConfig(ToolConfig):
-    """Config for the terminal-bench tool."""
+class TerminalBenchToolConfig(TerminalToolConfig):
+    """Config for TerminalBench — bash + file actions, 900s timeout cap."""
 
     working_dir: str = "/app"
-    max_output_bytes: int = MAX_OUTPUT_BYTES
+    max_timeout: int | None = 900
+    enable_file_actions: bool = True
 
     def make(self, container: Container | None = None) -> "TerminalBenchTool":
         if container is None:
@@ -28,87 +28,20 @@ class TerminalBenchToolConfig(ToolConfig):
         return TerminalBenchTool(config=self, container=container)
 
 
-class TerminalBenchTool(Tool):
-    """Agent-facing tool — delegates all execution to a CUBE Container."""
+class TerminalBenchTool(TerminalTool):
+    """TerminalTool extended with directory/file upload helpers for task setup.
 
-    def __init__(self, config: TerminalBenchToolConfig, container: Container) -> None:
-        self._config = config
-        self._container = container
+    Inherits bash(), read_file(), write_file(), bash_unlimited() from TerminalTool.
+    Overrides bash() to normalise LLM-supplied millisecond timeouts (timeout > 3600
+    is divided by 1000).  upload_file() and upload_directory() are internal helpers
+    used by the Task during reset() — not exposed as agent actions.
+    """
 
-    def reset(self) -> None:
-        pass
-
-    def _exec(self, command: str, **kwargs: Any) -> ExecResult:
-        """Run a command in the container with default workdir."""
-        kwargs.setdefault("workdir", self._config.working_dir)
-        return self._container.exec(command, **kwargs)
-
-    # ── Agent actions ──────────────────────────────────────────────
-    # bash() impl mirrors BashOnlySWEBenchTool (feat/swebench-verified-improvements).
-    # TODO: extract to a shared cube-tools package.
-
-    _MAX_BASH_TIMEOUT: int = 900
-
-    def _run_bash(self, command: str, timeout: int = 120) -> str:
-        result = self._container.exec(command, timeout=timeout, workdir=self._config.working_dir)
-        parts = []
-        if result.stdout:
-            parts.append(result.stdout)
-        if result.stderr:
-            parts.append(result.stderr)
-        if result.exit_code == 124:
-            parts.append(f"[timed out after {timeout}s]")
-        elif result.exit_code != 0:
-            parts.append(f"[exit_code: {result.exit_code}]")
-        return "\n".join(parts) if parts else "(no output)"
-
-    @tool_action
     def bash(self, command: str, timeout: int = 120) -> str:
-        """Execute a bash command in the sandbox and return its output.
-
-        Args:
-            command: Shell command. cwd=/app.
-            timeout: Seconds (NOT milliseconds), max 900.
-        """
-        if timeout > 3600:  # agent sent ms instead of seconds (e.g. 120000)
+        """Execute a bash command, normalising ms → s for LLM-supplied timeouts."""
+        if timeout > 3600:
             timeout = timeout // 1000
-        timeout = min(timeout, self._MAX_BASH_TIMEOUT)
-        output = self._run_bash(command, timeout=timeout)
-        encoded = output.encode("utf-8")
-        if len(encoded) <= self._config.max_output_bytes:
-            return output
-        head = encoded[:5000].decode("utf-8", errors="ignore")
-        tail = encoded[-5000:].decode("utf-8", errors="ignore")
-        return f"{head}\n[... {len(encoded) - 10000} bytes elided ...]\n{tail}"
-
-    def bash_unlimited(self, command: str, timeout: int = 120) -> str:
-        """Unlimited bash for internal use (evaluate, test harness)."""
-        return self._run_bash(command, timeout=timeout)
-
-    @tool_action
-    def read_file(self, path: str) -> str:
-        """Read the contents of a file in the sandbox."""
-        result = self._exec(f"cat {shlex.quote(path)}")
-        if result.exit_code != 0:
-            return f"Error reading {path}: {result.stderr or result.stdout}"
-        encoded = result.stdout.encode("utf-8")
-        if len(encoded) <= self._config.max_output_bytes:
-            return result.stdout
-        head = encoded[:5000].decode("utf-8", errors="ignore")
-        tail = encoded[-5000:].decode("utf-8", errors="ignore")
-        return f"{head}\n[... {len(encoded) - 10000} bytes elided ...]\n{tail}"
-
-    @tool_action
-    def write_file(self, path: str, content: str) -> str:
-        """Write content to a file in the sandbox."""
-        mkdir = self._exec(f"mkdir -p {shlex.quote(str(Path(path).parent))}")
-        if mkdir.exit_code != 0:
-            return f"Error creating parent dir for {path}: {mkdir.stderr or mkdir.stdout}"
-        escaped = content.replace("'", "'\\''")
-        write = self._exec(f"printf '%s' '{escaped}' > {shlex.quote(path)}")
-        if write.exit_code != 0:
-            return f"Error writing {path}: {write.stderr or write.stdout}"
-        return f"Wrote {len(content)} bytes to {path}"
+        return super().bash(command, timeout=timeout)
 
     # ── Internal helpers (used by Task, not exposed to agent) ─────
 
@@ -118,8 +51,13 @@ class TerminalBenchTool(Tool):
             self.write_file(remote_path, local_path.read_text(encoding="utf-8"))
         except UnicodeDecodeError:
             b64 = base64.b64encode(local_path.read_bytes()).decode("ascii")
-            self._exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}")
-            self._exec(f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}")
+            self._container.exec(
+                f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}", workdir=self._config.working_dir
+            )
+            self._container.exec(
+                f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}",
+                workdir=self._config.working_dir,
+            )
 
     def upload_directory(self, local_dir: Path, remote_dir: str) -> None:
         """Upload a local directory tree to the container in a single exec.
@@ -135,12 +73,16 @@ class TerminalBenchTool(Tool):
             tar.add(local_dir, arcname=".")
         b64 = base64.b64encode(buf.getvalue()).decode("ascii")
         remote_q = shlex.quote(remote_dir)
-        # Write the base64 payload in 8 KB chunks.  Single-arg printf through
-        # multiple shell layers can mangle long strings (observed with
-        # eai CLI + bash -lc); short chunks are robust.
+        # Write the base64 payload in 8 KB chunks — short chunks are robust
+        # through multiple shell layers (observed with eai CLI + bash -lc).
         chunk_size = 8192
         staging = "/tmp/cube-upload.tar.gz.b64"
-        self._exec(f": > {staging}")
+        self._container.exec(f": > {staging}", workdir=self._config.working_dir)
         for i in range(0, len(b64), chunk_size):
-            self._exec(f"printf %s {shlex.quote(b64[i : i + chunk_size])} >> {staging}")
-        self._exec(f"mkdir -p {remote_q} && base64 -d < {staging} | tar -xzf - -C {remote_q} && rm -f {staging}")
+            self._container.exec(
+                f"printf %s {shlex.quote(b64[i : i + chunk_size])} >> {staging}", workdir=self._config.working_dir
+            )
+        self._container.exec(
+            f"mkdir -p {remote_q} && base64 -d < {staging} | tar -xzf - -C {remote_q} && rm -f {staging}",
+            workdir=self._config.working_dir,
+        )
