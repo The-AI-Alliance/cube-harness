@@ -213,7 +213,12 @@ class Episode:
                     # Heartbeat 2: start of each turn, before agent.step() and step_fn().
                     ep_status.last_heartbeat_at = time.time()
                     ep_status.current_step = turns + 1
-                    self.storage.write_episode_status(trajectory_id, ep_status)
+                    try:
+                        self.storage.write_episode_status(trajectory_id, ep_status)
+                    except Exception:
+                        logger.warning(
+                            "Failed to write heartbeat for %s step %d", trajectory_id, turns + 1, exc_info=True
+                        )
 
                     with tracer.step(f"turn_{turns}") as span:
                         ts = time.time()

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Default timeouts shared with xray_utils for ghost-episode detection.
 DEFAULT_STEP_TIMEOUT_S: float = 9000.0
+DEFAULT_SETUP_TIMEOUT_S: float = 600.0
 DEFAULT_CANCEL_GRACE_S: float = 120.0
 
 
@@ -92,6 +93,7 @@ def run_with_ray(
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
     step_timeout_s: float = DEFAULT_STEP_TIMEOUT_S,
+    setup_timeout_s: float = DEFAULT_SETUP_TIMEOUT_S,
     cancel_grace_s: float = DEFAULT_CANCEL_GRACE_S,
     orphan_threshold_s: float = 3600.0,
     max_retry_rounds: int = 3,
@@ -115,6 +117,7 @@ def run_with_ray(
                 n_cpus=n_cpus,
                 ray_poll_timeout=ray_poll_timeout,
                 step_timeout_s=step_timeout_s,
+                setup_timeout_s=setup_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
                 max_retry_rounds=max_retry_rounds,
@@ -135,6 +138,7 @@ def _run_with_retries(
     n_cpus: int,
     ray_poll_timeout: float,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
     max_retry_rounds: int,
@@ -155,6 +159,7 @@ def _run_with_retries(
                 n_cpus=n_cpus,
                 ray_poll_timeout=ray_poll_timeout,
                 step_timeout_s=step_timeout_s,
+                setup_timeout_s=setup_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
             )
@@ -188,10 +193,12 @@ def _run_with_ray_impl(
     n_cpus: int,
     ray_poll_timeout: float,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
 ) -> ExpResult:
     """Run a single Ray round: pre-claim, submit, poll with step-timeout, sweep stale on shutdown."""
+    process_start_s = time.time()
     exp.save_config()
     output_dir = exp.output_dir
     storage = FileStorage(output_dir)
@@ -221,6 +228,7 @@ def _run_with_ray_impl(
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
+                process_start_s=process_start_s,
             )
 
             # Pre-claim every episode before any Ray submission so a concurrent runner
@@ -239,6 +247,7 @@ def _run_with_ray_impl(
                 storage,
                 ray_poll_timeout=ray_poll_timeout,
                 step_timeout_s=step_timeout_s,
+                setup_timeout_s=setup_timeout_s,
                 cancel_grace_s=cancel_grace_s,
             )
             exp.print_stats(results)
@@ -252,6 +261,7 @@ def _run_with_ray_impl(
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
+                process_start_s=process_start_s,
             )
 
 
@@ -262,6 +272,7 @@ def _poll_ray(
     *,
     ray_poll_timeout: float,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
 ) -> ExpResult:
     """Wait on Ray refs, collecting trajectories/failures and force-killing workers with stale heartbeats."""
@@ -300,6 +311,7 @@ def _poll_ray(
             storage,
             results,
             step_timeout_s=step_timeout_s,
+            setup_timeout_s=setup_timeout_s,
             cancel_grace_s=cancel_grace_s,
         )
     return results
@@ -312,13 +324,15 @@ def _kill_stale_workers(
     results: ExpResult,
     *,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
 ) -> None:
     """Read each active episode's status.json; force-kill workers with stale heartbeats.
 
-    A worker that has not advanced its heartbeat in `step_timeout_s + cancel_grace_s`
-    is presumed stuck. The driver force-cancels it, writes a `CANCELLED` status with
-    `error_type="StepTimeout"`, and removes the ref from the in-progress list.
+    Uses a phase-aware budget: episodes still in setup (current_step == 0) are given
+    `setup_timeout_s`; episodes that have entered the agent loop get the full `step_timeout_s`.
+    This lets setup hangs (container boot, env reset) be detected quickly without
+    shortening the budget for legitimate long-running agent steps.
     """
     now = time.time()
     to_remove: list[ray.ObjectRef] = []
@@ -330,11 +344,12 @@ def _kill_stale_workers(
         if status is None or status.status != "RUNNING" or status.last_heartbeat_at is None:
             continue
         age = now - status.last_heartbeat_at
-        if age <= step_timeout_s + cancel_grace_s:
+        budget = setup_timeout_s if status.current_step == 0 else step_timeout_s
+        if age <= budget + cancel_grace_s:
             continue
+        phase = "setup" if status.current_step == 0 else f"step {status.current_step}"
         logger.error(
-            f"Episode {traj_id} step {status.current_step} stalled for {age:.0f}s "
-            f"(>{step_timeout_s + cancel_grace_s:.0f}s) — force killing"
+            f"Episode {traj_id} {phase} stalled for {age:.0f}s (>{budget + cancel_grace_s:.0f}s) — force killing"
         )
         try:
             ray.cancel(ref, force=True)
@@ -351,8 +366,8 @@ def _kill_stale_workers(
             continue
         status.status = "CANCELLED"
         status.ended_at = now
-        status.error_type = "StepTimeout"
-        status.error_message = f"Step {status.current_step} exceeded {step_timeout_s:.0f}s"
+        status.error_type = "SetupTimeout" if status.current_step == 0 else "StepTimeout"
+        status.error_message = f"{phase} exceeded {budget:.0f}s"
         storage.write_episode_status(traj_id, status)
         results.failures[traj_id] = status.error_message
         to_remove.append(ref)
@@ -453,6 +468,7 @@ def _run_sequentially_impl(
     orphan_threshold_s: float,
 ) -> ExpResult:
     """Run a single sequential round in-process, returning trajectories and failures for this round."""
+    process_start_s = time.time()
     exp.save_config()
     storage = FileStorage(exp.output_dir)
     with exp.benchmark_config.make(exp.infra) as benchmark:
@@ -461,6 +477,7 @@ def _run_sequentially_impl(
             step_timeout_s=step_timeout_s,
             cancel_grace_s=cancel_grace_s,
             orphan_threshold_s=orphan_threshold_s,
+            process_start_s=process_start_s,
         )
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
