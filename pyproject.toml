@@ -20,6 +20,7 @@ dependencies = [
     "numpy~=2.3.5",
     "ray[default]>=2.52.1",
     "tenacity>=8.5.0",
+    "typer~=0.25",
     "python-dotenv~=1.2.0",
     "termcolor~=3.2",
     "opentelemetry-api>=1.20.0",

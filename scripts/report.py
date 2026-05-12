@@ -15,12 +15,12 @@ Run via ``make report`` or directly:
     scripts/report.py --results-dir /path/to   # custom results root
 """
 
-import argparse
 import json
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
+
+import typer
 
 from cube_harness.analyze.stats import reward_mean_stderr
 from cube_harness.episode_status import IN_FLIGHT_STATUSES, STATUS_ICONS
@@ -171,29 +171,23 @@ def _format_rows(rows: list[dict]) -> str:
     return "\n".join([header, sep, *(line(r) for r in rows)])
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Report cube-harness experiment results")
-    parser.add_argument("--match", default=None, help="Regex filter on experiment directory name")
-    parser.add_argument("--since", default=None, help="Only experiments on/after YYYY-MM-DD")
-    parser.add_argument("--last", type=int, default=None, help="Show only the N most recent")
-    parser.add_argument(
-        "--results-dir",
-        default=str(DEFAULT_RESULTS_DIR),
-        help=f"Results root (default: {DEFAULT_RESULTS_DIR})",
-    )
-    parser.add_argument("--no-header", action="store_true", help="Omit markdown table header + legend")
-    args = parser.parse_args()
+def main(
+    match: str | None = typer.Option(None, "--match", help="Regex filter on experiment directory name"),
+    since: str | None = typer.Option(None, "--since", help="Only experiments on/after YYYY-MM-DD"),
+    last: int | None = typer.Option(None, "--last", help="Show only the N most recent"),
+    results_dir: Path = typer.Option(DEFAULT_RESULTS_DIR, "--results-dir", help="Results root"),
+    no_header: bool = typer.Option(False, "--no-header", help="Omit markdown table header + legend"),
+) -> None:
+    """Markdown table of experiments in ``~/cube_harness_results/``."""
+    if not results_dir.exists():
+        typer.echo(f"Results dir not found: {results_dir}", err=True)
+        raise typer.Exit(1)
 
-    results_root = Path(args.results_dir)
-    if not results_root.exists():
-        print(f"Results dir not found: {results_root}", file=sys.stderr)
-        sys.exit(1)
-
-    since_ts = datetime.strptime(args.since, "%Y-%m-%d").timestamp() if args.since else None
-    pattern = re.compile(args.match, re.IGNORECASE) if args.match else None
+    since_ts = datetime.strptime(since, "%Y-%m-%d").timestamp() if since else None
+    pattern = re.compile(match, re.IGNORECASE) if match else None
 
     rows: list[dict] = []
-    for exp_dir in sorted(results_root.iterdir(), reverse=True):
+    for exp_dir in sorted(results_dir.iterdir(), reverse=True):
         if not exp_dir.is_dir():
             continue
         if pattern and not pattern.search(exp_dir.name):
@@ -206,21 +200,21 @@ def main() -> None:
         rows.append(row)
 
     rows.sort(key=lambda r: r["ts"], reverse=True)
-    if args.last:
-        rows = rows[: args.last]
+    if last:
+        rows = rows[:last]
 
     if not rows:
-        print("No matching experiments found.", file=sys.stderr)
-        sys.exit(0)
+        typer.echo("No matching experiments found.", err=True)
+        raise typer.Exit(0)
 
-    if not args.no_header:
-        print(
+    if not no_header:
+        typer.echo(
             "**Legend** — done/total: `+N▶` running · `+N🕐` queued · "
             "`N✗` failed · `N👻` stale (dead worker) · `N🚫` cancelled · "
             "`Nctx` context-window errors | accuracy ± SE over completed episodes\n"
         )
-    print(_format_rows(rows))
+    typer.echo(_format_rows(rows))
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
