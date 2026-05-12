@@ -522,8 +522,8 @@ def _read_all_archived_statuses(output_dir: Path, traj_id: str) -> list[dict]:
 # experiment_status.json lifecycle — end-to-end
 # ---------------------------------------------------------------------------
 
-from cube_harness.analyze.xray_utils import _driver_alive, _promote_ghost_episodes  # noqa: E402
-from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus  # noqa: E402
+from cube_harness.analyze.xray_utils import GHOST_TIMEOUT, _promote_ghost_episodes  # noqa: E402
+from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus, is_driver_alive  # noqa: E402
 
 
 def _make_simple_exp(tmp_dir: Path, scenarios: dict[str, list[str]], name: str = "exp_status") -> Experiment:
@@ -557,7 +557,7 @@ def test_experiment_status_sequential_happy_path(tmp_dir: Path) -> None:
     assert es.ended_at is not None
     assert es.ended_at >= es.started_at
     # Driver is done — XRay must see it as not alive.
-    assert _driver_alive(es, tmp_dir) is False
+    assert is_driver_alive(es, tmp_dir, timeout_s=GHOST_TIMEOUT) is False
 
 
 def test_experiment_status_sequential_interrupted(tmp_dir: Path, monkeypatch) -> None:
@@ -580,7 +580,7 @@ def test_experiment_status_sequential_interrupted(tmp_dir: Path, monkeypatch) ->
     assert es is not None
     assert es.status == "INTERRUPTED"
     assert es.ended_at is not None
-    assert _driver_alive(es, tmp_dir) is False
+    assert is_driver_alive(es, tmp_dir, timeout_s=GHOST_TIMEOUT) is False
 
 
 @pytest.mark.slow
@@ -601,7 +601,7 @@ def test_experiment_status_ray_happy_path(tmp_dir: Path) -> None:
     assert es.started_at >= started_before
     assert es.ended_at is not None and es.ended_at >= es.started_at
     # Driver finished — not alive.
-    assert _driver_alive(es, tmp_dir) is False
+    assert is_driver_alive(es, tmp_dir, timeout_s=GHOST_TIMEOUT) is False
 
 
 def test_experiment_status_interrupted_promotes_queued(tmp_dir: Path, monkeypatch) -> None:

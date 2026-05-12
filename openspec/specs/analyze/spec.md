@@ -35,17 +35,9 @@ CLI-style inspection helpers used by the viewer and exported for ad-hoc scripts.
 
 ### `xray_utils` (`cube_harness.analyze.xray_utils`)
 Formatting and data-extraction helpers (HTML rendering, trace fragments, step
-summaries), plus the **dead-driver detection** the viewer uses to decide whether
-orphaned in-flight episodes can be safely swept:
+summaries), plus `_promote_ghost_episodes(exp_dir)` — best-effort sweep run on
+every UI refresh:
 
-- `_driver_alive(exp_status, exp_dir) -> bool` — mode-aware liveness check.
-  - `None` exp_status → True (no `experiment_status.json` → pre-heartbeat
-    experiment, assume alive for backward compat).
-  - status `COMPLETED` / `INTERRUPTED` → False.
-  - status `RUNNING` with fresh experiment heartbeat (within `GHOST_TIMEOUT`) → True.
-  - status `RUNNING` with stale experiment heartbeat AND `mode == "sequential"` →
-    fall back to per-episode heartbeats (driver may be mid-episode).
-- `_promote_ghost_episodes(exp_dir)` — best-effort sweep run on every UI refresh:
   - RUNNING + ray (or no exp_status) → promote when per-episode heartbeat is older
     than `GHOST_TIMEOUT` (`should_sweep_running_to_stale` predicate).
   - RUNNING + sequential + driver_dead → promote immediately (driver IS the
@@ -53,6 +45,12 @@ orphaned in-flight episodes can be safely swept:
   - QUEUED + driver_dead → promote (no worker will ever pick it up if the
     scheduler is gone). QUEUED is **never** promoted when the driver is alive —
     in a large parallel batch, tasks legitimately wait hours for a slot.
+
+The "is the driver alive?" decision lives with the type it queries: see
+`is_driver_alive(exp_status, exp_dir, *, timeout_s)` in
+`cube_harness.experiment_status` for the mode-aware logic. Same shape as
+`should_sweep_running_to_stale` for episode statuses — predicate over the
+status object, callable from any consumer (viewer, monitoring, reports).
 
 ## UI model
 

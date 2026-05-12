@@ -26,7 +26,7 @@ from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus, should_sweep_running_to_stale
 from cube_harness.episode_status import TERMINAL_STATUSES as _EPISODE_TERMINAL_STATUSES
 from cube_harness.exp_runner import DEFAULT_CANCEL_GRACE_S, DEFAULT_STEP_TIMEOUT_S
-from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus
+from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus, is_driver_alive
 from cube_harness.llm import LLMCall
 
 logger = logging.getLogger(__name__)
@@ -445,41 +445,6 @@ GHOST_TIMEOUT = DEFAULT_STEP_TIMEOUT_S + DEFAULT_CANCEL_GRACE_S  # mirrors runne
 _XRAY_CACHE_FILENAME = ".xray_summary.json"
 
 
-def _driver_alive(exp_status: ExperimentStatus | None, exp_dir: Path) -> bool:
-    """Return True if the experiment driver appears to be alive.
-
-    Takes the already-read `ExperimentStatus` (None = file absent → assume alive,
-    covers pre-heartbeat experiments). Mode-aware:
-    - "ray": trusts the experiment heartbeat alone (driver polls every ~30 s).
-    - "sequential": falls back to episode-level heartbeats when the experiment
-      heartbeat is stale, because the driver heartbeats *between* episodes, not
-      inside episode.run(), so a long-running episode makes the experiment
-      heartbeat look stale even when the driver is alive.
-    """
-    if exp_status is None:
-        return True  # no status file → assume alive (pre-heartbeat experiment)
-    if exp_status.status in ("COMPLETED", "INTERRUPTED"):
-        return False
-    now = time.time()
-    if now - exp_status.last_heartbeat_at <= GHOST_TIMEOUT:
-        return True  # fresh experiment heartbeat
-    if exp_status.mode == "sequential":
-        # Stale experiment heartbeat in sequential mode: check episode heartbeats.
-        # A live RUNNING episode means the driver is mid-episode and alive.
-        episodes_dir = exp_dir / "episodes"
-        if episodes_dir.exists():
-            for ep_dir in episodes_dir.iterdir():
-                if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
-                    continue
-                ep_status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
-                if ep_status is None or ep_status.status != "RUNNING":
-                    continue
-                ep_hb = ep_status.last_heartbeat_at or ep_status.started_at
-                if now - ep_hb <= GHOST_TIMEOUT:
-                    return True
-    return False
-
-
 def _promote_ghost_episodes(exp_dir: Path) -> None:
     """Write STALE into status.json for in-flight episodes whose driver is dead.
 
@@ -493,7 +458,7 @@ def _promote_ghost_episodes(exp_dir: Path) -> None:
     if not episodes_dir.exists():
         return
     exp_status = ExperimentStatus.read(exp_dir / EXPERIMENT_STATUS_FILENAME)
-    driver_dead = not _driver_alive(exp_status, exp_dir)
+    driver_dead = not is_driver_alive(exp_status, exp_dir, timeout_s=GHOST_TIMEOUT)
     now = time.time()
     for ep_dir in episodes_dir.iterdir():
         if not ep_dir.is_dir() or ".archived_" in ep_dir.name:

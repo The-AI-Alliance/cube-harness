@@ -18,6 +18,8 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Literal
 
+from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
+
 logger = logging.getLogger(__name__)
 
 EXPERIMENT_STATUS_FILENAME = "experiment_status.json"
@@ -108,3 +110,49 @@ class ExperimentStatus:
             self.write(path)
         except Exception:
             logger.debug("Heartbeat write failed for %s", path, exc_info=True)
+
+
+def is_driver_alive(
+    exp_status: ExperimentStatus | None,
+    exp_dir: Path,
+    *,
+    timeout_s: float,
+) -> bool:
+    """Heuristic check: does the experiment driver appear to be alive?
+
+    Takes the already-read `ExperimentStatus` (None = file absent → assume alive,
+    covers pre-heartbeat experiments and the initial migration window). Mode-aware:
+
+    - "ray": trusts the experiment heartbeat alone (driver polls every ~30 s, so
+      a heartbeat older than `timeout_s` means the driver crashed).
+    - "sequential": falls back to per-episode heartbeats when the experiment
+      heartbeat is stale, because the driver heartbeats *between* episodes — a
+      long-running episode makes the experiment heartbeat look stale even though
+      the driver is alive inside `episode.run()`.
+
+    `timeout_s` is the staleness threshold for the heartbeat. Callers should pass
+    a value at least an order of magnitude larger than `_EXP_HEARTBEAT_INTERVAL_S`
+    in `exp_runner.py` to avoid false positives during short network/disk hiccups.
+    """
+    if exp_status is None:
+        return True  # no status file → assume alive (pre-heartbeat experiment)
+    if exp_status.status in ("COMPLETED", "INTERRUPTED"):
+        return False
+    now = time.time()
+    if now - exp_status.last_heartbeat_at <= timeout_s:
+        return True  # fresh experiment heartbeat
+    if exp_status.mode == "sequential":
+        # Stale experiment heartbeat in sequential mode: check per-episode heartbeats.
+        # A live RUNNING episode means the driver is mid-episode and alive.
+        episodes_dir = exp_dir / "episodes"
+        if episodes_dir.exists():
+            for ep_dir in episodes_dir.iterdir():
+                if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
+                    continue
+                ep_status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
+                if ep_status is None or ep_status.status != "RUNNING":
+                    continue
+                ep_hb = ep_status.last_heartbeat_at or ep_status.started_at
+                if now - ep_hb <= timeout_s:
+                    return True
+    return False
