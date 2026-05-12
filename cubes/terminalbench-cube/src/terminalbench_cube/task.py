@@ -467,7 +467,6 @@ class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
                 working_dir="/app",
                 max_timeout=900,
                 enable_file_actions=True,
-                normalize_ms_timeout=True,
             ),
             runtime_context=runtime_context,
             container_backend=container_backend,
