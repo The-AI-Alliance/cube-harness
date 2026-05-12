@@ -123,6 +123,7 @@ make install            # uv sync --all-extras
 make test               # full pytest
 make debug              # small end-to-end run
 make xray               # open the trajectory viewer
+make report             # markdown table of experiments in ~/cube_harness_results/ (forward args with ARGS="--last 10")
 make lint               # uvx ruff check --fix && uvx ruff format  (auto-fixes in place)
 make lint-check         # uvx ruff check --diff && uvx ruff format --diff  (read-only, what CI runs)
 make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency

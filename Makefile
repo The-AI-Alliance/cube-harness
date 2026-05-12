@@ -1,4 +1,4 @@
-.PHONY: help install ci-install update format lint lint-check test coverage hello debug xray review
+.PHONY: help install ci-install update format lint lint-check test coverage hello debug xray report review
 
 help:
 	@echo "make install       - Install dependencies in editable mode"
@@ -12,6 +12,7 @@ help:
 	@echo "make hello         - Run hello_miniwob recipe"
 	@echo "make debug         - Run hello_miniwob recipe in debug mode"
 	@echo "make xray          - Run AL2 XRay viewer in debug mode"
+	@echo "make report        - Print a markdown table of experiments in ~/cube_harness_results/"
 	@echo "make review PR=<n> - Check out a PR and set up any cross-repo cube-standard dependency"
 
 hello:
@@ -26,6 +27,9 @@ debug:
 
 xray:
 	uv run ch-xray --debug
+
+report:
+	uv run --active scripts/report.py $(ARGS)
 
 install:
 	@echo "🚀 Installing dependencies"

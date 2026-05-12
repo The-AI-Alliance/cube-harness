@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Experiment results reporter.
+"""Experiment results reporter — markdown table over cube_harness_results/.
 
-Scans cube_harness_results/ and prints a markdown summary table.
+Reuses cube_harness public APIs (no parallel parsing of episode files):
+  - `EpisodeStatus.from_json` and the canonical status constants for per-episode parsing
+  - `ExperimentResult(exp_dir).summary()` as the canonical avg_reward source when the
+    experiment has been finalised (falls back to a manual walk for in-flight runs).
 
-Usage:
+Run via ``make report`` or directly:
+
     scripts/report.py                          # all experiments, newest first
-    scripts/report.py --match haiku            # filter by substring in dir name
-    scripts/report.py --match "haiku.*tw"      # regex match
+    scripts/report.py --match haiku            # regex filter on dir name
     scripts/report.py --since 2026-05-03       # on or after date
-    scripts/report.py --last 10                # most recent N experiments
-    scripts/report.py --results-dir /path/to  # custom results root
+    scripts/report.py --last 10                # most recent N
+    scripts/report.py --results-dir /path/to   # custom results root
 """
 
 import argparse
@@ -20,7 +23,28 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from cube_harness.episode_status import (
+    IN_FLIGHT_STATUSES,
+    STATUS_FILENAME,
+    EpisodeStatus,
+)
+from cube_harness.results import ExperimentResult
+from cube_harness.storage import ARCHIVED_MARKER, EPISODES_DIR
+
 DEFAULT_RESULTS_DIR = Path.home() / "cube_harness_results"
+
+# Status display order — terminal-valid first, in-flight, then terminal-error.
+_DONE_STATUSES = ("COMPLETED", "MAX_STEPS_REACHED")
+_ERROR_STATUSES = ("FAILED", "STALE", "CANCELLED")
+
+# Icons for the status-breakdown column.
+_STATUS_ICONS: dict[str, str] = {
+    "RUNNING": "▶",
+    "QUEUED": "🕐",
+    "FAILED": "✗",
+    "STALE": "👻",
+    "CANCELLED": "🚫",
+}
 
 
 def _load_json(path: Path) -> dict:
@@ -30,139 +54,153 @@ def _load_json(path: Path) -> dict:
         return {}
 
 
+def _classify_template(template: str) -> str:
+    """Heuristic label for the agent's goal_template (best-effort, free-text)."""
+    if not template or template.strip() == "{{task}}":
+        return "minimal"
+    t = template.lower()
+    has_workflow = "suggested approach" in t
+    has_thought = "take time" in t
+    if has_workflow and has_thought:
+        return "thought-workflow"
+    if has_workflow:
+        return "workflow"
+    if has_thought:
+        return "thought"
+    return template[:30].replace("\n", " ")
+
+
+def _short_benchmark(name: str) -> str:
+    return name.replace("swebench-verified-cube", "sweb-v").replace("swebench-live-cube", "sweb-live")
+
+
+def _scan_episodes(exp_dir: Path) -> tuple[dict[str, int], list[float], float, int] | None:
+    """Walk episodes/ and return (status_counts, completed_rewards, total_cost, ctx_errors).
+
+    Returns None if the episodes dir is missing. Used for in-flight runs and for
+    the per-status breakdown that ExperimentSummary doesn't expose.
+    """
+    episodes_dir = exp_dir / EPISODES_DIR
+    if not episodes_dir.exists():
+        return None
+
+    counts: dict[str, int] = {}
+    completed_rewards: list[float] = []
+    total_cost = 0.0
+    ctx_errors = 0
+    seen: set[tuple[str, int]] = set()
+
+    for ep_dir in episodes_dir.iterdir():
+        if ARCHIVED_MARKER in ep_dir.name or not ep_dir.is_dir():
+            continue
+        status_path = ep_dir / STATUS_FILENAME
+        if not status_path.exists():
+            continue
+        try:
+            es = EpisodeStatus.from_json(status_path.read_text())
+        except (json.JSONDecodeError, KeyError):
+            continue
+        key = (es.task_id, es.episode_id)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        counts[es.status] = counts.get(es.status, 0) + 1
+        if es.error_type and "ContextWindow" in es.error_type:
+            ctx_errors += 1
+        if es.status in _DONE_STATUSES and es.reward is not None:
+            completed_rewards.append(float(es.reward))
+
+        total_cost += _load_json(ep_dir / "episode_record.json").get("usage", {}).get("total_cost_usd", 0.0)
+
+    return counts, completed_rewards, total_cost, ctx_errors
+
+
+def _format_episode_breakdown(counts: dict[str, int], ctx_errors: int) -> tuple[str, int]:
+    """Return ("done/total status icons", n_total) for the table row."""
+    n_done = sum(counts.get(s, 0) for s in _DONE_STATUSES)
+    n_inflight = sum(counts.get(s, 0) for s in IN_FLIGHT_STATUSES)
+    n_error = sum(counts.get(s, 0) for s in _ERROR_STATUSES)
+    n_total = n_done + n_inflight + n_error
+
+    parts = [f"{n_done}/{n_total}"]
+    inflight_parts = [f"{counts[s]}{_STATUS_ICONS[s]}" for s in ("RUNNING", "QUEUED") if counts.get(s)]
+    if inflight_parts:
+        parts.append("+" + "+".join(inflight_parts))
+    error_parts = [f"{counts[s]}{_STATUS_ICONS[s]}" for s in _ERROR_STATUSES if counts.get(s)]
+    if error_parts:
+        parts.append(" ".join(error_parts))
+    if ctx_errors:
+        parts.append(f"{ctx_errors}ctx")
+    return " ".join(parts), n_total
+
+
+def _format_accuracy(rewards: list[float], summary_avg: float | None, summary_n: int | None) -> str:
+    """Use ExperimentSummary if available (canonical), else compute from raw rewards."""
+    if summary_avg is not None and summary_n:
+        acc, n = summary_avg, summary_n
+    elif rewards:
+        acc, n = sum(rewards) / len(rewards), len(rewards)
+    else:
+        return "—"
+    se = math.sqrt(acc * (1 - acc) / n) if n > 1 else 0.0
+    return f"{acc:.1%} ±{se:.1%}"
+
+
 def _parse_experiment(exp_dir: Path) -> dict | None:
     record = _load_json(exp_dir / "experiment_record.json")
     if not record:
         return None
 
-    name = record.get("experiment_name", exp_dir.name)
-    benchmark = record.get("benchmark_name", "?")
-    # Shorten known benchmark names for display
-    benchmark = (
-        benchmark.replace("swebench-verified-cube", "sweb-v")
-        .replace("workarena", "workarena")
-        .replace("miniwob", "miniwob")
-    )
-    model = record.get("agent", {}).get("llm_model", "?")
-    template = record.get("agent", {}).get("config", {}).get("goal_template", "")
-    t = template.lower()
-    if not template or template.strip() == "{{task}}":
-        template_label = "minimal"
-    elif "suggested approach" in t and "take time" in t:
-        template_label = "thought-workflow"
-    elif "suggested approach" in t:
-        template_label = "workflow"
-    elif "take time" in t:
-        template_label = "thought"
-    else:
-        template_label = template[:30].replace("\n", " ")
+    scan = _scan_episodes(exp_dir)
+    if scan is None:
+        return None
+    counts, rewards, total_cost, ctx_errors = scan
+
+    # Canonical aggregate from ExperimentSummary when finalised — falls back to raw walk.
+    summary = ExperimentResult(exp_dir).summary()
+    summary_avg = summary.avg_reward if summary else None
+    summary_n = summary.n_completed if summary else None
 
     ts = record.get("evaluation_timestamp", 0)
-    date = datetime.fromtimestamp(ts).strftime("%m-%d %H:%M") if ts else "?"
-
-    episodes_dir = exp_dir / "episodes"
-    if not episodes_dir.exists():
-        return None
-
-    # Canonical status buckets (raw values from status.json)
-    # in-flight: RUNNING, QUEUED
-    # terminal-valid: COMPLETED, MAX_STEPS_REACHED  (have a reward)
-    # terminal-error: FAILED, STALE, CANCELLED      (no valid reward)
-    counts: dict[str, int] = {
-        "COMPLETED": 0,
-        "MAX_STEPS_REACHED": 0,
-        "RUNNING": 0,
-        "QUEUED": 0,
-        "FAILED": 0,
-        "STALE": 0,
-        "CANCELLED": 0,
-    }
-    completed_rewards: list[float] = []
-    context_window_errors = 0
-    total_cost = 0.0
-    seen_episode_ids: set[str] = set()
-
-    for ep_dir in episodes_dir.iterdir():
-        ep_name = ep_dir.name
-        # Skip archived entries (e.g. "ep7.archived_1234")
-        if ".archived_" in ep_name:
-            continue
-        if not ep_dir.is_dir():
-            continue
-
-        status_data = _load_json(ep_dir / "status.json")
-        if not status_data:
-            continue
-
-        ep_id = f"{status_data.get('task_id', ep_name)}_{status_data.get('episode_id', '')}"
-        if ep_id in seen_episode_ids:
-            continue
-        seen_episode_ids.add(ep_id)
-
-        raw_status = status_data.get("status", "UNKNOWN")
-        reward = status_data.get("reward")
-        error_type = status_data.get("error_type", "")
-
-        if error_type and "ContextWindow" in str(error_type):
-            context_window_errors += 1
-
-        if raw_status in counts:
-            counts[raw_status] += 1
-        else:
-            counts["FAILED"] += 1  # unknown terminal status → treat as error
-
-        if raw_status in ("COMPLETED", "MAX_STEPS_REACHED") and reward is not None:
-            completed_rewards.append(float(reward))
-
-        rec = _load_json(ep_dir / "episode_record.json")
-        total_cost += rec.get("usage", {}).get("total_cost_usd", 0.0)
-
-    n_done = counts["COMPLETED"] + counts["MAX_STEPS_REACHED"]
-    n_inflight = counts["RUNNING"] + counts["QUEUED"]
-    n_error = counts["FAILED"] + counts["STALE"] + counts["CANCELLED"]
-    n_total = n_done + n_inflight + n_error
-
-    if completed_rewards:
-        acc = sum(completed_rewards) / len(completed_rewards)
-        se = math.sqrt(acc * (1 - acc) / len(completed_rewards)) if len(completed_rewards) > 1 else 0.0
-        acc_str = f"{acc:.1%} ±{se:.1%}"
-    else:
-        acc_str = "—"
-
-    status_str = f"{n_done}/{n_total}"
-    if n_inflight:
-        inflight_parts = []
-        if counts["RUNNING"]:
-            inflight_parts.append(f"{counts['RUNNING']}▶")
-        if counts["QUEUED"]:
-            inflight_parts.append(f"{counts['QUEUED']}🕐")
-        status_str += f" +{'+'.join(inflight_parts)}"
-    if n_error:
-        error_parts = []
-        if counts["FAILED"]:
-            error_parts.append(f"{counts['FAILED']}✗")
-        if counts["STALE"]:
-            error_parts.append(f"{counts['STALE']}👻")
-        if counts["CANCELLED"]:
-            error_parts.append(f"{counts['CANCELLED']}🚫")
-        status_str += f" {' '.join(error_parts)}"
-    if context_window_errors:
-        status_str += f" {context_window_errors}ctx"
-
-    cost_str = f"${total_cost:.2f}" if total_cost else "—"
+    breakdown, _ = _format_episode_breakdown(counts, ctx_errors)
 
     return {
-        "date": date,
+        "date": datetime.fromtimestamp(ts).strftime("%m-%d %H:%M") if ts else "?",
         "ts": ts,
-        "name": name,
-        "benchmark": benchmark,
-        "model": model.split("/")[-1],  # strip provider prefix
-        "template": template_label,
-        "accuracy": acc_str,
-        "episodes": status_str,
-        "cost": cost_str,
+        "name": record.get("experiment_name", exp_dir.name),
+        "benchmark": _short_benchmark(record.get("benchmark_name", "?")),
+        "model": (record.get("agent", {}).get("llm_model") or "?").split("/")[-1],
+        "template": _classify_template(record.get("agent", {}).get("config", {}).get("goal_template", "")),
+        "accuracy": _format_accuracy(rewards, summary_avg, summary_n),
+        "episodes": breakdown,
+        "cost": f"${total_cost:.2f}" if total_cost else "—",
         "dir": exp_dir.name,
     }
+
+
+_COLUMNS = ("date", "benchmark", "model", "template", "accuracy", "episodes", "cost", "name")
+_HEADER_LABELS = {
+    "date": "date",
+    "benchmark": "bench",
+    "model": "model",
+    "template": "template",
+    "accuracy": "accuracy",
+    "episodes": "done/total",
+    "cost": "cost",
+    "name": "experiment",
+}
+
+
+def _format_rows(rows: list[dict]) -> str:
+    widths = {c: max(len(_HEADER_LABELS[c]), max(len(r[c]) for r in rows)) for c in _COLUMNS}
+
+    def line(r: dict) -> str:
+        return "| " + " | ".join(f"{r[c]:<{widths[c]}}" for c in _COLUMNS) + " |"
+
+    header = "| " + " | ".join(f"{_HEADER_LABELS[c]:<{widths[c]}}" for c in _COLUMNS) + " |"
+    sep = "| " + " | ".join("-" * widths[c] for c in _COLUMNS) + " |"
+    return "\n".join([header, sep, *(line(r) for r in rows)])
 
 
 def main() -> None:
@@ -175,7 +213,7 @@ def main() -> None:
         default=str(DEFAULT_RESULTS_DIR),
         help=f"Results root (default: {DEFAULT_RESULTS_DIR})",
     )
-    parser.add_argument("--no-header", action="store_true", help="Omit markdown table header")
+    parser.add_argument("--no-header", action="store_true", help="Omit markdown table header + legend")
     args = parser.parse_args()
 
     results_root = Path(args.results_dir)
@@ -183,19 +221,15 @@ def main() -> None:
         print(f"Results dir not found: {results_root}", file=sys.stderr)
         sys.exit(1)
 
-    since_ts = None
-    if args.since:
-        since_ts = datetime.strptime(args.since, "%Y-%m-%d").timestamp()
-
+    since_ts = datetime.strptime(args.since, "%Y-%m-%d").timestamp() if args.since else None
     pattern = re.compile(args.match, re.IGNORECASE) if args.match else None
 
-    rows = []
+    rows: list[dict] = []
     for exp_dir in sorted(results_root.iterdir(), reverse=True):
         if not exp_dir.is_dir():
             continue
         if pattern and not pattern.search(exp_dir.name):
             continue
-
         row = _parse_experiment(exp_dir)
         if row is None:
             continue
@@ -211,58 +245,13 @@ def main() -> None:
         print("No matching experiments found.", file=sys.stderr)
         sys.exit(0)
 
-    col_widths = {
-        "date": max(len("date"), max(len(r["date"]) for r in rows)),
-        "benchmark": max(len("bench"), max(len(r["benchmark"]) for r in rows)),
-        "model": max(len("model"), max(len(r["model"]) for r in rows)),
-        "template": max(len("template"), max(len(r["template"]) for r in rows)),
-        "accuracy": max(len("accuracy"), max(len(r["accuracy"]) for r in rows)),
-        "episodes": max(len("done/total"), max(len(r["episodes"]) for r in rows)),
-        "cost": max(len("cost"), max(len(r["cost"]) for r in rows)),
-        "name": max(len("experiment"), max(len(r["name"]) for r in rows)),
-    }
-
-    def fmt(row: dict) -> str:
-        return (
-            f"| {row['date']:<{col_widths['date']}} "
-            f"| {row['benchmark']:<{col_widths['benchmark']}} "
-            f"| {row['model']:<{col_widths['model']}} "
-            f"| {row['template']:<{col_widths['template']}} "
-            f"| {row['accuracy']:<{col_widths['accuracy']}} "
-            f"| {row['episodes']:<{col_widths['episodes']}} "
-            f"| {row['cost']:<{col_widths['cost']}} "
-            f"| {row['name']:<{col_widths['name']}} |"
-        )
-
     if not args.no_header:
         print(
-            "**Legend** — done/total: `+N▶` running · `+N🕐` queued · `N✗` failed · `N👻` stale (dead worker) · `N🚫` cancelled · `Nctx` context-window errors | accuracy ± SE over completed episodes\n"
+            "**Legend** — done/total: `+N▶` running · `+N🕐` queued · "
+            "`N✗` failed · `N👻` stale (dead worker) · `N🚫` cancelled · "
+            "`Nctx` context-window errors | accuracy ± SE over completed episodes\n"
         )
-        header = (
-            f"| {'date':<{col_widths['date']}} "
-            f"| {'bench':<{col_widths['benchmark']}} "
-            f"| {'model':<{col_widths['model']}} "
-            f"| {'template':<{col_widths['template']}} "
-            f"| {'accuracy':<{col_widths['accuracy']}} "
-            f"| {'done/total':<{col_widths['episodes']}} "
-            f"| {'cost':<{col_widths['cost']}} "
-            f"| {'experiment':<{col_widths['name']}} |"
-        )
-        sep = (
-            f"| {'-' * col_widths['date']} "
-            f"| {'-' * col_widths['benchmark']} "
-            f"| {'-' * col_widths['model']} "
-            f"| {'-' * col_widths['template']} "
-            f"| {'-' * col_widths['accuracy']} "
-            f"| {'-' * col_widths['episodes']} "
-            f"| {'-' * col_widths['cost']} "
-            f"| {'-' * col_widths['name']} |"
-        )
-        print(header)
-        print(sep)
-
-    for row in rows:
-        print(fmt(row))
+    print(_format_rows(rows))
 
 
 if __name__ == "__main__":
