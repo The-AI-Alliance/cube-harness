@@ -200,7 +200,9 @@ class WorkArenaTaskConfig(TaskConfig[WorkArenaTaskMetadata]):
 
 def _load_task_class(class_path: str) -> type:
     """Reconstruct a task class from its dotted module-qualified name."""
-    matches = [cls for cls in browsergym.workarena.ALL_WORKARENA_TASKS if f"{cls.__module__}.{cls.__name__}" == class_path]
+    matches = [
+        cls for cls in browsergym.workarena.ALL_WORKARENA_TASKS if f"{cls.__module__}.{cls.__name__}" == class_path
+    ]
     if len(matches) == 0:
         raise ValueError(f"{class_path!r} is not a registered WorkArena task class")
     assert len(matches) == 1, f"Duplicate task class registered for {class_path!r}"
