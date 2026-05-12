@@ -401,21 +401,14 @@ def test_episode_record_with_judge_output() -> None:
     record = record.model_copy(
         update={
             "judge_output": JudgeOutput(
-                analysis="Agent located the submit button at step 6 but never clicked it.",
-                outcome="failure",
-                summary="Agent identified the target but failed to submit.",
-                primary_blame="agent_scaffolding",
-                primary_blame_confidence=4,
-                other_blames=[],
-                evidence=[{"step": 6, "quote": "submit button visible at coords (412, 80)"}],
-                hypothesis="Adding an explicit 'submit when ready' clause to the system prompt would close this gap.",
-                hypothesis_confidence=3,
+                difficulty="hard",
+                feasible=True,
+                failure_root_cause="Agent did not find the submit button",
             )
         }
     )
-    assert record.judge_output.outcome.value == "failure"
-    assert record.judge_output.primary_blame.value == "agent_scaffolding"
-    assert record.judge_output.primary_blame_confidence == 4
+    assert record.judge_output.difficulty == "hard"
+    assert record.judge_output.feasible is True
 
 
 # ---------------------------------------------------------------------------
