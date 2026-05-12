@@ -8,7 +8,6 @@ from swebench_verified_cube.task import (
     SWEBenchVerifiedTaskConfig,
     SWEBenchVerifiedTaskMetadata,
 )
-from swebench_verified_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
 __all__ = [
     "SWEBenchVerifiedBenchmark",
@@ -17,8 +16,6 @@ __all__ = [
     "SWEBenchVerifiedTask",
     "SWEBenchVerifiedTaskConfig",
     "SWEBenchVerifiedTaskMetadata",
-    "SWEBenchTool",
-    "SWEBenchToolConfig",
     "get_debug_benchmark",
     "make_debug_agent",
 ]

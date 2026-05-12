@@ -143,10 +143,10 @@ def _make_benchmark_config(
     task_ids: list[str] | None,
     subset: str | None,
 ) -> object:
-    if benchmark_name == "swebench-verified":
-        from swebench_verified_cube.tool import BashOnlySWEBenchToolConfig
+    from cube.tools.terminal import TerminalToolConfig
 
-        tool_config = BashOnlySWEBenchToolConfig()
+    tool_config = TerminalToolConfig(working_dir="/testbed")
+    if benchmark_name == "swebench-verified":
         if debug:
             from swebench_verified_cube.debug import get_debug_benchmark
 
@@ -157,9 +157,6 @@ def _make_benchmark_config(
 
         config = SWEBenchVerifiedBenchmarkConfig(tool_config=tool_config)
     elif benchmark_name == "swebench-live":
-        from swebench_live_cube.tool import BashOnlySWEBenchToolConfig as LiveBashToolConfig
-
-        tool_config = LiveBashToolConfig()
         if debug:
             from swebench_live_cube.debug import get_debug_benchmark
 

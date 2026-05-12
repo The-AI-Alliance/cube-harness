@@ -8,11 +8,11 @@ import re
 import shlex
 from typing import Any
 
-from cube.container import ContainerBackend, relocate_if_readonly
+from cube.container import relocate_if_readonly
 from cube.core import ActionSchema, Observation
 from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
-from swebench_verified_cube.tool import BashOnlySWEBenchTool, SWEBenchTool, SWEBenchToolConfig
+from cube.tools.terminal import TerminalTool, TerminalToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
         # Oracle mode: write gold patch for debug/baseline use
         if self.oracle_mode and self._exec.patch:
-            assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+            assert isinstance(self.tool, TerminalTool)
             b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
@@ -172,7 +172,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
 
         # Apply test patch
         self._apply_patch(self._exec.test_patch)
@@ -210,7 +210,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
     def _apply_patch(self, patch: str) -> str:
         """Apply a unified diff patch to /testbed using git apply with fallbacks."""
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
         b64 = base64.b64encode(patch.encode()).decode()
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
@@ -255,7 +255,7 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         - non-zero exit but zero failures: old sympy containers emit import-level
           deprecation errors that inflate the exit code even when all tests passed.
         """
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
         if not test_directives:
             return True, ""
 
@@ -370,7 +370,7 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
         return SWEBenchVerifiedTask(
             metadata=self.metadata,
             execution_info=execution_info,
-            tool_config=self.tool_config or SWEBenchToolConfig(),
+            tool_config=self.tool_config or TerminalToolConfig(working_dir="/testbed", enable_file_actions=True),
             runtime_context=runtime_context,
             container_backend=container_backend,
             include_hints=self.include_hints,

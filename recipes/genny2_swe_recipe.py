@@ -125,15 +125,15 @@ def _make_benchmark_config(
     task_ids: list[str] | None,
     subset: str | None,
 ) -> object:
+    from cube.tools.terminal import TerminalToolConfig
     from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
-    from swebench_verified_cube.tool import BashOnlySWEBenchToolConfig
 
     if debug:
         from swebench_verified_cube.debug import get_debug_benchmark
 
         return get_debug_benchmark()
 
-    config = SWEBenchVerifiedBenchmarkConfig(tool_config=BashOnlySWEBenchToolConfig())
+    config = SWEBenchVerifiedBenchmarkConfig(tool_config=TerminalToolConfig(working_dir="/testbed"))
     if subset == "hal_mini":
         config = config.subset_from_list(list(_HAL_MINI_TASK_IDS))
     elif subset:

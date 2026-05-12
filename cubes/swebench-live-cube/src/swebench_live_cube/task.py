@@ -16,7 +16,7 @@ from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import ActionSchema, Observation
 from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
-from swebench_live_cube.tool import BashOnlySWEBenchTool, SWEBenchTool, SWEBenchToolConfig
+from cube.tools.terminal import TerminalTool, TerminalToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -194,11 +194,11 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
 
         # Oracle mode: write gold patch for debug/baseline use
         if self.oracle_mode and self._exec.patch:
-            assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+            assert isinstance(self.tool, TerminalTool)
             b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
         instruction = self._exec.problem_statement
         if self.include_hints and self._exec.hints_text:
             instruction += f"\n\n## Hints\n{self._exec.hints_text}"
@@ -213,7 +213,7 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
 
         fail_to_pass = self._exec.fail_to_pass
         pass_to_pass = self._exec.pass_to_pass
@@ -271,7 +271,7 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
 
     def _apply_patch(self, patch: str) -> str:
         """Apply a unified diff patch to /testbed using git apply with fallbacks."""
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
         b64 = base64.b64encode(patch.encode()).decode()
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
@@ -292,7 +292,7 @@ class SWEBenchLiveTask(Task[SWEBenchLiveTaskMetadata]):
 
     def _run_test_cmds(self, test_cmds: list[str], timeout: int = 1800) -> str:
         """Run the explicit test commands from the dataset."""
-        assert isinstance(self.tool, SWEBenchTool | BashOnlySWEBenchTool)
+        assert isinstance(self.tool, TerminalTool)
         if not test_cmds:
             return "(no test commands)"
 
@@ -435,7 +435,7 @@ class SWEBenchLiveTaskConfig(TaskConfig[SWEBenchLiveTaskMetadata]):
         return SWEBenchLiveTask(
             metadata=self.metadata,
             execution_info=execution_info,
-            tool_config=self.tool_config or SWEBenchToolConfig(),
+            tool_config=self.tool_config or TerminalToolConfig(working_dir="/testbed", enable_file_actions=True),
             runtime_context=runtime_context,
             container_backend=container_backend,
             include_hints=self.include_hints,

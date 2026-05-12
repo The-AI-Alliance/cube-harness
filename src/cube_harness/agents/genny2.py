@@ -361,7 +361,7 @@ class Genny2(Agent):
         # When obs_format="magic_submit", the agent submits by running:
         #   echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && cat patch.txt
         # Search all tool messages for the magic string — checking only the first line
-        # fails when BashOnlySWEBenchTool prepends <returncode>N</returncode>.
+        # fails when the tool prepends <returncode>N</returncode> (returncode_envelope format).
         if self.config.obs_format == "magic_submit" and self._actions_cnt > 0:
             raw_obs = obs.to_llm_messages()
             obs_combined = "\n".join(m.get("content", "") if isinstance(m, dict) else "" for m in raw_obs)
