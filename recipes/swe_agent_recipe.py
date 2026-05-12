@@ -5,17 +5,17 @@ Agent construction is delegated to ``cube_harness.agents.genny2_swe_config``.
 
 Usage:
     # Debug oracle tasks (no LLM, sequential):
-    .venv/bin/python recipes/genny2_swe.py --debug
-    .venv/bin/python recipes/genny2_swe.py --benchmark live --debug
+    .venv/bin/python recipes/swe_agent_recipe.py --debug
+    .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --debug
 
     # Full swebench-verified on Toolkit:
-    .venv/bin/python recipes/genny2_swe.py --toolkit --eai-path ~/bin/eai --n-parallel 20
+    .venv/bin/python recipes/swe_agent_recipe.py --toolkit --eai-path ~/bin/eai --n-parallel 20
 
     # HAL-50 subset on swebench-verified:
-    .venv/bin/python recipes/genny2_swe.py --subset hal_mini --toolkit ...
+    .venv/bin/python recipes/swe_agent_recipe.py --subset hal_mini --toolkit ...
 
     # SWE-bench Live, golden 30, Daytona:
-    .venv/bin/python recipes/genny2_swe.py --benchmark live --subset live-golden-30 --daytona
+    .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --subset live-golden-30 --daytona
 """
 
 import argparse

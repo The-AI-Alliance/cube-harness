@@ -33,13 +33,13 @@ cube install swebench-verified-cube      # one-time: download dataset + populate
 
 ```bash
 # 2 oracle debug tasks (no LLM, sequential):
-.venv/bin/python recipes/genny2_swe.py --debug
+.venv/bin/python recipes/swe_agent_recipe.py --debug
 
 # Full 500-task run on EAI Toolkit:
-.venv/bin/python recipes/genny2_swe.py --toolkit --eai-path ~/bin/eai --n-parallel 20
+.venv/bin/python recipes/swe_agent_recipe.py --toolkit --eai-path ~/bin/eai --n-parallel 20
 
 # Princeton HAL-50 subset (25 Django + 25 Sphinx):
-.venv/bin/python recipes/genny2_swe.py --subset hal_mini \
+.venv/bin/python recipes/swe_agent_recipe.py --subset hal_mini \
     --toolkit --eai-path ~/bin/eai --n-parallel 20
 ```
 

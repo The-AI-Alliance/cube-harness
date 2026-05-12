@@ -27,18 +27,18 @@ Re-running `install` is idempotent — it skips when the cache is already popula
 
 ### Via recipe (full evaluation run)
 
-The unified SWE recipe handles both Verified and Live. See [`recipes/genny2_swe.py`](../../recipes/genny2_swe.py).
+The unified SWE recipe handles both Verified and Live. See [`recipes/swe_agent_recipe.py`](../../recipes/swe_agent_recipe.py).
 
 ```bash
 # 2 oracle debug tasks, sequential, no LLM:
-.venv/bin/python recipes/genny2_swe.py --benchmark live --debug
+.venv/bin/python recipes/swe_agent_recipe.py --benchmark live --debug
 
 # SWE-bench Live golden 30 on EAI Toolkit:
-.venv/bin/python recipes/genny2_swe.py --benchmark live --subset live-golden-30 \
+.venv/bin/python recipes/swe_agent_recipe.py --benchmark live --subset live-golden-30 \
     --toolkit --eai-path ~/bin/eai --n-parallel 30
 
 # Full 'lite' subset (300 tasks):
-.venv/bin/python recipes/genny2_swe.py --benchmark live --subset lite \
+.venv/bin/python recipes/swe_agent_recipe.py --benchmark live --subset lite \
     --toolkit --eai-path ~/bin/eai --n-parallel 50
 ```
 
