@@ -10,7 +10,7 @@ name: integration (local)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - 'cubes/terminalbench-cube/**'
       - 'cubes/swebench-verified-cube/**'
@@ -18,7 +18,7 @@ on:
       - 'integration-tests/**'
       - '.github/workflows/integration-local.yml'
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:  # manual trigger
 
 concurrency:
