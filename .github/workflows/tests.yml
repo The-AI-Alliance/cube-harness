@@ -28,6 +28,16 @@ jobs:
       - name: Install dependencies
         run: make ci-install
 
+      # Cross-repo dep override: cube-harness's swe-* and terminalbench cubes
+      # import cube.tools.terminal (TerminalTool) which is on cube-standard's dev
+      # branch but not yet in a published release. The convention is to keep the
+      # PyPI pin in pyproject.toml and signal cross-repo deps via the PR body's
+      # `Depends-on:` line — but no automation reads that yet, so the override
+      # is hard-coded here. TODO: remove once cube-standard ships an rc with
+      # cube.tools.terminal and update pyproject pins to `>=0.1.0rc<N>`.
+      - name: Override cube-standard with dev branch (cross-repo dep)
+        run: uv pip install --force-reinstall --no-deps 'cube-standard[docker] @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
+
       - name: Run tests
         run: uv run pytest -n 10 tests/ -v
 

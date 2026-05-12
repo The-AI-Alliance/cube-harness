@@ -53,6 +53,13 @@ jobs:
         working-directory: integration-tests
         run: uv sync --group local --group dev
 
+      # Cross-repo dep override: swe-*/terminalbench cubes import cube.tools.terminal
+      # which is on cube-standard's dev branch but not yet in a published release.
+      # TODO: remove once cube-standard ships an rc with cube.tools.terminal.
+      - name: Override cube-standard with dev branch (cross-repo dep)
+        working-directory: integration-tests
+        run: uv pip install --force-reinstall --no-deps 'cube-standard[docker] @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
+
       - name: Docker daemon info
         run: docker info
 
