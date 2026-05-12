@@ -53,7 +53,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 cube-standard = { git = "https://github.com/The-AI-Alliance/cube-standard", branch = "main" }
-cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", branch = "main" }
+cube-computer-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-computer-tool", branch = "dev" }
 cube-infra-azure = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-resources/cube-infra-azure", branch = "main" }
 
 [dependency-groups]
