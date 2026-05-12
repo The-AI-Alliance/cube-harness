@@ -189,7 +189,7 @@ def _llm_cfg() -> LLMConfig:
     )
 
 
-@pytest.mark.integration
+@pytest.mark.live_api
 class TestModeACaching:
     """Mode A (raw history): cache breakpoint at system + last assistant.
     Cross-step cache hits should appear from step 2 onwards.
@@ -243,7 +243,7 @@ class TestModeACaching:
             )
 
 
-@pytest.mark.integration
+@pytest.mark.live_api
 class TestModeBCaching:
     """Mode B (rolling summaries): separate summary + action messages ensure
     byte-stable summaries across steps. Cross-step hits extend through all prior summaries.
@@ -279,7 +279,7 @@ class TestModeBCaching:
         )
 
 
-@pytest.mark.integration
+@pytest.mark.live_api
 class TestFlatModeCaching:
     """Flat mode: append-only linear history; identical cache behaviour to Mode A."""
 

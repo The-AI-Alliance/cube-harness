@@ -41,11 +41,17 @@ jobs:
       # --no-sync on the three uv run invocations below preserves the cube-standard@dev
       # override above. Without it, `uv run` re-syncs the venv back to the lockfile
       # state and reverts cube-standard to PyPI rc8, which doesn't have cube.tools.terminal.
+      #
+      # Test tiers (see pyproject markers + AGENTS.md "Test categories"):
+      #   - default: everything except live_api (real-LLM tests that cost money and
+      #     auto-skip without ANTHROPIC_API_KEY anyway)
+      #   - integration: Playwright tests, after `playwright install`
+      #   - live_api: never runs in CI; opt-in locally via `pytest -m live_api`
       - name: Run tests
-        run: uv run --no-sync pytest -n 10 tests/ -v
+        run: uv run --no-sync pytest -n 10 tests/ -m "not live_api" -v
 
       - name: Install Playwright browsers
         run: uv run --no-sync playwright install chromium
 
       - name: Run integration tests
-        run: uv run --no-sync pytest tests/ -m integration -v
+        run: uv run --no-sync pytest tests/ -m "integration and not live_api" -v

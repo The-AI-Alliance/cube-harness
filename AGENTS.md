@@ -131,6 +131,24 @@ make review PR=<n>      # check out a PR and wire up any cross-repo cube-standar
 uv run recipes/hello_miniwob.py   # example run
 ```
 
+### Test categories
+
+Pytest markers (declared in `pyproject.toml`) gate four tiers — pick the smallest one that exercises your change:
+
+| Marker | When to run | What it covers |
+|---|---|---|
+| *(unmarked)* | every iteration | ~980 fast tests, no external deps. ~30s. This is what `make test` defaults to. |
+| `slow` | before pushing if you touched `experiment`, `exp_runner`, `xray`, retry, or storage | Ray retry orchestration + xray e2e (~85s) |
+| `integration` | if you touched browser tools (`browsergym.py`, MiniWob, WorkArena) | Playwright/Chromium tests; needs `uv run playwright install chromium` first |
+| `live_api` | when modifying `llm.py` cache control / streaming / tool-choice behavior | Hits a real LLM provider. Costs ~$0.05/run. **Auto-skips without `ANTHROPIC_API_KEY`. Never runs in CI by default.** Only way to verify real `cache_read_tokens` from the API response. |
+
+```bash
+pytest tests/ -m "not slow and not integration and not live_api"   # fast tier, ~30s
+pytest tests/ -m "slow"                                              # Ray + xray e2e
+pytest tests/ -m "integration"                                       # Playwright (after install)
+ANTHROPIC_API_KEY=... pytest tests/ -m "live_api"                    # real-LLM verification
+```
+
 Always run `make lint` before finishing a task. `ruff check` and `ruff format` are
 **separate passes** — running only one is not enough for CI.
 
