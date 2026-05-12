@@ -23,6 +23,9 @@ build-backend = "uv_build"
 [tool.uv-build]
 include = ["src/workarena_cube/task_metadata.json"]
 
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
 [tool.ruff]
 fix = true
 line-length = 120
