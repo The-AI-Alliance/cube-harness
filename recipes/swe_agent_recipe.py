@@ -174,8 +174,14 @@ def _make_live_benchmark(
 
     cfg = SWEBenchLiveBenchmarkConfig()
     if solvable_from is not None:
-        task_ids = json.loads(solvable_from.read_text())
-    if subset == "live-golden-30":
+        task_ids = _load_solvable_task_ids(solvable_from)
+    if subset == "solvable-lite":
+        # Gold-patch-confirmed subset of lite; resource bundled in the cube package.
+        from importlib.resources import files
+
+        snapshot = files("swebench_live_cube").joinpath("lite_solvable_2026-05-12.json")
+        task_ids = _load_solvable_task_ids(Path(str(snapshot)))
+    elif subset == "live-golden-30":
         from swebench_live_cube.gold_patch.recipe import _LIVE_GOLDEN_30
 
         cfg = cfg.subset_from_list(list(_LIVE_GOLDEN_30))
@@ -186,6 +192,20 @@ def _make_live_benchmark(
     elif n_tasks:
         cfg = cfg.subset_from_list(list(cfg.task_metadata.keys())[:n_tasks])
     return cfg
+
+
+def _load_solvable_task_ids(path: Path) -> list[str]:
+    """Read either a bare list (legacy) or the metadata-wrapped schema.
+
+    Modern schema (preferred): ``{"date", "source_set", "n_tasks", "task_ids": [...]}``.
+    Legacy: a bare ``["task_id_1", ...]`` JSON list. Both are accepted so older
+    ``--solvable-from path.json`` dumps from ``gold_patch.recipe --dump-solvable``
+    keep working.
+    """
+    data = json.loads(path.read_text())
+    if isinstance(data, list):
+        return data
+    return data["task_ids"]
 
 
 # ---------------------------------------------------------------------------

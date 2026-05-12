@@ -42,7 +42,7 @@ The unified SWE recipe handles both Verified and Live. See [`recipes/swe_agent_r
     --toolkit --eai-path ~/bin/eai --n-parallel 50
 ```
 
-Named subsets: `solvable-lite` (217 gold-confirmed), `live-golden-30` (30 confirmed-solvable), `lite` (300), `verified` (499 Linux-runnable), `full` (1,895), `test`.
+Named subsets: `solvable-lite` (223 gold-confirmed snapshot — see `src/swebench_live_cube/lite_solvable_<date>.json`), `live-golden-30` (30 confirmed-solvable), `lite` (300), `verified` (499 Linux-runnable), `full` (1,895), `test`.
 
 ### Programmatic
 
@@ -84,6 +84,30 @@ bench.close()
 .venv/bin/python -m swebench_live_cube.gold_patch.recipe \
     --from-runs dir1 dir2 dir3 --dump-solvable solvable_lite_stable.json
 ```
+
+## Solvable snapshots
+
+A solvable snapshot is a JSON file shipped inside the package that records which task IDs resolved (reward == 1.0) under the gold-patch oracle on a given source subset, on a given date. Filename convention: `<subset>_solvable_<YYYY-MM-DD>.json`. Schema:
+
+```json
+{
+  "date": "2026-05-12",
+  "source_set": "swe-bench-live/lite",
+  "description": "...",
+  "n_tasks": 223,
+  "task_ids": ["..."]
+}
+```
+
+Snapshots are recipe-level pinned subsets — they freeze a deterministic task list so two agents can be compared on the same ground truth without re-running the gold-patch oracle. Regenerate with:
+
+```bash
+.venv/bin/python -m swebench_live_cube.gold_patch.recipe --subset lite \
+    --n-runs 3 --dump-solvable <new-snapshot-path>.json \
+    --toolkit --eai-path ~/bin/eai --n-parallel 50
+```
+
+Then wrap the resulting bare list in the schema above and rename to encode the date.
 
 ## Evaluation
 
