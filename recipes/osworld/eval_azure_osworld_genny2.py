@@ -110,6 +110,10 @@ surrounding layout). Coordinates are pixels measured from the screen's top-left 
 You control the computer by calling discrete primitive actions.
 
 ### Mouse
+x and y are always separate integer arguments — never a combined string or tuple.
+  ✓ click(x=500, y=400)          ✓ move_to(x=100, y=200)          ✓ scroll(dx=0, dy=3)
+  ✗ click(x="500, 400")          ✗ click(x=500, 400)              ✗ click("500, 400")
+
 - click(button="left", x=-1, y=-1, num_clicks=1)  — click at coords; -1 = use cursor pos
 - double_click(x=-1, y=-1)                        — double-click at coords
 - right_click(x=-1, y=-1)                         — right-click at coords
