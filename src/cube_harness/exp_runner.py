@@ -5,7 +5,10 @@ import os
 import socket
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import ray
@@ -65,6 +68,44 @@ def _trajectory_id(episode: Episode) -> str:
     return trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
 
 
+@contextmanager
+def _experiment_lifecycle(exp_dir: Path, mode: Literal["ray", "sequential"]) -> Iterator[tuple[ExperimentStatus, Path]]:
+    """Manage `experiment_status.json` from RUNNING through terminal write.
+
+    Writes RUNNING on entry. On normal exit, writes COMPLETED; on exception,
+    writes INTERRUPTED. Both initial and terminal writes log a warning on
+    failure rather than swallowing silently — these bracket the run, so a
+    failure here is something an operator should see.
+    """
+    now = time.time()
+    exp_status = ExperimentStatus(
+        status="RUNNING",
+        mode=mode,
+        pid=os.getpid(),
+        host=socket.gethostname(),
+        started_at=now,
+        last_heartbeat_at=now,
+        total_episodes=0,
+    )
+    exp_status_path = exp_dir / EXPERIMENT_STATUS_FILENAME
+    try:
+        exp_status.write(exp_status_path)
+    except Exception:
+        logger.warning("Failed to write initial experiment status", exc_info=True)
+    completed = False
+    try:
+        yield exp_status, exp_status_path
+        completed = True
+    finally:
+        exp_status.status = "COMPLETED" if completed else "INTERRUPTED"
+        exp_status.ended_at = time.time()
+        exp_status.last_heartbeat_at = exp_status.ended_at
+        try:
+            exp_status.write(exp_status_path)
+        except Exception:
+            logger.warning("Failed to write terminal experiment status", exc_info=True)
+
+
 def _pre_claim(storage: Storage, episode: Episode) -> None:
     """Write `QUEUED` for an episode before submitting it to Ray.
 
@@ -115,25 +156,12 @@ def run_with_ray(
         model=model,
         agent_name=agent_name,
     )
-    now = time.time()
-    exp_status = ExperimentStatus(
-        status="RUNNING",
-        mode="ray",
-        pid=os.getpid(),
-        host=socket.gethostname(),
-        started_at=now,
-        last_heartbeat_at=now,
-        total_episodes=0,
-    )
-    exp_status_path = exp.output_dir / EXPERIMENT_STATUS_FILENAME
     try:
-        exp_status.write(exp_status_path)
-    except Exception:
-        logger.warning("Failed to write initial experiment status", exc_info=True)
-    _completed = False
-    try:
-        with tracer.benchmark(exp.name):
-            result = _run_with_retries(
+        with (
+            tracer.benchmark(exp.name),
+            _experiment_lifecycle(exp.output_dir, mode="ray") as (exp_status, exp_status_path),
+        ):
+            return _run_with_retries(
                 exp,
                 n_cpus=n_cpus,
                 ray_poll_timeout=ray_poll_timeout,
@@ -145,16 +173,7 @@ def run_with_ray(
                 exp_status=exp_status,
                 exp_status_path=exp_status_path,
             )
-        _completed = True
-        return result
     finally:
-        exp_status.status = "COMPLETED" if _completed else "INTERRUPTED"
-        exp_status.ended_at = time.time()
-        exp_status.last_heartbeat_at = exp_status.ended_at
-        try:
-            exp_status.write(exp_status_path)
-        except Exception:
-            logger.warning("Failed to write terminal experiment status", exc_info=True)
         tracer.shutdown()
 
 
@@ -279,11 +298,7 @@ def _run_with_ray_impl(
                 ref = run_episode.remote(episode)
                 ref_to_traj_id[ref] = _trajectory_id(episode)
             exp_status.total_episodes = len(storage.list_episode_configs())
-            exp_status.last_heartbeat_at = time.time()
-            try:
-                exp_status.write(exp_status_path)
-            except Exception:
-                pass
+            exp_status.heartbeat(exp_status_path)
             logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
             results = _poll_ray(
                 exp,
@@ -367,15 +382,21 @@ def _poll_ray(
         # Heartbeat experiment_status.json so XRay knows this driver is alive.
         now = time.time()
         if now - last_exp_hb >= _EXP_HEARTBEAT_INTERVAL_S:
-            exp_status.last_heartbeat_at = now
-            exp_status.completed = len(results.trajectories)
-            exp_status.failed = len(results.failures)
-            try:
-                exp_status.write(exp_status_path)
-            except Exception:
-                pass
+            exp_status.heartbeat(
+                exp_status_path,
+                completed=len(results.trajectories),
+                failed=len(results.failures),
+            )
             last_exp_hb = now
 
+    # Final heartbeat flushes counters before the lifecycle writes the terminal
+    # status. Without this, the last batch of completions (or any work shorter
+    # than `_EXP_HEARTBEAT_INTERVAL_S`) would be lost from the on-disk record.
+    exp_status.heartbeat(
+        exp_status_path,
+        completed=len(results.trajectories),
+        failed=len(results.failures),
+    )
     return results
 
 
@@ -457,25 +478,12 @@ def run_sequentially(
         model=model,
         agent_name=agent_name,
     )
-    now = time.time()
-    exp_status = ExperimentStatus(
-        status="RUNNING",
-        mode="sequential",
-        pid=os.getpid(),
-        host=socket.gethostname(),
-        started_at=now,
-        last_heartbeat_at=now,
-        total_episodes=0,
-    )
-    exp_status_path = exp.output_dir / EXPERIMENT_STATUS_FILENAME
     try:
-        exp_status.write(exp_status_path)
-    except Exception:
-        logger.warning("Failed to write initial experiment status", exc_info=True)
-    _completed = False
-    try:
-        with tracer.benchmark(exp.name):
-            result = _run_sequentially_with_retries(
+        with (
+            tracer.benchmark(exp.name),
+            _experiment_lifecycle(exp.output_dir, mode="sequential") as (exp_status, exp_status_path),
+        ):
+            return _run_sequentially_with_retries(
                 exp,
                 debug_limit=debug_limit,
                 step_timeout_s=step_timeout_s,
@@ -485,16 +493,7 @@ def run_sequentially(
                 exp_status=exp_status,
                 exp_status_path=exp_status_path,
             )
-        _completed = True
-        return result
     finally:
-        exp_status.status = "COMPLETED" if _completed else "INTERRUPTED"
-        exp_status.ended_at = time.time()
-        exp_status.last_heartbeat_at = exp_status.ended_at
-        try:
-            exp_status.write(exp_status_path)
-        except Exception:
-            logger.warning("Failed to write terminal experiment status", exc_info=True)
         tracer.shutdown()
 
 
@@ -580,11 +579,7 @@ def _run_sequentially_impl(
             _pre_claim(storage, episode)
 
         exp_status.total_episodes = len(storage.list_episode_configs())
-        exp_status.last_heartbeat_at = time.time()
-        try:
-            exp_status.write(exp_status_path)
-        except Exception:
-            pass
+        exp_status.heartbeat(exp_status_path)
 
         results = ExpResult(
             tasks_num=len(episodes),
@@ -595,13 +590,11 @@ def _run_sequentially_impl(
             traj_id = _trajectory_id(episode)
             log_file = get_log_path(exp.output_dir, traj_id)
             # Heartbeat before each episode.run() so XRay can detect a dead driver.
-            exp_status.completed = len(results.trajectories)
-            exp_status.failed = len(results.failures)
-            exp_status.last_heartbeat_at = time.time()
-            try:
-                exp_status.write(exp_status_path)
-            except Exception:
-                pass
+            exp_status.heartbeat(
+                exp_status_path,
+                completed=len(results.trajectories),
+                failed=len(results.failures),
+            )
             with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
                 try:
                     trajectory = episode.run()
@@ -609,5 +602,13 @@ def _run_sequentially_impl(
                 except Exception as e:
                     logger.exception(f"Episode {traj_id} failed")
                     results.failures[traj_id] = str(e)
+        # Flush final counters before the lifecycle's terminal write — the
+        # in-loop heartbeat fires *before* each episode, so the last episode's
+        # outcome is otherwise missing from the on-disk record.
+        exp_status.heartbeat(
+            exp_status_path,
+            completed=len(results.trajectories),
+            failed=len(results.failures),
+        )
         exp.print_stats(results)
         return results

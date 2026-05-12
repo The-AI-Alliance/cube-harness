@@ -11,10 +11,14 @@ See also: `episode_status.py` for the per-episode equivalent.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Literal
+
+logger = logging.getLogger(__name__)
 
 EXPERIMENT_STATUS_FILENAME = "experiment_status.json"
 
@@ -81,3 +85,26 @@ class ExperimentStatus:
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(self.to_json())
         os.replace(tmp, path)
+
+    def heartbeat(
+        self,
+        path: Path,
+        *,
+        completed: int | None = None,
+        failed: int | None = None,
+    ) -> None:
+        """Update `last_heartbeat_at` (and optionally counters) and write best-effort.
+
+        Heartbeat writes are best-effort — a transient I/O error must not abort the
+        run. XRay tolerates a missed write because it reads the file on demand and
+        the next heartbeat will overwrite atomically.
+        """
+        self.last_heartbeat_at = time.time()
+        if completed is not None:
+            self.completed = completed
+        if failed is not None:
+            self.failed = failed
+        try:
+            self.write(path)
+        except Exception:
+            logger.debug("Heartbeat write failed for %s", path, exc_info=True)
