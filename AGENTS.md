@@ -115,6 +115,7 @@ PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropic
   Live `Task`, `Tool`, `Benchmark`, `Agent` objects never cross process boundaries.
 - **Trajectory steps alternate** env → agent → env → agent in persistence order.
 - **Trace-first:** every new long-running operation should get a `tracer.span()`.
+- **CLIs use Typer** — new scripts/recipes that need a CLI should use `typer.run(main)` with `typer.Option`-annotated args (FastAPI-style: type hints + docstring become `--help`). `scripts/experiments_report.py` is the canonical example. Don't add new `argparse` boilerplate.
 
 ## Development commands
 
@@ -123,10 +124,29 @@ make install            # uv sync --all-extras
 make test               # full pytest
 make debug              # small end-to-end run
 make xray               # open the trajectory viewer
+make report             # markdown table of experiments in ~/cube_harness_results/ (forward args with ARGS="--last 10")
 make lint               # uvx ruff check --fix && uvx ruff format  (auto-fixes in place)
 make lint-check         # uvx ruff check --diff && uvx ruff format --diff  (read-only, what CI runs)
 make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency
 uv run recipes/hello_miniwob.py   # example run
+```
+
+### Test categories
+
+Pytest markers (declared in `pyproject.toml`) gate four tiers — pick the smallest one that exercises your change:
+
+| Marker | Runs in CI? | When to run locally | What it covers |
+|---|---|---|---|
+| *(unmarked)* | ✅ always | every iteration | ~980 fast tests, no external deps. ~30s. This is what `make test` defaults to. |
+| `slow` | ❌ excluded | before pushing if you touched `experiment`, `exp_runner`, `xray`, retry, or storage | Ray retry orchestration + xray e2e. Excluded from CI by default because Ray-based tests are timing-flaky on shared GitHub Actions runners; runs reliably on a local machine in ~85s. |
+| `integration` | ✅ (Playwright step) | if you touched browser tools (`browsergym.py`, MiniWob, WorkArena) | Playwright/Chromium tests; needs `uv run playwright install chromium` first |
+| `live_api` | ❌ never | when modifying `llm.py` cache control / streaming / tool-choice behavior | Hits a real LLM provider. Costs ~$0.05/run. **Auto-skips without `ANTHROPIC_API_KEY`.** Only way to verify real `cache_read_tokens` from the API response. |
+
+```bash
+pytest tests/ -m "not slow and not integration and not live_api"   # fast tier, ~30s
+pytest tests/ -m "slow"                                              # Ray + xray e2e
+pytest tests/ -m "integration"                                       # Playwright (after install)
+ANTHROPIC_API_KEY=... pytest tests/ -m "live_api"                    # real-LLM verification
 ```
 
 Always run `make lint` before finishing a task. `ruff check` and `ruff format` are

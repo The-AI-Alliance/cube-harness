@@ -21,6 +21,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from cube_harness.agent import AgentConfig
+from cube_harness.analyze.stats import reward_mean_stderr
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
 from cube_harness.episode_status import TERMINAL_STATUSES as _EPISODE_TERMINAL_STATUSES
@@ -1351,17 +1352,13 @@ def _finished_rewards(trajectories: list[Trajectory]) -> list[float]:
 
 
 def _reward_mean_stderr(rewards: list[float]) -> tuple[float, float]:
-    """Return (mean, sample_stderr) for a list of rewards using ddof=1."""
-    n = len(rewards)
-    if n == 0:
-        return 0.0, 0.0
-    mean = sum(rewards) / n
-    if n > 1:
-        var = sum((r - mean) ** 2 for r in rewards) / (n - 1)
-        stderr = (var / n) ** 0.5
-    else:
-        stderr = 0.0
-    return mean, stderr
+    """Return (mean, stderr) for a list of rewards.
+
+    Delegates to :func:`cube_harness.analyze.stats.reward_mean_stderr` so XRay
+    and ``scripts/experiments_report.py`` produce identical CIs for the same data
+    (auto-selects binomial vs sample SE by data shape).
+    """
+    return reward_mean_stderr(rewards)
 
 
 def compute_experiment_stats(trajectories: list[Trajectory]) -> str:

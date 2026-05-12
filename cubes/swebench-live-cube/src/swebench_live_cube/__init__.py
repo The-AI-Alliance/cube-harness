@@ -8,7 +8,6 @@ from swebench_live_cube.task import (
     SWEBenchLiveTaskConfig,
     SWEBenchLiveTaskMetadata,
 )
-from swebench_live_cube.tool import SWEBenchTool, SWEBenchToolConfig
 
 __all__ = [
     "SWEBenchLiveBenchmark",
@@ -17,8 +16,6 @@ __all__ = [
     "SWEBenchLiveTask",
     "SWEBenchLiveTaskConfig",
     "SWEBenchLiveTaskMetadata",
-    "SWEBenchTool",
-    "SWEBenchToolConfig",
     "get_debug_benchmark",
     "make_debug_agent",
 ]

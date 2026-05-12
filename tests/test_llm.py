@@ -8,7 +8,15 @@ import tenacity
 from litellm import Message
 from litellm.types.utils import ChatCompletionMessageToolCall, Function
 
-from cube_harness.llm import LLM, LLMCall, LLMConfig, Prompt
+from cube_harness.llm import (
+    LLM,
+    LLMCall,
+    LLMConfig,
+    Prompt,
+    _build_cache_injection_points,
+    _is_anthropic_model,
+    _mark_last_tool_for_cache,
+)
 
 
 class TestPrompt:
@@ -153,6 +161,43 @@ class TestLLM:
         assert call_kwargs["tools"] == tools
         assert result.message.tool_calls is not None
         assert result.message.content == "Tool call made."
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_llm_call_empty_tools_drops_tool_choice(self, mock_completion, sample_llm_config, sample_prompt) -> None:
+        """When tools=[], tool_choice and parallel_tool_calls are omitted (some providers reject them)."""
+        mock_message = Message(role="assistant", content="no tools")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = None
+        mock_completion.return_value = mock_response
+
+        # sample_prompt has tools=[] by default
+        llm = LLM(config=sample_llm_config)
+        llm(sample_prompt)
+
+        call_kwargs = mock_completion.call_args.kwargs
+        assert "tools" not in call_kwargs
+        assert "tool_choice" not in call_kwargs
+        assert "parallel_tool_calls" not in call_kwargs
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_llm_call_tool_choice_none_drops_tool_choice(self, mock_completion) -> None:
+        """When tool_choice=None, tool_choice and parallel_tool_calls are omitted even with tools present."""
+        mock_message = Message(role="assistant", content="ok")
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=mock_message)]
+        mock_response.usage = None
+        mock_completion.return_value = mock_response
+
+        tools = [{"type": "function", "function": {"name": "search", "parameters": {}}}]
+        prompt = Prompt(messages=[{"role": "user", "content": "go"}], tools=tools)
+        llm = LLM(config=LLMConfig(model_name="gpt-5-nano", tool_choice=None))
+        llm(prompt)
+
+        call_kwargs = mock_completion.call_args.kwargs
+        assert "tools" in call_kwargs
+        assert "tool_choice" not in call_kwargs
+        assert "parallel_tool_calls" not in call_kwargs
 
 
 class TestLLMCall:
@@ -352,3 +397,170 @@ class TestRetryIntegration:
         result = llm(prompt)
         assert result.message.content == "final answer"
         assert mock_completion.call_count == 3
+
+
+class TestCacheControlHelpers:
+    """Tests for prompt-cache helper functions."""
+
+    def test_is_anthropic_model_true_cases(self) -> None:
+        for name in [
+            "claude-3-5-sonnet-20241022",
+            "anthropic/claude-3-5-haiku",
+            "bedrock/anthropic.claude-sonnet-4-5",
+            "vertex_ai/claude-opus-4-1",
+        ]:
+            assert _is_anthropic_model(name), name
+
+    def test_is_anthropic_model_false_cases(self) -> None:
+        # Includes a deliberate string-only-trap: substring "claude" appears under
+        # an openai routing prefix; the canonical provider resolver classifies it
+        # as openai so cache_control payloads don't leak.
+        for name in [
+            "gpt-4o",
+            "gpt-5-mini",
+            "azure/gpt-4o",
+            "gemini/gemini-2.0-flash",
+            "openai/something-claude-ish",
+        ]:
+            assert not _is_anthropic_model(name), name
+
+    def test_injection_points_empty_messages(self) -> None:
+        assert _build_cache_injection_points([]) == []
+
+    def test_injection_points_system_only(self) -> None:
+        # Single message → len < 2, no breakpoints emitted.
+        assert _build_cache_injection_points([{"role": "system", "content": "x"}]) == []
+
+    def test_injection_points_system_user_assistant(self) -> None:
+        msgs = [
+            {"role": "system", "content": "s"},
+            {"role": "user", "content": "u"},
+            {"role": "assistant", "content": "a"},
+        ]
+        points = _build_cache_injection_points(msgs)
+        assert points == [
+            {"location": "message", "index": 1, "control": {"type": "ephemeral"}},
+            {"location": "message", "index": 2, "control": {"type": "ephemeral"}},
+        ]
+
+    def test_injection_points_uses_last_assistant(self) -> None:
+        msgs = [
+            {"role": "system", "content": "s"},
+            {"role": "user", "content": "u1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "u2"},
+            {"role": "assistant", "content": "a2"},
+            {"role": "user", "content": "u3"},
+        ]
+        points = _build_cache_injection_points(msgs)
+        indices = sorted(p["index"] for p in points)
+        assert indices == [1, 4]
+
+    def test_injection_points_no_system(self) -> None:
+        msgs = [
+            {"role": "user", "content": "u"},
+            {"role": "assistant", "content": "a"},
+            {"role": "user", "content": "u2"},
+        ]
+        points = _build_cache_injection_points(msgs)
+        # No system message → only the rolling assistant breakpoint.
+        assert points == [{"location": "message", "index": 1, "control": {"type": "ephemeral"}}]
+
+    def test_injection_points_message_objects(self) -> None:
+        msgs = [Message(role="system", content="s"), Message(role="assistant", content="a")]
+        points = _build_cache_injection_points(msgs)
+        indices = sorted(p["index"] for p in points)
+        # Both breakpoints land at index 1: second message = assistant → deduplicated to one entry.
+        assert indices == [1]
+
+    def test_mark_last_tool_for_cache_empty(self) -> None:
+        assert _mark_last_tool_for_cache([]) == []
+
+    def test_mark_last_tool_for_cache_marks_last(self) -> None:
+        tools = [
+            {"type": "function", "function": {"name": "a"}},
+            {"type": "function", "function": {"name": "b"}},
+        ]
+        marked = _mark_last_tool_for_cache(tools)
+        assert marked[0] == tools[0]  # first untouched
+        assert marked[1]["cache_control"] == {"type": "ephemeral"}
+        # Original list not mutated.
+        assert "cache_control" not in tools[1]
+
+
+class TestLLMCacheControl:
+    """Tests for LLM.__call__ cache_control wiring."""
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_no_cache_control_when_unset(self, mock_completion, sample_prompt) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        llm = LLM(config=LLMConfig(model_name="claude-sonnet-4-5"))  # set_cache_control=None
+        llm(sample_prompt)
+        kwargs = mock_completion.call_args.kwargs
+        assert "cache_control_injection_points" not in kwargs
+        for tool in kwargs.get("tools", []):
+            assert "cache_control" not in tool
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_no_cache_control_for_non_anthropic(self, mock_completion) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        llm = LLM(config=LLMConfig(model_name="gpt-4o", set_cache_control="auto"))
+        prompt = Prompt(
+            messages=[{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+            tools=[{"type": "function", "function": {"name": "f"}}],
+        )
+        llm(prompt)
+        kwargs = mock_completion.call_args.kwargs
+        # Non-Anthropic: don't inject cache_control even when set_cache_control="auto".
+        assert "cache_control_injection_points" not in kwargs
+        for tool in kwargs.get("tools", []):
+            assert "cache_control" not in tool
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_auto_caching_for_anthropic(self, mock_completion) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        llm = LLM(config=LLMConfig(model_name="claude-sonnet-4-5", set_cache_control="auto"))
+        prompt = Prompt(
+            messages=[
+                {"role": "system", "content": "s"},
+                {"role": "user", "content": "u"},
+                {"role": "assistant", "content": "a"},
+                {"role": "user", "content": "u2"},
+            ],
+            tools=[
+                {"type": "function", "function": {"name": "a"}},
+                {"type": "function", "function": {"name": "b"}},
+            ],
+        )
+        llm(prompt)
+        kwargs = mock_completion.call_args.kwargs
+        points = kwargs["cache_control_injection_points"]
+        indices = sorted(p["index"] for p in points)
+        assert indices == [1, 2]
+        # Last tool marked, first untouched. Original prompt.tools must not be mutated.
+        assert kwargs["tools"][1]["cache_control"] == {"type": "ephemeral"}
+        assert "cache_control" not in kwargs["tools"][0]
+        assert "cache_control" not in prompt.tools[1]
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_auto_caching_no_assistant_yet(self, mock_completion) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        llm = LLM(config=LLMConfig(model_name="claude-sonnet-4-5", set_cache_control="auto"))
+        prompt = Prompt(
+            messages=[{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+            tools=[],
+        )
+        llm(prompt)
+        kwargs = mock_completion.call_args.kwargs
+        # Only the second-message anchor when no assistant has spoken yet.
+        assert kwargs["cache_control_injection_points"] == [
+            {"location": "message", "index": 1, "control": {"type": "ephemeral"}}
+        ]

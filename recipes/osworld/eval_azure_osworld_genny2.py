@@ -34,13 +34,13 @@ import sys
 from pathlib import Path
 
 from cube_computer_tool.computer import ActionSpace
-from cube_harness.agents.genny2 import Genny2Config
 from cube_infra_azure import AzureInfraConfig
 from dotenv import load_dotenv
 from osworld_cube.benchmark import OSWorldBenchmarkConfig
 from osworld_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
+from cube_harness.agents.genny2 import Genny2Config
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig

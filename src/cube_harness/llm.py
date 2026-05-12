@@ -9,7 +9,7 @@ from uuid import uuid4
 import litellm
 import tenacity
 from cube.core import TypedBaseModel
-from litellm import Message
+from litellm import BadRequestError, Message, get_llm_provider
 from litellm.exceptions import (
     APIConnectionError,
     InternalServerError,
@@ -18,7 +18,7 @@ from litellm.exceptions import (
     Timeout,
 )
 from litellm.utils import token_counter
-from pydantic import Field
+from pydantic import Field, field_validator
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
@@ -29,8 +29,25 @@ from pydantic import Field
 class Prompt(TypedBaseModel):
     """Represents the input prompt to chat completion api of LLM."""
 
-    messages: List[dict | Message]
+    messages: List[dict]
     tools: List[dict] = Field(default_factory=list)
+
+    @field_validator("messages", mode="before")
+    @classmethod
+    def _coerce_messages(cls, v: list) -> list[dict]:
+        """Coerce LiteLLM Message objects to plain dicts.
+
+        LiteLLM Message carries provider-specific fields (thinking_blocks,
+        reasoning_content) that Pydantic doesn't know about, causing
+        PydanticSerializationUnexpectedValue log spam on every model_dump call.
+        """
+        result: list[dict] = []
+        for msg in v:
+            if isinstance(msg, dict):
+                result.append(msg)
+            else:
+                result.append(msg.model_dump(exclude_none=True))
+        return result
 
     def __str__(self) -> str:
         """Debug view of the prompt."""
@@ -47,11 +64,16 @@ class LLMConfig(TypedBaseModel):
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
-    tool_choice: Literal["auto", "none", "required"] = "auto"
+    tool_choice: Literal["auto", "none", "required"] | None = "auto"
     parallel_tool_calls: bool = False
     num_retries: int = 5
     retry_strategy: Literal["exponential_backoff_retry", "constant_retry"] = "exponential_backoff_retry"
     timeout: float | None = 120.0  # seconds per attempt; None = no timeout
+    # Anthropic prompt caching. "auto" places ephemeral cache_control breakpoints at the
+    # system message and the last assistant message, plus the last tool definition. This
+    # gives a stable anchor (system + tools) and a rolling boundary (last assistant) that
+    # extends across steps as the conversation grows. No-op for non-Anthropic models.
+    set_cache_control: Literal["auto"] | None = None
 
     def make(self) -> "LLM":
         """Create LLM instance from config."""
@@ -80,23 +102,117 @@ class LLMResponse(TypedBaseModel):
     usage: Usage
 
 
+def _is_anthropic_model(model_name: str) -> bool:
+    """Does this model route to Anthropic's API (direct, Bedrock, or Vertex)?
+
+    Uses LiteLLM's canonical provider resolver where possible so prefix-based
+    routings are classified correctly — plain substring checks would false-positive
+    on names like ``openai/something-claude-ish`` (resolver correctly returns
+    ``provider=openai`` for that). Falls back to a substring check on the model
+    name only when no routing prefix is present (e.g. brand-new ``claude-*`` names
+    LiteLLM's registry hasn't caught up to). Used to gate Anthropic-specific
+    payloads (cache_control) so they don't leak to other providers.
+    """
+    try:
+        _, provider, _, _ = get_llm_provider(model_name)
+    except BadRequestError:
+        # Model not in LiteLLM's registry (e.g. ``claude-3-5-sonnet-20241022``,
+        # ``claude-3-5-sonnet-latest``, or any new SKU that ships before LiteLLM
+        # catches up). Fall back to substring matching, but only when no routing
+        # prefix is present — keeps ``newprefix/claude-foo`` etc. from sneaking
+        # through. Other exceptions propagate.
+        if "/" in model_name:
+            return False
+        return "claude" in model_name.lower() or "anthropic" in model_name.lower()
+    if provider == "anthropic":
+        return True
+    # Bedrock and Vertex route Claude models through the Anthropic API surface;
+    # LiteLLM forwards cache_control for those routings.
+    return provider in ("bedrock", "vertex_ai") and "claude" in model_name.lower()
+
+
+def _msg_role(msg: Any) -> str | None:
+    if isinstance(msg, dict):
+        return msg.get("role")
+    return getattr(msg, "role", None)
+
+
+def _build_cache_injection_points(messages: list) -> list[dict]:
+    """Return ephemeral cache_control breakpoints: second message + last assistant.
+
+    Two breakpoints enable cross-step cache hits:
+
+    1. Second message (index 1) — the goal / first large user content.  Marking
+       this creates a stable seed cache (system + tools + goal) that all later
+       steps can hit.  Marking only the system message fails because the system
+       message is usually below Anthropic's 1 024-token minimum alone.
+
+    2. Last assistant message — the rolling boundary.  On each new step the
+       history grows by one (obs, asst) pair, so this breakpoint is always one
+       message further out.  Anthropic's longest-prefix match hits the previous
+       step's cache and writes a slightly longer entry.
+
+    At step 0 (no assistant yet) only breakpoint 1 is emitted, writing the seed
+    cache.  At step 1+, breakpoint 2 is also emitted; the lookup hits the seed
+    (or the previous step's rolling cache) and the write extends it.
+    """
+    if len(messages) < 2:
+        return []
+    points: list[dict] = []
+    control = {"type": "ephemeral"}
+    # Breakpoint 1: second message — stable goal / main content anchor.
+    points.append({"location": "message", "index": 1, "control": control})
+    # Breakpoint 2: last assistant — rolling per-step extension.
+    for i in range(len(messages) - 1, -1, -1):
+        if _msg_role(messages[i]) == "assistant":
+            if not any(p["index"] == i for p in points):
+                points.append({"location": "message", "index": i, "control": control})
+            break
+    return points
+
+
+def _mark_last_tool_for_cache(tools: list[dict]) -> list[dict]:
+    """Return a copy of tools with ephemeral cache_control on the last entry.
+
+    Caches the entire tools array prefix on Anthropic. LiteLLM passes the
+    cache_control field through to the Anthropic API.
+    """
+    if not tools:
+        return tools
+    result = [dict(t) for t in tools]
+    result[-1] = {**result[-1], "cache_control": {"type": "ephemeral"}}
+    return result
+
+
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
 
     def __call__(self, prompt: Prompt) -> LLMResponse:
-        kwargs = {
+        tools = prompt.tools
+        kwargs: dict[str, Any] = {
             "model": self.config.model_name,
             "temperature": self.config.temperature,
             "max_completion_tokens": self.config.max_completion_tokens,
             "tool_choice": self.config.tool_choice,
             "parallel_tool_calls": self.config.parallel_tool_calls,
-            "tools": prompt.tools,
             "messages": prompt.messages,
             "timeout": self.config.timeout,
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
+        if self.config.set_cache_control == "auto" and _is_anthropic_model(self.config.model_name):
+            injection_points = _build_cache_injection_points(prompt.messages)
+            if injection_points:
+                kwargs["cache_control_injection_points"] = injection_points
+            tools = _mark_last_tool_for_cache(tools)
+        if tools:
+            kwargs["tools"] = tools
+        if not tools or self.config.tool_choice is None:
+            # Drop tool_choice / parallel_tool_calls when there are no tools (some providers
+            # reject tool_choice without a tools list) or when the caller opted out (None).
+            kwargs.pop("tool_choice", None)
+            kwargs.pop("parallel_tool_calls", None)
         response = self._completion_with_retry(**kwargs)
         usage = self._extract_usage(response)
         return LLMResponse(message=response.choices[0].message, usage=usage)

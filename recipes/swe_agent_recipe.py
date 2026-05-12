@@ -1,134 +1,211 @@
-"""Unified SWE-style agent recipe — swebench-verified, swebench-live, terminalbench.
+"""Genny2 SWE recipe — swebench-verified and swebench-live.
+
+Single entry point for Genny2 against both SWE-bench Verified and SWE-bench Live.
+Agent construction is delegated to ``cube_harness.agents.genny2_swe_config``.
 
 Usage:
-    .venv/bin/python recipes/swe_agent_recipe.py                              # swebench-verified, gpt-5.4-mini, debug
-    .venv/bin/python recipes/swe_agent_recipe.py swebench-verified gpt-5.4   # full run
-    .venv/bin/python recipes/swe_agent_recipe.py swebench-live gpt-5.4       # swe-bench live
-    .venv/bin/python recipes/swe_agent_recipe.py terminalbench gpt-5.4       # terminal-bench
+    # Debug oracle tasks (no LLM, sequential):
+    .venv/bin/python recipes/swe_agent_recipe.py --debug
+    .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --debug
 
-Options:
-    --debug              Cube's canonical debug tasks, sequential
-    --hints              Inject task hints (swebench-verified only)
-    --tasks t1,t2        Run specific task IDs
-    --subset NAME        Named subset: lite/verified/full (swebench-live), easy (terminalbench)
-    --n-parallel N       Ray workers (default: 5)
-    --retry DIR          Resume / retry from an existing output directory
+    # Full swebench-verified on Toolkit:
+    .venv/bin/python recipes/swe_agent_recipe.py --toolkit --eai-path ~/bin/eai --n-parallel 20
 
-Each cube must be installed in the active venv:
-    uv pip install -e cubes/swebench-verified-cube
-    uv pip install -e cubes/swebench-live-cube
-    uv pip install -e cubes/terminalbench-cube
+    # HAL-50 subset on swebench-verified:
+    .venv/bin/python recipes/swe_agent_recipe.py --subset hal_mini --toolkit ...
+
+    # SWE-bench Live, golden 30, Daytona:
+    .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --subset live-golden-30 --daytona
 """
 
+import argparse
+import json
 import logging
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# meta_agent/ is not a Python package — add it to sys.path so we can import hints.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "meta_agent"))
-
 _project_env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
-from hints import load_hints  # noqa: E402
-
-from cube_harness.agents.genny import GennyConfig  # noqa: E402
+from cube_harness.agents.genny2_swe_config import (  # noqa: E402
+    DEFAULT_TEMPLATE,
+    INSTANCE_TEMPLATES,
+    MODEL_CONFIGS,
+    make_agent_config,
+)
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
-from cube_harness.llm import LLMConfig  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
 # ---------------------------------------------------------------------------
-# Agent config
+# Hardcoded task subsets
+#
+# These belong long-term in each cube's BenchmarkConfig as named subsets; they
+# live here for now because the cubes ship the full benchmark and these subsets
+# are recipe-level concerns (which Princeton split, which gold-confirmed sample).
 # ---------------------------------------------------------------------------
 
-SWE_SYSTEM_PROMPT = """\
-You are an autonomous coding agent. You have access to a Linux sandbox with the repository \
-already cloned at /testbed.
-Your task is to resolve the GitHub issue described below. Use the provided tools to explore \
-the codebase, understand the problem, and implement a fix.
-Start by exploring the repository structure and reading relevant files before making changes.
-
-IMPORTANT — the issue requires you to ADD or CHANGE behavior in the source code. \
-The existing test suite will pass before your fix — that is expected. \
-Do NOT call final_step just because existing tests pass. \
-Only call final_step after you have actually modified the source code to resolve the issue.
-
-Before calling final_step, verify your fix by running the relevant tests.
-IMPORTANT: All test dependencies are in the conda 'testbed' environment — always prefix with
-`conda run -n testbed` or activate first: `. /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed`
-- Django projects: cd /testbed && conda run -n testbed python -m pytest tests/<module> -x -q
-  (older Django: ./tests/runtests.py --verbosity 2 <test_module>). Do NOT use "python -m unittest" directly.
-- SymPy projects: cd /testbed && conda run -n testbed bin/test <path/to/test_file.py>
-- Other Python projects: cd /testbed && conda run -n testbed python -m pytest <test_path> -x -q
-Never use bare `python -m pytest` — the base Python lacks test dependencies.
-
-IMPORTANT: Do NOT modify test files (files under tests/ or with test_ prefix). \
-The evaluation framework applies its own test patch during evaluation. \
-Only modify source code files to fix the bug.
-
-IMPORTANT: Every response must include a tool call — use `final_step` when done."""
-
-MODEL_CONFIGS: dict[str, LLMConfig] = {
-    "gpt-5.4-mini": LLMConfig(model_name="azure/gpt-5.4-mini"),
-    "gpt-5.4": LLMConfig(model_name="azure/gpt-5.4"),
-}
+_HAL_MINI_TASK_IDS: frozenset[str] = frozenset(
+    [
+        # Django (25)
+        "django__django-11790",
+        "django__django-11815",
+        "django__django-11848",
+        "django__django-11880",
+        "django__django-11885",
+        "django__django-11951",
+        "django__django-11964",
+        "django__django-11999",
+        "django__django-12039",
+        "django__django-12050",
+        "django__django-12143",
+        "django__django-12155",
+        "django__django-12193",
+        "django__django-12209",
+        "django__django-12262",
+        "django__django-12273",
+        "django__django-12276",
+        "django__django-12304",
+        "django__django-12308",
+        "django__django-12325",
+        "django__django-12406",
+        "django__django-12708",
+        "django__django-12713",
+        "django__django-12774",
+        "django__django-9296",
+        # Sphinx (25)
+        "sphinx-doc__sphinx-10323",
+        "sphinx-doc__sphinx-10435",
+        "sphinx-doc__sphinx-10466",
+        "sphinx-doc__sphinx-10673",
+        "sphinx-doc__sphinx-11510",
+        "sphinx-doc__sphinx-7590",
+        "sphinx-doc__sphinx-8056",
+        "sphinx-doc__sphinx-8265",
+        "sphinx-doc__sphinx-8269",
+        "sphinx-doc__sphinx-8475",
+        "sphinx-doc__sphinx-8548",
+        "sphinx-doc__sphinx-8551",
+        "sphinx-doc__sphinx-8638",
+        "sphinx-doc__sphinx-8721",
+        "sphinx-doc__sphinx-9229",
+        "sphinx-doc__sphinx-9230",
+        "sphinx-doc__sphinx-9281",
+        "sphinx-doc__sphinx-9320",
+        "sphinx-doc__sphinx-9367",
+        "sphinx-doc__sphinx-9461",
+        "sphinx-doc__sphinx-9698",
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
-# Benchmark factory
+# Infra / benchmark helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_benchmark(
-    benchmark_name: str,
+def _make_infra(
+    *,
+    toolkit: bool,
+    daytona: bool,
+    eai_profile: str,
+    eai_path: str,
+    preemptable: bool,
+    launch_timeout: int,
+) -> object:
+    if daytona:
+        from cube_infra_daytona import DaytonaInfraConfig
+
+        return DaytonaInfraConfig(launch_timeout_seconds=launch_timeout)
+    if toolkit:
+        from cube_infra_toolkit import ToolkitInfraConfig
+
+        return ToolkitInfraConfig(
+            profile=eai_profile,
+            eai_path=eai_path,
+            preemptable=preemptable,
+            launch_timeout_seconds=launch_timeout,
+        )
+    from cube.infra_local import LocalInfraConfig
+
+    return LocalInfraConfig()
+
+
+def _make_verified_benchmark(
+    *,
     debug: bool,
     task_ids: list[str] | None,
     subset: str | None,
 ) -> object:
-    """Instantiate and filter the requested benchmark. Imports are lazy so only
-    the installed cube is required."""
+    from cube.tools.terminal import TerminalToolConfig
+    from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
+
     if debug:
-        if benchmark_name == "swebench-verified":
-            from swebench_verified_cube.debug import get_debug_benchmark
-        elif benchmark_name == "swebench-live":
-            from swebench_live_cube.debug import get_debug_benchmark
-        elif benchmark_name == "terminalbench":
-            from terminalbench_cube.debug import get_debug_benchmark
-        else:
-            raise ValueError(
-                f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
-            )
-        bench = get_debug_benchmark()
-        if task_ids:
-            bench = bench.subset_from_list(task_ids)
-        return bench
+        from swebench_verified_cube.debug import get_debug_benchmark
 
-    if benchmark_name == "swebench-verified":
-        from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
+        return get_debug_benchmark()
 
-        bench = SWEBenchVerifiedBenchmarkConfig()
-    elif benchmark_name == "swebench-live":
-        from swebench_live_cube.benchmark import SWEBenchLiveBenchmarkConfig
-
-        bench = SWEBenchLiveBenchmarkConfig()
-    elif benchmark_name == "terminalbench":
-        from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
-
-        bench = TerminalBenchBenchmarkConfig()
-    else:
-        raise ValueError(
-            f"Unknown benchmark: {benchmark_name!r}. Choose: swebench-verified, swebench-live, terminalbench"
-        )
-
-    if subset:
-        bench = bench.named_subset(subset)
+    cfg = SWEBenchVerifiedBenchmarkConfig(tool_config=TerminalToolConfig(working_dir="/testbed"))
+    if subset == "hal_mini":
+        cfg = cfg.subset_from_list(list(_HAL_MINI_TASK_IDS))
+    elif subset:
+        cfg = cfg.named_subset(subset)
     if task_ids:
-        bench = bench.subset_from_list(task_ids)
-    return bench
+        cfg = cfg.subset_from_list(task_ids)
+    return cfg
+
+
+def _make_live_benchmark(
+    *,
+    debug: bool,
+    task_ids: list[str] | None,
+    subset: str | None,
+    n_tasks: int | None,
+    solvable_from: Path | None,
+) -> object:
+    from swebench_live_cube.benchmark import SWEBenchLiveBenchmarkConfig
+
+    if debug:
+        from swebench_live_cube.debug import get_debug_benchmark
+
+        return get_debug_benchmark()
+
+    cfg = SWEBenchLiveBenchmarkConfig()
+    if solvable_from is not None:
+        task_ids = _load_solvable_task_ids(solvable_from)
+    if subset == "solvable-lite":
+        # Gold-patch-confirmed subset of lite; resource bundled in the cube package.
+        from importlib.resources import files
+
+        snapshot = files("swebench_live_cube").joinpath("lite_solvable_2026-05-12.json")
+        task_ids = _load_solvable_task_ids(Path(str(snapshot)))
+    elif subset == "live-golden-30":
+        from swebench_live_cube.gold_patch.recipe import _LIVE_GOLDEN_30
+
+        cfg = cfg.subset_from_list(list(_LIVE_GOLDEN_30))
+    elif subset:
+        cfg = cfg.named_subset(subset)
+    if task_ids:
+        cfg = cfg.subset_from_list(task_ids)
+    elif n_tasks:
+        cfg = cfg.subset_from_list(list(cfg.task_metadata.keys())[:n_tasks])
+    return cfg
+
+
+def _load_solvable_task_ids(path: Path) -> list[str]:
+    """Read either a bare list (legacy) or the metadata-wrapped schema.
+
+    Modern schema (preferred): ``{"date", "source_set", "n_tasks", "task_ids": [...]}``.
+    Legacy: a bare ``["task_id_1", ...]`` JSON list. Both are accepted so older
+    ``--solvable-from path.json`` dumps from ``gold_patch.recipe --dump-solvable``
+    keep working.
+    """
+    data = json.loads(path.read_text())
+    if isinstance(data, list):
+        return data
+    return data["task_ids"]
 
 
 # ---------------------------------------------------------------------------
@@ -136,56 +213,53 @@ def _make_benchmark(
 # ---------------------------------------------------------------------------
 
 
-def run(
-    benchmark_name: str,
-    model_key: str,
-    *,
-    debug: bool,
-    use_hints: bool,
-    task_ids: list[str] | None,
-    subset: str | None,
-    n_parallel: int,
-    retry_dir: Path | None,
-) -> None:
-    llm_config = MODEL_CONFIGS[model_key]
-
-    task_hints = load_hints(benchmark_name) if use_hints else {}
-
-    agent_config = GennyConfig(
-        llm_config=llm_config,
-        system_prompt=SWE_SYSTEM_PROMPT,
-        max_actions=30,
-        render_last_n_obs=2,
-        task_hints=task_hints,
+def run(args: argparse.Namespace) -> None:
+    agent_config = make_agent_config(args.model, args.template, args.max_actions, args.cost_limit)
+    infra = _make_infra(
+        toolkit=args.toolkit,
+        daytona=args.daytona,
+        eai_profile=args.eai_profile,
+        eai_path=args.eai_path,
+        preemptable=args.preemptable,
+        launch_timeout=args.launch_timeout,
     )
 
-    if retry_dir is not None:
-        output_dir = retry_dir
-        resume = True
+    task_ids = [t.strip() for t in args.tasks.split(",")] if args.tasks else None
+    if args.benchmark == "verified":
+        benchmark_config = _make_verified_benchmark(
+            debug=args.debug,
+            task_ids=task_ids,
+            subset=args.subset,
+        )
     else:
-        output_dir = None
-        resume = False
+        benchmark_config = _make_live_benchmark(
+            debug=args.debug,
+            task_ids=task_ids,
+            subset=args.subset,
+            n_tasks=args.n_tasks,
+            solvable_from=Path(args.solvable_from) if args.solvable_from else None,
+        )
 
-    benchmark = _make_benchmark(benchmark_name, debug, task_ids, subset)
-
+    infra_label = "daytona" if args.daytona else (f"toolkit:{args.eai_profile}" if args.toolkit else "local")
+    retry_dir = Path(args.retry) if args.retry else None
     exp = Experiment(
-        name=f"genny-{benchmark_name}",
-        output_dir=output_dir,
+        name=f"genny2-swe-{args.benchmark}-{args.model}-{infra_label}",
+        output_dir=retry_dir,
         agent_config=agent_config,
-        benchmark_config=benchmark,
-        max_steps=30,
-        resume=resume,
+        benchmark_config=benchmark_config,
+        infra=infra,
+        max_steps=args.max_actions,
+        resume=retry_dir is not None,
     )
 
-    label = (
-        f"RETRY {retry_dir}" if retry_dir else (f"hints={use_hints}" if benchmark_name == "swebench-verified" else "")
+    print(
+        f"\n=== genny2 | swe-{args.benchmark} | {args.model} | {args.template} | {infra_label} | subset={args.subset or 'all'} ==="
     )
-    print(f"\n=== {benchmark_name} | {model_key} | {label or 'no hints'} ===")
 
-    if debug:
+    if args.debug:
         run_sequentially(exp)
     else:
-        run_with_ray(exp, n_cpus=n_parallel)
+        run_with_ray(exp, n_cpus=args.n_parallel)
 
 
 # ---------------------------------------------------------------------------
@@ -193,31 +267,44 @@ def run(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Run SWE-style benchmarks with the Genny agent")
-    parser.add_argument(
-        "benchmark",
-        nargs="?",
-        default="swebench-verified",
-        choices=["swebench-verified", "swebench-live", "terminalbench"],
-    )
+    parser = argparse.ArgumentParser(description="Genny2 SWE recipe — verified or live")
     parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS))
-    parser.add_argument("--debug", action="store_true", help="Run cube debug tasks sequentially")
-    parser.add_argument("--hints", action="store_true", help="Inject task hints")
-    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
-    parser.add_argument("--subset", default=None, help="Named subset (e.g. lite, easy)")
-    parser.add_argument("--n-parallel", type=int, default=5, help="Ray workers (default: 5)")
-    parser.add_argument("--retry", metavar="DIR", default=None, help="Resume/retry from output dir")
-    args = parser.parse_args()
-
-    run(
-        benchmark_name=args.benchmark,
-        model_key=args.model,
-        debug=args.debug,
-        use_hints=args.hints,
-        task_ids=[t.strip() for t in args.tasks.split(",")] if args.tasks else None,
-        subset=args.subset,
-        n_parallel=args.n_parallel,
-        retry_dir=Path(args.retry) if args.retry else None,
+    parser.add_argument(
+        "--benchmark",
+        default="verified",
+        choices=["verified", "live"],
+        help="Which SWE-bench variant to run (default: verified)",
     )
+    parser.add_argument(
+        "--template",
+        default=DEFAULT_TEMPLATE,
+        choices=list(INSTANCE_TEMPLATES),
+        help=f"Instance template variant (default: {DEFAULT_TEMPLATE})",
+    )
+    parser.add_argument("--debug", action="store_true", help="Run cube's debug oracle tasks sequentially (no LLM)")
+    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
+    parser.add_argument(
+        "--subset",
+        default=None,
+        help="Named subset. Verified: hal_mini, or any named subset on the cube. "
+        "Live: live-golden-30, solvable-lite, lite, verified, full, test.",
+    )
+    parser.add_argument("--n-tasks", type=int, default=None, help="Take first N tasks from subset (live only)")
+    parser.add_argument("--n-parallel", type=int, default=5)
+    parser.add_argument("--retry", metavar="DIR", default=None, help="Resume from output dir")
+    parser.add_argument(
+        "--solvable-from",
+        metavar="PATH",
+        default=None,
+        help="JSON file of solvable task IDs (e.g. output of gold_patch.recipe --dump-solvable). Live only.",
+    )
+    parser.add_argument("--toolkit", action="store_true")
+    parser.add_argument("--daytona", action="store_true", help="Use Daytona infra (requires DAYTONA_API_KEY)")
+    parser.add_argument("--eai-profile", default="yul101")
+    parser.add_argument("--eai-path", default="eai")
+    parser.add_argument("--preemptable", action="store_true")
+    parser.add_argument("--max-actions", type=int, default=150)
+    parser.add_argument("--cost-limit", type=float, default=1.0)
+    parser.add_argument("--launch-timeout", type=int, default=900)
+    args = parser.parse_args()
+    run(args)
