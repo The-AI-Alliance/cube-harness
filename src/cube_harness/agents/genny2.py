@@ -279,12 +279,7 @@ class Genny2Config(AgentConfig):
         return name
 
     def make(self, action_set: list[ActionSchema] | None = None, task_id: str | None = None, **kwargs) -> "Genny2":
-        schemas = action_set or []
-        # magic_submit uses bash magic-string submission; exclude final_step so the LLM sees
-        # only bash — matching mini-swe-agent's single-tool interface exactly.
-        if self.obs_format == "magic_submit":
-            schemas = [s for s in schemas if s.name != "final_step"]
-        return Genny2(config=self, action_schemas=schemas, task_id=task_id)
+        return Genny2(config=self, action_schemas=action_set or [], task_id=task_id)
 
 
 # ---------------------------------------------------------------------------
@@ -344,8 +339,6 @@ class Genny2(Agent):
         self._total_tokens: int = 0
         self._compacted_summary: str = ""  # injected into system message after compaction
 
-    _MAGIC_SUBMIT = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
-
     def step(self, obs: Observation) -> AgentOutput:
         budget_msg, busted = self.config.budget.check(self._total_cost, self._total_tokens, self._actions_cnt)
         if busted:
@@ -356,18 +349,6 @@ class Genny2(Agent):
                 self._total_tokens,
             )
             return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
-
-        # Magic-string submission detection (mini-swe-agent compatibility).
-        # When obs_format="magic_submit", the agent submits by running:
-        #   echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT && cat patch.txt
-        # Search all tool messages for the magic string — checking only the first line
-        # fails when the tool prepends <returncode>N</returncode> (returncode_envelope format).
-        if self.config.obs_format == "magic_submit" and self._actions_cnt > 0:
-            raw_obs = obs.to_llm_messages()
-            obs_combined = "\n".join(m.get("content", "") if isinstance(m, dict) else "" for m in raw_obs)
-            if self._MAGIC_SUBMIT in obs_combined:
-                logger.info("Genny2: magic submission string detected — stopping episode.")
-                return AgentOutput(actions=[Action(name=STOP_ACTION.name, arguments={})])
 
         profiler = Profiler()
 
@@ -427,7 +408,7 @@ class Genny2(Agent):
 
     def _obs_to_messages(self, obs: Observation) -> list[dict | Message]:
         messages = cast(list[dict | Message], obs.to_llm_messages())
-        if self.config.obs_format in ("output_tag", "magic_submit"):
+        if self.config.obs_format == "output_tag":
             wrapped = []
             for m in messages:
                 if isinstance(m, dict) and m.get("role") == "tool" and isinstance(m.get("content"), str):
