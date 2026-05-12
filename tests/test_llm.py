@@ -162,7 +162,7 @@ class TestLLM:
         assert result.message.tool_calls is not None
         assert result.message.content == "Tool call made."
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_llm_call_empty_tools_drops_tool_choice(self, mock_completion, sample_llm_config, sample_prompt) -> None:
         """When tools=[], tool_choice and parallel_tool_calls are omitted (some providers reject them)."""
         mock_message = Message(role="assistant", content="no tools")
@@ -180,7 +180,7 @@ class TestLLM:
         assert "tool_choice" not in call_kwargs
         assert "parallel_tool_calls" not in call_kwargs
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_llm_call_tool_choice_none_drops_tool_choice(self, mock_completion) -> None:
         """When tool_choice=None, tool_choice and parallel_tool_calls are omitted even with tools present."""
         mock_message = Message(role="assistant", content="ok")
@@ -491,7 +491,7 @@ class TestCacheControlHelpers:
 class TestLLMCacheControl:
     """Tests for LLM.__call__ cache_control wiring."""
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_no_cache_control_when_unset(self, mock_completion, sample_prompt) -> None:
         mock_completion.return_value = MagicMock(
             choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
@@ -503,7 +503,7 @@ class TestLLMCacheControl:
         for tool in kwargs.get("tools", []):
             assert "cache_control" not in tool
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_no_cache_control_for_non_anthropic(self, mock_completion) -> None:
         mock_completion.return_value = MagicMock(
             choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
@@ -520,7 +520,7 @@ class TestLLMCacheControl:
         for tool in kwargs.get("tools", []):
             assert "cache_control" not in tool
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_auto_caching_for_anthropic(self, mock_completion) -> None:
         mock_completion.return_value = MagicMock(
             choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
@@ -548,7 +548,7 @@ class TestLLMCacheControl:
         assert "cache_control" not in kwargs["tools"][0]
         assert "cache_control" not in prompt.tools[1]
 
-    @patch("cube_harness.llm.completion_with_retries")
+    @patch("cube_harness.llm.litellm.completion")
     def test_auto_caching_no_assistant_yet(self, mock_completion) -> None:
         mock_completion.return_value = MagicMock(
             choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
