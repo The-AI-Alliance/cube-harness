@@ -19,6 +19,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -172,13 +173,16 @@ def _format_rows(rows: list[dict]) -> str:
 
 
 def main(
-    match: str | None = typer.Option(None, "--match", help="Regex filter on experiment directory name"),
-    since: str | None = typer.Option(None, "--since", help="Only experiments on/after YYYY-MM-DD"),
-    last: int | None = typer.Option(None, "--last", help="Show only the N most recent"),
-    results_dir: Path = typer.Option(DEFAULT_RESULTS_DIR, "--results-dir", help="Results root"),
-    no_header: bool = typer.Option(False, "--no-header", help="Omit markdown table header + legend"),
+    match: Annotated[str | None, typer.Option(help="Regex filter on experiment directory name")] = None,
+    since: Annotated[str | None, typer.Option(help="Only experiments on/after YYYY-MM-DD")] = None,
+    last: Annotated[int | None, typer.Option(help="Show only the N most recent")] = None,
+    results_dir: Annotated[Path, typer.Option(help="Results root")] = DEFAULT_RESULTS_DIR,
+    header: Annotated[bool, typer.Option(help="Show table header + legend (use --no-header to omit)")] = True,
 ) -> None:
-    """Markdown table of experiments in ``~/cube_harness_results/``."""
+    """Markdown table of experiments in ``~/cube_harness_results/``.
+
+    Flag names are auto-derived from parameter names (snake_case → kebab-case).
+    """
     if not results_dir.exists():
         typer.echo(f"Results dir not found: {results_dir}", err=True)
         raise typer.Exit(1)
@@ -207,7 +211,7 @@ def main(
         typer.echo("No matching experiments found.", err=True)
         raise typer.Exit(0)
 
-    if not no_header:
+    if header:
         typer.echo(
             "**Legend** — done/total: `+N▶` running · `+N🕐` queued · "
             "`N✗` failed · `N👻` stale (dead worker) · `N🚫` cancelled · "
