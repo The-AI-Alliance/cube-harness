@@ -303,6 +303,12 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         m = re.match(r"^(\w+)\s+\(([^)]+)\)$", directive)
         if m:
             method, class_path = m.group(1), m.group(2)
+            # Python 3.11+ unittest verbose output sometimes already includes the
+            # method inside the parens: "test_foo (mod.Class.test_foo)". Returning
+            # f"{class_path}.{method}" would double-append and Django's loader
+            # would reject it. Detect and pass through unchanged.
+            if class_path.endswith(f".{method}") or class_path == method:
+                return class_path
             return f"{class_path}.{method}"
         # A valid Python dotted path has no spaces or special chars.
         if re.search(r"[\s#'\"]", directive):
