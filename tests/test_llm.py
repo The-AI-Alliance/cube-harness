@@ -412,7 +412,16 @@ class TestCacheControlHelpers:
             assert _is_anthropic_model(name), name
 
     def test_is_anthropic_model_false_cases(self) -> None:
-        for name in ["gpt-4o", "gpt-5-mini", "azure/gpt-4o", "gemini/gemini-2.0-flash"]:
+        # Includes a deliberate string-only-trap: substring "claude" appears under
+        # an openai routing prefix; the canonical provider resolver classifies it
+        # as openai so cache_control payloads don't leak.
+        for name in [
+            "gpt-4o",
+            "gpt-5-mini",
+            "azure/gpt-4o",
+            "gemini/gemini-2.0-flash",
+            "openai/something-claude-ish",
+        ]:
             assert not _is_anthropic_model(name), name
 
     def test_injection_points_empty_messages(self) -> None:

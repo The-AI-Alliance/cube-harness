@@ -9,7 +9,7 @@ from uuid import uuid4
 import litellm
 import tenacity
 from cube.core import TypedBaseModel
-from litellm import Message
+from litellm import Message, get_llm_provider
 from litellm.exceptions import (
     APIConnectionError,
     InternalServerError,
@@ -103,13 +103,29 @@ class LLMResponse(TypedBaseModel):
 
 
 def _is_anthropic_model(model_name: str) -> bool:
-    """Heuristic: does this model route to Anthropic via LiteLLM?
+    """Does this model route to Anthropic's API (direct, Bedrock, or Vertex)?
 
-    Covers direct Anthropic, Bedrock-Anthropic, and Vertex-Claude routings. Used to
-    gate Anthropic-specific cache_control payloads so they don't leak to other providers.
+    Uses LiteLLM's canonical provider resolver where possible so prefix-based
+    routings are classified correctly — plain substring checks would false-positive
+    on names like ``openai/something-claude-ish`` (resolver correctly returns
+    ``provider=openai`` for that). Falls back to a substring check on the model
+    name only when no routing prefix is present (e.g. brand-new ``claude-*`` names
+    LiteLLM's registry hasn't caught up to). Used to gate Anthropic-specific
+    payloads (cache_control) so they don't leak to other providers.
     """
-    name = model_name.lower()
-    return "claude" in name or "anthropic" in name
+    try:
+        _, provider, _, _ = get_llm_provider(model_name)
+    except Exception:
+        # Unknown model. Fall back to substring only when the caller used no
+        # routing prefix — keeps ``openai/...`` etc. from sneaking through.
+        if "/" in model_name:
+            return False
+        return "claude" in model_name.lower() or "anthropic" in model_name.lower()
+    if provider == "anthropic":
+        return True
+    # Bedrock and Vertex route Claude models through the Anthropic API surface;
+    # LiteLLM forwards cache_control for those routings.
+    return provider in ("bedrock", "vertex_ai") and "claude" in model_name.lower()
 
 
 def _msg_role(msg: Any) -> str | None:
