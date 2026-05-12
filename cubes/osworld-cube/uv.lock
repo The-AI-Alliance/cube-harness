@@ -480,7 +480,7 @@ wheels = [
 [[package]]
 name = "cube-computer-tool"
 version = "0.2.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&branch=fix%2Fazure-retry-and-computer-tool-cleanup#e8e13e2069734e2de8d3f47596ad21277dec3fbd" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&branch=dev#4bc662209fb771fd21014f0894655573eb4d5cd2" }
 dependencies = [
     { name = "cube-standard" },
     { name = "pillow" },
@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "cube-infra-aws"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws#a82f1984e033e4829d03854bdc011e22d6139f5f" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws&branch=dev#4bc662209fb771fd21014f0894655573eb4d5cd2" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
@@ -503,7 +503,7 @@ dependencies = [
 [[package]]
 name = "cube-infra-azure"
 version = "0.1.0"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure#a82f1984e033e4829d03854bdc011e22d6139f5f" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&branch=dev#4bc662209fb771fd21014f0894655573eb4d5cd2" }
 dependencies = [
     { name = "azure-identity" },
     { name = "azure-mgmt-compute" },
@@ -518,7 +518,7 @@ dependencies = [
 [[package]]
 name = "cube-standard"
 version = "0.1.0rc8"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard#a82f1984e033e4829d03854bdc011e22d6139f5f" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?branch=dev#4bc662209fb771fd21014f0894655573eb4d5cd2" }
 dependencies = [
     { name = "docstring-parser" },
     { name = "fastapi" },
@@ -535,7 +535,7 @@ dependencies = [
 [[package]]
 name = "cube-vm-backend"
 version = "0.2.1"
-source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend#a82f1984e033e4829d03854bdc011e22d6139f5f" }
+source = { git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend&branch=dev#4bc662209fb771fd21014f0894655573eb4d5cd2" }
 dependencies = [
     { name = "cube-standard" },
     { name = "requests" },
@@ -1359,11 +1359,11 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "cssselect", specifier = ">=1.2" },
-    { name = "cube-computer-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&branch=fix%2Fazure-retry-and-computer-tool-cleanup" },
-    { name = "cube-infra-aws", marker = "extra == 'aws'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws" },
-    { name = "cube-infra-azure", marker = "extra == 'azure'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure" },
-    { name = "cube-standard", specifier = ">=0.1.0rc8" },
-    { name = "cube-vm-backend", extras = ["docker"], git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend" },
+    { name = "cube-computer-tool", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-tools%2Fcube-computer-tool&branch=dev" },
+    { name = "cube-infra-aws", marker = "extra == 'aws'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-aws&branch=dev" },
+    { name = "cube-infra-azure", marker = "extra == 'azure'", git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-infra-azure&branch=dev" },
+    { name = "cube-standard", git = "https://github.com/The-AI-Alliance/cube-standard?branch=dev" },
+    { name = "cube-vm-backend", extras = ["docker"], git = "https://github.com/The-AI-Alliance/cube-standard?subdirectory=cube-resources%2Fcube-vm-backend&branch=dev" },
     { name = "fastdtw", specifier = ">=0.3" },
     { name = "formulas", specifier = ">=1.2" },
     { name = "imagehash", specifier = ">=4.3" },
