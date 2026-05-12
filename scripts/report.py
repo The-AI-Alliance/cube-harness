@@ -22,29 +22,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from cube_harness.analyze.stats import binomial_std_err
-from cube_harness.episode_status import (
-    IN_FLIGHT_STATUSES,
-    STATUS_FILENAME,
-    EpisodeStatus,
-)
+from cube_harness.analyze.stats import reward_mean_stderr
+from cube_harness.episode_status import IN_FLIGHT_STATUSES, STATUS_ICONS
 from cube_harness.results import ExperimentResult
-from cube_harness.storage import ARCHIVED_MARKER, EPISODES_DIR
 
 DEFAULT_RESULTS_DIR = Path.home() / "cube_harness_results"
 
 # Status display order — terminal-valid first, in-flight, then terminal-error.
 _DONE_STATUSES = ("COMPLETED", "MAX_STEPS_REACHED")
 _ERROR_STATUSES = ("FAILED", "STALE", "CANCELLED")
-
-# Icons for the status-breakdown column.
-_STATUS_ICONS: dict[str, str] = {
-    "RUNNING": "▶",
-    "QUEUED": "🕐",
-    "FAILED": "✗",
-    "STALE": "👻",
-    "CANCELLED": "🚫",
-}
 
 
 def _load_json(path: Path) -> dict:
@@ -74,60 +60,46 @@ def _short_benchmark(name: str) -> str:
     return name.replace("swebench-verified-cube", "sweb-v").replace("swebench-live-cube", "sweb-live")
 
 
-def _scan_episodes(exp_dir: Path) -> tuple[dict[str, int], list[float], float, int] | None:
-    """Walk episodes/ and return (status_counts, completed_rewards, total_cost, ctx_errors).
+def _scan_episodes(result: ExperimentResult) -> tuple[dict[str, int], list[float], float, int]:
+    """Aggregate per-status counts, rewards, cost, and context-window errors.
 
-    Returns None if the episodes dir is missing. Used for in-flight runs and for
-    the per-status breakdown that ExperimentSummary doesn't expose.
+    Walks via :meth:`ExperimentResult.iter_episode_statuses` so the episode set
+    (including in-flight) matches what the XRay viewer sees.
     """
-    episodes_dir = exp_dir / EPISODES_DIR
-    if not episodes_dir.exists():
-        return None
-
     counts: dict[str, int] = {}
     completed_rewards: list[float] = []
     total_cost = 0.0
     ctx_errors = 0
-    seen: set[tuple[str, int]] = set()
 
-    for ep_dir in episodes_dir.iterdir():
-        if ARCHIVED_MARKER in ep_dir.name or not ep_dir.is_dir():
-            continue
-        status_path = ep_dir / STATUS_FILENAME
-        if not status_path.exists():
-            continue
-        try:
-            es = EpisodeStatus.from_json(status_path.read_text())
-        except (json.JSONDecodeError, KeyError):
-            continue
-        key = (es.task_id, es.episode_id)
-        if key in seen:
-            continue
-        seen.add(key)
-
+    for es in result.iter_episode_statuses():
         counts[es.status] = counts.get(es.status, 0) + 1
         if es.error_type and "ContextWindow" in es.error_type:
             ctx_errors += 1
         if es.status in _DONE_STATUSES and es.reward is not None:
             completed_rewards.append(float(es.reward))
-
+        # Cost lives in episode_record.json, not status.json.
+        ep_dir = result._dir / "episodes" / f"{es.task_id}_ep{es.episode_id}"
         total_cost += _load_json(ep_dir / "episode_record.json").get("usage", {}).get("total_cost_usd", 0.0)
 
     return counts, completed_rewards, total_cost, ctx_errors
 
 
 def _format_episode_breakdown(counts: dict[str, int], ctx_errors: int) -> tuple[str, int]:
-    """Return ("done/total status icons", n_total) for the table row."""
+    """Return ("done/total status icons", n_total) for the table row.
+
+    Uses ``STATUS_ICONS`` from ``episode_status`` — same canonical icon set the
+    XRay viewer references for its HTML status cells.
+    """
     n_done = sum(counts.get(s, 0) for s in _DONE_STATUSES)
     n_inflight = sum(counts.get(s, 0) for s in IN_FLIGHT_STATUSES)
     n_error = sum(counts.get(s, 0) for s in _ERROR_STATUSES)
     n_total = n_done + n_inflight + n_error
 
     parts = [f"{n_done}/{n_total}"]
-    inflight_parts = [f"{counts[s]}{_STATUS_ICONS[s]}" for s in ("RUNNING", "QUEUED") if counts.get(s)]
+    inflight_parts = [f"{counts[s]}{STATUS_ICONS[s]}" for s in ("RUNNING", "QUEUED") if counts.get(s)]
     if inflight_parts:
         parts.append("+" + "+".join(inflight_parts))
-    error_parts = [f"{counts[s]}{_STATUS_ICONS[s]}" for s in _ERROR_STATUSES if counts.get(s)]
+    error_parts = [f"{counts[s]}{STATUS_ICONS[s]}" for s in _ERROR_STATUSES if counts.get(s)]
     if error_parts:
         parts.append(" ".join(error_parts))
     if ctx_errors:
@@ -135,19 +107,17 @@ def _format_episode_breakdown(counts: dict[str, int], ctx_errors: int) -> tuple[
     return " ".join(parts), n_total
 
 
-def _format_accuracy(rewards: list[float], summary_avg: float | None, summary_n: int | None) -> str:
-    """Use ExperimentSummary if available (canonical), else compute from raw rewards.
+def _format_accuracy(rewards: list[float]) -> str:
+    """Format accuracy + standard error using the shared ``reward_mean_stderr``.
 
-    SE uses the shared ``binomial_std_err`` (same formula as
-    ``inspect_results.get_std_err`` for binary outcomes).
+    Same formula as the XRay viewer's per-experiment row (auto-selects binomial
+    vs sample SE based on data shape), so both tools produce identical CIs for
+    the same data.
     """
-    if summary_avg is not None and summary_n:
-        acc, n = summary_avg, summary_n
-    elif rewards:
-        acc, n = sum(rewards) / len(rewards), len(rewards)
-    else:
+    if not rewards:
         return "—"
-    return f"{acc:.1%} ±{binomial_std_err(acc, n):.1%}"
+    acc, se = reward_mean_stderr(rewards)
+    return f"{acc:.1%} ±{se:.1%}"
 
 
 def _parse_experiment(exp_dir: Path) -> dict | None:
@@ -155,15 +125,10 @@ def _parse_experiment(exp_dir: Path) -> dict | None:
     if not record:
         return None
 
-    scan = _scan_episodes(exp_dir)
-    if scan is None:
+    result = ExperimentResult(exp_dir)
+    counts, rewards, total_cost, ctx_errors = _scan_episodes(result)
+    if not counts:
         return None
-    counts, rewards, total_cost, ctx_errors = scan
-
-    # Canonical aggregate from ExperimentSummary when finalised — falls back to raw walk.
-    summary = ExperimentResult(exp_dir).summary()
-    summary_avg = summary.avg_reward if summary else None
-    summary_n = summary.n_completed if summary else None
 
     ts = record.get("evaluation_timestamp", 0)
     breakdown, _ = _format_episode_breakdown(counts, ctx_errors)
@@ -175,7 +140,7 @@ def _parse_experiment(exp_dir: Path) -> dict | None:
         "benchmark": _short_benchmark(record.get("benchmark_name", "?")),
         "model": (record.get("agent", {}).get("llm_model") or "?").split("/")[-1],
         "template": _classify_template(record.get("agent", {}).get("config", {}).get("goal_template", "")),
-        "accuracy": _format_accuracy(rewards, summary_avg, summary_n),
+        "accuracy": _format_accuracy(rewards),
         "episodes": breakdown,
         "cost": f"${total_cost:.2f}" if total_cost else "—",
         "dir": exp_dir.name,
