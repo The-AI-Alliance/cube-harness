@@ -486,4 +486,8 @@ def _run_sequentially_impl(
                     logger.exception(f"Episode {traj_id} failed")
                     results.failures[traj_id] = str(e)
         exp.print_stats(results)
+        # Match the Ray path: drop step lists from the in-memory result. Steps
+        # are already on disk; reload via storage.load_trajectory() if needed.
+        for traj in results.trajectories.values():
+            traj.steps.clear()
         return results
