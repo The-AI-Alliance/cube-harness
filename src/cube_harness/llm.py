@@ -9,7 +9,7 @@ from uuid import uuid4
 import litellm
 import tenacity
 from cube.core import TypedBaseModel
-from litellm import Message, get_llm_provider
+from litellm import BadRequestError, Message, get_llm_provider
 from litellm.exceptions import (
     APIConnectionError,
     InternalServerError,
@@ -115,9 +115,12 @@ def _is_anthropic_model(model_name: str) -> bool:
     """
     try:
         _, provider, _, _ = get_llm_provider(model_name)
-    except Exception:
-        # Unknown model. Fall back to substring only when the caller used no
-        # routing prefix — keeps ``openai/...`` etc. from sneaking through.
+    except BadRequestError:
+        # Model not in LiteLLM's registry (e.g. ``claude-3-5-sonnet-20241022``,
+        # ``claude-3-5-sonnet-latest``, or any new SKU that ships before LiteLLM
+        # catches up). Fall back to substring matching, but only when no routing
+        # prefix is present — keeps ``newprefix/claude-foo`` etc. from sneaking
+        # through. Other exceptions propagate.
         if "/" in model_name:
             return False
         return "claude" in model_name.lower() or "anthropic" in model_name.lower()
