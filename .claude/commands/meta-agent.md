@@ -226,7 +226,7 @@ Write a new file per session, with this skeleton:
 | | |
 |---|---|
 | Recipe | `recipes/meta_agent_web_recipe.py` |
-| SWE recipe | `recipes/swe_agent_recipe.py` |
+| SWE recipe | `recipes/genny2_swe.py` |
 | Hints | `meta_agent/hints/<benchmark>.json` + `load_hints(benchmark)` |
 | Clarifications | `meta_agent/clarifications/<benchmark>.json` + `load_clarifications(benchmark)` |
 | Journal | `~/cube_meta_agent_journal/` (machine-local) |

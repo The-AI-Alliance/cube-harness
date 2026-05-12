@@ -12,11 +12,11 @@ Install with: pip install swebench-live-cube[eval]
 
 Usage:
     # Validate pipeline on 30-task sample (no LLM, ~5 min on Toolkit):
-    .venv/bin/python -m swebench_live_cube.gold_patch_recipe --subset live30 \\
+    .venv/bin/python -m swebench_live_cube.gold_patch.recipe --subset live30 \\
         --toolkit --eai-profile yul101 --eai-path ~/bin/eai
 
     # Identify solvable subset across full lite (300 tasks), 3 runs for stability:
-    .venv/bin/python -m swebench_live_cube.gold_patch_recipe --subset lite \\
+    .venv/bin/python -m swebench_live_cube.gold_patch.recipe --subset lite \\
         --toolkit --eai-profile yul101 --eai-path ~/bin/eai \\
         --n-parallel 50 --n-runs 3 --dump-solvable solvable_lite_stable.json
 """
@@ -25,13 +25,14 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from pathlib import Path
 
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment, ExpResult
 from cube_harness.storage import FileStorage
 
-from swebench_live_cube.gold_patch_agent import GoldPatchAgentConfig
+from swebench_live_cube.gold_patch.agent import GoldPatchAgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +303,13 @@ if __name__ == "__main__":
     parser.add_argument("--n-runs", type=int, default=1, help="Repeat N times for flakiness detection")
     parser.add_argument("--retry", metavar="DIR", default=None, help="Re-run only CANCELLED/FAILED episodes from DIR")
     parser.add_argument("--existing-run-dir", metavar="DIR", nargs="+", default=None)
+    parser.add_argument(
+        "--from-runs",
+        metavar="DIR",
+        nargs="+",
+        default=None,
+        help="Skip running; intersect these completed run dirs into --dump-solvable",
+    )
     parser.add_argument("--dump-solvable", metavar="PATH", default=None)
     parser.add_argument("--n-parallel", type=int, default=50)
     parser.add_argument("--launch-timeout", type=int, default=900)
@@ -310,6 +318,14 @@ if __name__ == "__main__":
     parser.add_argument("--eai-path", default="eai")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
+
+    # Post-hoc intersection: skip running, just intersect existing run dirs.
+    if args.from_runs:
+        if not args.dump_solvable:
+            parser.error("--from-runs requires --dump-solvable")
+        run_dirs = [Path(d) for d in args.from_runs]
+        _write_solvable(run_dirs, Path(args.dump_solvable), total=0)
+        sys.exit(0)
 
     run_gold_baseline(
         subset=args.subset,
