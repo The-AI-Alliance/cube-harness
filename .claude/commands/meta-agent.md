@@ -183,21 +183,40 @@ Key `GennyConfig` levers: `render_last_n_obs`, `max_obs_chars`, `enable_summariz
 - Scaffolding changes → `feat/meta-agent`
 - Each fix → `feat/meta-agent/iter-N-<description>` → PR against `feat/meta-agent`
 
-**Experiment journal** — `experiments/meta_agent_log.md` in the repo, committed to `feat/meta-agent`.
-This is shared state: it tracks *why* each fix was made, which is as important as the fix itself.
-Raw results dirs (`~/cube_harness_results/`) stay local (too large, machine-specific).
+**Experiment journal** — `~/cube_meta_agent_journal/` (machine-local, not committed).
+One markdown file per debugging session, named `YYYY-MM-DD_<benchmark>-<scope>.md`.
+Tracks *why* each fix was made, which is as important as the fix itself.
+Raw results dirs (`~/cube_harness_results/`) also stay local (too large, machine-specific).
 
-Append one entry per iteration when committing the fix PR:
+Write a new file per session, with this skeleton:
 
 ```markdown
-## Iteration N — YYYY-MM-DD
-**Tasks**: task_a, task_b
-**What the agent saw**: [prompt/obs findings]
-**Hypothesis**: [one line]
-**Intervention**: [causal test used to confirm]
-**Fix**: [what changed, where, blast radius]
-**Result**: reward before → after
-**Control set**: [pass / regression on task_x]
+# <Title>
+
+**Date**: YYYY-MM-DD
+**Branch**: <git branch>
+**Base commit**: <short hash> (<one-line description>)
+**Benchmark**: <workarena L1 | swebench-verified | …>
+**Model**: <e.g. azure/gpt-5.4>
+**Objective**: <what we're trying to fix or learn>
+
+## Context
+<Brief setup — what's already known, what changed since last session>
+
+## Runs
+### Run N — <label>
+- **Config**: hints=on/off, max_steps=40, n_workers=4
+- **Result**: X/Y (Z%)
+- **Key observations**: …
+
+## Findings
+<Root causes, confirmed/rejected hypotheses>
+
+## Changes made
+<Files changed and why — link to specific fixes>
+
+## Next steps
+<What to try next session>
 ```
 
 ---
@@ -210,7 +229,7 @@ Append one entry per iteration when committing the fix PR:
 | SWE recipe | `recipes/swe_agent_recipe.py` |
 | Hints | `meta_agent/hints/<benchmark>.json` + `load_hints(benchmark)` |
 | Clarifications | `meta_agent/clarifications/<benchmark>.json` + `load_clarifications(benchmark)` |
-| Journal | `experiments/meta_agent_log.md` |
+| Journal | `~/cube_meta_agent_journal/` (machine-local) |
 | Genny | `src/cube_harness/agents/genny.py` |
 | Results API | `src/cube_harness/results.py` |
 | Results root | `~/cube_harness_results/` |

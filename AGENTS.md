@@ -173,6 +173,6 @@ installs all workspace packages with `uv pip install -e cube-standard --all-pack
 ## Meta-agent
 
 `meta_agent/` holds an iterative eval-analyze-fix loop used for improving agents.
-The skill `/meta-agent` drives it (see `.claude/skills/meta-agent/`). Journal
-entries live in `meta_agent/journal/` for historical context — not part of the
-build.
+The skill `/meta-agent` drives it (see `.claude/commands/meta-agent.md`). Journal
+entries are kept machine-local at `~/cube_meta_agent_journal/` — not committed,
+not shared across machines.
