@@ -43,15 +43,20 @@ jobs:
       # state and reverts cube-standard to PyPI rc8, which doesn't have cube.tools.terminal.
       #
       # Test tiers (see pyproject markers + AGENTS.md "Test categories"):
-      #   - default: everything except live_api (real-LLM tests that cost money and
-      #     auto-skip without ANTHROPIC_API_KEY anyway)
-      #   - integration: Playwright tests, after `playwright install`
-      #   - live_api: never runs in CI; opt-in locally via `pytest -m live_api`
+      #   - default: fast tier only — excludes `slow` (Ray retry orchestration + xray
+      #     e2e; flaky on shared GitHub Actions runners due to timing assumptions) and
+      #     `live_api` (real-LLM tests; cost money; auto-skip without ANTHROPIC_API_KEY).
+      #     ~30s wall-clock instead of ~25 min when slow tests are included.
+      #   - integration: Playwright tests, after `playwright install`.
+      #   - slow: runs locally with `pytest -m slow`. TODO: add a nightly scheduled
+      #     workflow that runs `pytest -m "slow and not live_api"` on a dedicated
+      #     runner where flakies don't block PR merges.
+      #   - live_api: never runs in CI; opt-in locally via `pytest -m live_api`.
       - name: Run tests
-        run: uv run --no-sync pytest -n 10 tests/ -m "not live_api" -v
+        run: uv run --no-sync pytest -n 10 tests/ -m "not slow and not live_api" -v
 
       - name: Install Playwright browsers
         run: uv run --no-sync playwright install chromium
 
       - name: Run integration tests
-        run: uv run --no-sync pytest tests/ -m "integration and not live_api" -v
+        run: uv run --no-sync pytest tests/ -m "integration and not slow and not live_api" -v

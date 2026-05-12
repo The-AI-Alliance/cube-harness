@@ -135,12 +135,12 @@ uv run recipes/hello_miniwob.py   # example run
 
 Pytest markers (declared in `pyproject.toml`) gate four tiers — pick the smallest one that exercises your change:
 
-| Marker | When to run | What it covers |
-|---|---|---|
-| *(unmarked)* | every iteration | ~980 fast tests, no external deps. ~30s. This is what `make test` defaults to. |
-| `slow` | before pushing if you touched `experiment`, `exp_runner`, `xray`, retry, or storage | Ray retry orchestration + xray e2e (~85s) |
-| `integration` | if you touched browser tools (`browsergym.py`, MiniWob, WorkArena) | Playwright/Chromium tests; needs `uv run playwright install chromium` first |
-| `live_api` | when modifying `llm.py` cache control / streaming / tool-choice behavior | Hits a real LLM provider. Costs ~$0.05/run. **Auto-skips without `ANTHROPIC_API_KEY`. Never runs in CI by default.** Only way to verify real `cache_read_tokens` from the API response. |
+| Marker | Runs in CI? | When to run locally | What it covers |
+|---|---|---|---|
+| *(unmarked)* | ✅ always | every iteration | ~980 fast tests, no external deps. ~30s. This is what `make test` defaults to. |
+| `slow` | ❌ excluded | before pushing if you touched `experiment`, `exp_runner`, `xray`, retry, or storage | Ray retry orchestration + xray e2e. Excluded from CI by default because Ray-based tests are timing-flaky on shared GitHub Actions runners; runs reliably on a local machine in ~85s. |
+| `integration` | ✅ (Playwright step) | if you touched browser tools (`browsergym.py`, MiniWob, WorkArena) | Playwright/Chromium tests; needs `uv run playwright install chromium` first |
+| `live_api` | ❌ never | when modifying `llm.py` cache control / streaming / tool-choice behavior | Hits a real LLM provider. Costs ~$0.05/run. **Auto-skips without `ANTHROPIC_API_KEY`.** Only way to verify real `cache_read_tokens` from the API response. |
 
 ```bash
 pytest tests/ -m "not slow and not integration and not live_api"   # fast tier, ~30s
