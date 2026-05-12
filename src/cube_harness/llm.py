@@ -3,11 +3,20 @@
 import pprint
 from datetime import datetime
 from functools import partial
-from typing import Callable, List, Literal
+from typing import Any, Callable, List, Literal
 from uuid import uuid4
 
+import litellm
+import tenacity
 from cube.core import TypedBaseModel
-from litellm import Message, completion_with_retries
+from litellm import Message
+from litellm.exceptions import (
+    APIConnectionError,
+    InternalServerError,
+    RateLimitError,
+    ServiceUnavailableError,
+    Timeout,
+)
 from litellm.utils import token_counter
 from pydantic import Field
 
@@ -80,8 +89,6 @@ class LLM:
             "model": self.config.model_name,
             "temperature": self.config.temperature,
             "max_completion_tokens": self.config.max_completion_tokens,
-            "num_retries": self.config.num_retries,
-            "retry_strategy": self.config.retry_strategy,
             "tool_choice": self.config.tool_choice,
             "parallel_tool_calls": self.config.parallel_tool_calls,
             "tools": prompt.tools,
@@ -90,9 +97,31 @@ class LLM:
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
-        response = completion_with_retries(**kwargs)
+        response = self._completion_with_retry(**kwargs)
         usage = self._extract_usage(response)
         return LLMResponse(message=response.choices[0].message, usage=usage)
+
+    def _completion_with_retry(self, **kwargs: Any) -> Any:
+        """Call litellm.completion with exponential backoff on transient errors.
+
+        litellm's completion_with_retries caps its backoff at 10 s, which is too
+        short for Anthropic overloaded_error responses under heavy load. We own the
+        retry loop here to get a proper 120 s ceiling.
+        """
+        _RETRIABLE = (
+            InternalServerError,
+            ServiceUnavailableError,
+            RateLimitError,
+            Timeout,
+            APIConnectionError,
+        )
+        retryer = tenacity.Retrying(
+            wait=tenacity.wait_exponential(multiplier=2, max=120),
+            stop=tenacity.stop_after_attempt(self.config.num_retries),
+            retry=tenacity.retry_if_exception_type(_RETRIABLE),
+            reraise=True,
+        )
+        return retryer(litellm.completion, **kwargs)
 
     def _extract_usage(self, response) -> Usage:
         """Extract usage info from LiteLLM response."""
