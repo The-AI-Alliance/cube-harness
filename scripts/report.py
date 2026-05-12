@@ -17,12 +17,12 @@ Run via ``make report`` or directly:
 
 import argparse
 import json
-import math
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
+from cube_harness.analyze.stats import binomial_std_err
 from cube_harness.episode_status import (
     IN_FLIGHT_STATUSES,
     STATUS_FILENAME,
@@ -136,15 +136,18 @@ def _format_episode_breakdown(counts: dict[str, int], ctx_errors: int) -> tuple[
 
 
 def _format_accuracy(rewards: list[float], summary_avg: float | None, summary_n: int | None) -> str:
-    """Use ExperimentSummary if available (canonical), else compute from raw rewards."""
+    """Use ExperimentSummary if available (canonical), else compute from raw rewards.
+
+    SE uses the shared ``binomial_std_err`` (same formula as
+    ``inspect_results.get_std_err`` for binary outcomes).
+    """
     if summary_avg is not None and summary_n:
         acc, n = summary_avg, summary_n
     elif rewards:
         acc, n = sum(rewards) / len(rewards), len(rewards)
     else:
         return "—"
-    se = math.sqrt(acc * (1 - acc) / n) if n > 1 else 0.0
-    return f"{acc:.1%} ±{se:.1%}"
+    return f"{acc:.1%} ±{binomial_std_err(acc, n):.1%}"
 
 
 def _parse_experiment(exp_dir: Path) -> dict | None:
