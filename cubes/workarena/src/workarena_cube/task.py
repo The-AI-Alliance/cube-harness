@@ -1,10 +1,10 @@
 """WorkArena task implementation for the CUBE framework."""
 
-import importlib
 import logging
 import time
 from typing import Any, List, Literal, override
 
+import browsergym.workarena
 from browsergym.workarena.tasks.base import AbstractServiceNowTask
 from cube.benchmark import RuntimeContext
 from cube.container import ContainerBackend
@@ -200,9 +200,13 @@ class WorkArenaTaskConfig(TaskConfig[WorkArenaTaskMetadata]):
 
 def _load_task_class(class_path: str) -> type:
     """Reconstruct a task class from its dotted module-qualified name."""
-    module_name, class_name = class_path.rsplit(".", 1)
-    module = importlib.import_module(module_name)
-    return getattr(module, class_name)
+    matches = [
+        cls for cls in browsergym.workarena.ALL_WORKARENA_TASKS if f"{cls.__module__}.{cls.__name__}" == class_path
+    ]
+    if len(matches) == 0:
+        raise ValueError(f"{class_path!r} is not a registered WorkArena task class")
+    assert len(matches) == 1, f"Duplicate task class registered for {class_path!r}"
+    return matches[0]
 
 
 def _apply_task_runtime_preferences(tool: WorkArenaBrowserTool, workarena_task: AbstractServiceNowTask) -> None:
