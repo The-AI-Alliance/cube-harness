@@ -29,7 +29,7 @@ xray:
 	uv run ch-xray --debug
 
 report:
-	uv run --active scripts/report.py $(ARGS)
+	uv run --active scripts/experiments_report.py $(ARGS)
 
 install:
 	@echo "🚀 Installing dependencies"

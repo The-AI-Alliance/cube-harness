@@ -1355,7 +1355,7 @@ def _reward_mean_stderr(rewards: list[float]) -> tuple[float, float]:
     """Return (mean, stderr) for a list of rewards.
 
     Delegates to :func:`cube_harness.analyze.stats.reward_mean_stderr` so XRay
-    and ``scripts/report.py`` produce identical CIs for the same data
+    and ``scripts/experiments_report.py`` produce identical CIs for the same data
     (auto-selects binomial vs sample SE by data shape).
     """
     return reward_mean_stderr(rewards)

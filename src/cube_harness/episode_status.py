@@ -29,7 +29,7 @@ RETRIABLE_STATUSES: frozenset[Status] = frozenset({"FAILED", "CANCELLED", "STALE
 STATUS_FILENAME = "status.json"
 
 # Canonical icons by raw Status. One-character/one-grapheme per entry so terminal
-# tools (e.g. ``scripts/report.py``) can lay them out cleanly. The XRay viewer
+# tools (e.g. ``scripts/experiments_report.py``) can lay them out cleanly. The XRay viewer
 # wraps these in ``<span title='…'>`` for hover tooltips and additionally splits
 # COMPLETED into success/fail using the recorded reward; that split lives in
 # ``analyze/xray_utils.py`` since it depends on reward semantics, not status alone.

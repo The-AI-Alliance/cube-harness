@@ -115,7 +115,7 @@ PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropic
   Live `Task`, `Tool`, `Benchmark`, `Agent` objects never cross process boundaries.
 - **Trajectory steps alternate** env → agent → env → agent in persistence order.
 - **Trace-first:** every new long-running operation should get a `tracer.span()`.
-- **CLIs use Typer** — new scripts/recipes that need a CLI should use `typer.run(main)` with `typer.Option`-annotated args (FastAPI-style: type hints + docstring become `--help`). `scripts/report.py` is the canonical example. Don't add new `argparse` boilerplate.
+- **CLIs use Typer** — new scripts/recipes that need a CLI should use `typer.run(main)` with `typer.Option`-annotated args (FastAPI-style: type hints + docstring become `--help`). `scripts/experiments_report.py` is the canonical example. Don't add new `argparse` boilerplate.
 
 ## Development commands
 

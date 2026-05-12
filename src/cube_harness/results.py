@@ -167,7 +167,7 @@ class ExperimentResult:
 
         Unlike :meth:`episodes` (which requires the finalized ``episode.metadata.json``),
         this also surfaces in-flight (``QUEUED``/``RUNNING``) episodes — used by
-        ``scripts/report.py`` and the XRay viewer's per-experiment row computation
+        ``scripts/experiments_report.py`` and the XRay viewer's per-experiment row computation
         so both tools see the same episode set. Deduplicated by ``(task_id, episode_id)``.
         """
         episodes_dir = self._dir / EPISODES_DIR

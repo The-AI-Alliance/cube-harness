@@ -8,11 +8,11 @@ Reuses cube_harness public APIs (no parallel parsing of episode files):
 
 Run via ``make report`` or directly:
 
-    scripts/report.py                          # all experiments, newest first
-    scripts/report.py --match haiku            # regex filter on dir name
-    scripts/report.py --since 2026-05-03       # on or after date
-    scripts/report.py --last 10                # most recent N
-    scripts/report.py --results-dir /path/to   # custom results root
+    scripts/experiments_report.py                          # all experiments, newest first
+    scripts/experiments_report.py --match haiku            # regex filter on dir name
+    scripts/experiments_report.py --since 2026-05-03       # on or after date
+    scripts/experiments_report.py --last 10                # most recent N
+    scripts/experiments_report.py --results-dir /path/to   # custom results root
 """
 
 import json

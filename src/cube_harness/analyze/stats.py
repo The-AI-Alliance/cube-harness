@@ -42,7 +42,7 @@ def reward_mean_stderr(rewards: list[float]) -> tuple[float, float]:
       * All values in {0, 1} → :func:`binomial_std_err` (tighter for binary outcomes).
       * Otherwise → :func:`sample_std_err` (sample-std with Bessel correction).
 
-    This is the canonical aggregate used by both ``scripts/report.py`` and the
+    This is the canonical aggregate used by both ``scripts/experiments_report.py`` and the
     XRay viewer — same data should produce the same accuracy CI in both tools.
     Returns ``(0.0, 0.0)`` for empty input.
     """
