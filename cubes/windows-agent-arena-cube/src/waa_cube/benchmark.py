@@ -85,7 +85,7 @@ class WAATaskConfig(TaskConfig):
                 f"WAATaskConfig for task '{self.task_id}' has no tool_config. "
                 "Pass tool_config=ComputerConfig(...) to WAABenchmark."
             )
-        exec_info_raw = WAATaskConfig.load_task_execution_info(self.task_id)
+        exec_info_raw = self.load_task_execution_info()
         execution_info = WAATaskExecutionInfo.model_validate(exec_info_raw)
         return WAATask(
             metadata=self.metadata,
