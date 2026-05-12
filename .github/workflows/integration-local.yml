@@ -64,9 +64,12 @@ jobs:
         run: docker info
 
       - name: Run integration suite
+        # --no-sync: keep the cube-standard@dev override from the previous step.
+        # Without it, `uv run` re-syncs the venv back to the lockfile state and
+        # reverts cube-standard to PyPI rc8, which doesn't have cube.tools.terminal.
         working-directory: integration-tests
         run: >-
-          uv run --group local --group dev pytest test_debug_matrix.py
+          uv run --no-sync --group local --group dev pytest test_debug_matrix.py
           -v --tb=short --log-cli-level=INFO
           -k "${{ matrix.cube }} and local"
 
