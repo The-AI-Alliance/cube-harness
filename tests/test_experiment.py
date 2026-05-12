@@ -917,6 +917,7 @@ class TestKillStaleWorkersRaceGuard:
                 storage,
                 results,
                 step_timeout_s=1.0,
+                setup_timeout_s=1.0,
                 cancel_grace_s=1.0,
             )
 
@@ -954,6 +955,7 @@ class TestKillStaleWorkersRaceGuard:
                 storage,
                 results,
                 step_timeout_s=1.0,
+                setup_timeout_s=1.0,
                 cancel_grace_s=1.0,
             )
 
@@ -962,7 +964,7 @@ class TestKillStaleWorkersRaceGuard:
         written: EpisodeStatus = mock_write.call_args[0][1]
         assert written.status == "CANCELLED"
         assert written.error_type == "StepTimeout"
-        assert "Step 5 exceeded" in written.error_message
+        assert "step 5 exceeded" in written.error_message
         # Recorded as a failure.
         assert traj_id in results.failures
         assert fake_ref not in episodes_in_progress

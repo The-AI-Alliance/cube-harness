@@ -17,7 +17,7 @@ from cube_harness.agent import AgentConfig
 from cube_harness.core import Trajectory
 from cube_harness.episode import MAX_STEPS, Episode
 from cube_harness.episode_logs import trajectory_log_id
-from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus
+from cube_harness.episode_status import RETRIABLE_STATUSES, EpisodeStatus, should_sweep_running_to_stale
 from cube_harness.eval_log import EvalLog, ExperimentRecord
 from cube_harness.storage import FileStorage
 
@@ -97,6 +97,7 @@ class Experiment(TypedBaseModel):
         step_timeout_s: float = 1800.0,
         cancel_grace_s: float = 120.0,
         orphan_threshold_s: float = 3600.0,
+        process_start_s: float | None = None,
     ) -> list[Episode]:
         """Return episodes to run based on `resume`.
 
@@ -130,6 +131,7 @@ class Experiment(TypedBaseModel):
             step_timeout_s=step_timeout_s,
             cancel_grace_s=cancel_grace_s,
             orphan_threshold_s=orphan_threshold_s,
+            process_start_s=process_start_s,
         )
 
         statuses = storage.list_episode_statuses()
@@ -291,10 +293,15 @@ def sweep_stale_statuses(
     step_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
+    process_start_s: float | None = None,
 ) -> list[str]:
     """Mark in-flight episodes whose worker is dead as `STALE`.
 
-    Two cases:
+    Three cases:
+    - `RUNNING` with `last_heartbeat_at` predating `process_start_s` (worker is from a
+      prior, now-dead process — force-sweep regardless of heartbeat age). Fixes the
+      kill-and-retry race where a freshly killed worker has a recent heartbeat that
+      would otherwise pass the age threshold.
     - `RUNNING` with `last_heartbeat_at` older than `step_timeout_s + cancel_grace_s`
       (worker died mid-episode without writing a terminal status).
     - `QUEUED` with `started_at` older than `orphan_threshold_s` (driver pre-claimed
@@ -307,9 +314,14 @@ def sweep_stale_statuses(
     swept: list[str] = []
     for trajectory_id, status in storage.list_episode_statuses().items():
         is_stale = False
-        if status.status == "RUNNING" and status.last_heartbeat_at is not None:
-            if now - status.last_heartbeat_at > step_timeout_s + cancel_grace_s:
-                is_stale = True
+        if status.status == "RUNNING":
+            is_stale = should_sweep_running_to_stale(
+                status,
+                now=now,
+                step_timeout_s=step_timeout_s,
+                cancel_grace_s=cancel_grace_s,
+                process_start_s=process_start_s,
+            )
         elif status.status == "QUEUED":
             if now - status.started_at > orphan_threshold_s:
                 is_stale = True

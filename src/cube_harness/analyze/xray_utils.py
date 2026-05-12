@@ -23,9 +23,10 @@ from pydantic import BaseModel
 from cube_harness.agent import AgentConfig
 from cube_harness.analyze.stats import reward_mean_stderr
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
-from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus
+from cube_harness.episode_status import STATUS_FILENAME, EpisodeStatus, should_sweep_running_to_stale
 from cube_harness.episode_status import TERMINAL_STATUSES as _EPISODE_TERMINAL_STATUSES
 from cube_harness.exp_runner import DEFAULT_CANCEL_GRACE_S, DEFAULT_STEP_TIMEOUT_S
+from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus, is_driver_alive
 from cube_harness.llm import LLMCall
 
 logger = logging.getLogger(__name__)
@@ -445,30 +446,48 @@ _XRAY_CACHE_FILENAME = ".xray_summary.json"
 
 
 def _promote_ghost_episodes(exp_dir: Path) -> None:
-    """Write STALE into status.json for RUNNING/QUEUED episodes whose heartbeat is dead.
+    """Write STALE into status.json for in-flight episodes whose driver is dead.
 
-    Fixes experiments where the runner crashed without marking episodes terminal.
-    This lets the cache machinery treat the experiment as finished so it can be frozen.
+    RUNNING + ray mode: promoted by per-episode heartbeat age (GHOST_TIMEOUT).
+    RUNNING + sequential mode + driver dead: promoted immediately — driver is the
+      worker, so process death kills both.
+    QUEUED + driver dead: promoted regardless of mode — no worker will ever pick
+      these up if the scheduler that queued them is gone.
     """
     episodes_dir = exp_dir / "episodes"
     if not episodes_dir.exists():
         return
+    exp_status = ExperimentStatus.read(exp_dir / EXPERIMENT_STATUS_FILENAME)
+    driver_dead = not is_driver_alive(exp_status, exp_dir, timeout_s=GHOST_TIMEOUT)
     now = time.time()
     for ep_dir in episodes_dir.iterdir():
         if not ep_dir.is_dir() or ".archived_" in ep_dir.name:
             continue
         status = EpisodeStatus.read(ep_dir / STATUS_FILENAME)
-        if status is None or status.status not in ("RUNNING", "QUEUED"):
+        if status is None:
             continue
-        hb = status.last_heartbeat_at or status.started_at
-        if now - hb > GHOST_TIMEOUT:
-            status.status = "STALE"
-            if status.ended_at is None:
-                status.ended_at = hb
-            try:
-                status.write(ep_dir / STATUS_FILENAME)
-            except OSError:
-                pass  # best-effort: race with runner archiving the dir is harmless
+        is_stale = False
+        if status.status == "RUNNING":
+            if driver_dead and exp_status is not None and exp_status.mode == "sequential":
+                is_stale = True  # driver == worker; both dead
+            else:
+                is_stale = should_sweep_running_to_stale(
+                    status,
+                    now=now,
+                    step_timeout_s=DEFAULT_STEP_TIMEOUT_S,
+                    cancel_grace_s=DEFAULT_CANCEL_GRACE_S,
+                )
+        elif status.status == "QUEUED" and driver_dead:
+            is_stale = True
+        if not is_stale:
+            continue
+        status.status = "STALE"
+        if status.ended_at is None:
+            status.ended_at = status.last_heartbeat_at or status.started_at
+        try:
+            status.write(ep_dir / STATUS_FILENAME)
+        except OSError:
+            pass  # best-effort: race with runner archiving the dir is harmless
 
 
 def _all_episodes_terminal(exp_dir: Path) -> bool:
