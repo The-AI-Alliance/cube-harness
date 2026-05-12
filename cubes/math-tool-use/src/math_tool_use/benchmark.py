@@ -21,9 +21,9 @@ def process_aime_and_amc(dataset, dataset_name):
 
 def _load_aime_dataset(year: int, upsample_factor: int = 0) -> list[dict]:
     if year == 2025:
-        aime_dataset = load_dataset("MathArena/aime_2025", split="train", trust_remote_code=True)
+        aime_dataset = load_dataset("MathArena/aime_2025", split="train")
     else:
-        aime_dataset = load_dataset("AI-MO/aimo-validation-aime", split="train", trust_remote_code=True)
+        aime_dataset = load_dataset("AI-MO/aimo-validation-aime", split="train")
         aime_dataset = aime_dataset.filter(lambda x: str(year) in x["url"])
 
     dataset_name = f"aime_{year}" + ("" if upsample_factor > 0 else "_original")
