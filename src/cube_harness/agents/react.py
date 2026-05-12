@@ -102,6 +102,7 @@ class ReactAgent(Agent):
             logprobs=llm_response.logprobs,
             completion_token_ids=llm_response.completion_token_ids,
             finish_reason=llm_response.finish_reason,
+            metadata=llm_response.metadata,
         )
         return AgentOutput(actions=parse_actions(llm_output), llm_calls=[llm_call])
 

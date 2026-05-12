@@ -433,6 +433,7 @@ class Genny(Agent):
             logprobs=response.logprobs,
             completion_token_ids=response.completion_token_ids,
             finish_reason=response.finish_reason,
+            metadata=response.metadata,
         )
         return response.message.content or "", llm_call
 
@@ -460,6 +461,7 @@ class Genny(Agent):
             logprobs=response.logprobs,
             completion_token_ids=response.completion_token_ids,
             finish_reason=response.finish_reason,
+            metadata=response.metadata,
         )
         return response.message, llm_call
 

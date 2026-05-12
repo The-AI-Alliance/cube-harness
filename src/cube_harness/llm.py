@@ -1,6 +1,7 @@
 """LLM interaction abstractions, LiteLLM based."""
 
 import pprint
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -84,6 +85,7 @@ class LLMResponse(TypedBaseModel):
     logprobs: list[float] | None = None
     completion_token_ids: list[int] | None = None
     finish_reason: str | None = None
+    metadata: dict = Field(default_factory=dict)
 
 
 class LLM:
@@ -226,6 +228,7 @@ class LLMRouteLease:
     api_base: str | None = None
     api_key: str | None = None
     model_name: str | None = None
+    metadata: dict | None = None
 
 
 class LLMRouter(Protocol):
@@ -305,6 +308,8 @@ class RoutedLLM(LLM):
         lease: LLMRouteLease | None = None
         response_obj: LLMResponse | None = None
         error: BaseException | None = None
+        started_at: datetime | None = None
+        started_perf: float | None = None
         try:
             lease = self.config.router.acquire(self.config, prompt)
             kwargs = self._completion_kwargs(prompt)
@@ -315,8 +320,22 @@ class RoutedLLM(LLM):
             if lease.model_name is not None:
                 kwargs["model"] = lease.model_name
 
+            started_at = datetime.now()
+            started_perf = time.perf_counter()
             raw_response = completion_with_retries(**kwargs)
             response_obj = self._response_from_completion(raw_response)
+            finished_at = datetime.now()
+            response_obj.metadata.update(lease.metadata or {})
+            response_obj.metadata.update(
+                {
+                    "route_id": lease.route_id,
+                    "route_api_base": lease.api_base,
+                    "route_model_name": lease.model_name,
+                    "llm_started_at": started_at.isoformat(),
+                    "llm_finished_at": finished_at.isoformat(),
+                    "llm_latency_s": time.perf_counter() - started_perf if started_perf is not None else None,
+                }
+            )
             return response_obj
         except BaseException as exc:
             error = exc
@@ -341,3 +360,4 @@ class LLMCall(TypedBaseModel):
     logprobs: list[float] | None = None
     completion_token_ids: list[int] | None = None
     finish_reason: str | None = None
+    metadata: dict = Field(default_factory=dict)

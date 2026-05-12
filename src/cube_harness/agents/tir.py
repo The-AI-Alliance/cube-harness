@@ -1,8 +1,8 @@
 import json
 import logging
-from litellm import Message
 
 from cube.core import Action, ActionSchema, Observation
+from litellm import Message
 
 from cube_harness.agent import Agent, AgentConfig
 from cube_harness.core import AgentOutput, LLMCall
@@ -127,6 +127,7 @@ class TirAgent(Agent):
             logprobs=llm_response.logprobs,
             completion_token_ids=llm_response.completion_token_ids,
             finish_reason=llm_response.finish_reason,
+            metadata=llm_response.metadata,
         )
         actions = tir_parse_actions_tolerant(llm_output)
         for i in range(len(actions)):
