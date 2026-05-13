@@ -76,8 +76,19 @@ if __name__ == "__main__":
     parser.add_argument("--name", default=None, help="Experiment name (default: auto-generated)")
     parser.add_argument("--n-cpus", type=int, default=4, help="Number of parallel Ray workers (default: 4)")
     parser.add_argument("--n-seeds", type=int, default=4, help="Number of seeds")
-    parser.add_argument("--browser", choices=("playwright", "browsergym"), default="playwright",
-                        help="Browser tool backend (default: playwright)")
+    parser.add_argument(
+        "--browser",
+        choices=("playwright", "browsergym"),
+        default="playwright",
+        help="Browser tool backend (default: playwright)",
+    )
     args = parser.parse_args()
-    main(debug=args.debug, agent=args.agent, model=args.model, name=args.name, n_cpus=args.n_cpus,
-         n_seeds=args.n_seeds, browser=args.browser)
+    main(
+        debug=args.debug,
+        agent=args.agent,
+        model=args.model,
+        name=args.name,
+        n_cpus=args.n_cpus,
+        n_seeds=args.n_seeds,
+        browser=args.browser,
+    )
