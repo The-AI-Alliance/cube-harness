@@ -1,4 +1,8 @@
-"""Unit tests for cube_harness.infra_profile."""
+"""Unit tests for cube_harness.infra_profile.
+
+Verifies the TypedBaseModel-based resolver: no per-kind branches, just
+`InfraConfig.model_validate(profile_dict)` with `_type` for discrimination.
+"""
 
 from __future__ import annotations
 
@@ -34,46 +38,49 @@ def test_load_local_explicit_name(tmp_config: Path) -> None:
     assert isinstance(infra, LocalInfraConfig)
 
 
-def test_load_local_from_config(tmp_config: Path) -> None:
+def test_load_via_typed_basemodel_discrimination(tmp_config: Path) -> None:
+    """The `_type` field on TypedBaseModel auto-instantiates the right class."""
     from cube.infra_local import LocalInfraConfig
 
-    tmp_config.write_text(json.dumps({"local": {"kind": "local"}}))
-    infra = infra_profile.load_infra("local")
+    tmp_config.write_text(json.dumps({"my-local": {"_type": "cube.infra_local.LocalInfraConfig"}}))
+    infra = infra_profile.load_infra("my-local")
     assert isinstance(infra, LocalInfraConfig)
 
 
 def test_missing_profile_raises(tmp_config: Path) -> None:
-    tmp_config.write_text(json.dumps({"yul101": {"kind": "toolkit"}}))
+    tmp_config.write_text(json.dumps({"yul101": {"_type": "cube.infra_local.LocalInfraConfig"}}))
     with pytest.raises(KeyError, match="absent_profile"):
         infra_profile.load_infra("absent_profile")
 
 
-def test_unknown_kind_raises(tmp_config: Path) -> None:
-    tmp_config.write_text(json.dumps({"weird": {"kind": "mystery-cloud"}}))
-    with pytest.raises(ValueError, match="mystery-cloud"):
+def test_unknown_type_raises(tmp_config: Path) -> None:
+    """Pydantic surfaces a clear error for an unknown `_type`."""
+    tmp_config.write_text(json.dumps({"weird": {"_type": "nonexistent.module.WhateverConfig"}}))
+    with pytest.raises((ImportError, ValueError, ModuleNotFoundError)):
         infra_profile.load_infra("weird")
 
 
-def test_env_var_overrides_default(tmp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_env_var_picks_default_profile(tmp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """CUBE_INFRA env var picks the profile when no explicit name is passed."""
-    tmp_config.write_text(json.dumps({"local-override": {"kind": "local"}}))
-    monkeypatch.setenv("CUBE_INFRA", "local-override")
-    # Should resolve to local-override via env var.  We can't assert the type
-    # of the specific local-override (it's LocalInfraConfig), but we can assert
-    # that an "unknown profile" KeyError is NOT raised — meaning the env var
-    # was consulted.
     from cube.infra_local import LocalInfraConfig
 
+    tmp_config.write_text(json.dumps({"alt": {"_type": "cube.infra_local.LocalInfraConfig"}}))
+    monkeypatch.setenv("CUBE_INFRA", "alt")
     infra = infra_profile.load_infra()
     assert isinstance(infra, LocalInfraConfig)
 
 
 def test_explicit_name_overrides_env_var(tmp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_config.write_text(json.dumps({"local-a": {"kind": "local"}, "local-b": {"kind": "local"}}))
-    monkeypatch.setenv("CUBE_INFRA", "local-a")
-    # Explicit "local-b" wins over the env var.  Both are LocalInfraConfig here,
-    # but the test still validates the resolution path doesn't raise on "local-b".
     from cube.infra_local import LocalInfraConfig
 
-    infra = infra_profile.load_infra("local-b")
+    tmp_config.write_text(
+        json.dumps(
+            {
+                "a": {"_type": "cube.infra_local.LocalInfraConfig"},
+                "b": {"_type": "cube.infra_local.LocalInfraConfig"},
+            }
+        )
+    )
+    monkeypatch.setenv("CUBE_INFRA", "a")
+    infra = infra_profile.load_infra("b")
     assert isinstance(infra, LocalInfraConfig)
