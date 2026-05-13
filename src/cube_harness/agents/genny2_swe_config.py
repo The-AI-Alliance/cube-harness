@@ -20,19 +20,10 @@ Suggested approach:
 3. Verify: confirm the result meets the requirement. If it does not, make a focused adjustment and try again.\
 """
 
-_WORKFLOW_BLOCK_TBENCH = """\
-Suggested approach:
-1. Explore: read the task, inspect /app and any relevant files to understand the environment.
-2. Implement: write, modify, or install what is needed to satisfy the task.
-3. Verify: run a quick sanity check to confirm your solution works.
-4. Finish: call final_step when you are done.\
-"""
-
 INSTANCE_TEMPLATES: dict[str, str] = {
     "minimal": "{{task}}",
     "workflow": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}",
     "workflow-generic": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK_GENERIC}",
-    "workflow-tbench": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK_TBENCH}",
 }
 
 # Production default: generic 3-step workflow, works across SWE-bench, TerminalBench, and similar.
