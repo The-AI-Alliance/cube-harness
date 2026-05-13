@@ -51,14 +51,30 @@ class LLMResponse(TypedBaseModel):
     message: Message          # litellm.Message
     usage: Usage
 
+    @property
+    def reasoning_text(self) -> str   # provider-agnostic; empty when no reasoning
+
 class Usage(TypedBaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     cached_tokens: int = 0
     cache_creation_tokens: int = 0    # Anthropic prompt caching
+    reasoning_tokens: int = 0          # OpenAI o-series / gpt-5 (Anthropic: folded into completion_tokens, stays 0)
     cost: float = 0.0                  # USD from LiteLLM pricing
 ```
+
+### `get_reasoning(msg: Message) -> str`
+
+Module-level helper. Provider-agnostic reasoning extractor:
+
+1. `msg.reasoning_content` if non-empty (OpenAI / streaming).
+2. Concatenation of `msg.thinking_blocks[*].thinking` (Anthropic extended thinking).
+3. Fallback to `msg.content`, else empty string.
+
+Works on any `litellm.Message`, including those reconstructed from persisted
+`LLMCall.output` records — so it's the canonical reasoning extractor for both
+live runs (`LLMResponse.reasoning_text`) and offline trajectory analysis.
 
 ### `LLM`
 ```python
@@ -92,6 +108,16 @@ steps in traces and training data.
 4. Module-level `litellm.callbacks` is intentionally NOT set. OTel callbacks are
    attached only after a proper `TracerProvider` is configured (see metrics spec) —
    otherwise litellm's default console exporter floods stdout.
+5. **Reasoning round-trip.** `Prompt._coerce_messages` MUST preserve provider
+   reasoning fields on assistant messages so they can be re-sent in subsequent
+   calls. Specifically: `thinking_blocks` (including each block's `signature`),
+   `reasoning_content`, and `tool_calls` survive coercion from `litellm.Message`
+   to dict. Anthropic extended thinking with tool use requires the prior turn's
+   `thinking_blocks` to be echoed back; stripping them breaks the tool-use loop.
+6. **Anthropic thinking + temperature.** `LLMConfig` rejects construction when
+   `reasoning_effort` is set on an Anthropic model with `temperature != 1.0`.
+   Anthropic forbids non-unit temperature under extended thinking; the validator
+   surfaces this at config time rather than at API time.
 
 ## Caching (Anthropic)
 
@@ -136,7 +162,21 @@ Anthropic response so trace consumers can see cache-hit rates per step.
 - `Prompt.messages` accepts both dicts and `litellm.Message` objects; the
   `field_validator` coerces Messages to dicts at construction so the stored type
   is always `list[dict]`. Downstream readers don't need to handle the union.
-- Anthropic extended thinking: set `reasoning_effort`. The reasoning output lands in
-  `message.reasoning_content` / `message.thinking_blocks` — log them via
-  `AgentOutput.thoughts` so the XRay viewer can display them.
+- **Reasoning extraction.** Set `reasoning_effort` to activate native reasoning on
+  supported models (OpenAI o-series / gpt-5; Anthropic Claude 3.7+/4.x; Gemini 2.5;
+  Grok 3/4; DeepSeek R1/R2; Qwen3-thinking; Magistral). Use
+  `response.reasoning_text` (or `get_reasoning(msg)` for offline analysis) to obtain
+  the thinking string for `AgentOutput.thoughts`. The structured form is preserved
+  on `response.message.thinking_blocks` / `reasoning_content` for round-trip.
+- **Anthropic thinking constraint.** Anthropic forbids `temperature != 1.0` when
+  extended thinking is active. `LLMConfig` validates this at construction time.
+- **Tool-use loops with Anthropic thinking.** Each assistant turn's
+  `thinking_blocks` (including `signature`) MUST be echoed back in subsequent
+  calls. `Prompt._coerce_messages` preserves them automatically via
+  `Message.model_dump(exclude_none=True)`. Do not strip these fields.
+- **`reasoning_tokens` accounting.** OpenAI o-series / gpt-5 surface
+  `completion_tokens_details.reasoning_tokens` separately, but those tokens are
+  already counted inside `completion_tokens` — do not add them to a budget tally,
+  or you will double-count. The field exists for telemetry, not for budgeting.
+  Anthropic reports nothing here; reasoning is folded into `completion_tokens`.
 - Cost is USD from LiteLLM's built-in pricing — may lag behind provider price changes.

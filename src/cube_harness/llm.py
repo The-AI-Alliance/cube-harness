@@ -18,7 +18,7 @@ from litellm.exceptions import (
     Timeout,
 )
 from litellm.utils import token_counter
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
@@ -75,6 +75,16 @@ class LLMConfig(TypedBaseModel):
     # extends across steps as the conversation grows. No-op for non-Anthropic models.
     set_cache_control: Literal["auto"] | None = None
 
+    @model_validator(mode="after")
+    def _check_anthropic_thinking_temperature(self) -> "LLMConfig":
+        """Anthropic extended thinking forbids temperature != 1.0; fail at config time, not API time."""
+        if self.reasoning_effort is not None and _is_anthropic_model(self.model_name) and self.temperature != 1.0:
+            raise ValueError(
+                f"Anthropic extended thinking requires temperature=1.0, got temperature={self.temperature}. "
+                "Either set temperature=1.0 or remove reasoning_effort."
+            )
+        return self
+
     def make(self) -> "LLM":
         """Create LLM instance from config."""
         return LLM(config=self)
@@ -92,7 +102,30 @@ class Usage(TypedBaseModel):
     total_tokens: int = 0
     cached_tokens: int = 0  # tokens read from cache (cache hit)
     cache_creation_tokens: int = 0  # tokens written to cache (Anthropic)
+    # Provider-reported reasoning/thinking tokens (OpenAI o-series / gpt-5: separate
+    # field; Anthropic: not surfaced — folded into completion_tokens, stays 0 here).
+    reasoning_tokens: int = 0
     cost: float = 0.0  # cost in USD from LiteLLM pricing
+
+
+def get_reasoning(msg: Message) -> str:
+    """Provider-agnostic reasoning text extractor.
+
+    Checks reasoning_content (OpenAI o-series / Anthropic streaming),
+    then thinking_blocks (Anthropic extended thinking),
+    then falls back to plain content.
+
+    Works on any litellm.Message — including those reconstructed from persisted
+    LLMCall.output records, making it the canonical reasoning extractor for both
+    live runs and offline trajectory analysis.
+    """
+    if rc := getattr(msg, "reasoning_content", None):
+        return rc
+    blocks = getattr(msg, "thinking_blocks", None) or []
+    text = " ".join(b.get("thinking", "") for b in blocks if isinstance(b, dict))
+    if text:
+        return text
+    return msg.content or ""
 
 
 class LLMResponse(TypedBaseModel):
@@ -100,6 +133,11 @@ class LLMResponse(TypedBaseModel):
 
     message: Message
     usage: Usage
+
+    @property
+    def reasoning_text(self) -> str:
+        """Reasoning/thinking text emitted by the model, provider-agnostic. Empty when none."""
+        return get_reasoning(self.message)
 
 
 def _is_anthropic_model(model_name: str) -> bool:
@@ -277,12 +315,20 @@ class LLM:
         if isinstance(hidden_params, dict):
             cost = safe_float(hidden_params.get("response_cost", 0.0))
 
+        # Reasoning tokens (OpenAI o-series / gpt-5 surface them in completion_tokens_details;
+        # Anthropic folds them into completion_tokens and reports nothing here — stays 0).
+        reasoning_tokens = 0
+        completion_details = getattr(usage_data, "completion_tokens_details", None)
+        if completion_details:
+            reasoning_tokens = safe_int(getattr(completion_details, "reasoning_tokens", 0))
+
         return Usage(
             prompt_tokens=safe_int(getattr(usage_data, "prompt_tokens", 0)),
             completion_tokens=safe_int(getattr(usage_data, "completion_tokens", 0)),
             total_tokens=safe_int(getattr(usage_data, "total_tokens", 0)),
             cached_tokens=cached_tokens,
             cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
             cost=cost,
         )
 
