@@ -18,7 +18,7 @@ from litellm.exceptions import (
     Timeout,
 )
 from litellm.utils import token_counter
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 # NOTE: Do not set litellm.callbacks = ["otel"] here at module level.
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
@@ -75,6 +75,16 @@ class LLMConfig(TypedBaseModel):
     # extends across steps as the conversation grows. No-op for non-Anthropic models.
     set_cache_control: Literal["auto"] | None = None
 
+    @model_validator(mode="after")
+    def _check_anthropic_thinking_temperature(self) -> "LLMConfig":
+        """Anthropic extended thinking forbids temperature != 1.0; fail at config time, not API time."""
+        if self.reasoning_effort is not None and _is_anthropic_model(self.model_name) and self.temperature != 1.0:
+            raise ValueError(
+                f"Anthropic extended thinking requires temperature=1.0, got temperature={self.temperature}. "
+                "Either set temperature=1.0 or remove reasoning_effort."
+            )
+        return self
+
     def make(self) -> "LLM":
         """Create LLM instance from config."""
         return LLM(config=self)
@@ -92,7 +102,32 @@ class Usage(TypedBaseModel):
     total_tokens: int = 0
     cached_tokens: int = 0  # tokens read from cache (cache hit)
     cache_creation_tokens: int = 0  # tokens written to cache (Anthropic)
+    # Reasoning/thinking tokens. LiteLLM surfaces these via
+    # completion_tokens_details.reasoning_tokens for both OpenAI o-series/gpt-5
+    # (native field) and Anthropic (normalized from thinking_blocks). They are
+    # ALREADY counted within completion_tokens — do not add separately to a
+    # budget tally or you will double-count.
+    reasoning_tokens: int = 0
     cost: float = 0.0  # cost in USD from LiteLLM pricing
+
+
+def get_reasoning(msg: Message) -> str:
+    """Provider-agnostic reasoning text extractor — returns "" when no reasoning emitted.
+
+    Checks reasoning_content (OpenAI o-series / gpt-5; Anthropic streaming) first,
+    then concatenates thinking_blocks (Anthropic extended thinking). Returns the
+    empty string when neither is present — it deliberately does NOT fall back to
+    msg.content, since the final response text is already available on the
+    Message and conflating it with thinking would muddy the contract.
+
+    Works on any litellm.Message — including those reconstructed from persisted
+    LLMCall.output records, making it the canonical reasoning extractor for both
+    live runs and offline trajectory analysis.
+    """
+    if rc := getattr(msg, "reasoning_content", None):
+        return rc
+    blocks = getattr(msg, "thinking_blocks", None) or []
+    return " ".join(b.get("thinking", "") for b in blocks if isinstance(b, dict))
 
 
 class LLMResponse(TypedBaseModel):
@@ -100,6 +135,11 @@ class LLMResponse(TypedBaseModel):
 
     message: Message
     usage: Usage
+
+    @property
+    def reasoning_text(self) -> str:
+        """Reasoning/thinking text emitted by the model, provider-agnostic. Empty when none."""
+        return get_reasoning(self.message)
 
 
 def _is_anthropic_model(model_name: str) -> bool:
@@ -277,12 +317,22 @@ class LLM:
         if isinstance(hidden_params, dict):
             cost = safe_float(hidden_params.get("response_cost", 0.0))
 
+        # Reasoning tokens — LiteLLM normalizes both OpenAI (native field) and
+        # Anthropic (computed from thinking_blocks) into completion_tokens_details.
+        # These are already part of completion_tokens; the separate field is for
+        # telemetry, not for budgeting.
+        reasoning_tokens = 0
+        completion_details = getattr(usage_data, "completion_tokens_details", None)
+        if completion_details:
+            reasoning_tokens = safe_int(getattr(completion_details, "reasoning_tokens", 0))
+
         return Usage(
             prompt_tokens=safe_int(getattr(usage_data, "prompt_tokens", 0)),
             completion_tokens=safe_int(getattr(usage_data, "completion_tokens", 0)),
             total_tokens=safe_int(getattr(usage_data, "total_tokens", 0)),
             cached_tokens=cached_tokens,
             cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
             cost=cost,
         )
 

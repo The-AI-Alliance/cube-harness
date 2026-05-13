@@ -42,7 +42,7 @@ from termcolor import colored
 
 from cube_harness.agent import Agent, AgentConfig
 from cube_harness.core import AgentOutput
-from cube_harness.llm import LLM, LLMCall, LLMConfig, Prompt
+from cube_harness.llm import LLM, LLMCall, LLMConfig, Prompt, get_reasoning
 
 logger = logging.getLogger(__name__)
 
@@ -130,21 +130,6 @@ def _format_action_list(actions: "list[Action]") -> str:
     """Format a list of actions as a compact text string."""
     parts = [f"{a.name}({', '.join(f'{k}={v!r}' for k, v in a.arguments.items())})" for a in actions]
     return ", ".join(parts) if parts else "no action"
-
-
-def _get_reasoning(response: "Message") -> str:
-    """Extract reasoning text from a response, checking all known fields across providers.
-
-    Checks reasoning_content (OpenAI o-series / Anthropic streaming),
-    then thinking_blocks (Anthropic extended thinking), then falls back to content.
-    """
-    if rc := getattr(response, "reasoning_content", None):
-        return rc
-    blocks = getattr(response, "thinking_blocks", None) or []
-    block_text = " ".join(b.get("thinking", "") for b in blocks if isinstance(b, dict))
-    if block_text:
-        return block_text
-    return response.content or ""
 
 
 def _truncate_message(msg: dict, max_chars: int) -> dict:
@@ -385,7 +370,10 @@ class Genny2(Agent):
                     self.history.append(self._latest_obs)
                 self.history.append([response])
         else:
-            thoughts = _get_reasoning(response) or None
+            # Prefer the model's reasoning trace when available; otherwise fall back
+            # to the response content so non-reasoning agents still surface their
+            # inline ReAct thinking in the trajectory's `thoughts` panel.
+            thoughts = get_reasoning(response) or response.content or None
             if self._latest_obs:
                 self.history.append(self._latest_obs)
             self.history.append([response])
@@ -533,7 +521,7 @@ class Genny2(Agent):
         messages.append({"role": "user", "content": self.config.compact_prompt})
         prompt = Prompt(messages=messages, tools=[])
         response = self.llm(prompt)
-        summary = response.message.content or _get_reasoning(response.message) or ""
+        summary = response.message.content or get_reasoning(response.message) or ""
         llm_call = LLMCall(
             tag="compact",
             llm_config=self.config.llm_config,
@@ -560,7 +548,7 @@ class Genny2(Agent):
         ]
         prompt = Prompt(messages=messages, tools=[])
         response = self.llm(prompt)
-        summary = response.message.content or _get_reasoning(response.message) or ""
+        summary = response.message.content or get_reasoning(response.message) or ""
         llm_call = LLMCall(
             tag="compact",
             llm_config=self.config.llm_config,

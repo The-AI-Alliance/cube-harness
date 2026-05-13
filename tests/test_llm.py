@@ -12,10 +12,13 @@ from cube_harness.llm import (
     LLM,
     LLMCall,
     LLMConfig,
+    LLMResponse,
     Prompt,
+    Usage,
     _build_cache_injection_points,
     _is_anthropic_model,
     _mark_last_tool_for_cache,
+    get_reasoning,
 )
 
 
@@ -78,8 +81,9 @@ class TestLLMConfig:
 
     def test_llm_config_custom_values(self):
         """Test LLMConfig with custom values."""
+        # Non-Anthropic model: the temperature/reasoning_effort validator is Anthropic-specific.
         config = LLMConfig(
-            model_name="claude-3-opus",
+            model_name="gpt-5-mini",
             temperature=0.5,
             max_tokens=10000,
             max_completion_tokens=2048,
@@ -564,3 +568,175 @@ class TestLLMCacheControl:
         assert kwargs["cache_control_injection_points"] == [
             {"location": "message", "index": 1, "control": {"type": "ephemeral"}}
         ]
+
+
+class TestPromptThinkingRoundTrip:
+    """Round-trip invariant: thinking_blocks (+ signature) and reasoning_content survive Prompt coercion.
+
+    Anthropic extended thinking with tool use requires the prior assistant turn's
+    thinking_blocks (including the opaque signature) to be echoed back in the next
+    call. The Prompt validator dumps litellm.Message via model_dump(exclude_none=True);
+    this test locks in that the provider fields make it through.
+    """
+
+    def test_thinking_blocks_survive_prompt_coercion(self) -> None:
+        msg = Message(
+            role="assistant",
+            content="here is my answer",
+            thinking_blocks=[{"type": "thinking", "thinking": "let me think...", "signature": "sig_abc123"}],
+            reasoning_content="let me think...",
+        )
+        prompt = Prompt(messages=[msg], tools=[])
+        coerced = prompt.messages[0]
+
+        assert isinstance(coerced, dict)
+        assert coerced["thinking_blocks"][0]["signature"] == "sig_abc123"
+        assert coerced["thinking_blocks"][0]["thinking"] == "let me think..."
+        assert coerced["thinking_blocks"][0]["type"] == "thinking"
+        assert coerced["reasoning_content"] == "let me think..."
+
+    def test_reasoning_content_alone_survives(self) -> None:
+        msg = Message(role="assistant", content="answer", reasoning_content="step by step...")
+        prompt = Prompt(messages=[msg], tools=[])
+        assert prompt.messages[0]["reasoning_content"] == "step by step..."
+
+
+class TestLLMConfigAnthropicThinkingValidator:
+    """LLMConfig must reject Anthropic + reasoning_effort + temperature != 1.0 at config time."""
+
+    def test_anthropic_thinking_rejects_nonunity_temperature(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="temperature=1.0"):
+            LLMConfig(model_name="claude-sonnet-4-5", temperature=0.7, reasoning_effort="medium")
+
+    def test_anthropic_thinking_accepts_temperature_one(self) -> None:
+        cfg = LLMConfig(model_name="claude-sonnet-4-5", temperature=1.0, reasoning_effort="medium")
+        assert cfg.reasoning_effort == "medium"
+
+    def test_anthropic_no_reasoning_allows_any_temperature(self) -> None:
+        # Without reasoning_effort, Claude can use any temperature.
+        cfg = LLMConfig(model_name="claude-sonnet-4-5", temperature=0.3)
+        assert cfg.temperature == 0.3
+
+    def test_openai_reasoning_allows_nonunity_temperature(self) -> None:
+        # The constraint is Anthropic-specific; OpenAI o-series/gpt-5 are unaffected.
+        cfg = LLMConfig(model_name="gpt-5-mini", temperature=0.5, reasoning_effort="high")
+        assert cfg.temperature == 0.5
+
+    def test_bedrock_claude_also_validated(self) -> None:
+        import pytest
+
+        # _is_anthropic_model covers bedrock/anthropic.* routing too.
+        with pytest.raises(ValueError, match="temperature=1.0"):
+            LLMConfig(model_name="bedrock/anthropic.claude-sonnet-4-5", temperature=0.5, reasoning_effort="low")
+
+
+class TestGetReasoning:
+    """get_reasoning(msg) is the canonical provider-agnostic reasoning extractor."""
+
+    def test_returns_reasoning_content_when_set(self) -> None:
+        msg = Message(role="assistant", content="answer", reasoning_content="my reasoning here")
+        assert get_reasoning(msg) == "my reasoning here"
+
+    def test_returns_thinking_blocks_concatenated_when_no_reasoning_content(self) -> None:
+        msg = Message(
+            role="assistant",
+            content="answer",
+            thinking_blocks=[
+                {"type": "thinking", "thinking": "first thought"},
+                {"type": "thinking", "thinking": "second thought"},
+            ],
+        )
+        assert get_reasoning(msg) == "first thought second thought"
+
+    def test_reasoning_content_takes_precedence_over_thinking_blocks(self) -> None:
+        msg = Message(
+            role="assistant",
+            content="answer",
+            reasoning_content="from reasoning_content",
+            thinking_blocks=[{"type": "thinking", "thinking": "from thinking_blocks"}],
+        )
+        # Precedence: reasoning_content first, since both refer to the same underlying reasoning.
+        assert get_reasoning(msg) == "from reasoning_content"
+
+    def test_returns_empty_when_no_reasoning_fields(self) -> None:
+        # Deliberately does NOT fall back to msg.content — the final response
+        # text is already accessible via .message.content; reasoning_text is
+        # strictly about reasoning, so callers can rely on truthiness as a
+        # "did the model think?" signal.
+        msg = Message(role="assistant", content="plain answer")
+        assert get_reasoning(msg) == ""
+
+    def test_empty_string_when_nothing_present(self) -> None:
+        msg = Message(role="assistant", content=None)
+        assert get_reasoning(msg) == ""
+
+
+class TestLLMResponseReasoningText:
+    """LLMResponse.reasoning_text exposes get_reasoning(message) as a property."""
+
+    def test_reasoning_text_from_reasoning_content(self) -> None:
+        msg = Message(role="assistant", content="answer", reasoning_content="rc here")
+        resp = LLMResponse(message=msg, usage=Usage())
+        assert resp.reasoning_text == "rc here"
+
+    def test_reasoning_text_from_thinking_blocks(self) -> None:
+        msg = Message(
+            role="assistant",
+            content="answer",
+            thinking_blocks=[{"type": "thinking", "thinking": "tb here", "signature": "s"}],
+        )
+        resp = LLMResponse(message=msg, usage=Usage())
+        assert resp.reasoning_text == "tb here"
+
+    def test_reasoning_text_empty_when_none(self) -> None:
+        # When there's no reasoning, the property falls back to content (empty string here).
+        msg = Message(role="assistant", content="")
+        resp = LLMResponse(message=msg, usage=Usage())
+        assert resp.reasoning_text == ""
+
+
+class TestUsageReasoningTokens:
+    """LLM._extract_usage populates reasoning_tokens from completion_tokens_details."""
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_reasoning_tokens_extracted_from_openai_response(
+        self, mock_completion, sample_llm_config, sample_prompt
+    ) -> None:
+        # OpenAI o-series / gpt-5 surface reasoning_tokens under completion_tokens_details.
+        usage = MagicMock(
+            prompt_tokens=100,
+            completion_tokens=200,
+            total_tokens=300,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            prompt_tokens_details=None,
+            completion_tokens_details=MagicMock(reasoning_tokens=42),
+        )
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=usage
+        )
+        llm = LLM(config=sample_llm_config)
+        resp = llm(sample_prompt)
+        assert resp.usage.reasoning_tokens == 42
+        assert resp.usage.completion_tokens == 200
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_reasoning_tokens_zero_when_no_details(self, mock_completion, sample_llm_config, sample_prompt) -> None:
+        # Anthropic does not surface reasoning_tokens separately — folded into completion_tokens.
+        usage = MagicMock(
+            prompt_tokens=50,
+            completion_tokens=80,
+            total_tokens=130,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            prompt_tokens_details=None,
+            completion_tokens_details=None,
+        )
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=usage
+        )
+        llm = LLM(config=sample_llm_config)
+        resp = llm(sample_prompt)
+        assert resp.usage.reasoning_tokens == 0
