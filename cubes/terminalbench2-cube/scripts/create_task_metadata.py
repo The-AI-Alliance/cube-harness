@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate src/terminalbench_cube/task_metadata.json from the terminal-bench-2 repo.
+"""Generate src/terminalbench2_cube/task_metadata.json from the terminal-bench-2 repo.
 
 This is a developer tool. Run it when the terminal-bench-2 task list changes to
 regenerate the shipped package resource. The output file is committed to the
@@ -7,7 +7,7 @@ repository — end users never need to run this script.
 
 Only lightweight public fields are written (difficulty, category, tags,
 max_agent_timeout_sec, container_config). Heavy execution data (instruction,
-archive) is written by TerminalBenchBenchmarkConfig.install() into the per-task
+archive) is written by TerminalBench2BenchmarkConfig.install() into the per-task
 execution cache and is never committed.
 
 Usage:
@@ -34,12 +34,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from cube.container import ContainerConfig
 
-from terminalbench_cube.benchmark import REPO_URL, TerminalBenchBenchmarkConfig
-from terminalbench_cube.task import TerminalBenchTaskMetadata
+from terminalbench2_cube.benchmark import REPO_URL, TerminalBench2BenchmarkConfig
+from terminalbench2_cube.task import TerminalBench2TaskMetadata
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_OUTPUT = Path(__file__).parent.parent / "src" / "terminalbench_cube" / "task_metadata.json"
+_DEFAULT_OUTPUT = Path(__file__).parent.parent / "src" / "terminalbench2_cube" / "task_metadata.json"
 
 
 def _parse_gb(value: str | int | float) -> float:
@@ -56,19 +56,19 @@ def _parse_gb(value: str | int | float) -> float:
     return 4.0
 
 
-def _build_task_metadata(tasks: list[dict]) -> dict[str, TerminalBenchTaskMetadata]:
+def _build_task_metadata(tasks: list[dict]) -> dict[str, TerminalBench2TaskMetadata]:
     """Build lightweight TaskMetadata from raw task dicts.
 
     Only extracts public fields (difficulty, category, tags, max_agent_timeout_sec,
     container_config). Heavy execution fields (instruction, archive) live in the
     per-task execution cache written by install().
     """
-    metadata: dict[str, TerminalBenchTaskMetadata] = {}
+    metadata: dict[str, TerminalBench2TaskMetadata] = {}
     for t in tasks:
         tid = t["task_id"]
         # abstract_description = first line of the instruction, capped at 200 chars
         first_line = t["base_description"].split("\n", 1)[0]
-        metadata[tid] = TerminalBenchTaskMetadata(
+        metadata[tid] = TerminalBench2TaskMetadata(
             id=tid,
             abstract_description=first_line[:200],
             recommended_max_steps=None,
@@ -95,7 +95,7 @@ def generate_task_metadata(
     """Clone (or reuse) the terminal-bench-2 repo and write the shipped task_metadata.json.
 
     Args:
-        output_path: Destination path. Defaults to src/terminalbench_cube/task_metadata.json.
+        output_path: Destination path. Defaults to src/terminalbench2_cube/task_metadata.json.
         repo_dir:    Path to an already-cloned terminal-bench-2 repo. If None, a fresh
                      shallow clone is made into a temporary directory.
         force:       Overwrite even if output_path already exists.
@@ -137,7 +137,7 @@ def _load_tasks_from_repo(repo_dir: Path) -> list[dict]:
     tasks = []
     for item in sorted(repo_dir.iterdir()):
         if item.is_dir() and (item / "task.toml").exists():
-            task = TerminalBenchBenchmarkConfig._load_task_from_repo(item)
+            task = TerminalBench2BenchmarkConfig._load_task_from_repo(item)
             if task:
                 tasks.append(task)
                 logger.info("  Loaded: %s (%s)", task["task_id"], task["difficulty"])

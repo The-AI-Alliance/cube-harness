@@ -1,4 +1,4 @@
-"""Benchmark for terminalbench-cube — real-world terminal tasks with pytest-based validation."""
+"""Benchmark for terminalbench2-cube — real-world terminal tasks with pytest-based validation."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
 from cube.resource import InfraConfig
 from cube.task import TaskConfig
 
-from terminalbench_cube.task import TerminalBenchTaskConfig, TerminalBenchTaskMetadata
+from terminalbench2_cube.task import TerminalBench2TaskConfig, TerminalBench2TaskMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def _build_execution_info(task: dict) -> dict:
     }
 
 
-class TerminalBenchBenchmark(Benchmark["TerminalBenchBenchmarkConfig"]):
+class TerminalBench2Benchmark(Benchmark["TerminalBench2BenchmarkConfig"]):
     """Runtime pair — publishes ``self._infra`` (stashed by the base
     ``Benchmark.__init__``) into ``runtime_context["infra"]`` so per-task
     container launches flow through ``Task.runtime_context``.
@@ -55,7 +55,7 @@ class TerminalBenchBenchmark(Benchmark["TerminalBenchBenchmarkConfig"]):
             self._infra.cleanup_stale()
             self._runtime_context["infra"] = self._infra
         logger.info(
-            "TerminalBenchBenchmark ready with %d tasks (infra=%s)",
+            "TerminalBench2Benchmark ready with %d tasks (infra=%s)",
             self.config.num_tasks,
             self._infra.fingerprint() if self._infra is not None else "<none>",
         )
@@ -64,11 +64,11 @@ class TerminalBenchBenchmark(Benchmark["TerminalBenchBenchmarkConfig"]):
         logger.info("Terminal-Bench benchmark closed")
 
 
-class TerminalBenchBenchmarkConfig(BenchmarkConfig[TerminalBenchTaskMetadata]):
+class TerminalBench2BenchmarkConfig(BenchmarkConfig[TerminalBench2TaskMetadata]):
     """Terminal-Bench 2 — real-world terminal tasks with pytest-based validation."""
 
     benchmark_metadata: ClassVar[BenchmarkMetadata] = BenchmarkMetadata(
-        name="terminalbench-cube",
+        name="terminalbench2-cube",
         version="0.1.0",
         description=(
             "Real-world terminal tasks (compile, debug, deploy) with pytest-based validation.\n"
@@ -106,8 +106,8 @@ class TerminalBenchBenchmarkConfig(BenchmarkConfig[TerminalBenchTaskMetadata]):
             "video-processing": ("category", "video-processing"),
         },
     )
-    task_config_class: ClassVar[type[TaskConfig]] = TerminalBenchTaskConfig
-    benchmark_class: ClassVar[type[Benchmark]] = TerminalBenchBenchmark
+    task_config_class: ClassVar[type[TaskConfig]] = TerminalBench2TaskConfig
+    benchmark_class: ClassVar[type[Benchmark]] = TerminalBench2Benchmark
 
     # User-configurable fields
     oracle_mode: bool = False
@@ -164,16 +164,16 @@ class TerminalBenchBenchmarkConfig(BenchmarkConfig[TerminalBenchTaskMetadata]):
             shutil.rmtree(exec_cache_dir)
             logger.info(f"Removed execution cache at {exec_cache_dir}")
 
-    def make(self, infra: InfraConfig | None = None) -> TerminalBenchBenchmark:
+    def make(self, infra: InfraConfig | None = None) -> TerminalBench2Benchmark:
         """Resolve a default infra of ``LocalInfraConfig`` if none provided, then
         delegate to the base ``BenchmarkConfig.make`` for provisioning + setup.
         """
-        return cast(TerminalBenchBenchmark, super().make(infra=infra or LocalInfraConfig()))
+        return cast(TerminalBench2Benchmark, super().make(infra=infra or LocalInfraConfig()))
 
-    def get_task_configs(self) -> Generator[TerminalBenchTaskConfig, None, None]:
+    def get_task_configs(self) -> Generator[TerminalBench2TaskConfig, None, None]:
         """Yield TaskConfigs with oracle_mode forwarded from benchmark settings."""
         for tm in self.tasks().values():
-            yield TerminalBenchTaskConfig(
+            yield TerminalBench2TaskConfig(
                 metadata=tm,
                 tool_config=self.tool_config,
                 oracle_mode=self.oracle_mode,

@@ -12,7 +12,7 @@ on:
   pull_request:
     branches: [main, dev]
     paths:
-      - 'cubes/terminalbench-cube/**'
+      - 'cubes/terminalbench2-cube/**'
       - 'cubes/swebench-verified-cube/**'
       - 'cubes/swebench-live-cube/**'
       - 'integration-tests/**'
@@ -34,7 +34,7 @@ jobs:
       fail-fast: false  # always run all three cubes so a single failure is scoped
       matrix:
         cube:
-          - terminalbench
+          - terminalbench2
           - swebench_verified
           - swebench_live
     steps:

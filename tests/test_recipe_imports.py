@@ -1,7 +1,7 @@
 """Static-analysis guard: every `from <local pkg> import Y` in any recipe resolves.
 
 Catches the class of bug that broke #381's consolidated branch — one PR deleted
-`terminalbench_cube.tool`, another's recipe still imported it from inside a
+`terminalbench2_cube.tool`, another's recipe still imported it from inside a
 function. The regression only surfaced at runtime on a non-debug code path.
 
 Pure AST walk + lazy `importlib.import_module` — no Docker, no network, no LLM
@@ -31,7 +31,7 @@ LOCAL_PACKAGE_PREFIXES: tuple[str, ...] = (
     "osworld_cube",
     "swebench_live_cube",
     "swebench_verified_cube",
-    "terminalbench_cube",
+    "terminalbench2_cube",
     "webarena_verified_cube",
     "waa_cube",
 )
