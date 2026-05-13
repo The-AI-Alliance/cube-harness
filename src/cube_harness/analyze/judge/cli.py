@@ -1,24 +1,40 @@
-"""CLI entry point for the trajectory judge (ch-judge)."""
+"""CLI entry point for the trajectory judge (`ch-judge`).
+
+Two subcommands:
+- `ch-judge run <experiment_dir> [options]` — batch judge episodes.
+- `ch-judge init-context <experiment_dir>` — (re)generate `judge_context.md`
+  via the benchmark-context sub-agent.
+
+`ch-judge <experiment_dir>` (no subcommand) is also accepted — it dispatches to
+`run` so existing scripts keep working.
+"""
 
 from __future__ import annotations
 
-import argparse
+import asyncio
 import logging
 import sys
+import warnings
 from collections import Counter
 from pathlib import Path
+from typing import Annotated
 
+import typer
+
+from cube_harness.analyze.judge.benchmark_context_agent import generate_context_file
 from cube_harness.analyze.judge.core import (
-    DEFAULT_MODEL,
     DEFAULT_SAMPLE_FRACTION,
     judge_experiment,
 )
-from cube_harness.eval_log import JudgeMetadata, JudgeOutput
+from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, TerminalClaudeDriver
+from cube_harness.analyze.judge.recipe import JudgeRecipe
+from cube_harness.analyze.judge.use_cases import RECIPE_CATALOG
+from cube_harness.eval_log import BaseJudgeOutput, JudgeMetadata
 
 logger = logging.getLogger(__name__)
 
 
-def _print_summary_table(results: dict[str, tuple[JudgeOutput, JudgeMetadata]]) -> None:
+def _print_summary_table(results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]]) -> None:
     if not results:
         print("(no episodes judged)")
         return
@@ -39,90 +55,203 @@ def _print_summary_table(results: dict[str, tuple[JudgeOutput, JudgeMetadata]]) 
     print(f"Primary blame:  {dict(blames)}")
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        prog="ch-judge",
-        description="Post-hoc trajectory judge for cube-harness experiments.",
-    )
-    p.add_argument("path", type=Path, help="Experiment directory or single episode directory.")
-    p.add_argument("--model", default=DEFAULT_MODEL, help=f"Judge model (default: {DEFAULT_MODEL}).")
+def _resolve_recipe(name: str) -> JudgeRecipe:
+    """Look up a recipe by name from the catalog."""
+    if name not in RECIPE_CATALOG:
+        known = ", ".join(sorted(RECIPE_CATALOG))
+        raise typer.BadParameter(f"unknown recipe {name!r} — known: {known}")
+    return RECIPE_CATALOG[name]
 
-    sel = p.add_argument_group("episode selection (mutually exclusive)")
-    g = sel.add_mutually_exclusive_group()
-    g.add_argument("--ids", default=None, help="Comma-separated trajectory IDs (or task IDs) to judge exactly.")
-    g.add_argument(
-        "--sample",
-        type=float,
-        default=None,
-        metavar="FRACTION",
-        help=f"Random fraction of eligible episodes (default: {DEFAULT_SAMPLE_FRACTION} when no other selector given).",
-    )
-    g.add_argument("--n", type=int, default=None, help="Random N eligible episodes.")
-    g.add_argument("--all", action="store_true", help="Judge every eligible episode.")
 
-    p.add_argument("--failures-only", action="store_true", help="Restrict to episodes with is_correct=False.")
-    p.add_argument("--overwrite", action="store_true", help="Re-judge episodes that already have judge_output.")
-    p.add_argument("--seed", type=int, default=None, help="Seed for sampling reproducibility.")
-    p.add_argument("--summary", action="store_true", help="Print aggregate blame/outcome distribution.")
-    p.add_argument("--n-parallel", type=int, default=1, help="Number of episodes to judge concurrently (default: 1).")
-    p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Stream the judge's tool calls and assistant text to stderr while it runs.",
+def _make_driver(name: str) -> AgentDriver:
+    """Build a concrete driver from a CLI flag value."""
+    if name == "claude-code-sdk":
+        return ClaudeCodeSDKDriver()
+    if name == "claude-terminal":
+        return TerminalClaudeDriver()
+    raise typer.BadParameter(f"unknown driver {name!r} — choose one of: claude-code-sdk, claude-terminal")
+
+
+def _resolve_sample(
+    *,
+    all_eps: bool,
+    sample: float | None,
+    n: int | None,
+    ids: list[str] | None,
+) -> float | None:
+    """Apply the same sample-fraction defaults the old argparse path used."""
+    if all_eps:
+        return 1.0
+    if sample is not None:
+        return sample
+    if n is not None or ids is not None:
+        return None
+    return DEFAULT_SAMPLE_FRACTION
+
+
+def _run(
+    *,
+    path: Path,
+    recipe: str,
+    driver: str,
+    audit: bool,
+    n_seeds: int,
+    ids: str | None,
+    sample: float | None,
+    n: int | None,
+    all_eps: bool,
+    failures_only: bool,
+    overwrite: bool,
+    seed: int | None,
+    summary_only: bool,
+    n_parallel: int,
+    verbose: bool,
+    trace_mode: str,
+    model: str | None,
+) -> None:
+    """Shared implementation between the root command and the `run` subcommand."""
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    p.add_argument(
-        "--trace",
-        choices=["actions", "full", "off"],
-        default="actions",
-        dest="trace_mode",
-        help=(
-            "Judge action trace level stored in judge_metadata.judge_actions. "
-            "'actions' (default): compact list of (tool, summarised_input). "
-            "'full': also includes raw_input dict. "
-            "'off': nothing stored."
-        ),
+    chosen_recipe = _resolve_recipe(recipe)
+    chosen_driver = _make_driver(driver)
+
+    if model is not None:
+        warnings.warn(
+            "`--model` is deprecated — set `model` on the recipe instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    id_list = [s.strip() for s in ids.split(",")] if ids else None
+    effective_sample = _resolve_sample(all_eps=all_eps, sample=sample, n=n, ids=id_list)
+
+    if trace_mode not in ("actions", "full", "off"):
+        raise typer.BadParameter(f"--trace must be one of: actions, full, off (got {trace_mode!r})")
+
+    results = judge_experiment(
+        path,
+        recipe=chosen_recipe,
+        driver=chosen_driver,
+        audit=audit,
+        n_seeds=n_seeds,
+        ids=id_list,
+        sample=effective_sample,
+        n=n,
+        failures_only=failures_only,
+        overwrite=overwrite,
+        seed=seed,
+        verbose=verbose,
+        n_parallel=n_parallel,
+        trace_mode=trace_mode,  # type: ignore[arg-type]
+        model=model,
     )
-    return p.parse_args(argv)
+
+    if summary_only:
+        _print_summary_table(results)
+    else:
+        for tid, (o, _) in results.items():
+            print(f"{tid}: {o.outcome.value} / {o.primary_blame.value} (conf={o.primary_blame_confidence})")
+
+
+app = typer.Typer(
+    add_completion=False,
+    help="Post-hoc trajectory judge for cube-harness experiments.",
+    no_args_is_help=True,
+)
+
+
+@app.command("run")
+def run_cmd(
+    path: Annotated[Path, typer.Argument(help="Experiment directory or single episode directory.")],
+    recipe: Annotated[str, typer.Option(help="Recipe name (see use_cases/ subdirectories).")] = "general_blame",
+    driver: Annotated[
+        str,
+        typer.Option(help="Coding-agent driver: 'claude-code-sdk' (API key) or 'claude-terminal' (subscription)."),
+    ] = "claude-code-sdk",
+    audit: Annotated[bool, typer.Option(help="Run the audit pass after each judgment (writes audit.json).")] = False,
+    n_seeds: Annotated[int, typer.Option("--n-seeds", help="Judge each episode this many times.")] = 1,
+    ids: Annotated[str | None, typer.Option(help="Comma-separated trajectory IDs (or task IDs) to judge.")] = None,
+    sample: Annotated[float | None, typer.Option(help="Random fraction of eligible episodes.")] = None,
+    n: Annotated[int | None, typer.Option(help="Random N eligible episodes.")] = None,
+    all_eps: Annotated[bool, typer.Option("--all", help="Judge every eligible episode.")] = False,
+    failures_only: Annotated[bool, typer.Option("--failures-only", help="Restrict to is_correct=False.")] = False,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Re-judge episodes that already have judge_output.")
+    ] = False,
+    seed: Annotated[int | None, typer.Option(help="Seed for sampling reproducibility.")] = None,
+    summary_only: Annotated[bool, typer.Option("--summary", help="Print aggregate distribution at end.")] = False,
+    n_parallel: Annotated[int, typer.Option("--n-parallel", help="Concurrent judge sub-processes.")] = 1,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Stream tool calls + text to stderr.")] = False,
+    trace_mode: Annotated[
+        str, typer.Option("--trace", help="Judge action trace level: actions, full, off.")
+    ] = "actions",
+    model: Annotated[
+        str | None, typer.Option(help="DEPRECATED — set on the recipe. Triggers a deprecation warning.")
+    ] = None,
+) -> None:
+    """Batch judge episodes in an experiment directory."""
+    _run(
+        path=path,
+        recipe=recipe,
+        driver=driver,
+        audit=audit,
+        n_seeds=n_seeds,
+        ids=ids,
+        sample=sample,
+        n=n,
+        all_eps=all_eps,
+        failures_only=failures_only,
+        overwrite=overwrite,
+        seed=seed,
+        summary_only=summary_only,
+        n_parallel=n_parallel,
+        verbose=verbose,
+        trace_mode=trace_mode,
+        model=model,
+    )
+
+
+@app.command("init-context")
+def init_context_cmd(
+    experiment_dir: Annotated[Path, typer.Argument(help="Experiment directory.")],
+    driver: Annotated[str, typer.Option(help="Driver to invoke the context agent through.")] = "claude-code-sdk",
+    model: Annotated[str, typer.Option(help="Model name for the context agent.")] = "claude-opus-4-7",
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Invoke the benchmark-context sub-agent to (re)generate judge_context.md."""
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    chosen_driver = _make_driver(driver)
+    path = asyncio.run(
+        generate_context_file(experiment_dir, driver=chosen_driver, model=model, verbose=verbose),
+    )
+    print(f"Wrote {path}")
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    """Console-script entry point.
 
-    ids = [s.strip() for s in args.ids.split(",")] if args.ids else None
-    sample: float | None
-    if args.all:
-        sample = 1.0
-    elif args.sample is not None:
-        sample = args.sample
-    elif args.n is not None or ids is not None:
-        sample = None
-    else:
-        sample = DEFAULT_SAMPLE_FRACTION
-
-    results = judge_experiment(
-        args.path,
-        model=args.model,
-        ids=ids,
-        sample=sample,
-        n=args.n,
-        failures_only=args.failures_only,
-        overwrite=args.overwrite,
-        seed=args.seed,
-        verbose=args.verbose,
-        n_parallel=args.n_parallel,
-        trace_mode=args.trace_mode,
-    )
-
-    if args.summary:
-        _print_summary_table(results)
-    else:
-        for tid, (o, m) in results.items():
-            print(f"{tid}: {o.outcome.value} / {o.primary_blame.value} (conf={o.primary_blame_confidence})")
+    Back-compat: when argv is `[<path>, ...flags...]` (i.e. no subcommand
+    keyword), we dispatch to the `run` subcommand by prepending its name. This
+    keeps `ch-judge <experiment_dir> --recipe X` working.
+    """
+    if argv is None:
+        argv = sys.argv[1:]
+    # Distinguish a subcommand from a positional path: if the first arg matches a
+    # known subcommand name, leave argv alone; otherwise prepend `run`.
+    subcommand_names = {"run", "init-context", "--help", "-h"}
+    if argv and argv[0] not in subcommand_names:
+        argv = ["run", *argv]
+    try:
+        app(args=argv, standalone_mode=False)
+    except typer.Exit as e:
+        return int(e.exit_code or 0)
+    except SystemExit as e:
+        return int(e.code or 0)
     return 0
 
 
