@@ -133,21 +133,15 @@ uv run recipes/hello_miniwob.py   # example run
 
 ### Test categories
 
-Pytest markers (declared in `pyproject.toml`) gate four tiers — pick the smallest one that exercises your change:
+| Type | When | Where |
+|---|---|---|
+| Unit (`pytest tests/`) | every iteration | `tests/` — fast, no external deps. What CI runs by default (`-m "not slow and not live_api"`). |
+| `slow` (`pytest -m slow`) | when touching the marked area | `tests/` with `@pytest.mark.slow`. Excluded from CI by default — Ray-based timing tests are flaky on shared GitHub Actions runners; reliable locally. |
+| `integration` (`pytest -m integration`) | when touching the marked area | `tests/` with `@pytest.mark.integration`. Setup details (Playwright install, etc.) live in the marker's docstring in `pyproject.toml`. |
+| `live_api` (`pytest -m live_api`) | when touching the marked area | `tests/` with `@pytest.mark.live_api`. Hits a real LLM provider; costs money; auto-skips without `ANTHROPIC_API_KEY`; never runs in CI. |
+| Smoke (`scripts/smoke/*.py`) | when a PR touches plumbing unit tests can't reach | Standalone scripts a coding agent runs to verify end-to-end behavior. Never CI. May stand up real infrastructure or call external APIs; minutes-long runs are fine. Each prints `SMOKE OK/FAIL/SKIP: <name>` (exit 0/1/2). Discover with `find . -path '*/scripts/smoke/*.py'`. |
 
-| Marker | Runs in CI? | When to run locally | What it covers |
-|---|---|---|---|
-| *(unmarked)* | ✅ always | every iteration | ~980 fast tests, no external deps. ~30s. This is what `make test` defaults to. |
-| `slow` | ❌ excluded | before pushing if you touched `experiment`, `exp_runner`, `xray`, retry, or storage | Ray retry orchestration + xray e2e. Excluded from CI by default because Ray-based tests are timing-flaky on shared GitHub Actions runners; runs reliably on a local machine in ~85s. |
-| `integration` | ✅ (Playwright step) | if you touched browser tools (`browsergym.py`, MiniWob, WorkArena) | Playwright/Chromium tests; needs `uv run playwright install chromium` first |
-| `live_api` | ❌ never | when modifying `llm.py` cache control / streaming / tool-choice behavior | Hits a real LLM provider. Costs ~$0.05/run. **Auto-skips without `ANTHROPIC_API_KEY`.** Only way to verify real `cache_read_tokens` from the API response. |
-
-```bash
-pytest tests/ -m "not slow and not integration and not live_api"   # fast tier, ~30s
-pytest tests/ -m "slow"                                              # Ray + xray e2e
-pytest tests/ -m "integration"                                       # Playwright (after install)
-ANTHROPIC_API_KEY=... pytest tests/ -m "live_api"                    # real-LLM verification
-```
+Smokes are the coding agent's judgment call — for a PR that touches a marked area, pick the relevant smokes, adapt the environment (auth, credentials, profiles), and iterate until green. **Reflex:** when adding complex new code, drop a smoke alongside it; a green end-to-end run is the strongest signal the change actually works as intended.
 
 Always run `make lint` before finishing a task. `ruff check` and `ruff format` are
 **separate passes** — running only one is not enough for CI.
