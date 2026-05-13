@@ -26,6 +26,7 @@ Usage:
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -315,12 +316,13 @@ def main(
     ] = None,
     oracle_mode: Annotated[bool, typer.Option(help="Upload gold solution at reset (tbench/verified)")] = False,
     infra: Annotated[
-        str,
+        str | None,
         typer.Option(
-            help="Named infra profile from ~/.cube/infra.json (default 'local'). "
-            "Overridable via $CUBE_INFRA. See cube_harness.infra_profile for the JSON schema."
+            help="Named infra profile from ~/.cube/infra.json. "
+            "Default resolution: $CUBE_INFRA env var, else 'local'. "
+            "See cube_harness.infra_profile for the JSON schema."
         ),
-    ] = "local",
+    ] = None,
     max_actions: Annotated[int, typer.Option(help="Max actions per episode")] = 150,
     cost_limit: Annotated[float, typer.Option(help="Cost limit per episode (USD)")] = 1.0,
     max_output_bytes: Annotated[int, typer.Option(help="Max bash output bytes per step (tbench)")] = 8_000,
@@ -335,6 +337,8 @@ def main(
 
     agent_config = make_agent_config(model, template, max_actions, cost_limit)
     infra_config = load_infra(infra)
+    # Resolve the name we ended up using (env var or fallback) for naming / logging.
+    resolved_infra = infra or os.environ.get("CUBE_INFRA") or "local"
 
     task_ids = [t.strip() for t in tasks.split(",")] if tasks else None
     if benchmark == "verified":
@@ -357,7 +361,7 @@ def main(
         )
 
     exp = Experiment(
-        name=f"genny2-swe-{benchmark}-{model}-{infra}",
+        name=f"genny2-swe-{benchmark}-{model}-{resolved_infra}",
         output_dir=retry,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
@@ -366,7 +370,9 @@ def main(
         resume=retry is not None,
     )
 
-    print(f"\n=== genny2 | swe-{benchmark} | {model} | {template} | infra={infra} | subset={subset or 'all'} ===")
+    print(
+        f"\n=== genny2 | swe-{benchmark} | {model} | {template} | infra={resolved_infra} | subset={subset or 'all'} ==="
+    )
 
     if debug:
         run_sequentially(exp)

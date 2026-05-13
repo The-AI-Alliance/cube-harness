@@ -70,6 +70,13 @@ def test_env_var_picks_default_profile(tmp_config: Path, monkeypatch: pytest.Mon
     assert isinstance(infra, LocalInfraConfig)
 
 
+def test_reserved_local_name_raises(tmp_config: Path) -> None:
+    """A user-defined ``"local"`` profile would silently shadow the safe fallback — refuse."""
+    tmp_config.write_text(json.dumps({"local": {"_type": "cube_infra_toolkit.toolkit.ToolkitInfraConfig"}}))
+    with pytest.raises(ValueError, match="reserved"):
+        infra_profile.load_infra()
+
+
 def test_explicit_name_overrides_env_var(tmp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from cube.infra_local import LocalInfraConfig
 

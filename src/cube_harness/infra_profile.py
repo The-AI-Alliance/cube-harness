@@ -22,6 +22,13 @@ def load_infra(name: str | None = None) -> InfraConfig:
     name = name or os.environ.get("CUBE_INFRA") or "local"
 
     profiles: dict[str, dict] = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+    # ``"local"`` is reserved as the safe fallback (returns ``LocalInfraConfig()``
+    # even with no config file). If a user defines a ``"local"`` profile their
+    # entry would silently shadow the fallback — likely a footgun. Refuse loudly.
+    if "local" in profiles:
+        raise ValueError(
+            f"{CONFIG_PATH}: profile name 'local' is reserved as the fallback. Rename your entry (e.g. 'my-local')."
+        )
     if name not in profiles:
         if name == "local":
             from cube.infra_local import LocalInfraConfig
