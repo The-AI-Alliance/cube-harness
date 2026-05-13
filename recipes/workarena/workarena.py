@@ -1,15 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "cube-harness",
-#     "workarena-cube",
-# ]
-#
-# [tool.uv.sources]
-# cube-harness = { path = "..", editable = true }
-# workarena-cube = { path = "../cubes/workarena", editable = true }
-# ///
-
 """Example recipe for running WorkArena benchmark with cube-harness.
 
 This recipe demonstrates how to run WorkArena tasks using the BrowserGym tool.
@@ -25,16 +13,16 @@ Prerequisites:
 
 Usage:
     # Genny agent, debug mode (default)
-    uv run recipes/workarena.py --debug
+    uv run --project recipes/workarena recipes/workarena/workarena.py --debug
 
     # React agent, debug mode
-    uv run recipes/workarena.py --debug --agent react
+    uv run --project recipes/workarena recipes/workarena/workarena.py --debug --agent react
 
     # Full run with Genny (parallel with Ray)
-    uv run recipes/workarena.py
+    uv run --project recipes/workarena recipes/workarena/workarena.py
 
     # Full run with React
-    uv run recipes/workarena.py --agent react
+    uv run --project recipes/workarena recipes/workarena/workarena.py --agent react
 """
 
 import argparse
@@ -53,27 +41,32 @@ from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
 from cube_harness.tools.browsergym import BrowsergymConfig
 
-_LLM = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
-
-AGENTS = {
-    "genny": GennyConfig(
-        llm_config=_LLM,
-        max_actions=20,
-        render_last_n_obs=1,
-        tools_as_text=False,
-        enable_summarize=False,
-        summarize_cot_only=True,
-    ),
-    "react": ReactAgentConfig(
-        llm_config=_LLM,
-        render_last_n_steps=3,
-        max_actions=20,
-    ),
-}
+_DEFAULT_MODEL = "openai/gpt-5-nano"
+_MAX_STEPS_BY_LEVEL = {1: 15, 2: 50, 3: 50}
 
 
-def main(debug: bool, agent: str, level: int) -> None:
-    agent_config = AGENTS[agent]
+def make_agents(model: str) -> dict[str, GennyConfig | ReactAgentConfig]:
+    llm = LLMConfig(model_name=model, temperature=1.0)
+    return {
+        "genny": GennyConfig(
+            llm_config=llm,
+            max_actions=20,
+            render_last_n_obs=1,
+            tools_as_text=False,
+            enable_summarize=False,
+            summarize_cot_only=True,
+        ),
+        "react": ReactAgentConfig(
+            llm_config=llm,
+            render_last_n_steps=3,
+            max_actions=20,
+        ),
+    }
+
+
+def main(debug: bool, agent: str, level: int, model: str, name: str | None, n_cpus: int) -> None:
+    agent_config = make_agents(model)[agent]
+    exp_name = name if name is not None else f"workarena_{agent}"
     output_dir = make_experiment_output_dir(agent, "workarena", tag=f"l{level}")
 
     tools_configs = [
@@ -94,23 +87,26 @@ def main(debug: bool, agent: str, level: int) -> None:
     benchmark_config = WorkArenaBenchmarkConfig(tool_config=tool_config, n_seeds_l1=1).named_subset(f"l{level}")
 
     exp = Experiment(
-        name=f"workarena_{agent}",
+        name=exp_name,
         output_dir=output_dir,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
-        max_steps=15,
+        max_steps=_MAX_STEPS_BY_LEVEL[level],
     )
 
     if debug:
         run_sequentially(exp, debug_limit=2)
     else:
-        run_with_ray(exp, n_cpus=4)
+        run_with_ray(exp, n_cpus=n_cpus)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run WorkArena benchmark with cube-harness.")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode (headed browser, limited tasks)")
-    parser.add_argument("--agent", choices=AGENTS, default="genny", help="Agent to use (default: genny)")
-    parser.add_argument("--level", choices=[1, 2, 3], default=1, help="Level to run (default: 1)")
+    parser.add_argument("--agent", choices=("genny", "react"), default="genny", help="Agent to use (default: genny)")
+    parser.add_argument("--level", type=int, choices=[1, 2, 3], default=1, help="Level to run (default: 1)")
+    parser.add_argument("--model", default=_DEFAULT_MODEL, help=f"LLM model (default: {_DEFAULT_MODEL})")
+    parser.add_argument("--name", default=None, help="Experiment name tag (default: l{level})")
+    parser.add_argument("--n-cpus", type=int, default=4, help="Number of parallel Ray workers (default: 4)")
     args = parser.parse_args()
-    main(debug=args.debug, agent=args.agent, level=args.level)
+    main(debug=args.debug, agent=args.agent, level=args.level, model=args.model, name=args.name, n_cpus=args.n_cpus)

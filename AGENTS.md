@@ -126,7 +126,7 @@ make xray               # open the trajectory viewer
 make lint               # uvx ruff check --fix && uvx ruff format  (auto-fixes in place)
 make lint-check         # uvx ruff check --diff && uvx ruff format --diff  (read-only, what CI runs)
 make review PR=<n>      # check out a PR and wire up any cross-repo cube-standard dependency
-uv run recipes/hello_miniwob.py   # example run
+uv run --project recipes/miniwob recipes/miniwob/hello_miniwob.py   # example run
 ```
 
 Always run `make lint` before finishing a task. `ruff check` and `ruff format` are

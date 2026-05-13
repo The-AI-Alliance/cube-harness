@@ -45,7 +45,7 @@ make test
 
 ### Run Hello Example
 
-The [`hello_miniwob`](recipes/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark.
+The [`hello_miniwob`](recipes/miniwob/hello_miniwob.py) recipe demonstrates running a ReAct agent on the MiniWob benchmark.
 
 **Start here** — 2 tasks, sequential (fast, no Ray required):
 

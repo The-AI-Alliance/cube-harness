@@ -1,0 +1,15 @@
+[project]
+name = "recipe-env-webarena-verified"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-harness",
+    "webarena-verified-cube",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+cube-harness = { path = "../..", editable = true }
+webarena-verified-cube = { path = "../../cubes/webarena-verified", editable = true }
