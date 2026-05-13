@@ -1,42 +1,9 @@
 """Named-infra-profile resolver — `~/.cube/infra.json` → `InfraConfig`.
 
-Lets recipes accept a single ``--infra <name>`` flag instead of a per-recipe
-mix of ``--toolkit / --daytona / --eai-profile / --eai-path / --preemptable``
-boolean knobs. Per-profile fields live in ``~/.cube/infra.json`` so the choice
-of infra (and its parameters) is local to each developer's machine.
-
-File format
------------
-
-``~/.cube/infra.json`` maps profile name → ``InfraConfig`` payload. Each value
-is whatever ``InfraConfig.model_validate(...)`` accepts: a dict with the
-``_type`` field (fully-qualified class path) plus any fields the concrete
-subclass takes. Since every InfraConfig is a ``TypedBaseModel``, the ``_type``
-tag auto-discriminates — no per-kind branch lives here::
-
-    {
-      "yul101": {
-        "_type": "cube_infra_toolkit.toolkit.ToolkitInfraConfig",
-        "profile": "yul101",
-        "eai_path": "eai"
-      },
-      "yul101-preempt": {
-        "_type": "cube_infra_toolkit.toolkit.ToolkitInfraConfig",
-        "profile": "yul101",
-        "preemptable": true
-      },
-      "daytona": {
-        "_type": "cube_infra_daytona.daytona.DaytonaInfraConfig"
-      }
-    }
-
-Resolution order
-----------------
-
-1. Explicit ``name`` arg (e.g. recipe's ``--infra <name>``).
-2. ``$CUBE_INFRA`` env var.
-3. Literal ``"local"`` — falls back to ``LocalInfraConfig()`` even with no
-   config file, so a fresh checkout runs without setup.
+Each entry is an ``InfraConfig.model_validate(...)`` payload (a ``_type``-tagged
+``TypedBaseModel`` dict). Resolution order: explicit ``name`` arg → ``$CUBE_INFRA``
+env var → literal ``"local"`` (which falls back to ``LocalInfraConfig()`` even
+with no config file).
 """
 
 from __future__ import annotations
