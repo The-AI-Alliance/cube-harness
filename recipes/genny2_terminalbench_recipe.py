@@ -17,22 +17,25 @@ Usage:
 
 import logging
 from pathlib import Path
+from typing import Annotated
 
+import typer
 from dotenv import load_dotenv
 
 _project_env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
 from cube_harness.agents.genny2_swe_config import (  # noqa: E402
-    DEFAULT_TBENCH_TEMPLATE,
     INSTANCE_TEMPLATES,
     MODEL_CONFIGS,
-    make_tbench_agent_config,
+    make_agent_config,
 )
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
+
+DEFAULT_TBENCH_TEMPLATE = "workflow-tbench"
 
 
 def _make_infra(toolkit: bool, eai_profile: str, eai_path: str, preemptable: bool, sidecar_data: str | None) -> object:
@@ -83,45 +86,50 @@ def _make_benchmark_config(
     return config
 
 
-def run(
-    model_key: str,
-    *,
-    template: str,
-    debug: bool,
-    difficulty: str | None,
-    category: str | None,
-    task_ids: list[str] | None,
-    oracle_mode: bool,
-    n_parallel: int,
-    retry_dir: Path | None,
-    toolkit: bool,
-    eai_profile: str,
-    eai_path: str,
-    preemptable: bool,
-    sidecar_data: str | None = None,
-    max_actions: int = 100,
-    cost_limit: float = 1.0,
+def main(
+    model: Annotated[str, typer.Argument(help="Model key from MODEL_CONFIGS")] = "gpt-5.4-mini",
+    template: Annotated[str, typer.Option(help="Instance template variant")] = DEFAULT_TBENCH_TEMPLATE,
+    debug: Annotated[bool, typer.Option(help="Run debug oracle tasks sequentially (no LLM)")] = False,
+    difficulty: Annotated[str | None, typer.Option(help="Filter by difficulty (easy/medium/hard)")] = None,
+    category: Annotated[str | None, typer.Option(help="Filter by category glob")] = None,
+    tasks: Annotated[str | None, typer.Option(help="Comma-separated task IDs")] = None,
+    oracle_mode: Annotated[bool, typer.Option(help="Upload gold solution at reset")] = False,
+    n_parallel: Annotated[int, typer.Option(help="Number of Ray workers")] = 5,
+    retry: Annotated[Path | None, typer.Option(help="Resume from output dir")] = None,
+    toolkit: Annotated[bool, typer.Option(help="Use EAI Toolkit instead of local Docker")] = False,
+    eai_profile: Annotated[str, typer.Option(help="EAI profile")] = "yul101",
+    eai_path: Annotated[str, typer.Option(help="Path to eai CLI")] = "eai",
+    preemptable: Annotated[bool, typer.Option(help="Request preemptable resources")] = False,
+    sidecar_data: Annotated[
+        str | None, typer.Option(help="EAI data name for exec-relay sidecar (e.g. snow.allac.cube_sidecar)")
+    ] = None,
+    max_actions: Annotated[int, typer.Option(help="Max actions per episode")] = 100,
+    cost_limit: Annotated[float, typer.Option(help="Cost limit per episode (USD)")] = 1.0,
 ) -> None:
-    agent_config = make_tbench_agent_config(model_key, template, max_actions, cost_limit)
+    """Run Genny2 against Terminal-Bench 2 tasks."""
+    if model not in MODEL_CONFIGS:
+        raise typer.BadParameter(f"unknown model {model!r}; pick from {sorted(MODEL_CONFIGS)}")
+    if template not in INSTANCE_TEMPLATES:
+        raise typer.BadParameter(f"unknown template {template!r}; pick from {sorted(INSTANCE_TEMPLATES)}")
+
+    task_ids = [t.strip() for t in tasks.split(",")] if tasks else None
+    agent_config = make_agent_config(model, template, max_actions, cost_limit)
 
     infra = _make_infra(toolkit, eai_profile, eai_path, preemptable, sidecar_data)
     benchmark_config = _make_benchmark_config(debug, difficulty, category, task_ids, oracle_mode)
 
-    output_dir = retry_dir if retry_dir is not None else None
-    resume = retry_dir is not None
-
     infra_label = f"toolkit:{eai_profile}" if toolkit else "local"
     exp = Experiment(
-        name=f"genny2-tbench-{model_key}-{template}-{infra_label}",
-        output_dir=output_dir,
+        name=f"genny2-tbench-{model}-{template}-{infra_label}",
+        output_dir=retry,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
         infra=infra,
         max_steps=max_actions,
-        resume=resume,
+        resume=retry is not None,
     )
 
-    print(f"\n=== genny2 | {model_key} | terminalbench | {template} | {infra_label} ===")
+    print(f"\n=== genny2 | {model} | terminalbench | {template} | {infra_label} ===")
 
     if debug:
         run_sequentially(exp)
@@ -130,51 +138,4 @@ def run(
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Genny2 Terminal-Bench recipe")
-    parser.add_argument("model", nargs="?", default="gpt-5.4-mini", choices=list(MODEL_CONFIGS))
-    parser.add_argument(
-        "--template",
-        default=DEFAULT_TBENCH_TEMPLATE,
-        choices=list(INSTANCE_TEMPLATES),
-        help=f"Instance template variant (default: {DEFAULT_TBENCH_TEMPLATE})",
-    )
-    parser.add_argument("--debug", action="store_true", help="Run debug oracle tasks sequentially")
-    parser.add_argument("--difficulty", default=None, help="Filter by difficulty (easy, medium, hard)")
-    parser.add_argument("--category", default=None, help="Filter by category glob")
-    parser.add_argument("--tasks", default=None, help="Comma-separated task IDs")
-    parser.add_argument("--oracle-mode", action="store_true", help="Upload gold solution at reset")
-    parser.add_argument("--n-parallel", type=int, default=5)
-    parser.add_argument("--retry", metavar="DIR", default=None, help="Resume from output dir")
-    parser.add_argument("--toolkit", action="store_true")
-    parser.add_argument("--eai-profile", default="yul101")
-    parser.add_argument("--eai-path", default="eai")
-    parser.add_argument("--preemptable", action="store_true")
-    parser.add_argument(
-        "--sidecar-data",
-        default=None,
-        help="EAI data name for the exec-relay sidecar binary (e.g. snow.allac.cube_sidecar)",
-    )
-    parser.add_argument("--max-actions", type=int, default=100)
-    parser.add_argument("--cost-limit", type=float, default=1.0)
-    args = parser.parse_args()
-
-    run(
-        model_key=args.model,
-        template=args.template,
-        debug=args.debug,
-        difficulty=args.difficulty,
-        category=args.category,
-        task_ids=[t.strip() for t in args.tasks.split(",")] if args.tasks else None,
-        oracle_mode=args.oracle_mode,
-        n_parallel=args.n_parallel,
-        retry_dir=Path(args.retry) if args.retry else None,
-        toolkit=args.toolkit,
-        eai_profile=args.eai_profile,
-        eai_path=args.eai_path,
-        preemptable=args.preemptable,
-        sidecar_data=args.sidecar_data,
-        max_actions=args.max_actions,
-        cost_limit=args.cost_limit,
-    )
+    typer.run(main)

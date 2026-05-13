@@ -5,8 +5,6 @@ from cube_harness.llm import LLMConfig
 
 SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
 
-TBENCH_SYSTEM_PROMPT = "You are a helpful assistant operating in a Linux terminal environment. Work through the task by running shell commands. When your solution is ready, call final_step — the system will verify it automatically. If an action seems to have no effect, avoid retrying it."
-
 _WORKFLOW_BLOCK = """\
 Suggested approach:
 1. Reproduce: confirm the current behavior — run the relevant test or command to observe the issue.
@@ -39,7 +37,6 @@ INSTANCE_TEMPLATES: dict[str, str] = {
 
 # Production default: generic 3-step workflow, works across SWE-bench, TerminalBench, and similar.
 DEFAULT_TEMPLATE = "workflow-generic"
-DEFAULT_TBENCH_TEMPLATE = "workflow-tbench"
 
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(
@@ -80,23 +77,6 @@ def make_agent_config(
     return Genny2Config(
         llm_config=MODEL_CONFIGS[model_key],
         system_prompt=SYSTEM_PROMPT,
-        goal_template=INSTANCE_TEMPLATES[template],
-        flat_history=True,
-        step_prompt="",
-        max_format_errors=3,
-        budget=BudgetConfig(max_actions=max_actions, cost_limit=cost_limit),
-    )
-
-
-def make_tbench_agent_config(
-    model_key: str,
-    template: str = DEFAULT_TBENCH_TEMPLATE,
-    max_actions: int = 100,
-    cost_limit: float = 1.0,
-) -> Genny2Config:
-    return Genny2Config(
-        llm_config=MODEL_CONFIGS[model_key],
-        system_prompt=TBENCH_SYSTEM_PROMPT,
         goal_template=INSTANCE_TEMPLATES[template],
         flat_history=True,
         step_prompt="",

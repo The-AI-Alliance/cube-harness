@@ -20,8 +20,8 @@ import pytest
 
 from cube_harness.agents.genny2 import Genny2Config
 from cube_harness.agents.genny2_swe_config import (
-    DEFAULT_TBENCH_TEMPLATE,
-    make_tbench_agent_config,
+    INSTANCE_TEMPLATES,
+    make_agent_config,
 )
 
 # Package prefixes owned by this repo. Imports of these MUST resolve — they're
@@ -64,9 +64,14 @@ def test_recipe_local_imports_resolve(recipe: str) -> None:
         assert hasattr(mod, name), f"{recipe}: `from {module} import {name}` — name not found"
 
 
-def test_make_tbench_agent_config_constructs() -> None:
-    """The tbench agent-config factory must produce a valid Genny2Config."""
-    cfg = make_tbench_agent_config("gpt-5.4-mini", DEFAULT_TBENCH_TEMPLATE, max_actions=10, cost_limit=0.1)
+def test_workflow_tbench_template_registered() -> None:
+    """The `workflow-tbench` instance template must be registered for tbench recipes."""
+    assert "workflow-tbench" in INSTANCE_TEMPLATES
+
+
+def test_make_agent_config_accepts_tbench_template() -> None:
+    """The shared agent-config factory must build a Genny2Config with workflow-tbench."""
+    cfg = make_agent_config("gpt-5.4-mini", "workflow-tbench", max_actions=10, cost_limit=0.1)
     assert isinstance(cfg, Genny2Config)
     assert cfg.budget.max_actions == 10
     assert cfg.budget.cost_limit == 0.1
