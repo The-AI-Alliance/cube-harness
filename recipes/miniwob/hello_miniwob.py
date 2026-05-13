@@ -13,6 +13,7 @@ Usage:
 
 import argparse
 
+from cube.seed import BasicSeedGenerator
 from cube_browser_playwright.playwright_session import PlaywrightSessionConfig
 from miniwob_cube.benchmark import MiniWobBenchmarkConfig
 
@@ -35,7 +36,7 @@ def make_agents(model: str) -> dict[str, Genny2Config | ReactAgentConfig]:
     }
 
 
-def main(debug: bool, agent: str, model: str, name: str | None, n_cpus: int) -> None:
+def main(debug: bool, agent: str, model: str, name: str | None, n_cpus: int, n_seeds: int) -> None:
     agent_config = make_agents(model)[agent]
     model_short = model.split("/")[-1]
     exp_name = name if name is not None else f"miniwob/{agent}-{model_short}"
@@ -55,6 +56,7 @@ def main(debug: bool, agent: str, model: str, name: str | None, n_cpus: int) -> 
         agent_config=agent_config,
         benchmark_config=benchmark_config,
         max_steps=10,
+        n_seeds=n_seeds,
     )
 
     if debug:
@@ -70,5 +72,6 @@ if __name__ == "__main__":
     parser.add_argument("--model", default=_DEFAULT_MODEL, help=f"LLM model (default: {_DEFAULT_MODEL})")
     parser.add_argument("--name", default=None, help="Experiment name (default: auto-generated)")
     parser.add_argument("--n-cpus", type=int, default=4, help="Number of parallel Ray workers (default: 4)")
+    parser.add_argument("--n-seeds", type=int, default=4, help="Number of seeds")
     args = parser.parse_args()
-    main(debug=args.debug, agent=args.agent, model=args.model, name=args.name, n_cpus=args.n_cpus)
+    main(debug=args.debug, agent=args.agent, model=args.model, name=args.name, n_cpus=args.n_cpus, n_seeds=args.n_seeds)
