@@ -1,27 +1,27 @@
 """Genny2 SWE recipe — swebench-verified, swebench-live, and terminalbench.
 
 Single entry point for Genny2 against any of the SWE-like cube benchmarks. Agent
-construction is delegated to ``cube_harness.agents.genny2_swe_config``.
+construction is delegated to ``cube_harness.agents.genny2_swe_config``. Infra
+choice is delegated to ``cube_harness.infra_profile.load_infra`` — declare named
+profiles in ``~/.cube/infra.json`` and pick one via ``--infra <name>``.
 
 Usage:
-    # Debug oracle tasks (no LLM, sequential):
+    # Debug oracle tasks (no LLM, sequential, local Docker):
     .venv/bin/python recipes/swe_agent_recipe.py --debug
     .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --debug
     .venv/bin/python recipes/swe_agent_recipe.py --benchmark tbench --debug
 
-    # Full swebench-verified on Toolkit:
-    .venv/bin/python recipes/swe_agent_recipe.py --toolkit --eai-path ~/bin/eai --n-parallel 20
+    # Full swebench-verified on a named Toolkit profile (defined in ~/.cube/infra.json):
+    .venv/bin/python recipes/swe_agent_recipe.py --infra yul101 --n-parallel 20
 
     # HAL-50 subset on swebench-verified:
-    .venv/bin/python recipes/swe_agent_recipe.py --subset hal_mini --toolkit ...
+    .venv/bin/python recipes/swe_agent_recipe.py --subset hal_mini --infra yul101
 
-    # SWE-bench Live, golden 30, Daytona:
-    .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --subset live-golden-30 --daytona
+    # SWE-bench Live, golden 30, on a daytona profile:
+    .venv/bin/python recipes/swe_agent_recipe.py --benchmark live --subset live-golden-30 --infra daytona
 
-    # TerminalBench, fixed 40-task iteration subset, on Toolkit with sidecar + uv mount:
-    .venv/bin/python recipes/swe_agent_recipe.py --benchmark tbench --subset tbench-iter-40 \\
-        --toolkit --eai-profile yul101 \\
-        --sidecar-data snow.allac.cube_sidecar --assets-data snow.allac.cube_uv
+    # TerminalBench, fixed 40-task iteration subset:
+    .venv/bin/python recipes/swe_agent_recipe.py --benchmark tbench --subset tbench-iter-40 --infra yul101
 """
 
 import json
@@ -43,6 +43,7 @@ from cube_harness.agents.genny2_swe_config import (  # noqa: E402
 )
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
+from cube_harness.infra_profile import load_infra  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s %(message)s")
 
@@ -170,39 +171,8 @@ _TBENCH_ITER_40: frozenset[str] = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# Infra / benchmark helpers
+# Benchmark helpers
 # ---------------------------------------------------------------------------
-
-
-def _make_infra(
-    *,
-    toolkit: bool,
-    daytona: bool,
-    eai_profile: str,
-    eai_path: str,
-    preemptable: bool,
-    launch_timeout: int,
-    sidecar_data: str | None = None,
-    assets_data: str | None = None,
-) -> object:
-    if daytona:
-        from cube_infra_daytona import DaytonaInfraConfig
-
-        return DaytonaInfraConfig(launch_timeout_seconds=launch_timeout)
-    if toolkit:
-        from cube_infra_toolkit import ToolkitInfraConfig
-
-        return ToolkitInfraConfig(
-            profile=eai_profile,
-            eai_path=eai_path,
-            preemptable=preemptable,
-            launch_timeout_seconds=launch_timeout,
-            sidecar_data=sidecar_data,
-            assets_data=assets_data,
-        )
-    from cube.infra_local import LocalInfraConfig
-
-    return LocalInfraConfig()
 
 
 def _make_verified_benchmark(
@@ -344,21 +314,16 @@ def main(
         ),
     ] = None,
     oracle_mode: Annotated[bool, typer.Option(help="Upload gold solution at reset (tbench/verified)")] = False,
-    toolkit: Annotated[bool, typer.Option(help="Use EAI Toolkit infra")] = False,
-    daytona: Annotated[bool, typer.Option(help="Use Daytona infra (requires DAYTONA_API_KEY)")] = False,
-    eai_profile: Annotated[str, typer.Option(help="EAI profile")] = "yul101",
-    eai_path: Annotated[str, typer.Option(help="Path to eai CLI")] = "eai",
-    preemptable: Annotated[bool, typer.Option(help="Request preemptable resources")] = False,
-    sidecar_data: Annotated[
-        str | None, typer.Option(help="EAI data name for exec-relay sidecar (tbench/verified on Toolkit)")
-    ] = None,
-    assets_data: Annotated[
-        str | None, typer.Option(help="EAI data name for cube assets mount, e.g. snow.allac.cube_uv (tbench)")
-    ] = None,
+    infra: Annotated[
+        str,
+        typer.Option(
+            help="Named infra profile from ~/.cube/infra.json (default 'local'). "
+            "Overridable via $CUBE_INFRA. See cube_harness.infra_profile for the JSON schema."
+        ),
+    ] = "local",
     max_actions: Annotated[int, typer.Option(help="Max actions per episode")] = 150,
     cost_limit: Annotated[float, typer.Option(help="Cost limit per episode (USD)")] = 1.0,
     max_output_bytes: Annotated[int, typer.Option(help="Max bash output bytes per step (tbench)")] = 8_000,
-    launch_timeout: Annotated[int, typer.Option(help="Container launch timeout (seconds)")] = 900,
 ) -> None:
     """Run Genny2 against an SWE-like cube benchmark."""
     if model not in MODEL_CONFIGS:
@@ -369,16 +334,7 @@ def main(
         raise typer.BadParameter(f"unknown benchmark {benchmark!r}; pick from verified | live | tbench")
 
     agent_config = make_agent_config(model, template, max_actions, cost_limit)
-    infra = _make_infra(
-        toolkit=toolkit,
-        daytona=daytona,
-        eai_profile=eai_profile,
-        eai_path=eai_path,
-        preemptable=preemptable,
-        launch_timeout=launch_timeout,
-        sidecar_data=sidecar_data,
-        assets_data=assets_data,
-    )
+    infra_config = load_infra(infra)
 
     task_ids = [t.strip() for t in tasks.split(",")] if tasks else None
     if benchmark == "verified":
@@ -400,18 +356,17 @@ def main(
             max_output_bytes=max_output_bytes,
         )
 
-    infra_label = "daytona" if daytona else (f"toolkit:{eai_profile}" if toolkit else "local")
     exp = Experiment(
-        name=f"genny2-swe-{benchmark}-{model}-{infra_label}",
+        name=f"genny2-swe-{benchmark}-{model}-{infra}",
         output_dir=retry,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
-        infra=infra,
+        infra=infra_config,
         max_steps=max_actions,
         resume=retry is not None,
     )
 
-    print(f"\n=== genny2 | swe-{benchmark} | {model} | {template} | {infra_label} | subset={subset or 'all'} ===")
+    print(f"\n=== genny2 | swe-{benchmark} | {model} | {template} | infra={infra} | subset={subset or 'all'} ===")
 
     if debug:
         run_sequentially(exp)
