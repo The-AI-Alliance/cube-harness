@@ -21,10 +21,11 @@ class Usage(TypedBaseModel):
 ```
 
 `LLM._extract_usage` MUST populate `reasoning_tokens` from
-`response.usage.completion_tokens_details.reasoning_tokens` when present
-(OpenAI o-series, gpt-5 family, and any provider LiteLLM normalizes to that
-shape). Anthropic does not surface reasoning tokens separately — they are folded
-into `completion_tokens`; `reasoning_tokens` stays 0 on Anthropic responses.
+`response.usage.completion_tokens_details.reasoning_tokens` when present.
+LiteLLM normalizes both OpenAI (native field on `completion_tokens_details`) and
+Anthropic (computed from `thinking_blocks`) into the same path, so the
+extraction is provider-agnostic. The reported value is **already counted
+inside `completion_tokens`** — telemetry only, not budget.
 
 ---
 
@@ -116,9 +117,13 @@ is replaced with:
 > `response.message.thinking_blocks` / `reasoning_content` for round-trip and
 > offline analysis.
 >
-> **Anthropic + thinking constraint.** Anthropic forbids `temperature != 1.0`
-> when extended thinking is active. `LLMConfig` validates this at construction
-> time.
+> **Anthropic + thinking constraints.** Three API-level restrictions apply when
+> `reasoning_effort` is set on an Anthropic model:
+> 1. `temperature` must be `1.0` (validated at config construction).
+> 2. `tool_choice` cannot be `"required"` (Anthropic 400s with "Thinking may
+>    not be enabled when tool_choice forces tool use"). Use `"auto"`.
+> 3. `max_completion_tokens` must exceed the thinking `budget_tokens` LiteLLM
+>    derives from `reasoning_effort` (≈1024 for "low"); set ≥2048 in practice.
 >
 > **Tool-use loops with Anthropic thinking.** Each assistant turn's
 > `thinking_blocks` (including `signature`) MUST be echoed back in subsequent

@@ -60,7 +60,7 @@ class Usage(TypedBaseModel):
     total_tokens: int = 0
     cached_tokens: int = 0
     cache_creation_tokens: int = 0    # Anthropic prompt caching
-    reasoning_tokens: int = 0          # OpenAI o-series / gpt-5 (Anthropic: folded into completion_tokens, stays 0)
+    reasoning_tokens: int = 0          # LiteLLM-normalized across providers; subset of completion_tokens
     cost: float = 0.0                  # USD from LiteLLM pricing
 ```
 
@@ -168,15 +168,30 @@ Anthropic response so trace consumers can see cache-hit rates per step.
   `response.reasoning_text` (or `get_reasoning(msg)` for offline analysis) to obtain
   the thinking string for `AgentOutput.thoughts`. The structured form is preserved
   on `response.message.thinking_blocks` / `reasoning_content` for round-trip.
-- **Anthropic thinking constraint.** Anthropic forbids `temperature != 1.0` when
-  extended thinking is active. `LLMConfig` validates this at construction time.
+- **OpenAI hides the reasoning text.** OpenAI o-series and gpt-5 (including
+  Azure-OpenAI deployments) return `reasoning_tokens > 0` to confirm the model
+  thought, but **do not return the thinking text** — `reasoning_content` and
+  `thinking_blocks` are empty even with `reasoning_effort` set. This is an
+  OpenAI design choice. Consequence: `AgentOutput.thoughts` will be `None` on
+  OpenAI episodes even when the model reasoned. The agent still benefits from
+  the reasoning; only the human-readable trace is unavailable.
+- **Anthropic thinking constraints.** Two API-level restrictions surface when
+  `reasoning_effort` is set on an Anthropic model:
+  1. `temperature` must be `1.0`. `LLMConfig` validates this at construction time.
+  2. `tool_choice` must NOT be `"required"`. Anthropic returns 400 with
+     "Thinking may not be enabled when tool_choice forces tool use." Stay on
+     `"auto"` (the default) and shape the prompt to elicit the tool call.
+  3. `max_completion_tokens` must exceed the thinking `budget_tokens` LiteLLM
+     maps `reasoning_effort` onto (≈1024 for "low", more for higher). Set
+     `max_completion_tokens` to at least 2048 when reasoning is active.
 - **Tool-use loops with Anthropic thinking.** Each assistant turn's
   `thinking_blocks` (including `signature`) MUST be echoed back in subsequent
   calls. `Prompt._coerce_messages` preserves them automatically via
   `Message.model_dump(exclude_none=True)`. Do not strip these fields.
-- **`reasoning_tokens` accounting.** OpenAI o-series / gpt-5 surface
-  `completion_tokens_details.reasoning_tokens` separately, but those tokens are
-  already counted inside `completion_tokens` — do not add them to a budget tally,
-  or you will double-count. The field exists for telemetry, not for budgeting.
-  Anthropic reports nothing here; reasoning is folded into `completion_tokens`.
+- **`reasoning_tokens` accounting.** LiteLLM normalizes `reasoning_tokens` for
+  both OpenAI (native `completion_tokens_details.reasoning_tokens`) and
+  Anthropic (computed from `thinking_blocks`) into the same `Usage` field.
+  These tokens are **already counted inside `completion_tokens`** — do not add
+  them to a budget tally, or you will double-count. The field exists for
+  telemetry only.
 - Cost is USD from LiteLLM's built-in pricing — may lag behind provider price changes.

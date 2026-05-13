@@ -102,18 +102,23 @@ class Usage(TypedBaseModel):
     total_tokens: int = 0
     cached_tokens: int = 0  # tokens read from cache (cache hit)
     cache_creation_tokens: int = 0  # tokens written to cache (Anthropic)
-    # Provider-reported reasoning/thinking tokens (OpenAI o-series / gpt-5: separate
-    # field; Anthropic: not surfaced — folded into completion_tokens, stays 0 here).
+    # Reasoning/thinking tokens. LiteLLM surfaces these via
+    # completion_tokens_details.reasoning_tokens for both OpenAI o-series/gpt-5
+    # (native field) and Anthropic (normalized from thinking_blocks). They are
+    # ALREADY counted within completion_tokens — do not add separately to a
+    # budget tally or you will double-count.
     reasoning_tokens: int = 0
     cost: float = 0.0  # cost in USD from LiteLLM pricing
 
 
 def get_reasoning(msg: Message) -> str:
-    """Provider-agnostic reasoning text extractor.
+    """Provider-agnostic reasoning text extractor — returns "" when no reasoning emitted.
 
-    Checks reasoning_content (OpenAI o-series / Anthropic streaming),
-    then thinking_blocks (Anthropic extended thinking),
-    then falls back to plain content.
+    Checks reasoning_content (OpenAI o-series / gpt-5; Anthropic streaming) first,
+    then concatenates thinking_blocks (Anthropic extended thinking). Returns the
+    empty string when neither is present — it deliberately does NOT fall back to
+    msg.content, since the final response text is already available on the
+    Message and conflating it with thinking would muddy the contract.
 
     Works on any litellm.Message — including those reconstructed from persisted
     LLMCall.output records, making it the canonical reasoning extractor for both
@@ -122,10 +127,7 @@ def get_reasoning(msg: Message) -> str:
     if rc := getattr(msg, "reasoning_content", None):
         return rc
     blocks = getattr(msg, "thinking_blocks", None) or []
-    text = " ".join(b.get("thinking", "") for b in blocks if isinstance(b, dict))
-    if text:
-        return text
-    return msg.content or ""
+    return " ".join(b.get("thinking", "") for b in blocks if isinstance(b, dict))
 
 
 class LLMResponse(TypedBaseModel):
@@ -315,8 +317,10 @@ class LLM:
         if isinstance(hidden_params, dict):
             cost = safe_float(hidden_params.get("response_cost", 0.0))
 
-        # Reasoning tokens (OpenAI o-series / gpt-5 surface them in completion_tokens_details;
-        # Anthropic folds them into completion_tokens and reports nothing here — stays 0).
+        # Reasoning tokens — LiteLLM normalizes both OpenAI (native field) and
+        # Anthropic (computed from thinking_blocks) into completion_tokens_details.
+        # These are already part of completion_tokens; the separate field is for
+        # telemetry, not for budgeting.
         reasoning_tokens = 0
         completion_details = getattr(usage_data, "completion_tokens_details", None)
         if completion_details:

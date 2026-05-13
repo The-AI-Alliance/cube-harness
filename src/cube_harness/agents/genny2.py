@@ -370,7 +370,10 @@ class Genny2(Agent):
                     self.history.append(self._latest_obs)
                 self.history.append([response])
         else:
-            thoughts = get_reasoning(response) or None
+            # Prefer the model's reasoning trace when available; otherwise fall back
+            # to the response content so non-reasoning agents still surface their
+            # inline ReAct thinking in the trajectory's `thoughts` panel.
+            thoughts = get_reasoning(response) or response.content or None
             if self._latest_obs:
                 self.history.append(self._latest_obs)
             self.history.append([response])

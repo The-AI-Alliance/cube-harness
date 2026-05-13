@@ -660,9 +660,13 @@ class TestGetReasoning:
         # Precedence: reasoning_content first, since both refer to the same underlying reasoning.
         assert get_reasoning(msg) == "from reasoning_content"
 
-    def test_falls_back_to_content_when_no_reasoning_fields(self) -> None:
+    def test_returns_empty_when_no_reasoning_fields(self) -> None:
+        # Deliberately does NOT fall back to msg.content — the final response
+        # text is already accessible via .message.content; reasoning_text is
+        # strictly about reasoning, so callers can rely on truthiness as a
+        # "did the model think?" signal.
         msg = Message(role="assistant", content="plain answer")
-        assert get_reasoning(msg) == "plain answer"
+        assert get_reasoning(msg) == ""
 
     def test_empty_string_when_nothing_present(self) -> None:
         msg = Message(role="assistant", content=None)

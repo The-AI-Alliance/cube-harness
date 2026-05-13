@@ -81,13 +81,11 @@ class Usage(TypedBaseModel):
     cost: float = 0.0
 ```
 
-Extracted in `_extract_usage` from:
-
-- **OpenAI**: `usage.completion_tokens_details.reasoning_tokens`.
-- **Anthropic**: not surfaced separately by the API — reasoning is folded into
-  `completion_tokens`. Leave at 0; document the gap.
-- **Other providers**: best-effort via the same `completion_tokens_details` path
-  (LiteLLM normalizes most reasoning models to this shape).
+Extracted in `_extract_usage` from
+`usage.completion_tokens_details.reasoning_tokens`. LiteLLM normalizes both
+OpenAI (native field) and Anthropic (computed from `thinking_blocks`) into this
+path, so the extraction is provider-agnostic. The value is **already part of
+`completion_tokens`** — telemetry only, not budgeting.
 
 Default of 0 means existing trajectory JSONs without the field deserialize cleanly.
 
