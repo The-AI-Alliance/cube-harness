@@ -94,7 +94,6 @@ def _cli(
     eai_profile: Annotated[str, typer.Option(help="EAI profile")] = "yul101",
     eai_path: Annotated[str, typer.Option(help="Path to eai CLI")] = "eai",
     preemptable: Annotated[bool, typer.Option(help="Request preemptable resources")] = False,
-    sidecar_data: Annotated[str | None, typer.Option(help="EAI data name for the exec-relay sidecar binary")] = None,
 ) -> None:
     """Run the terminalbench-cube oracle debug suite."""
     import terminalbench_cube.debug as _this_module
@@ -106,12 +105,13 @@ def _cli(
     if toolkit:
         from cube_infra_toolkit import ToolkitInfraConfig
 
+        # cube_data defaults to "auto" — ToolkitInfraConfig auto-provisions the
+        # sidecar + uv bundle at /opt/cube/ on first launch, no flags needed.
         infra = ToolkitInfraConfig(
             profile=eai_profile,
             eai_path=eai_path,
             preemptable=preemptable,
             launch_timeout_seconds=3000,
-            sidecar_data=sidecar_data,
         )
 
     results = run_debug_suite("terminalbench-cube", _this_module, workers=1, infra=infra)

@@ -77,6 +77,18 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
             )
         return self.execution_info
 
+    @property
+    def tool(self) -> TerminalTool:  # type: ignore[override]
+        """Narrow `Task.tool` (typed `AbstractTool`) to the concrete TerminalTool.
+
+        TerminalBenchTask only constructs TerminalTool in ``_build_tool``; the
+        single assert here replaces the four scattered call-site asserts. If
+        cube-standard later splits TerminalTool into Protocol + concrete (see
+        cube-standard#151), drop the isinstance check entirely.
+        """
+        assert isinstance(self._tool, TerminalTool), f"expected TerminalTool, got {type(self._tool).__name__}"
+        return self._tool
+
     def _build_tool(self) -> None:
         new_wd = relocate_if_readonly(
             self._container,
@@ -96,7 +108,6 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
-        assert isinstance(self.tool, TerminalTool)
         self.tool.reset()
 
         # Fast-fail if the container sandbox is broken (all bash commands return
@@ -149,8 +160,6 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         here because `validate_per_step=False` makes this a single terminal call
         after the episode ends — don't copy this pattern into a per-step evaluator.
         """
-        assert isinstance(self.tool, TerminalTool)
-
         # Upload test harness to the sandbox
         if self._task_path is not None:
             tests_dir = self._task_path / "tests"
@@ -291,28 +300,27 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         bootstrap pip (via get-pip.py with SSL verification disabled for the
         bootstrap step only) and finally ``pip install uv``.
         """
-        assert isinstance(self.tool, TerminalTool)
         marker = "/tmp/fakehome/.local/bin/uv"
         probe = self.tool.bash(f"test -x {marker} && echo EXISTS || echo MISSING", timeout=15)
         if "EXISTS" in probe:
             return
 
-        # Fast path: cube_assets EAI data mount (see ToolkitInfraConfig.assets_data).
-        # When the harness mounts /opt/cube-assets/ with a uv binary, copy it
-        # directly — bypasses the python3-bootstrap path that fails on minimal
-        # images lacking python3, curl, AND apt sources.  Note: EAI data mounts
-        # are read-only and strip the execute bit (mode 0600), so we use ``-f``
-        # for the probe and ``chmod +x`` after copying into the writable HOME.
+        # Fast path: cube_data bundle mount (auto-provisioned by ToolkitInfraConfig).
+        # When ToolkitInfraConfig mounts /opt/cube/ with the cube_data bundle, copy
+        # the uv binaries directly — bypasses the python3-bootstrap path that fails
+        # on minimal images lacking python3, curl, AND apt sources.  Note: EAI data
+        # mounts are read-only and strip the execute bit (mode 0600), so we use
+        # ``-f`` for the probe and ``chmod +x`` after copying into the writable HOME.
         assets_probe = self.tool.bash(
-            "test -f /opt/cube-assets/uv && test -f /opt/cube-assets/uvx && echo YES || echo NO",
+            "test -f /opt/cube/uv && test -f /opt/cube/uvx && echo YES || echo NO",
             timeout=15,
         )
         if "YES" in assets_probe:
-            logger.info("Using mounted /opt/cube-assets/uv for uv install")
+            logger.info("Using mounted /opt/cube/uv for uv install")
             self.tool.bash(
                 "export HOME=/tmp/fakehome && "
                 "mkdir -p $HOME/.local/bin && "
-                "cp /opt/cube-assets/uv /opt/cube-assets/uvx $HOME/.local/bin/ && "
+                "cp /opt/cube/uv /opt/cube/uvx $HOME/.local/bin/ && "
                 "chmod +x $HOME/.local/bin/uv $HOME/.local/bin/uvx && "
                 "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env",
                 timeout=30,
@@ -390,7 +398,6 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
 
     def _install_python3_nonroot(self) -> None:
         """Download python3.12 packages via apt and extract with dpkg-deb (no root needed)."""
-        assert isinstance(self.tool, TerminalTool)
         logger.info("Downloading python3.12 packages via apt (non-root) and extracting to /tmp/python3_pkg")
         apt_opts = "-o Dir::State::Lists=/tmp/apt/lists -o Dir::Cache::Archives=/tmp/apt/archives"
         cmd = (

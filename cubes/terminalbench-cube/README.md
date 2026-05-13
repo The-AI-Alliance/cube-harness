@@ -28,20 +28,21 @@ cube install terminalbench-cube      # one-time: clone terminal-bench-2 and popu
 ### Via recipe
 
 ```bash
-# 2 oracle debug tasks (no LLM, sequential):
-.venv/bin/python recipes/genny2_terminalbench_recipe.py --debug
+# 2 oracle debug tasks (no LLM, sequential, local Docker):
+.venv/bin/python recipes/swe_agent_recipe.py --benchmark tbench --debug
 
-# Easy tasks, local Docker:
-.venv/bin/python recipes/genny2_terminalbench_recipe.py --difficulty easy
-
-# Full 89-task run on EAI Toolkit:
-.venv/bin/python recipes/genny2_terminalbench_recipe.py \
-    --toolkit --eai-profile yul101 --n-parallel 20
+# Full 89-task run on a named Toolkit profile (declared in ~/.cube/infra.json):
+.venv/bin/python recipes/swe_agent_recipe.py --benchmark tbench --infra yul101 --n-parallel 20
 
 # Stable 40-task medium subset for iteration (proportional across categories):
-.venv/bin/python recipes/genny2_terminalbench_iter_recipe.py \
-    --toolkit --eai-profile yul101 --sidecar-data snow.allac.cube_sidecar
+.venv/bin/python recipes/swe_agent_recipe.py --benchmark tbench --subset tbench-iter-40 --infra yul101
 ```
+
+Infra choice (Toolkit / Daytona / local) is driven by named profiles in
+`~/.cube/infra.json` — see `cube_harness.infra_profile` for the schema. The
+sidecar + uv bundle that used to require `--sidecar-data` / `--assets-data`
+flags is now auto-provisioned by `ToolkitInfraConfig` (`cube_data="auto"`,
+mounted at `/opt/cube/` on first launch).
 
 ### Programmatic
 
@@ -73,7 +74,7 @@ bench.close()
 
 - **`oracle_mode`** — uploads the gold solution to `/tmp/solution` so a scripted debug agent (or a "give-up" recipe) can apply it directly. Used by the debug suite.
 - **`relocate_if_readonly`** — when `/app` is a read-only mount (some non-root backends like EAI Toolkit), the working directory relocates to `/tmp/app` and the agent's instruction text is rewritten in-place so prompts match the path the evaluator checks.
-- **`_ensure_uv_preinstalled()`** — bootstraps a local `uv` binary inside the container so test.sh's `curl https://astral.sh/uv/.../install.sh | sh` line works on minimal images. Three fall-back paths: (1) **fast path** copying from `/opt/cube-assets/` when the harness mounts the [`ToolkitInfraConfig.assets_data`](https://github.com/The-AI-Alliance/cube-standard) blob; (2) root `apt-get install python3 + pip install uv`; (3) non-root `apt-get download + dpkg-deb --extract` for images without root.
+- **`_ensure_uv_preinstalled()`** — bootstraps a local `uv` binary inside the container so test.sh's `curl https://astral.sh/uv/.../install.sh | sh` line works on minimal images. Three fall-back paths: (1) **fast path** copying from `/opt/cube/` when `ToolkitInfraConfig` auto-mounts the cube_data bundle; (2) root `apt-get install python3 + pip install uv`; (3) non-root `apt-get download + dpkg-deb --extract` for images without root.
 
 ## Evaluation
 
