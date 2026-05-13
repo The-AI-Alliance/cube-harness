@@ -12,7 +12,11 @@ Classes:
     AgentInfo         — agent descriptor: config, dependency versions, git provenance
     BenchmarkSubset   — benchmark subset descriptor for MNAR propensity correction
     JudgeConfig       — configuration of the judge LLM (optional)
+    BlameCategory     — closed-world taxonomy of failure causes
+    Outcome           — outcome of the episode as judged
+    EvidenceItem      — step-indexed transcript quote backing a blame attribution
     JudgeOutput       — per-episode judge assessment (optional)
+    JudgeMetadata     — billing/provenance for a single judge invocation (optional)
     Verifier          — task verifier reference (optional)
     ExperimentRecord  — experiment-level record written to experiment_record.json
     EpisodeRecord     — episode-level record written after each episode completes
@@ -26,6 +30,7 @@ import logging
 import re
 import subprocess
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -289,12 +294,84 @@ class JudgeConfig(TypedBaseModel):
     judged_at: str | None = Field(default=None, description="ISO-8601 timestamp when judging was run.")
 
 
-class JudgeOutput(TypedBaseModel):
-    """Per-episode assessment from a post-hoc LLM judge."""
+JUDGE_SCHEMA_VERSION = "v1"
 
-    difficulty: str | None = Field(default=None, description="Estimated task difficulty (free-form or enum).")
-    feasible: bool | None = Field(default=None, description="Whether the task was deemed completable by the judge.")
-    failure_root_cause: str | None = Field(default=None, description="Short description of why the agent failed.")
+
+class BlameCategory(str, Enum):
+    """Closed-world taxonomy of failure causes. The judge must pick from this set or `none`."""
+
+    task_unclear = "task_unclear"
+    model_capability = "model_capability"
+    tool_failure = "tool_failure"
+    env_failure = "env_failure"
+    agent_scaffolding = "agent_scaffolding"
+    action_space_limited = "action_space_limited"
+    insufficient_observation = "insufficient_observation"
+    eval_brittle = "eval_brittle"
+    submission_format = "submission_format"
+    none = "none"
+
+
+class Outcome(str, Enum):
+    """What happened in the episode, beyond the binary reward."""
+
+    success = "success"
+    success_lucky = "success_lucky"
+    almost = "almost"
+    failure = "failure"
+    should_have_been_rewarded = "should_have_been_rewarded"
+
+
+class EvidenceItem(TypedBaseModel):
+    """A step-indexed transcript quote backing a blame attribution."""
+
+    step: int = Field(description="Step index in the trajectory.")
+    quote: str = Field(description="Verbatim excerpt from the agent or environment output.")
+
+
+class JudgeOutput(TypedBaseModel):
+    """Per-episode assessment from a post-hoc LLM judge.
+
+    Field order follows the judge's reasoning process: free-form `analysis` first as a
+    scratchpad, then structured conclusions grounded in evidence.
+    """
+
+    analysis: str = Field(
+        description="Multi-paragraph reasoning scratchpad. Filled first; grounds all structured fields below."
+    )
+    outcome: Outcome = Field(description="What happened in the episode beyond the binary reward.")
+    summary: str = Field(description="1-3 sentence description of what happened.")
+    primary_blame: BlameCategory = Field(description="Dominant failure cause; `none` for clean successes.")
+    primary_blame_confidence: int = Field(
+        ge=0, le=5, description="Confidence in primary_blame (0=no basis, 5=certain)."
+    )
+    other_blames: list[BlameCategory] = Field(
+        default_factory=list,
+        description="Secondary contributing causes. Must not repeat primary_blame.",
+    )
+    evidence: list[EvidenceItem] = Field(
+        default_factory=list,
+        description="Step-indexed quotes from the transcript. Required when primary_blame != 'none'.",
+    )
+    hypothesis: str = Field(description="1-2 sentences: what change would most likely fix this class of failure.")
+    hypothesis_confidence: int = Field(
+        ge=0, le=5, description="Confidence in the proposed fix (0=pure guess, 5=certain)."
+    )
+
+
+class JudgeMetadata(TypedBaseModel):
+    """Billing and provenance for a single judge invocation. Sibling to `judge_output`."""
+
+    model: str = Field(description="Judge model identifier (e.g. 'claude-opus-4-7').")
+    prompt_tokens: int = Field(default=0, description="Input tokens consumed by the judge call.")
+    completion_tokens: int = Field(default=0, description="Output tokens produced by the judge call.")
+    cost_usd: float = Field(default=0.0, description="Total USD cost of the judge call.")
+    duration_s: float = Field(default=0.0, description="Wall-clock duration of the judge call in seconds.")
+    timestamp: float = Field(description="Wall-clock time the judge ran (Unix seconds).")
+    judge_schema_version: str = Field(
+        default=JUDGE_SCHEMA_VERSION,
+        description="Schema version of the JudgeOutput record produced — for forward compatibility.",
+    )
 
 
 class Verifier(TypedBaseModel):
@@ -416,7 +493,11 @@ class EpisodeRecord(TypedBaseModel):
     )
     judge_output: JudgeOutput | None = Field(
         default=None,
-        description="Per-episode LLM judge assessment (difficulty, feasibility, failure root cause).",
+        description="Per-episode LLM judge assessment (outcome, blame, evidence, hypothesis).",
+    )
+    judge_metadata: JudgeMetadata | None = Field(
+        default=None,
+        description="Billing/provenance for the judge invocation. None until a judge has run.",
     )
 
     @classmethod

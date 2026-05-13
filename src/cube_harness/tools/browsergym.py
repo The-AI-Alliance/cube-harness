@@ -1,5 +1,6 @@
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -161,7 +162,17 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
         if self._session is None:
             raise RuntimeError("No session — call close() before network_trace()")
-        return NetworkTrace.from_content(self._session.trace_path())
+
+        trace_path_fn = getattr(self._session, "trace_path", None)
+        if callable(trace_path_fn):
+            trace_path = Path(trace_path_fn())
+            if trace_path.exists():
+                return NetworkTrace.from_content(trace_path)
+
+        raise FileNotFoundError(
+            "No session trace artifact available. "
+            "Expected a closed PlaywrightSession with an existing trace path."
+        )
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser.make()
