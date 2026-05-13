@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cube-standard[docker]>=0.1.0rc8",
     "datasets",
+    "typer~=0.25",
 ]
 
 [project.entry-points."cube.benchmarks"]

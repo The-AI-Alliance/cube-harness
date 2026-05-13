@@ -9,7 +9,9 @@ make_debug_agent(task_id)     → DebugAgent
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
+import typer
 from cube.core import Action, ActionSchema, Observation
 from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
 
@@ -87,35 +89,35 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-if __name__ == "__main__":
-    import argparse
-    import sys
-
+def _cli(
+    toolkit: Annotated[bool, typer.Option(help="Use EAI Toolkit infra instead of local Docker")] = False,
+    eai_profile: Annotated[str, typer.Option(help="EAI profile")] = "yul101",
+    eai_path: Annotated[str, typer.Option(help="Path to eai CLI")] = "eai",
+    preemptable: Annotated[bool, typer.Option(help="Request preemptable resources")] = False,
+    sidecar_data: Annotated[str | None, typer.Option(help="EAI data name for the exec-relay sidecar binary")] = None,
+) -> None:
+    """Run the terminalbench-cube oracle debug suite."""
     import terminalbench_cube.debug as _this_module
     from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    parser = argparse.ArgumentParser(description="terminalbench-cube debug suite")
-    parser.add_argument("--toolkit", action="store_true", help="Use EAI Toolkit infra instead of local Docker")
-    parser.add_argument("--eai-profile", default="yul101", help="EAI profile (default: yul101)")
-    parser.add_argument("--eai-path", default="eai", help="Path to eai CLI (default: eai)")
-    parser.add_argument("--preemptable", action="store_true", help="Request preemptable resources")
-    parser.add_argument("--sidecar-data", default=None, help="EAI data name for the exec-relay sidecar binary")
-    cli = parser.parse_args()
-
     infra = None
-    if cli.toolkit:
+    if toolkit:
         from cube_infra_toolkit import ToolkitInfraConfig
 
         infra = ToolkitInfraConfig(
-            profile=cli.eai_profile,
-            eai_path=cli.eai_path,
-            preemptable=cli.preemptable,
+            profile=eai_profile,
+            eai_path=eai_path,
+            preemptable=preemptable,
             launch_timeout_seconds=3000,
-            sidecar_data=cli.sidecar_data,
+            sidecar_data=sidecar_data,
         )
 
     results = run_debug_suite("terminalbench-cube", _this_module, workers=1, infra=infra)
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
-    sys.exit(1 if failed else 0)
+    raise typer.Exit(1 if failed else 0)
+
+
+if __name__ == "__main__":
+    typer.run(_cli)
