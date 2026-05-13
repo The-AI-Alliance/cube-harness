@@ -58,8 +58,8 @@ def _make_benchmark_config(
     task_ids: list[str] | None,
     oracle_mode: bool,
 ) -> object:
+    from cube.tools.terminal import TerminalToolConfig
     from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
-    from terminalbench_cube.tool import TerminalBenchToolConfig
 
     if debug:
         from terminalbench_cube.debug import get_debug_benchmark
@@ -71,7 +71,7 @@ def _make_benchmark_config(
 
     TerminalBenchBenchmarkConfig.install()
     config = TerminalBenchBenchmarkConfig(
-        tool_config=TerminalBenchToolConfig(),
+        tool_config=TerminalToolConfig(working_dir="/app", max_timeout=900, enable_file_actions=True),
         oracle_mode=oracle_mode,
     )
     if difficulty:

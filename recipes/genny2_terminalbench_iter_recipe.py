@@ -130,12 +130,17 @@ def _make_infra(
 
 
 def _make_benchmark_config(task_ids: list[str], max_output_bytes: int) -> object:
+    from cube.tools.terminal import TerminalToolConfig
     from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
-    from terminalbench_cube.tool import TerminalBenchToolConfig
 
     TerminalBenchBenchmarkConfig.install()
     return TerminalBenchBenchmarkConfig(
-        tool_config=TerminalBenchToolConfig(max_output_bytes=max_output_bytes),
+        tool_config=TerminalToolConfig(
+            working_dir="/app",
+            max_timeout=900,
+            enable_file_actions=True,
+            max_output_bytes=max_output_bytes,
+        ),
     ).subset_from_list(task_ids)
 
 
