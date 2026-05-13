@@ -1,4 +1,4 @@
-"""Shared Genny2 agent configuration for SWE-bench recipes."""
+"""Shared Genny2 agent configuration for SWE-bench and TerminalBench recipes."""
 
 from cube_harness.agents.genny2 import BudgetConfig, Genny2Config
 from cube_harness.llm import LLMConfig

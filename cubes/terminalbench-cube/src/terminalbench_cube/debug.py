@@ -9,7 +9,9 @@ make_debug_agent(task_id)     → DebugAgent
 from __future__ import annotations
 
 import logging
+from typing import Annotated
 
+import typer
 from cube.core import Action, ActionSchema, Observation
 from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
 
@@ -87,14 +89,35 @@ def make_debug_agent(task_id: str) -> DebugAgent:
     return DebugAgent(task_id)
 
 
-if __name__ == "__main__":
-    import sys
-
+def _cli(
+    toolkit: Annotated[bool, typer.Option(help="Use EAI Toolkit infra instead of local Docker")] = False,
+    eai_profile: Annotated[str, typer.Option(help="EAI profile")] = "yul101",
+    eai_path: Annotated[str, typer.Option(help="Path to eai CLI")] = "eai",
+    preemptable: Annotated[bool, typer.Option(help="Request preemptable resources")] = False,
+) -> None:
+    """Run the terminalbench-cube oracle debug suite."""
     import terminalbench_cube.debug as _this_module
     from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
-    results = run_debug_suite("terminalbench-cube", _this_module)
+    infra = None
+    if toolkit:
+        from cube_infra_toolkit import ToolkitInfraConfig
+
+        # cube_data defaults to "auto" — ToolkitInfraConfig auto-provisions the
+        # sidecar + uv bundle at /opt/cube/ on first launch, no flags needed.
+        infra = ToolkitInfraConfig(
+            profile=eai_profile,
+            eai_path=eai_path,
+            preemptable=preemptable,
+            launch_timeout_seconds=3000,
+        )
+
+    results = run_debug_suite("terminalbench-cube", _this_module, workers=1, infra=infra)
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
-    sys.exit(1 if failed else 0)
+    raise typer.Exit(1 if failed else 0)
+
+
+if __name__ == "__main__":
+    typer.run(_cli)

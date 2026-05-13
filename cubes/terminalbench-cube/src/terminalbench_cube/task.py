@@ -4,6 +4,7 @@ import base64
 import io
 import logging
 import re
+import shlex
 import tarfile
 import tempfile
 from pathlib import Path
@@ -14,8 +15,8 @@ from pydantic import PrivateAttr
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
 from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
+from cube.tools.terminal import TerminalTool, TerminalToolConfig
 from terminalbench_cube.pytest_parser import PytestParser
-from terminalbench_cube.tool import TerminalBenchTool, TerminalBenchToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
 
     # Container-side paths — always under /tmp so logic works uniformly on root
     # and non-root backends (EAI Toolkit images have /tmp mode 1777).
+    _working_dir: str = PrivateAttr(default="/app")
     _solution_dir: str = PrivateAttr(default="/tmp/solution")
     _tests_dir: str = PrivateAttr(default="/tmp/tests")
     _logs_verifier_dir: str = PrivateAttr(default="/tmp/logs/verifier")
@@ -74,6 +76,18 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
                 f"Construct via TerminalBenchTaskConfig.make() so it is populated."
             )
         return self.execution_info
+
+    @property
+    def tool(self) -> TerminalTool:  # type: ignore[override]
+        """Narrow `Task.tool` (typed `AbstractTool`) to the concrete TerminalTool.
+
+        TerminalBenchTask only constructs TerminalTool in ``_build_tool``; the
+        single assert here replaces the four scattered call-site asserts. If
+        cube-standard later splits TerminalTool into Protocol + concrete (see
+        cube-standard#151), drop the isinstance check entirely.
+        """
+        assert isinstance(self._tool, TerminalTool), f"expected TerminalTool, got {type(self._tool).__name__}"
+        return self._tool
 
     def _build_tool(self) -> None:
         new_wd = relocate_if_readonly(
@@ -90,10 +104,17 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
                 "git config --global user.name 'Cube Harness'"
             ),
         )
+        self._working_dir = new_wd
         self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
     def reset(self) -> tuple[Observation, dict[str, Any]]:
         self.tool.reset()
+
+        # Fast-fail if the container sandbox is broken (all bash commands return
+        # exit_code=1 with no output). Avoids wasting 100 agent steps on a dead env.
+        health = self.tool.bash("echo ok", timeout=15)
+        if "ok" not in health:
+            raise RuntimeError(f"Container health check failed for {self.metadata.id!r}: {health!r}")
 
         # Extract task archive to a temp dir (kept alive until close())
         self._temp_dir = tempfile.TemporaryDirectory()
@@ -108,27 +129,37 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
 
         # Oracle mode: upload solution for debugging/baselines
         if self.oracle_mode and (task_path / "solution").exists():
-            assert isinstance(self.tool, TerminalBenchTool)
-            app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
             solution_dir = task_path / "solution"
-            if app_dir != "/app":
-                self._rewrite_files_locally(solution_dir, {"/app/": f"{app_dir}/"})
+            if self._working_dir != "/app":
+                self._rewrite_files_locally(solution_dir, {"/app/": f"{self._working_dir}/"})
             self.tool.bash(f"mkdir -p {self._solution_dir}")
-            self.tool.upload_directory(solution_dir, self._solution_dir)
+            self._upload_directory(solution_dir, self._solution_dir)
             # Pre-install python3 + uv so oracle solve.sh scripts work on minimal
             # images (e.g. bare LaTeX) that ship without python3.  In non-oracle
             # runs the agent installs its own deps; we don't add overhead there.
             self._ensure_uv_preinstalled()
 
-        return Observation.from_text(self._exec.instruction), {
+        instruction = self._exec.instruction
+        # Mirror the test-script rewrite: when /app is read-only and we relocated
+        # the working dir to /tmp/app, the agent's instructions still reference
+        # /app verbatim (from terminal-bench task.yaml).  Rewrite so the agent
+        # writes to the same path the evaluator checks.
+        if self._working_dir != "/app":
+            instruction = re.sub(r"/app(?=[\s/.,;:)\]'\"]|$)", self._working_dir, instruction)
+
+        return Observation.from_text(instruction), {
             "task_id": self.metadata.id,
             "difficulty": self.metadata.difficulty,
             "category": self.metadata.category,
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
-        assert isinstance(self.tool, TerminalBenchTool)
+        """Run the upstream pytest verifier in the sandbox and return the reward.
 
+        Deliberately mutates container state (uploads tests, installs `uv`).  Safe
+        here because `validate_per_step=False` makes this a single terminal call
+        after the episode ends — don't copy this pattern into a per-step evaluator.
+        """
         # Upload test harness to the sandbox
         if self._task_path is not None:
             tests_dir = self._task_path / "tests"
@@ -138,8 +169,6 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
                 # Done in Python (not via sed) to avoid shell-quoting pitfalls
                 # (e.g. single quotes inside sed expressions) and GNU sed
                 # re-scanning surprises that produce double '/tmp/' prefixes.
-                assert isinstance(self.tool, TerminalBenchTool)
-                app_dir = self.tool._config.working_dir  # type: ignore[attr-defined]
                 path_subs: dict[str, str] = {
                     "/logs/verifier": self._logs_verifier_dir,
                     "/tests/": self._tests_dir + "/",
@@ -148,12 +177,12 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
                     '"/tests"': f'"{self._tests_dir}"',
                     "'/tests'": f"'{self._tests_dir}'",
                 }
-                if app_dir != "/app":
-                    path_subs["/app/"] = f"{app_dir}/"
-                    path_subs['"/app"'] = f'"{app_dir}"'
-                    path_subs["'/app'"] = f"'{app_dir}'"
+                if self._working_dir != "/app":
+                    path_subs["/app/"] = f"{self._working_dir}/"
+                    path_subs['"/app"'] = f'"{self._working_dir}"'
+                    path_subs["'/app'"] = f"'{self._working_dir}'"
                 self._rewrite_files_locally(tests_dir, path_subs)
-                self.tool.upload_directory(tests_dir, self._tests_dir)
+                self._upload_directory(tests_dir, self._tests_dir)
                 self.tool.bash(f"chmod +x {self._tests_dir}/test.sh")
 
         # Pre-install `uv` + fake HOME so test.sh's
@@ -187,6 +216,48 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
             "test_results": test_results,
             "output_preview": output[:1000] if output else "",
         }
+
+    def _upload_file(self, local_path: Path, remote_path: str) -> None:
+        """Upload a local file into the container (text or binary)."""
+        try:
+            content = local_path.read_text(encoding="utf-8")
+            escaped = content.replace("'", "'\\''")
+            self._container.exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}", workdir=self._working_dir)
+            self._container.exec(f"printf '%s' '{escaped}' > {shlex.quote(remote_path)}", workdir=self._working_dir)
+        except UnicodeDecodeError:
+            b64 = base64.b64encode(local_path.read_bytes()).decode("ascii")
+            self._container.exec(f"mkdir -p {shlex.quote(str(Path(remote_path).parent))}", workdir=self._working_dir)
+            self._container.exec(
+                f"printf '%s' {shlex.quote(b64)} | base64 -d > {shlex.quote(remote_path)}",
+                workdir=self._working_dir,
+            )
+
+    def _upload_directory(self, local_dir: Path, remote_dir: str) -> None:
+        """Upload a local directory tree into the container via base64+tar.
+
+        Packs ``local_dir`` into an in-memory tar.gz, writes the base64 string
+        to a temp file via multi-chunk ``printf >> file`` (shell-quoting-safe
+        even through nested eai CLI → remote bash layers), then decodes and
+        extracts.  Uses only base64+tar which every POSIX task image ships.
+        """
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            tar.add(local_dir, arcname=".")
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        remote_q = shlex.quote(remote_dir)
+        # Write the base64 payload in 8 KB chunks — short chunks are robust
+        # through multiple shell layers (observed with eai CLI + bash -lc).
+        chunk_size = 8192
+        staging = "/tmp/cube-upload.tar.gz.b64"
+        self._container.exec(f": > {staging}", workdir=self._working_dir)
+        for i in range(0, len(b64), chunk_size):
+            self._container.exec(
+                f"printf %s {shlex.quote(b64[i : i + chunk_size])} >> {staging}", workdir=self._working_dir
+            )
+        self._container.exec(
+            f"mkdir -p {remote_q} && base64 -d < {staging} | tar -xzf - -C {remote_q} && rm -f {staging}",
+            workdir=self._working_dir,
+        )
 
     @staticmethod
     def _rewrite_files_locally(directory: Path, subs: dict[str, str]) -> None:
@@ -232,6 +303,28 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         marker = "/tmp/fakehome/.local/bin/uv"
         probe = self.tool.bash(f"test -x {marker} && echo EXISTS || echo MISSING", timeout=15)
         if "EXISTS" in probe:
+            return
+
+        # Fast path: cube_data bundle mount (auto-provisioned by ToolkitInfraConfig).
+        # When ToolkitInfraConfig mounts /opt/cube/ with the cube_data bundle, copy
+        # the uv binaries directly — bypasses the python3-bootstrap path that fails
+        # on minimal images lacking python3, curl, AND apt sources.  Note: EAI data
+        # mounts are read-only and strip the execute bit (mode 0600), so we use
+        # ``-f`` for the probe and ``chmod +x`` after copying into the writable HOME.
+        assets_probe = self.tool.bash(
+            "test -f /opt/cube/uv && test -f /opt/cube/uvx && echo YES || echo NO",
+            timeout=15,
+        )
+        if "YES" in assets_probe:
+            logger.info("Using mounted /opt/cube/uv for uv install")
+            self.tool.bash(
+                "export HOME=/tmp/fakehome && "
+                "mkdir -p $HOME/.local/bin && "
+                "cp /opt/cube/uv /opt/cube/uvx $HOME/.local/bin/ && "
+                "chmod +x $HOME/.local/bin/uv $HOME/.local/bin/uvx && "
+                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env",
+                timeout=30,
+            )
             return
 
         # Some minimal images (e.g. bare LaTeX) ship without python3.
@@ -382,7 +475,12 @@ class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
         return TerminalBenchTask(
             metadata=self.metadata,
             execution_info=execution_info,
-            tool_config=self.tool_config or TerminalBenchToolConfig(),
+            tool_config=self.tool_config
+            or TerminalToolConfig(
+                working_dir="/app",
+                max_timeout=900,
+                enable_file_actions=True,
+            ),
             runtime_context=runtime_context,
             container_backend=container_backend,
             oracle_mode=self.oracle_mode,
