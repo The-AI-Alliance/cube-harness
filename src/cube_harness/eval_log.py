@@ -15,7 +15,8 @@ Classes:
     BlameCategory     — closed-world taxonomy of failure causes
     Outcome           — outcome of the episode as judged
     EvidenceItem      — step-indexed transcript quote backing a blame attribution
-    JudgeOutput       — per-episode judge assessment (optional)
+    BaseJudgeOutput   — per-episode judge assessment, base shape (recipes extend it)
+    JudgeOutput       — deprecated alias for BaseJudgeOutput
     JudgeMetadata     — billing/provenance for a single judge invocation (optional)
     Verifier          — task verifier reference (optional)
     ExperimentRecord  — experiment-level record written to experiment_record.json
@@ -329,8 +330,14 @@ class EvidenceItem(TypedBaseModel):
     quote: str = Field(description="Verbatim excerpt from the agent or environment output.")
 
 
-class JudgeOutput(TypedBaseModel):
-    """Per-episode assessment from a post-hoc LLM judge.
+class BaseJudgeOutput(TypedBaseModel):
+    """Base per-episode assessment from a post-hoc LLM judge.
+
+    Each judge recipe (general_blame, profiling, agent_scaffolding, ...) extends this
+    base with use-case-specific fields. The cross-recipe core fields (analysis,
+    outcome, summary, primary_blame, primary_blame_confidence) live here so that
+    aggregate views (CSV report, cross-experiment joins) can flatten any recipe's
+    output to a common schema.
 
     Field order follows the judge's reasoning process: free-form `analysis` first as a
     scratchpad, then structured conclusions grounded in evidence.
@@ -357,6 +364,13 @@ class JudgeOutput(TypedBaseModel):
     hypothesis_confidence: int = Field(
         ge=0, le=5, description="Confidence in the proposed fix (0=pure guess, 5=certain)."
     )
+
+
+# Deprecated alias — `JudgeOutput` was renamed to `BaseJudgeOutput` to make the
+# extension contract explicit. The `general_blame` recipe's `OutputModel` is the
+# direct successor (identical on-disk shape). Kept for one release window so
+# existing callers (judge_report.py, downstream consumers) keep working.
+JudgeOutput = BaseJudgeOutput
 
 
 class JudgeMetadata(TypedBaseModel):
@@ -491,9 +505,12 @@ class EpisodeRecord(TypedBaseModel):
         default=None,
         description="Task verifier reference for reproducibility and post-hoc inspection.",
     )
-    judge_output: JudgeOutput | None = Field(
+    judge_output: BaseJudgeOutput | None = Field(
         default=None,
-        description="Per-episode LLM judge assessment (outcome, blame, evidence, hypothesis).",
+        description=(
+            "Per-episode LLM judge assessment (outcome, blame, evidence, hypothesis). "
+            "Concrete shape depends on the recipe used; the base fields are always present."
+        ),
     )
     judge_metadata: JudgeMetadata | None = Field(
         default=None,
