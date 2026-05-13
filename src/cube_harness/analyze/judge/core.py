@@ -7,22 +7,39 @@ import csv
 import json
 import logging
 import time
+import warnings
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
-from cube_harness.analyze.judge.context import _load_experiment_view, collect_source_paths
-from cube_harness.analyze.judge.prompt import JUDGE_SYSTEM_PROMPT, build_user_prompt
-from cube_harness.analyze.judge.sdk import TraceMode, _extract_json_block, _run_claude_code
-from cube_harness.analyze.judge.selection import EpisodeRef, _load_episode_record, discover_episodes, select_episodes
+from cube_harness.analyze.cross_experiment.cross_judge_agreement import (
+    write_cross_judge_agreement,
+)
+from cube_harness.analyze.judge.audit import AUDIT_FILENAME, run_audit_pass, write_audit
+from cube_harness.analyze.judge.benchmark_context_agent import generate_context_file
+from cube_harness.analyze.judge.context import (
+    _load_experiment_view,
+    find_default_context_file,
+    validate_context_file,
+)
+from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, DriverResult, ToolAction, TraceMode
+from cube_harness.analyze.judge.recipe import JudgeRecipe, get_default_recipe
+from cube_harness.analyze.judge.sdk import _extract_json_block
+from cube_harness.analyze.judge.selection import (
+    EpisodeRef,
+    Selector,
+    _load_episode_record,
+    discover_episodes,
+    select_episodes,
+)
 from cube_harness.analyze.judge.transcript import extract_transcript
 from cube_harness.core import Trajectory
 from cube_harness.eval_log import (
     JUDGE_SCHEMA_VERSION,
+    BaseJudgeOutput,
     JudgeMetadata,
-    JudgeOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +48,7 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_SAMPLE_FRACTION = 0.10
 EXPERIMENT_JUDGE_SUMMARY_FILENAME = "experiment_judge_summary.json"
 EXPERIMENT_JUDGE_REPORT_FILENAME = "experiment_judge_report.csv"
+EXPERIMENT_JUDGE_REPORT_JSON_FILENAME = "experiment_judge_report.json"
 
 
 def _load_trajectory_meta(path: Path) -> Trajectory | None:
@@ -45,7 +63,7 @@ def _load_trajectory_meta(path: Path) -> Trajectory | None:
         return None
 
 
-def _validate_invariants(obj: JudgeOutput) -> None:
+def _validate_invariants(obj: BaseJudgeOutput) -> None:
     """Enforce the V1 invariants from the spec (post-parse, pre-write)."""
     if obj.primary_blame.value != "none" and not obj.evidence:
         raise ValueError("evidence must be non-empty when primary_blame != 'none'")
@@ -61,13 +79,104 @@ def _validate_invariants(obj: JudgeOutput) -> None:
         obj.primary_blame = obj.primary_blame.__class__("none")
 
 
+def _resolve_recipe(recipe: JudgeRecipe | None, model_override: str | None) -> JudgeRecipe:
+    """Pick the recipe for this run and apply a (deprecated) `model=` override.
+
+    `model=` is preserved as a thin shim — old callers passed it directly; the
+    new path puts the model on the recipe. We honour it here with a deprecation
+    warning rather than silently breaking existing scripts.
+    """
+    base = recipe or get_default_recipe()
+    if model_override is not None and model_override != base.model:
+        warnings.warn(
+            "Passing `model=` to judge_episode/judge_experiment is deprecated; "
+            "set it on the recipe instead. Synthesising a recipe override.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return base.model_copy(update={"model": model_override})
+    return base
+
+
+def _resolve_driver(driver: AgentDriver | None) -> AgentDriver:
+    """Default to `ClaudeCodeSDKDriver()` when no driver is given."""
+    return driver or ClaudeCodeSDKDriver()
+
+
+def _build_user_prompt(
+    *,
+    recipe: JudgeRecipe,
+    trajectory_id: str,
+    task_id: str,
+    reward: float | None,
+    total_steps: int | None,
+    agent_name: str,
+    benchmark_name: str,
+    transcript_dir: Path,
+    episode_metadata_path: Path,
+    episode_config_path: Path,
+    task_description: str,
+    source_paths: dict[str, Path],
+    related_paths: list[Path],
+) -> str:
+    """Render the recipe's user-prompt template with per-episode fields."""
+    src_block = (
+        "\n".join(f"  {name}: {p}" for name, p in source_paths.items())
+        if source_paths
+        else "  (none resolved — judge from transcript only)"
+    )
+    if related_paths:
+        src_block += "\n  related_episodes:\n" + "\n".join(f"    - {p}" for p in related_paths)
+
+    return recipe.user_prompt_template.format(
+        trajectory_id=trajectory_id,
+        task_id=task_id,
+        reward=reward if reward is not None else "unknown",
+        total_steps=total_steps if total_steps is not None else "unknown",
+        agent_name=agent_name,
+        benchmark_name=benchmark_name,
+        transcript_dir=transcript_dir,
+        episode_metadata_path=episode_metadata_path,
+        episode_config_path=episode_config_path,
+        task_description=task_description or "(none)",
+        source_paths_block=src_block,
+    )
+
+
+async def _ensure_context_file(experiment_dir: Path, driver: AgentDriver) -> Path:
+    """Find or generate `judge_context.md` and verify every listed path exists."""
+    try:
+        path = find_default_context_file(experiment_dir)
+    except FileNotFoundError:
+        logger.info("judge_context.md missing under %s — invoking benchmark-context-agent", experiment_dir)
+        path = await generate_context_file(experiment_dir, driver=driver)
+    return path
+
+
+def _serialise_actions(actions: list[ToolAction]) -> list[dict[str, Any]]:
+    """Lossy convert `list[ToolAction]` to the legacy dict shape used by
+    `_persist_judgment` / `judge_trace.json`. Keeps existing readers happy."""
+    out: list[dict[str, Any]] = []
+    for a in actions:
+        entry: dict[str, Any] = {"tool": a.tool, "input": a.input_summary}
+        if a.raw_input is not None:
+            entry["raw_input"] = a.raw_input
+        out.append(entry)
+    return out
+
+
 async def _judge_episode_impl(
     episode_dir: Path,
     experiment_dir: Path,
-    model: str,
-    verbose: bool,
+    *,
+    recipe: JudgeRecipe,
+    driver: AgentDriver,
+    selector: Selector | None = None,
+    audit: bool = False,
+    verbose: bool = False,
     trace_mode: TraceMode = "actions",
-) -> tuple[JudgeOutput, JudgeMetadata, list[dict[str, Any]]]:
+    all_refs: list[EpisodeRef] | None = None,
+) -> tuple[BaseJudgeOutput, JudgeMetadata, list[ToolAction], DriverResult, float]:
     """Async core shared by judge_episode (single) and judge_experiment (parallel)."""
     transcript_dir = episode_dir / "_judge_transcript"
     extract_transcript(episode_dir, transcript_dir)
@@ -87,8 +196,24 @@ async def _judge_episode_impl(
     else:
         task_id, reward, total_steps, task_description = "unknown", None, None, ""
 
-    source_paths = collect_source_paths(view)
-    user_prompt = build_user_prompt(
+    context_path = await _ensure_context_file(experiment_dir, driver)
+    source_paths = validate_context_file(context_path)
+
+    related_paths: list[Path] = []
+    if selector is not None:
+        if all_refs is None:
+            all_refs = discover_episodes(experiment_dir)
+        # Find the matching ref (by directory) so the selector has the record.
+        main_ref = next((r for r in all_refs if r.episode_dir == episode_dir), None)
+        if main_ref is not None:
+            related_paths = selector.select(
+                main_episode=main_ref,
+                experiment_dir=experiment_dir,
+                all_refs=all_refs,
+            )
+
+    user_prompt = _build_user_prompt(
+        recipe=recipe,
         trajectory_id=episode_dir.name,
         task_id=task_id,
         reward=reward,
@@ -100,26 +225,38 @@ async def _judge_episode_impl(
         episode_config_path=config_path,
         task_description=task_description,
         source_paths=source_paths,
+        related_paths=related_paths,
     )
 
-    logger.info("Judging %s (reward=%s, steps=%s) with %s", episode_dir.name, reward, total_steps, model)
+    additional_dirs = list(source_paths.values()) + [transcript_dir] + related_paths
+    logger.info(
+        "Judging %s (reward=%s, steps=%s) with recipe=%s driver=%s model=%s",
+        episode_dir.name,
+        reward,
+        total_steps,
+        recipe.name,
+        driver.name,
+        recipe.model,
+    )
 
-    result = await _run_claude_code(
-        system_prompt=JUDGE_SYSTEM_PROMPT,
+    result = await driver.run(
+        system_prompt=recipe.system_prompt,
         user_prompt=user_prompt,
         cwd=episode_dir,
-        additional_dirs=list(source_paths.values()) + [transcript_dir],
-        model=model,
+        additional_dirs=additional_dirs,
+        model=recipe.model,
+        allowed_tools=recipe.allowed_tools,
+        permission_mode=recipe.permission_mode,
         verbose=verbose,
         trace_mode=trace_mode,
     )
 
     obj = _extract_json_block(result.output_text)
-    judge_output = JudgeOutput.model_validate(obj)
+    judge_output = recipe.output_model.model_validate(obj)
     _validate_invariants(judge_output)
 
     judge_metadata = JudgeMetadata(
-        model=model,
+        model=recipe.model,
         prompt_tokens=result.prompt_tokens,
         completion_tokens=result.completion_tokens,
         cost_usd=result.cost_usd,
@@ -127,34 +264,70 @@ async def _judge_episode_impl(
         timestamp=time.time(),
         judge_schema_version=JUDGE_SCHEMA_VERSION,
     )
-    return judge_output, judge_metadata, result.actions
+
+    audit_cost = 0.0
+    if audit or recipe.audit:
+        try:
+            audit_obj, audit_cost = await run_audit_pass(
+                recipe=recipe,
+                driver=driver,
+                judge_output_json=judge_output.model_dump_json(),
+                judge_trace_path=episode_dir / "judge_trace.json",
+                session_id=result.session_id,
+                cwd=episode_dir,
+                additional_dirs=additional_dirs,
+                verbose=verbose,
+            )
+            write_audit(episode_dir, audit_obj)
+        except Exception as e:
+            logger.warning("Audit pass failed for %s: %s", episode_dir.name, e)
+
+    return judge_output, judge_metadata, result.actions, result, audit_cost
 
 
 def judge_episode(
     episode_dir: Path,
     *,
     experiment_dir: Path | None = None,
-    model: str = DEFAULT_MODEL,
+    recipe: JudgeRecipe | None = None,
+    driver: AgentDriver | None = None,
+    selector: Selector | None = None,
+    audit: bool = False,
     verbose: bool = False,
     trace_mode: TraceMode = "actions",
-) -> tuple[JudgeOutput, JudgeMetadata]:
+    model: str | None = None,
+) -> tuple[BaseJudgeOutput, JudgeMetadata]:
     """Run a post-hoc judge on a single episode trajectory directory.
 
     `experiment_dir` is needed only to locate `experiment_config.json`; if omitted,
     we look one level up from `episode_dir`.
+
+    `model=` is deprecated — set it on the recipe; it triggers a DeprecationWarning
+    and synthesises a recipe override for one release window.
     """
     episode_dir = Path(episode_dir).resolve()
     if experiment_dir is None:
         experiment_dir = episode_dir.parent.parent
-    judge_output, judge_metadata, _ = asyncio.run(
-        _judge_episode_impl(episode_dir, Path(experiment_dir).resolve(), model, verbose, trace_mode)
+    chosen_recipe = _resolve_recipe(recipe, model)
+    chosen_driver = _resolve_driver(driver)
+    judge_output, judge_metadata, _, _, _ = asyncio.run(
+        _judge_episode_impl(
+            episode_dir,
+            Path(experiment_dir).resolve(),
+            recipe=chosen_recipe,
+            driver=chosen_driver,
+            selector=selector,
+            audit=audit,
+            verbose=verbose,
+            trace_mode=trace_mode,
+        )
     )
     return judge_output, judge_metadata
 
 
 def _persist_judgment(
     ref: EpisodeRef,
-    judge_output: JudgeOutput,
+    judge_output: BaseJudgeOutput,
     judge_metadata: JudgeMetadata,
     actions: list[dict[str, Any]] | None = None,
     trace_mode: TraceMode = "actions",
@@ -190,7 +363,11 @@ def _persist_judgment(
 def judge_experiment(
     experiment_dir: Path,
     *,
-    model: str = DEFAULT_MODEL,
+    recipe: JudgeRecipe | None = None,
+    driver: AgentDriver | None = None,
+    selector: Selector | None = None,
+    audit: bool = False,
+    n_seeds: int = 1,
     ids: list[str] | None = None,
     sample: float | None = None,
     n: int | None = None,
@@ -200,17 +377,28 @@ def judge_experiment(
     verbose: bool = False,
     n_parallel: int = 1,
     trace_mode: TraceMode = "actions",
-) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
+    model: str | None = None,
+) -> dict[str, tuple[BaseJudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
     Selection (default): all episodes that don't already have a judge_output.
     With `--sample 0.1`: 10% of those, randomly. With `--ids`: exactly those.
     With `n_parallel > 1`: run that many judge sub-processes concurrently.
 
+    With `n_seeds > 1`: each selected episode is judged N times with the same
+    recipe; `cross_judge_agreement.csv` is written next to the per-episode
+    artefacts.
+
+    `model=` is deprecated — set it on the recipe.
+
     Writes per-episode results into `episode_record.json` (or a sidecar if missing)
-    and aggregate stats into `experiment_judge_summary.json`.
+    and aggregate stats into `experiment_judge_summary.json`,
+    `experiment_judge_report.csv`, and `experiment_judge_report.json`.
     """
     experiment_dir = Path(experiment_dir).resolve()
+    chosen_recipe = _resolve_recipe(recipe, model)
+    chosen_driver = _resolve_driver(driver)
+
     refs = discover_episodes(experiment_dir)
     selected = select_episodes(
         refs,
@@ -226,76 +414,142 @@ def judge_experiment(
         logger.info("No episodes selected to judge in %s", experiment_dir)
         return {}
 
+    if n_parallel > chosen_driver.max_parallelism:
+        logger.info(
+            "Clamping n_parallel from %d to driver max_parallelism=%d (driver=%s)",
+            n_parallel,
+            chosen_driver.max_parallelism,
+            chosen_driver.name,
+        )
+        n_parallel = chosen_driver.max_parallelism
+
     logger.info(
-        "Judging %d / %d episodes in %s (n_parallel=%d)",
+        "Judging %d / %d episodes in %s (recipe=%s driver=%s n_parallel=%d n_seeds=%d audit=%s)",
         len(selected),
         len(refs),
         experiment_dir.name,
+        chosen_recipe.name,
+        chosen_driver.name,
         n_parallel,
+        n_seeds,
+        bool(audit or chosen_recipe.audit),
     )
 
-    results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
-    if n_parallel > 1:
-        results = asyncio.run(
-            _judge_experiment_parallel(selected, experiment_dir, model, verbose, n_parallel, trace_mode)
-        )
-    else:
-        for ref in selected:
-            try:
-                judge_output, judge_metadata, actions = asyncio.run(
-                    _judge_episode_impl(ref.episode_dir, experiment_dir, model, verbose, trace_mode)
-                )
-            except Exception as e:
-                logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
-                continue
-            ref.record = _load_episode_record(ref.record_path)
-            _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
-            results[ref.trajectory_id] = (judge_output, judge_metadata)
+    # The `seeded` runs map for cross-judge agreement when n_seeds > 1.
+    # Keyed by (trajectory_id, recipe_name) → list of (output, metadata).
+    seeded_runs: dict[tuple[str, str], list[tuple[BaseJudgeOutput, JudgeMetadata]]] = {}
+    # Per-episode audit cost (only populated when audit enabled).
+    audit_costs: dict[str, float] = {}
 
-    _write_summary(experiment_dir, selected, results, model=model)
+    results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]] = asyncio.run(
+        _judge_experiment_async(
+            selected,
+            experiment_dir,
+            recipe=chosen_recipe,
+            driver=chosen_driver,
+            selector=selector,
+            audit=audit,
+            n_parallel=max(1, n_parallel),
+            n_seeds=max(1, n_seeds),
+            verbose=verbose,
+            trace_mode=trace_mode,
+            seeded_runs_out=seeded_runs,
+            audit_costs_out=audit_costs,
+            all_refs=refs,
+        )
+    )
+
+    if n_seeds > 1 and seeded_runs:
+        write_cross_judge_agreement(experiment_dir, judgments=seeded_runs)
+
+    _write_summary(
+        experiment_dir,
+        selected,
+        results,
+        recipe=chosen_recipe,
+        driver=chosen_driver,
+        audit_costs=audit_costs,
+    )
     return results
 
 
-async def _judge_experiment_parallel(
+async def _judge_experiment_async(
     selected: list[EpisodeRef],
     experiment_dir: Path,
-    model: str,
-    verbose: bool,
+    *,
+    recipe: JudgeRecipe,
+    driver: AgentDriver,
+    selector: Selector | None,
+    audit: bool,
     n_parallel: int,
-    trace_mode: TraceMode = "actions",
-) -> dict[str, tuple[JudgeOutput, JudgeMetadata]]:
+    n_seeds: int,
+    verbose: bool,
+    trace_mode: TraceMode,
+    seeded_runs_out: dict[tuple[str, str], list[tuple[BaseJudgeOutput, JudgeMetadata]]],
+    audit_costs_out: dict[str, float],
+    all_refs: list[EpisodeRef],
+) -> dict[str, tuple[BaseJudgeOutput, JudgeMetadata]]:
+    """Run the judge across `selected` × `n_seeds`, bounded by `n_parallel`."""
     semaphore = asyncio.Semaphore(n_parallel)
-    results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {}
+    primary_results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]] = {}
 
-    async def _one(ref: EpisodeRef) -> None:
+    async def _one(ref: EpisodeRef, seed_index: int) -> None:
         async with semaphore:
             try:
-                judge_output, judge_metadata, actions = await _judge_episode_impl(
-                    ref.episode_dir, experiment_dir, model, verbose, trace_mode
+                judge_output, judge_metadata, actions, _, audit_cost = await _judge_episode_impl(
+                    ref.episode_dir,
+                    experiment_dir,
+                    recipe=recipe,
+                    driver=driver,
+                    selector=selector,
+                    audit=audit,
+                    verbose=verbose,
+                    trace_mode=trace_mode,
+                    all_refs=all_refs,
                 )
             except Exception as e:
-                logger.exception("Judge failed on %s: %s", ref.trajectory_id, e)
+                logger.exception("Judge failed on %s (seed %d): %s", ref.trajectory_id, seed_index, e)
                 return
-            ref.record = _load_episode_record(ref.record_path)
-            _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
-            results[ref.trajectory_id] = (judge_output, judge_metadata)
+            # Persist the *first* judgment per episode (seed 0). Additional
+            # seeds feed the cross-judge agreement table; we don't overwrite the
+            # primary record with a later seed.
+            if seed_index == 0:
+                ref.record = _load_episode_record(ref.record_path)
+                _persist_judgment(ref, judge_output, judge_metadata, _serialise_actions(actions), trace_mode)
+                primary_results[ref.trajectory_id] = (judge_output, judge_metadata)
+            audit_costs_out[ref.trajectory_id] = audit_costs_out.get(ref.trajectory_id, 0.0) + audit_cost
+            seeded_runs_out.setdefault((ref.trajectory_id, recipe.name), []).append((judge_output, judge_metadata))
 
-    await asyncio.gather(*[_one(ref) for ref in selected])
-    return results
+    tasks = [_one(ref, seed_idx) for ref in selected for seed_idx in range(n_seeds)]
+    await asyncio.gather(*tasks)
+    return primary_results
 
 
 def _write_summary(
     experiment_dir: Path,
     selected: list[EpisodeRef],
-    results: dict[str, tuple[JudgeOutput, JudgeMetadata]],
+    results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]],
     *,
-    model: str,
+    recipe: JudgeRecipe | None = None,
+    driver: AgentDriver | None = None,
+    audit_costs: dict[str, float] | None = None,
+    model: str | None = None,  # deprecated — accepted for ch-judge-report compat
 ) -> None:
     if not results:
         return
+    if recipe is None:
+        # Legacy path (judge_report.py): synthesise a minimal recipe so we can
+        # still emit the summary's recipe/model fields. Uses the model carried
+        # by an existing judge_metadata, or the deprecated `model=` kwarg.
+        effective_model = model or next(iter(results.values()))[1].model
+        recipe = get_default_recipe().model_copy(update={"model": effective_model})
+    if driver is None:
+        driver = ClaudeCodeSDKDriver()
+    audit_costs = audit_costs or {}
     outcomes = Counter(o.outcome.value for o, _ in results.values())
     blames = Counter(o.primary_blame.value for o, _ in results.values())
     total_cost = sum(m.cost_usd for _, m in results.values())
+    total_audit_cost = sum(audit_costs.values())
     total_prompt = sum(m.prompt_tokens for _, m in results.values())
     total_completion = sum(m.completion_tokens for _, m in results.values())
     n = len(results)
@@ -309,9 +563,11 @@ def _write_summary(
         if ref.trajectory_id in results
     ]
 
-    summary = {
+    summary: dict[str, Any] = {
         "n_judged": n,
-        "model": model,
+        "model": recipe.model,
+        "recipe": recipe.name,
+        "driver": driver.name,
         "judge_schema_version": JUDGE_SCHEMA_VERSION,
         "timestamp": time.time(),
         "total_judge_cost_usd": round(total_cost, 4),
@@ -321,16 +577,21 @@ def _write_summary(
         "outcomes": dict(outcomes),
         "primary_blame": dict(blames),
         "report_csv": EXPERIMENT_JUDGE_REPORT_FILENAME,
+        "report_json": EXPERIMENT_JUDGE_REPORT_JSON_FILENAME,
         "judged_episodes": judged_episodes,
     }
+    if total_audit_cost > 0.0:
+        summary["total_audit_cost_usd"] = round(total_audit_cost, 4)
+        summary["audit_report"] = AUDIT_FILENAME
     (experiment_dir / EXPERIMENT_JUDGE_SUMMARY_FILENAME).write_text(json.dumps(summary, indent=2))
     _write_csv_report(experiment_dir, selected, results)
+    _write_json_report(experiment_dir, selected, results, recipe=recipe, driver=driver)
 
 
 def _write_csv_report(
     experiment_dir: Path,
     selected: list[EpisodeRef],
-    results: dict[str, tuple[JudgeOutput, JudgeMetadata]],
+    results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]],
 ) -> None:
     """Write one row per judged episode for spreadsheet-friendly inspection.
 
@@ -383,3 +644,39 @@ def _write_csv_report(
                     "duration_s": round(m.duration_s, 2),
                 }
             )
+
+
+def _write_json_report(
+    experiment_dir: Path,
+    selected: list[EpisodeRef],
+    results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]],
+    *,
+    recipe: JudgeRecipe,
+    driver: AgentDriver,
+) -> None:
+    """Write `experiment_judge_report.json` — preserves per-recipe `OutputModel` shape.
+
+    The CSV flattens to the base schema (loses recipe-specific extension fields);
+    this artefact keeps the typed shape for downstream consumers."""
+    path = experiment_dir / EXPERIMENT_JUDGE_REPORT_JSON_FILENAME
+    rows: list[dict[str, Any]] = []
+    for ref in selected:
+        if ref.trajectory_id not in results:
+            continue
+        o, m = results[ref.trajectory_id]
+        rows.append(
+            {
+                "trajectory_id": ref.trajectory_id,
+                "episode_record": str(ref.record_path.relative_to(experiment_dir)),
+                "judge_output": o.model_dump(mode="json"),
+                "judge_metadata": m.model_dump(mode="json"),
+            }
+        )
+    payload = {
+        "recipe": recipe.name,
+        "driver": driver.name,
+        "model": recipe.model,
+        "judge_schema_version": JUDGE_SCHEMA_VERSION,
+        "rows": rows,
+    }
+    path.write_text(json.dumps(payload, indent=2))
