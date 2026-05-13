@@ -143,6 +143,12 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
+        """Run the upstream pytest verifier in the sandbox and return the reward.
+
+        Deliberately mutates container state (uploads tests, installs `uv`).  Safe
+        here because `validate_per_step=False` makes this a single terminal call
+        after the episode ends — don't copy this pattern into a per-step evaluator.
+        """
         assert isinstance(self.tool, TerminalTool)
 
         # Upload test harness to the sandbox
