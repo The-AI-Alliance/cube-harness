@@ -204,6 +204,119 @@ class Episode:
         self.storage.write_episode_status(trajectory_id, ep_status)
         return ep_status
 
+    def _run_turn(
+        self,
+        turns: int,
+        env_output: EnvironmentOutput,
+        agent,
+        step_fn: Callable,
+        trajectory: Trajectory,
+        summary_proc: SummaryProcessor,
+        ep_status: EpisodeStatus,
+        span: Span,
+    ) -> tuple[EnvironmentOutput, bool]:
+        """Execute one agent→env turn. Returns (new_env_output, should_stop)."""
+        ts = time.time()
+        try:
+            agent_output = agent.step(env_output.obs)
+        except Exception as e:
+            logger.exception(f"Error in agent.step() at turn {turns}: {e}")
+            agent_output = AgentOutput(error=StepError.from_exception(e))
+            self._save_step(
+                TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time()), trajectory, summary_proc
+            )
+            ep_status.had_step_errors = True
+            raise e
+
+        self.log_agent_output(turns, agent_output)
+        self._save_step(
+            TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time()), trajectory, summary_proc
+        )
+        if agent_output.error is not None:
+            ep_status.had_step_errors = True
+
+        if not agent_output.actions and not agent_output.error:
+            logger.info(colored("Agent returned no actions — stopping episode.", "yellow"))
+            return env_output, True
+
+        env_ts = time.time()
+        try:
+            env_output = step_fn(agent_output.actions)
+        except Exception as e:
+            logger.exception(f"Error in step() at turn {turns}: {e}")
+            env_output = EnvironmentOutput(obs=env_output.obs, error=StepError.from_exception(e))
+            self._save_step(
+                TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time()), trajectory, summary_proc
+            )
+            ep_status.had_step_errors = True
+            raise e
+
+        logger.info(colored(f"Turn {turns} Env output: done={env_output.done} reward={env_output.reward}", "blue"))
+        self._save_step(
+            TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time()), trajectory, summary_proc
+        )
+        if env_output.error is not None:
+            ep_status.had_step_errors = True
+        span.set_attribute("done", env_output.done)
+        span.set_attribute("reward", env_output.reward)
+        return env_output, False
+
+    def _save_step(self, step: TrajectoryStep, trajectory: Trajectory, summary_proc: SummaryProcessor) -> None:
+        self.storage.save_step(step, trajectory.id, len(trajectory.steps))
+        summary_proc.on_step(len(trajectory.steps), step)
+        trajectory.steps.append(step)
+
+    def _finalize_episode(
+        self,
+        trajectory: Trajectory,
+        env_output: EnvironmentOutput,
+        turns: int,
+        evaluate_fn: Callable,
+        summary_proc: SummaryProcessor,
+        ep_status: EpisodeStatus,
+        episode_span: Span,
+    ) -> None:
+        """Force-evaluate if needed, save trajectory, write episode record, set span status."""
+        # Force one final evaluation when the loop exited without done=True.
+        max_steps_reached = turns >= self.config.max_steps and not env_output.done
+        if not env_output.done:
+            try:
+                eval_ts = time.time()
+                forced_reward, forced_info = evaluate_fn(env_output.obs)
+                env_output = EnvironmentOutput(
+                    obs=env_output.obs,
+                    reward=forced_reward,
+                    done=env_output.done,
+                    info={**env_output.info, **forced_info},
+                    error=env_output.error,
+                )
+                self._save_step(
+                    TrajectoryStep(output=env_output, start_time=eval_ts, end_time=time.time()),
+                    trajectory,
+                    summary_proc,
+                )
+            except Exception:
+                logger.exception("Final evaluate() raised; trajectory keeps last step's reward")
+        trajectory.end_time = time.time()
+        trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
+        trajectory.summary_stats = _compute_summary_stats(trajectory)
+        self.storage.save_trajectory(trajectory)
+        summary_proc.on_episode_complete(trajectory, self.storage)
+        try:
+            ep_record = EpisodeRecord.from_trajectory(
+                trajectory,
+                evaluation_id=self.config.output_dir.name,
+                task_config=self.config.task_config,
+            )
+            ep_record.write(self.config.output_dir)
+        except Exception:
+            logger.warning("Failed to write episode record", exc_info=True)
+        logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
+        final_reward = trajectory.last_env_step().reward
+        ep_status.reward = final_reward
+        episode_span.set_status(StatusCode.OK if final_reward > 0 else StatusCode.ERROR)
+        ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
+
     def _run_loop(
         self,
         setup_fn: Callable[[], EnvironmentOutput],
@@ -250,107 +363,32 @@ class Episode:
                 logger.info(colored(f"Episode started — done={env_output.done} reward={env_output.reward}", "blue"))
                 turns = 0
                 while not env_output.done and turns < self.config.max_steps:
-                    # Heartbeat 2: start of each turn, before agent.step() and step_fn().
                     ep_status.last_heartbeat_at = time.time()
                     ep_status.current_step = turns + 1
                     self.storage.write_episode_status(trajectory_id, ep_status)
-
                     with tracer.step(f"turn_{turns}") as span:
-                        ts = time.time()
-                        try:
-                            agent_output = agent.step(env_output.obs)
-                        except Exception as e:
-                            logger.exception(f"Error in agent.step() at turn {turns}: {e}")
-                            agent_output = AgentOutput(error=StepError.from_exception(e))
-                            agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
-                            self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
-                            summary_proc.on_step(len(trajectory.steps), agent_step)
-                            trajectory.steps.append(agent_step)
-                            ep_status.had_step_errors = True
-                            raise e
-
-                        self.log_agent_output(turns, agent_output)
-                        agent_step = TrajectoryStep(output=agent_output, start_time=ts, end_time=time.time())
-                        self.storage.save_step(agent_step, trajectory.id, len(trajectory.steps))
-                        summary_proc.on_step(len(trajectory.steps), agent_step)
-                        trajectory.steps.append(agent_step)
-                        if agent_output.error is not None:
-                            ep_status.had_step_errors = True
-
-                        if not agent_output.actions and not agent_output.error:
-                            logger.info(colored("Agent returned no actions — stopping episode.", "yellow"))
-                            break
-
-                        env_ts = time.time()
-                        try:
-                            env_output = step_fn(agent_output.actions)
-                        except Exception as e:
-                            logger.exception(f"Error in step() at turn {turns}: {e}")
-                            env_output = EnvironmentOutput(obs=env_output.obs, error=StepError.from_exception(e))
-                            env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
-                            self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
-                            summary_proc.on_step(len(trajectory.steps), env_step)
-                            trajectory.steps.append(env_step)
-                            ep_status.had_step_errors = True
-                            raise e
-
-                        logger.info(
-                            colored(
-                                f"Turn {turns} Env output: done={env_output.done} reward={env_output.reward}", "blue"
-                            )
+                        env_output, should_stop = self._run_turn(
+                            turns,
+                            env_output,
+                            agent,
+                            step_fn,
+                            trajectory,
+                            summary_proc,
+                            ep_status,
+                            span,
                         )
-                        env_step = TrajectoryStep(output=env_output, start_time=env_ts, end_time=time.time())
-                        self.storage.save_step(env_step, trajectory.id, len(trajectory.steps))
-                        summary_proc.on_step(len(trajectory.steps), env_step)
-                        trajectory.steps.append(env_step)
-                        if env_output.error is not None:
-                            ep_status.had_step_errors = True
-                        span.set_attribute("done", env_output.done)
-                        span.set_attribute("reward", env_output.reward)
-                        turns += 1
-                # Loop exited without `done=True` — either max_steps fired or the agent
-                # gave up. cube's task.step only calls evaluate() when done or
-                # validate_per_step, so we'd otherwise return reward=0.0. Force one
-                # final evaluation and save it as a synthetic env step so the
-                # trajectory's last_env_step carries the real reward.
-                max_steps_reached = turns >= self.config.max_steps and not env_output.done
-                if not env_output.done:
-                    try:
-                        eval_ts = time.time()
-                        forced_reward, forced_info = evaluate_fn(env_output.obs)
-                        env_output = EnvironmentOutput(
-                            obs=env_output.obs,
-                            reward=forced_reward,
-                            done=env_output.done,
-                            info={**env_output.info, **forced_info},
-                            error=env_output.error,
-                        )
-                        forced_step = TrajectoryStep(output=env_output, start_time=eval_ts, end_time=time.time())
-                        self.storage.save_step(forced_step, trajectory.id, len(trajectory.steps))
-                        summary_proc.on_step(len(trajectory.steps), forced_step)
-                        trajectory.steps.append(forced_step)
-                    except Exception:
-                        logger.exception("Final evaluate() raised; trajectory keeps last step's reward")
-                trajectory.end_time = time.time()
-                trajectory.reward_info = {"reward": env_output.reward, "done": env_output.done, **env_output.info}
-                trajectory.summary_stats = _compute_summary_stats(trajectory)
-                self.storage.save_trajectory(trajectory)
-                summary_proc.on_episode_complete(trajectory, self.storage)
-                try:
-                    ep_record = EpisodeRecord.from_trajectory(
-                        trajectory,
-                        evaluation_id=self.config.output_dir.name,
-                        task_config=self.config.task_config,
-                    )
-                    ep_record.write(self.config.output_dir)
-                except Exception:
-                    logger.warning("Failed to write episode record", exc_info=True)
-                logger.info(colored(f"Episode completed in {turns} turns, reward: {env_output.reward}", "blue"))
-                final_reward = trajectory.last_env_step().reward
-                ep_status.reward = final_reward
-                status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
-                episode_span.set_status(status)
-                ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
+                    if should_stop:
+                        break
+                    turns += 1
+                self._finalize_episode(
+                    trajectory,
+                    env_output,
+                    turns,
+                    evaluate_fn,
+                    summary_proc,
+                    ep_status,
+                    episode_span,
+                )
             except Exception as e:
                 logger.exception(f"Error during agent run: {e}")
                 ep_status.status = "FAILED"
