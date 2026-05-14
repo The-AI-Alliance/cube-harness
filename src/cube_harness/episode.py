@@ -2,13 +2,14 @@ import logging
 import time
 import warnings
 from pathlib import Path
-from typing import Callable, Self
+from typing import Callable, Protocol, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
 from cube.container import ContainerBackend
-from cube.core import EnvironmentOutput, StepError, TypedBaseModel
+from cube.core import Artifact, EnvironmentOutput, StepError, TypedBaseModel
 from cube.task import TaskConfig
-from opentelemetry.trace import StatusCode
+from opentelemetry.trace import Span, StatusCode
+from pydantic import TypeAdapter
 from termcolor import colored
 
 from cube_harness.agent import AgentConfig
@@ -16,13 +17,46 @@ from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.eval_log import EpisodeRecord
-from cube_harness.metrics.tracer import get_tracer
+from cube_harness.metrics.tracer import CH_ARTIFACTS, get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
 
 logger = logging.getLogger(__name__)
 
 MAX_STEPS = 1000  # System-wide upper limit on steps
+
+_artifact_list_adapter = TypeAdapter(list[Artifact])
+
+
+class ArtifactExporter(Protocol):
+    """Pluggable post-episode artifact exporter.
+
+    Called inside the OTel episode span after task.close(). Converts local
+    artifacts (e.g. FileArtifactBlob) into resolvable references (e.g.
+    RemoteFileArtifactBlob with a GCS URL). The returned artifacts are
+    attached to the span so downstream consumers (Bench UI) can fetch them.
+    """
+
+    def export(self, artifact: Artifact, episode_id: str) -> Artifact: ...
+
+
+def _attach_artifacts_to_span(
+    span: Span,
+    artifacts: list[Artifact],
+    exporter: "ArtifactExporter | None",
+    episode_id: str,
+) -> None:
+    """Export artifacts (if exporter configured) and attach to the OTel span."""
+    exported: list[Artifact] = []
+    for artifact in artifacts:
+        if exporter is not None:
+            try:
+                artifact = exporter.export(artifact, episode_id)
+            except Exception:
+                logger.warning("Failed to export artifact %s, attaching as-is", artifact.id, exc_info=True)
+        exported.append(artifact)
+    if exported:
+        span.set_attribute(CH_ARTIFACTS, _artifact_list_adapter.dump_json(exported).decode())
 
 
 class EpisodeConfig(TypedBaseModel):
@@ -50,7 +84,9 @@ class Episode:
         storage: Storage | None,
         runtime_context: RuntimeContext | None,
         container_backend: ContainerBackend | None,
+        artifact_exporter: ArtifactExporter | None = None,
     ) -> None:
+        self.artifact_exporter = artifact_exporter
         self.config = EpisodeConfig(
             id=id,
             agent_config=agent_config,
@@ -127,6 +163,7 @@ class Episode:
         step_fn = task.step
         close_fn = task.close
         evaluate_fn = task.evaluate
+        artifacts_fn = task.artifacts
 
         def setup_fn() -> EnvironmentOutput:
             obs, info = task.reset()
@@ -136,7 +173,9 @@ class Episode:
         # action_schemas is read by eval_log.AgentInfo (feat/atlas-eval-log) to populate
         # the tool list in structured evaluation records without re-instantiating the task.
         extra_metadata = {"action_schemas": [a.as_dict() for a in action_set]}
-        return self._run_loop(setup_fn, step_fn, evaluate_fn, close_fn, agent, extra_metadata=extra_metadata)
+        return self._run_loop(
+            setup_fn, step_fn, evaluate_fn, close_fn, artifacts_fn, agent, extra_metadata=extra_metadata
+        )
 
     def _open_status(self, trajectory_id: str) -> EpisodeStatus:
         """Initialise `status.json` for this attempt.
@@ -171,6 +210,7 @@ class Episode:
         step_fn: Callable,
         evaluate_fn: Callable,
         close_fn: Callable,
+        artifacts_fn: Callable[[], list[Artifact]],
         agent,
         extra_metadata: dict | None = None,
     ) -> Trajectory:
@@ -183,8 +223,8 @@ class Episode:
         ep_status = self._open_status(trajectory_id)
 
         trajectory: Trajectory | None = None
-        try:
-            with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
+        with tracer.episode(task_id, experiment=self.config.exp_name) as episode_span:
+            try:
                 start_time = ep_status.started_at
                 env_output = setup_fn()
                 agent_name = self.config.agent_config.agent_name
@@ -310,22 +350,26 @@ class Episode:
                 ep_status.reward = final_reward
                 status = StatusCode.OK if final_reward > 0 else StatusCode.ERROR
                 episode_span.set_status(status)
-            ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
-        except Exception as e:
-            logger.exception(f"Error during agent run: {e}")
-            ep_status.status = "FAILED"
-            ep_status.error_type = type(e).__name__
-            ep_status.error_message = str(e)[:500]
-            raise e
-        finally:
-            ep_status.ended_at = time.time()
-            ep_status.last_heartbeat_at = ep_status.ended_at
-            try:
-                self.storage.write_episode_status(trajectory_id, ep_status)
-            except Exception:
-                logger.exception("Failed to write final episode status")
-            close_fn()
-            tracer.shutdown()
+                ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
+            except Exception as e:
+                logger.exception(f"Error during agent run: {e}")
+                ep_status.status = "FAILED"
+                ep_status.error_type = type(e).__name__
+                ep_status.error_message = str(e)[:500]
+                raise e
+            finally:
+                ep_status.ended_at = time.time()
+                ep_status.last_heartbeat_at = ep_status.ended_at
+                try:
+                    self.storage.write_episode_status(trajectory_id, ep_status)
+                except Exception:
+                    logger.exception("Failed to write final episode status")
+                close_fn()
+                try:
+                    _attach_artifacts_to_span(episode_span, artifacts_fn(), self.artifact_exporter, trajectory_id)
+                except Exception:
+                    logger.warning("Failed to collect/export episode artifacts", exc_info=True)
+        tracer.shutdown()
         return trajectory
 
     def log_agent_output(self, turns: int, agent_output: AgentOutput) -> None:
