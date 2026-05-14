@@ -88,6 +88,8 @@ is governed by cube-standard's specs. Don't subclass those here — consume them
 
 ## Code review
 
+**Default branch is `dev`** — base all PRs off it, not `main`.
+
 **Sign your commits.** Every commit needs a `Signed-off-by` line (`git commit -s`). DCO is enforced by CI — unsigned commits will be blocked.
 
 PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md)), which audits changes against these guidelines. Write PRs as if a reviewer will check each principle above against the diff.
