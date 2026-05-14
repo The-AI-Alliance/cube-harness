@@ -143,7 +143,8 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_terminated = False
 
     def close(self) -> None:
-        self._close_runtime()
+        if self._session is not None and not getattr(self._session, "_closed", False):
+            self._session.stop()
         self._last_obs = None
         self._last_info = None
         self._last_reward = 0.0
