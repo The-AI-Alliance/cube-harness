@@ -24,6 +24,7 @@ import typer
 from cube_harness.analyze.judge.benchmark_context_agent import generate_context_file
 from cube_harness.analyze.judge.core import (
     DEFAULT_SAMPLE_FRACTION,
+    JudgeBatchConfig,
     judge_experiment,
 )
 from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, TerminalClaudeDriver
@@ -130,8 +131,11 @@ def _run(
     if trace_mode not in ("actions", "full", "off"):
         raise typer.BadParameter(f"--trace must be one of: actions, full, off (got {trace_mode!r})")
 
-    results = judge_experiment(
-        path,
+    # Honour the deprecated --model flag by overriding the chosen recipe's model.
+    if model is not None and model != chosen_recipe.model:
+        chosen_recipe = chosen_recipe.model_copy(update={"model": model})
+
+    config = JudgeBatchConfig(
         recipe=chosen_recipe,
         driver=chosen_driver,
         audit=audit,
@@ -145,8 +149,8 @@ def _run(
         verbose=verbose,
         n_parallel=n_parallel,
         trace_mode=trace_mode,  # type: ignore[arg-type]
-        model=model,
     )
+    results = judge_experiment(path, config)
 
     if summary_only:
         _print_summary_table(results)

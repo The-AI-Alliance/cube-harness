@@ -28,7 +28,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from cube.core import TypedBaseModel
 from pydantic import Field
@@ -64,6 +64,7 @@ class DriverResult(TypedBaseModel):
     session_id: str | None = None
 
 
+@runtime_checkable
 class AgentDriver(Protocol):
     """Pluggable coding-agent transport.
 

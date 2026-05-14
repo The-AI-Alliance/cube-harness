@@ -21,7 +21,7 @@ import logging
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, runtime_checkable
 
 from pydantic import ValidationError
 
@@ -127,6 +127,7 @@ def select_episodes(
 # ---------------------------------------------------------------------------
 
 
+@runtime_checkable
 class Selector(Protocol):
     """Pluggable rule for picking *related* episodes the judge should also read.
 

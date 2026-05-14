@@ -12,7 +12,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
+from cube.core import TypedBaseModel
+from pydantic import ConfigDict, Field, ValidationError
 
 from cube_harness.analyze.cross_experiment.cross_judge_agreement import (
     write_cross_judge_agreement,
@@ -49,6 +50,48 @@ DEFAULT_SAMPLE_FRACTION = 0.10
 EXPERIMENT_JUDGE_SUMMARY_FILENAME = "experiment_judge_summary.json"
 EXPERIMENT_JUDGE_REPORT_FILENAME = "experiment_judge_report.csv"
 EXPERIMENT_JUDGE_REPORT_JSON_FILENAME = "experiment_judge_report.json"
+
+
+class JudgeBatchConfig(TypedBaseModel):
+    """Everything `judge_experiment` needs except the experiment directory.
+
+    Replaces a 15-kwarg call signature with one Pydantic object so callers
+    (CLI, smokes, tests, the eventual meta-agent) can construct the run
+    once and pass it around. Fields are grouped by concern:
+
+    - **Behaviour** (`recipe`, `driver`, `selector`, `audit`, `n_seeds`):
+      what kind of judgment to produce.
+    - **Selection** (`ids`, `sample`, `n`, `failures_only`, `overwrite`,
+      `seed`): which episodes the batch covers.
+    - **Execution** (`n_parallel`, `verbose`, `trace_mode`): how the work
+      is dispatched.
+
+    `arbitrary_types_allowed=True` is required because `driver` and
+    `selector` are Protocols, not Pydantic models. The recipe holds a
+    Pydantic `output_model` type via the same mechanism.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    # Behaviour
+    recipe: JudgeRecipe = Field(default_factory=get_default_recipe)
+    driver: AgentDriver = Field(default_factory=ClaudeCodeSDKDriver)
+    selector: Selector | None = None
+    audit: bool = False
+    n_seeds: int = 1
+
+    # Episode selection
+    ids: list[str] | None = None
+    sample: float | None = None
+    n: int | None = None
+    failures_only: bool = False
+    overwrite: bool = False
+    seed: int | None = None
+
+    # Execution
+    n_parallel: int = 1
+    verbose: bool = False
+    trace_mode: TraceMode = "actions"
 
 
 def _load_trajectory_meta(path: Path) -> Trajectory | None:
@@ -353,77 +396,58 @@ def persist_judgment(
 
 def judge_experiment(
     experiment_dir: Path,
-    *,
-    recipe: JudgeRecipe | None = None,
-    driver: AgentDriver | None = None,
-    selector: Selector | None = None,
-    audit: bool = False,
-    n_seeds: int = 1,
-    ids: list[str] | None = None,
-    sample: float | None = None,
-    n: int | None = None,
-    failures_only: bool = False,
-    overwrite: bool = False,
-    seed: int | None = None,
-    verbose: bool = False,
-    n_parallel: int = 1,
-    trace_mode: TraceMode = "actions",
-    model: str | None = None,
+    config: JudgeBatchConfig | None = None,
 ) -> dict[str, tuple[BaseJudgeOutput, JudgeMetadata]]:
     """Batch judge selected episodes in an experiment output directory.
 
-    Selection (default): all episodes that don't already have a judge_output.
-    With `--sample 0.1`: 10% of those, randomly. With `--ids`: exactly those.
-    With `n_parallel > 1`: run that many judge sub-processes concurrently.
+    `config` bundles every behavioural / selection / execution knob — see
+    `JudgeBatchConfig`. `config=None` uses defaults (general_blame recipe,
+    SDK driver, no selector, no audit, no seeding, all unjudged episodes,
+    sequential, sonnet).
 
-    With `n_seeds > 1`: each selected episode is judged N times with the same
-    recipe; `cross_judge_agreement.csv` is written next to the per-episode
-    artefacts.
-
-    `model=` is deprecated — set it on the recipe.
-
-    Writes per-episode results into `episode_record.json` (or a sidecar if missing)
-    and aggregate stats into `experiment_judge_summary.json`,
+    Writes per-episode results into `episode_record.json` (or a sidecar if
+    missing) and aggregate stats into `experiment_judge_summary.json`,
     `experiment_judge_report.csv`, and `experiment_judge_report.json`.
+    When `config.n_seeds > 1`, also writes `cross_judge_agreement.csv`.
     """
     experiment_dir = Path(experiment_dir).resolve()
-    chosen_recipe = _resolve_recipe(recipe, model)
-    chosen_driver = _resolve_driver(driver)
+    cfg = config or JudgeBatchConfig()
 
     refs = discover_episodes(experiment_dir)
     selected = select_episodes(
         refs,
-        ids=ids,
-        sample=sample,
-        n=n,
-        failures_only=failures_only,
-        overwrite=overwrite,
-        seed=seed,
+        ids=cfg.ids,
+        sample=cfg.sample,
+        n=cfg.n,
+        failures_only=cfg.failures_only,
+        overwrite=cfg.overwrite,
+        seed=cfg.seed,
     )
 
     if not selected:
         logger.info("No episodes selected to judge in %s", experiment_dir)
         return {}
 
-    if n_parallel > chosen_driver.max_parallelism:
+    n_parallel = cfg.n_parallel
+    if n_parallel > cfg.driver.max_parallelism:
         logger.info(
             "Clamping n_parallel from %d to driver max_parallelism=%d (driver=%s)",
             n_parallel,
-            chosen_driver.max_parallelism,
-            chosen_driver.name,
+            cfg.driver.max_parallelism,
+            cfg.driver.name,
         )
-        n_parallel = chosen_driver.max_parallelism
+        n_parallel = cfg.driver.max_parallelism
 
     logger.info(
         "Judging %d / %d episodes in %s (recipe=%s driver=%s n_parallel=%d n_seeds=%d audit=%s)",
         len(selected),
         len(refs),
         experiment_dir.name,
-        chosen_recipe.name,
-        chosen_driver.name,
+        cfg.recipe.name,
+        cfg.driver.name,
         n_parallel,
-        n_seeds,
-        bool(audit or chosen_recipe.audit),
+        cfg.n_seeds,
+        bool(cfg.audit or cfg.recipe.audit),
     )
 
     # The `seeded` runs map for cross-judge agreement when n_seeds > 1.
@@ -436,29 +460,29 @@ def judge_experiment(
         _judge_experiment_async(
             selected,
             experiment_dir,
-            recipe=chosen_recipe,
-            driver=chosen_driver,
-            selector=selector,
-            audit=audit,
+            recipe=cfg.recipe,
+            driver=cfg.driver,
+            selector=cfg.selector,
+            audit=cfg.audit,
             n_parallel=max(1, n_parallel),
-            n_seeds=max(1, n_seeds),
-            verbose=verbose,
-            trace_mode=trace_mode,
+            n_seeds=max(1, cfg.n_seeds),
+            verbose=cfg.verbose,
+            trace_mode=cfg.trace_mode,
             seeded_runs_out=seeded_runs,
             audit_costs_out=audit_costs,
             all_refs=refs,
         )
     )
 
-    if n_seeds > 1 and seeded_runs:
+    if cfg.n_seeds > 1 and seeded_runs:
         write_cross_judge_agreement(experiment_dir, judgments=seeded_runs)
 
     write_summary(
         experiment_dir,
         selected,
         results,
-        recipe=chosen_recipe,
-        driver=chosen_driver,
+        recipe=cfg.recipe,
+        driver=cfg.driver,
         audit_costs=audit_costs,
     )
     return results

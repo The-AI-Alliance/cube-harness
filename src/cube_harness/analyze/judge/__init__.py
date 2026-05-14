@@ -40,6 +40,7 @@ from cube_harness.analyze.judge.core import (
     EXPERIMENT_JUDGE_REPORT_FILENAME,
     EXPERIMENT_JUDGE_REPORT_JSON_FILENAME,
     EXPERIMENT_JUDGE_SUMMARY_FILENAME,
+    JudgeBatchConfig,
     judge_episode,
     judge_experiment,
     persist_judgment,
@@ -81,6 +82,7 @@ __all__ = [
     # Public API — judge
     "judge_episode",
     "judge_experiment",
+    "JudgeBatchConfig",
     "discover_episodes",
     "select_episodes",
     "extract_transcript",

@@ -57,6 +57,7 @@ from cube_harness.analyze.judge import (
     DEFAULT_RECIPE,
     EXPERIMENT_JUDGE_REPORT_FILENAME,
     EXPERIMENT_JUDGE_SUMMARY_FILENAME,
+    JudgeBatchConfig,
     judge_experiment,
 )
 from cube_harness.analyze.judge.core import EXPERIMENT_JUDGE_REPORT_JSON_FILENAME
@@ -291,13 +292,13 @@ def main(
         recipe = DEFAULT_RECIPE if model is None else DEFAULT_RECIPE.model_copy(update={"model": model})
 
         typer.echo(f"Calling judge_experiment(...) with recipe={recipe.name} ...")
-        results = judge_experiment(
-            exp_dir,
+        config = JudgeBatchConfig(
             recipe=recipe,
             driver=chosen,
             ids=[TRAJECTORY_ID],
             verbose=False,
         )
+        results = judge_experiment(exp_dir, config)
     except Exception as e:
         typer.echo(f"Driver call raised: {type(e).__name__}: {e}")
         if not keep_temp:

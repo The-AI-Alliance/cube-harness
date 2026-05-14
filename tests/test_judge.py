@@ -30,6 +30,7 @@ from cube_harness.analyze.judge import (
     AgentDriver,
     AuditOutput,
     DriverResult,
+    JudgeBatchConfig,
     JudgeRecipe,
     SameAgentPreviousIteration,
     SameTaskDifferentAgent,
@@ -790,7 +791,7 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
     exp, ep = _make_episode_dir(tmp_path, "task1_ep0")
     driver = _FakeDriver(output_text=f"Here is my analysis:\n```json\n{_VALID_JUDGE_JSON}\n```")
 
-    results = judge_experiment(exp, driver=driver, ids=["task1_ep0"])
+    results = judge_experiment(exp, JudgeBatchConfig(driver=driver, ids=["task1_ep0"]))
 
     assert "task1_ep0" in results
     judge_out, judge_meta = results["task1_ep0"]
