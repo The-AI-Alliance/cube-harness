@@ -57,7 +57,10 @@ from cube_harness.analyze.judge import (
     DEFAULT_RECIPE,
     EXPERIMENT_JUDGE_REPORT_FILENAME,
     EXPERIMENT_JUDGE_SUMMARY_FILENAME,
+    META_ANALYSIS_FILENAME,
+    META_ANALYSIS_MARKDOWN_FILENAME,
     JudgeBatchConfig,
+    MetaAnalysis,
     judge_experiment,
 )
 from cube_harness.analyze.judge.core import EXPERIMENT_JUDGE_REPORT_JSON_FILENAME
@@ -254,12 +257,49 @@ def _verify_outputs(exp_dir: Path, judge_out, judge_meta) -> list[tuple[bool, st
     return checks
 
 
+def _verify_meta_analysis(exp_dir: Path) -> list[tuple[bool, str]]:
+    """Checks specific to the post-batch synthesis pass."""
+    checks: list[tuple[bool, str]] = []
+    json_path = exp_dir / META_ANALYSIS_FILENAME
+    md_path = exp_dir / META_ANALYSIS_MARKDOWN_FILENAME
+    checks.append((json_path.exists(), f"{json_path.name} written"))
+    checks.append((md_path.exists() and md_path.stat().st_size > 50, f"{md_path.name} non-trivial"))
+
+    if json_path.exists():
+        payload = json.loads(json_path.read_text())
+        try:
+            analysis = MetaAnalysis.model_validate(payload)
+        except Exception as e:
+            checks.append((False, f"meta_analysis.json parses as MetaAnalysis: {type(e).__name__}: {e}"))
+            return checks
+        checks.append((True, "meta_analysis.json parses as MetaAnalysis"))
+        checks.append((analysis.n_episodes_judged == 1, f"n_episodes_judged=1 (got {analysis.n_episodes_judged})"))
+        checks.append(
+            (
+                bool(analysis.markdown_summary and len(analysis.markdown_summary) > 50),
+                f"markdown_summary non-trivial (len={len(analysis.markdown_summary or '')})",
+            )
+        )
+
+    return checks
+
+
 def main(
     driver: Annotated[str, typer.Option(help="Driver to use.", click_type=None)] = "claude-code-sdk",
     model: Annotated[
         str | None,
         typer.Option(help="Override the recipe's model. Defaults to the recipe's setting."),
     ] = None,
+    synthesize: Annotated[
+        bool,
+        typer.Option(
+            "--synthesize/--no-synthesize",
+            help="Run the meta-analysis sub-agent after the batch. On by default; doubles the smoke cost.",
+        ),
+    ] = True,
+    synthesis_model: Annotated[
+        str, typer.Option("--synthesis-model", help="Model for the synthesis pass.")
+    ] = "claude-sonnet-4-6",
     keep_temp: Annotated[bool, typer.Option(help="Leave the fixture experiment dir for inspection.")] = False,
 ) -> None:
     """End-to-end judge smoke against a self-contained fixture experiment."""
@@ -291,12 +331,15 @@ def main(
         # Build the recipe with the optional model override applied.
         recipe = DEFAULT_RECIPE if model is None else DEFAULT_RECIPE.model_copy(update={"model": model})
 
-        typer.echo(f"Calling judge_experiment(...) with recipe={recipe.name} ...")
+        typer.echo(f"Calling judge_experiment(...) with recipe={recipe.name} synthesize={synthesize} ...")
         config = JudgeBatchConfig(
             recipe=recipe,
             driver=chosen,
             ids=[TRAJECTORY_ID],
             verbose=False,
+            synthesize=synthesize,
+            synthesis_model=synthesis_model,
+            journal_dir=None,  # smoke fixture lives in a tempdir; don't pollute the journal
         )
         results = judge_experiment(exp_dir, config)
     except Exception as e:
@@ -326,6 +369,8 @@ def main(
     typer.echo()
 
     checks = _verify_outputs(exp_dir, judge_out, judge_meta)
+    if synthesize:
+        checks.extend(_verify_meta_analysis(exp_dir))
     passed = sum(1 for ok, _ in checks if ok)
     total = len(checks)
     for ok, label in checks:

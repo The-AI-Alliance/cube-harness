@@ -109,6 +109,9 @@ def _run(
     verbose: bool,
     trace_mode: str,
     model: str | None,
+    synthesize: bool,
+    synthesis_model: str,
+    journal_dir: Path | None,
 ) -> None:
     """Shared implementation between the root command and the `run` subcommand."""
     logging.basicConfig(
@@ -149,6 +152,9 @@ def _run(
         verbose=verbose,
         n_parallel=n_parallel,
         trace_mode=trace_mode,  # type: ignore[arg-type]
+        synthesize=synthesize,
+        synthesis_model=synthesis_model,
+        journal_dir=journal_dir,
     )
     results = judge_experiment(path, config)
 
@@ -194,6 +200,22 @@ def run_cmd(
     model: Annotated[
         str | None, typer.Option(help="DEPRECATED — set on the recipe. Triggers a deprecation warning.")
     ] = None,
+    synthesize: Annotated[
+        bool, typer.Option("--synthesize/--no-synthesize", help="Run the meta-analysis sub-agent after the batch.")
+    ] = True,
+    synthesis_model: Annotated[
+        str, typer.Option("--synthesis-model", help="Model for the meta-analysis sub-agent. Opus by default.")
+    ] = "claude-opus-4-7",
+    journal_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--journal-dir",
+            help="Mirror meta_analysis.{json,md} into <journal-dir>/<experiment>/ — defaults to ~/cube_meta_agent_journal.",
+        ),
+    ] = Path("~/cube_meta_agent_journal").expanduser(),
+    no_journal: Annotated[
+        bool, typer.Option("--no-journal", help="Skip the journal mirror even when --journal-dir is set.")
+    ] = False,
 ) -> None:
     """Batch judge episodes in an experiment directory."""
     _run(
@@ -214,6 +236,9 @@ def run_cmd(
         verbose=verbose,
         trace_mode=trace_mode,
         model=model,
+        synthesize=synthesize,
+        synthesis_model=synthesis_model,
+        journal_dir=None if no_journal else journal_dir,
     )
 
 

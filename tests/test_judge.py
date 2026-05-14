@@ -3,6 +3,7 @@ selection, recipes, drivers, audit, cross-experiment writers."""
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
 import os
@@ -791,7 +792,9 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
     exp, ep = _make_episode_dir(tmp_path, "task1_ep0")
     driver = _FakeDriver(output_text=f"Here is my analysis:\n```json\n{_VALID_JUDGE_JSON}\n```")
 
-    results = judge_experiment(exp, JudgeBatchConfig(driver=driver, ids=["task1_ep0"]))
+    # synthesize=False here — the integration test is scoped to the judge
+    # pipeline; meta-analysis has its own dedicated test below.
+    results = judge_experiment(exp, JudgeBatchConfig(driver=driver, ids=["task1_ep0"], synthesize=False))
 
     assert "task1_ep0" in results
     judge_out, judge_meta = results["task1_ep0"]
@@ -995,3 +998,143 @@ def test_fake_driver_satisfies_protocol() -> None:
     assert callable(drv.continue_session)
     # And it is accepted as an AgentDriver at type-check time:
     _: AgentDriver = drv  # noqa: F841
+
+
+# ---------------------------------------------------------------------------
+# Meta-analysis: schema round-trip + write_meta_analysis + run_meta_analysis
+# ---------------------------------------------------------------------------
+
+
+_VALID_META_ANALYSIS_JSON = json.dumps(
+    {
+        "patterns": [
+            {
+                "name": "inspects-but-never-edits",
+                "description": "Agent runs a read tool, sees the bug, but never writes a fix.",
+                "affected_trajectories": ["taskA_ep0"],
+                "dominant_blame": "model_capability",
+            }
+        ],
+        "root_cause_hypotheses": [
+            {
+                "description": "The system prompt does not instruct the agent to apply edits before declaring done.",
+                "pattern_names": ["inspects-but-never-edits"],
+                "confidence": 4,
+            }
+        ],
+        "suggested_interventions": [
+            {
+                "target": "agent system prompt",
+                "change": "Add: 'Apply the fix to disk before submitting an answer.'",
+                "rationale": "The dominant pattern is non-action after diagnosis.",
+                "confidence": 4,
+            }
+        ],
+        "markdown_summary": (
+            "## Patterns\n\n"
+            "- inspects-but-never-edits: agent diagnoses without writing a fix.\n\n"
+            "## Root causes\n\n"
+            "- The system prompt does not force a write step before submission.\n\n"
+            "## Suggested interventions\n\n"
+            "- Add an explicit edit instruction to the agent system prompt.\n"
+        ),
+        "notes": None,
+    }
+)
+
+
+def test_meta_analysis_schema_roundtrip() -> None:
+    from cube_harness.analyze.judge import FailurePattern, MetaAnalysis
+
+    obj = MetaAnalysis(
+        experiment_id="exp-1",
+        recipe="general_blame",
+        driver="claude-code-sdk",
+        model="claude-opus-4-7",
+        timestamp=1_000_000.0,
+        n_episodes_judged=2,
+        outcome_distribution={"failure": 2},
+        primary_blame_distribution={"model_capability": 2},
+        success_rate=0.0,
+        patterns=[
+            FailurePattern(
+                name="x",
+                description="d",
+                affected_trajectories=["a", "b"],
+                dominant_blame="model_capability",
+            )
+        ],
+        markdown_summary="Body.",
+    )
+    restored = MetaAnalysis.model_validate_json(obj.model_dump_json())
+    assert restored == obj
+
+
+def test_meta_analysis_writer_produces_json_and_md(tmp_path: Path) -> None:
+    from cube_harness.analyze.judge import MetaAnalysis, write_meta_analysis
+
+    obj = MetaAnalysis(
+        experiment_id="exp-1",
+        recipe="general_blame",
+        driver="claude-code-sdk",
+        model="claude-opus-4-7",
+        timestamp=1.0,
+        n_episodes_judged=1,
+        outcome_distribution={"failure": 1},
+        primary_blame_distribution={"agent_scaffolding": 1},
+        success_rate=0.0,
+        markdown_summary="# Body\n\nSome prose.\n",
+    )
+    json_path, md_path = write_meta_analysis(tmp_path, obj)
+    assert json_path.read_text().startswith("{")
+    assert "Body" in md_path.read_text()
+
+
+def test_meta_analysis_journal_copy(tmp_path: Path) -> None:
+    from cube_harness.analyze.judge import MetaAnalysis, copy_to_journal, write_meta_analysis
+
+    obj = MetaAnalysis(
+        experiment_id="exp-42",
+        recipe="general_blame",
+        driver="fake-driver",
+        model="claude-opus-4-7",
+        timestamp=1.0,
+        n_episodes_judged=1,
+        outcome_distribution={"failure": 1},
+        primary_blame_distribution={"agent_scaffolding": 1},
+        success_rate=0.0,
+        markdown_summary="body",
+    )
+    exp_dir = tmp_path / "exp"
+    exp_dir.mkdir()
+    journal_dir = tmp_path / "journal"
+    json_path, md_path = write_meta_analysis(exp_dir, obj)
+    j_dst, m_dst = copy_to_journal(journal_dir, "exp-42", json_path, md_path)
+    assert j_dst.parent == journal_dir / "exp-42"
+    assert j_dst.read_text() == json_path.read_text()
+    assert m_dst.read_text() == md_path.read_text()
+
+
+def test_run_meta_analysis_with_fake_driver(tmp_path: Path) -> None:
+    from cube_harness.analyze.judge.meta_analysis import run_meta_analysis
+
+    driver = _FakeDriver(output_text=f"Here is the synthesis:\n```json\n{_VALID_META_ANALYSIS_JSON}\n```")
+    results = {
+        "taskA_ep0": (_valid_judge_output(), JudgeMetadata(model="claude-sonnet-4-6", timestamp=1.0)),
+    }
+    analysis = asyncio.run(
+        run_meta_analysis(
+            experiment_dir=tmp_path,
+            experiment_id="exp-1",
+            recipe_name="general_blame",
+            driver=driver,
+            results=results,
+            model="claude-opus-4-7",
+        )
+    )
+    assert analysis.experiment_id == "exp-1"
+    assert analysis.recipe == "general_blame"
+    assert analysis.driver == "fake-driver"
+    assert analysis.n_episodes_judged == 1
+    assert analysis.patterns[0].name == "inspects-but-never-edits"
+    assert "inspects" in analysis.markdown_summary

@@ -56,6 +56,18 @@ from cube_harness.analyze.judge.driver import (
     ToolAction,
     TraceMode,
 )
+from cube_harness.analyze.judge.meta_analysis import (
+    DEFAULT_META_ANALYSIS_MODEL,
+    META_ANALYSIS_FILENAME,
+    META_ANALYSIS_MARKDOWN_FILENAME,
+    FailurePattern,
+    Intervention,
+    MetaAnalysis,
+    RootCauseHypothesis,
+    copy_to_journal,
+    run_meta_analysis,
+    write_meta_analysis,
+)
 from cube_harness.analyze.judge.parse import extract_json_block
 from cube_harness.analyze.judge.recipe import BaseJudgeOutput, JudgeRecipe, get_default_recipe
 from cube_harness.analyze.judge.selection import (
@@ -117,6 +129,17 @@ __all__ = [
     "AUDIT_FILENAME",
     "AUDIT_PROMPT",
     "run_audit_pass",
+    # Public API — meta-analysis
+    "MetaAnalysis",
+    "FailurePattern",
+    "RootCauseHypothesis",
+    "Intervention",
+    "META_ANALYSIS_FILENAME",
+    "META_ANALYSIS_MARKDOWN_FILENAME",
+    "DEFAULT_META_ANALYSIS_MODEL",
+    "run_meta_analysis",
+    "write_meta_analysis",
+    "copy_to_journal",
     # Constants
     "DEFAULT_MODEL",
     "DEFAULT_SAMPLE_FRACTION",

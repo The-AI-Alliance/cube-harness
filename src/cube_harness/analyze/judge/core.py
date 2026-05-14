@@ -26,6 +26,11 @@ from cube_harness.analyze.judge.context import (
     validate_context_file,
 )
 from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, DriverResult, ToolAction, TraceMode
+from cube_harness.analyze.judge.meta_analysis import (
+    copy_to_journal,
+    run_meta_analysis,
+    write_meta_analysis,
+)
 from cube_harness.analyze.judge.parse import extract_json_block
 from cube_harness.analyze.judge.recipe import JudgeRecipe, get_default_recipe
 from cube_harness.analyze.judge.selection import (
@@ -92,6 +97,19 @@ class JudgeBatchConfig(TypedBaseModel):
     n_parallel: int = 1
     verbose: bool = False
     trace_mode: TraceMode = "actions"
+
+    # Post-batch synthesis
+    synthesize: bool = True
+    """Run the meta-analysis sub-agent after the batch completes."""
+
+    synthesis_model: str = "claude-opus-4-7"
+    """Model for the meta-analysis sub-agent. Opus by default — synthesis is
+    abstract reasoning over many judgments."""
+
+    journal_dir: Path | None = None
+    """When set, mirror `meta_analysis.{json,md}` into
+    `<journal_dir>/<experiment_basename>/`. The meta-agent's outer loop reads
+    this directory to accumulate cross-iteration narrative."""
 
 
 def _load_trajectory_meta(path: Path) -> Trajectory | None:
@@ -485,6 +503,30 @@ def judge_experiment(
         driver=cfg.driver,
         audit_costs=audit_costs,
     )
+
+    if cfg.synthesize and results:
+        try:
+            analysis = asyncio.run(
+                run_meta_analysis(
+                    experiment_dir=experiment_dir,
+                    experiment_id=experiment_dir.name,
+                    recipe_name=cfg.recipe.name,
+                    driver=cfg.driver,
+                    results=results,
+                    model=cfg.synthesis_model,
+                    verbose=cfg.verbose,
+                )
+            )
+            json_path, md_path = write_meta_analysis(experiment_dir, analysis)
+            logger.info("Wrote meta-analysis to %s and %s", json_path.name, md_path.name)
+            if cfg.journal_dir is not None:
+                copy_to_journal(cfg.journal_dir, experiment_dir.name, json_path, md_path)
+        except Exception as e:
+            # The synthesis is a value-add, not a blocker. Surface the error
+            # but keep the primary results — the user still has every
+            # per-episode judgment and the flat aggregates.
+            logger.exception("Meta-analysis failed for %s: %s", experiment_dir.name, e)
+
     return results
 
 
