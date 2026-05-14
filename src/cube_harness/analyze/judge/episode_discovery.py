@@ -4,10 +4,10 @@
 returns one `EpisodeRef` per subdirectory; if the path itself looks like a
 single episode (has `steps/`), it is returned as the only ref.
 
-`select_episodes(refs, ...)` filters the result by the legacy CLI flags
-(`--ids`, `--sample`, `--n`, `--failures-only`, `--overwrite`, `--seed`).
-This is the entry point used by `judge_experiment` to decide which episodes
-go to the judge.
+`select_episodes(refs, *, ids=..., failures_only=..., overwrite=...)` filters
+the pool. Selection is intentionally explicit — random sampling was removed
+because experiments now embed their own task selection upfront; the
+meta-agent passes `ids` lists when it wants a subset.
 
 Related-trajectory selection (Selector Protocol + the three concrete
 selectors) lives in `selectors.py`.
@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,19 +81,18 @@ def select_episodes(
     refs: list[EpisodeRef],
     *,
     ids: list[str] | None = None,
-    sample: float | None = None,
-    n: int | None = None,
     failures_only: bool = False,
     overwrite: bool = False,
-    seed: int | None = None,
 ) -> list[EpisodeRef]:
-    """Filter and sample episode refs.
+    """Filter the episode pool.
 
     `ids` is an explicit override: when set, the named episodes are returned
-    verbatim regardless of `failures_only` / already-judged / sampling — the user
+    verbatim regardless of `failures_only` / already-judged — the caller
     typed exactly what they want.
 
-    Otherwise: failures-only → already-judged (unless `overwrite`) → sample/n.
+    Otherwise: pool = refs, then optional `failures_only` filter, then drop
+    already-judged unless `overwrite=True`. The result is the full eligible
+    set — random sampling lives elsewhere if a caller really needs it.
     """
     if ids:
         wanted = set(ids)
@@ -103,20 +101,8 @@ def select_episodes(
     pool = refs
     if failures_only:
         pool = [r for r in pool if (r.record is not None and not r.record.is_correct)]
-
     if not overwrite:
         pool = [r for r in pool if not (r.record is not None and r.record.judge_output is not None)]
-
-    rng = random.Random(seed)
-    if n is not None:
-        if n >= len(pool):
-            return pool
-        return rng.sample(pool, n)
-    if sample is not None:
-        if sample >= 1.0:
-            return pool
-        k = max(1, int(round(len(pool) * sample))) if pool else 0
-        return rng.sample(pool, k)
     return pool
 
 

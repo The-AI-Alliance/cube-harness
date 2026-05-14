@@ -281,23 +281,6 @@ def test_select_episodes_ids_match_task_id_prefix(tmp_path: Path) -> None:
     assert len(selected) == 1
 
 
-def test_select_episodes_sample_is_seeded(tmp_path: Path) -> None:
-    eps = [(f"t{i}_ep0", False, False) for i in range(20)]
-    exp = _make_experiment(tmp_path, eps)
-    refs = discover_episodes(exp)
-    a = select_episodes(refs, sample=0.25, seed=42)
-    b = select_episodes(refs, sample=0.25, seed=42)
-    assert {r.trajectory_id for r in a} == {r.trajectory_id for r in b}
-    assert len(a) == 5  # 20 * 0.25
-
-
-def test_select_episodes_n_caps_at_pool_size(tmp_path: Path) -> None:
-    exp = _make_experiment(tmp_path, [("a_ep0", False, False), ("b_ep0", False, False)])
-    refs = discover_episodes(exp)
-    selected = select_episodes(refs, n=99)
-    assert len(selected) == 2
-
-
 # ---------------------------------------------------------------------------
 # Related-trajectory selectors
 # ---------------------------------------------------------------------------
@@ -792,9 +775,10 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
     exp, ep = _make_episode_dir(tmp_path, "task1_ep0")
     driver = _FakeDriver(output_text=f"Here is my analysis:\n```json\n{_VALID_JUDGE_JSON}\n```")
 
-    # synthesize=False here — the integration test is scoped to the judge
-    # pipeline; meta-analysis has its own dedicated test below.
-    results = judge_experiment(exp, JudgeBatchConfig(driver=driver, ids=["task1_ep0"], synthesize=False))
+    # synthesis_model="" skips the meta-analysis pass — the integration test
+    # is scoped to the judge pipeline; meta-analysis has its own dedicated
+    # test below.
+    results = judge_experiment(exp, JudgeBatchConfig(driver=driver, ids=["task1_ep0"], synthesis_model=""))
 
     assert "task1_ep0" in results
     judge_out, judge_meta = results["task1_ep0"]

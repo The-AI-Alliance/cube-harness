@@ -66,16 +66,15 @@ EXPERIMENT_JUDGE_REPORT_JSON_FILENAME = "experiment_judge_report.json"
 class JudgeBatchConfig(TypedBaseModel):
     """Everything `judge_experiment` needs except the experiment directory.
 
-    Replaces a 15-kwarg call signature with one Pydantic object so callers
-    (CLI, smokes, tests, the eventual meta-agent) can construct the run
-    once and pass it around. Fields are grouped by concern:
-
-    - **Behaviour** (`recipe`, `driver`, `selector`, `audit`, `n_seeds`):
-      what kind of judgment to produce.
-    - **Selection** (`ids`, `sample`, `n`, `failures_only`, `overwrite`,
-      `seed`): which episodes the batch covers.
-    - **Execution** (`n_parallel`, `verbose`, `trace_mode`): how the work
-      is dispatched.
+    Behaviour: `recipe`, `driver`, `selector`, `audit`, `n_seeds`.
+    Selection: `ids`, `failures_only`, `overwrite`. The default is "all
+    eligible (unjudged) episodes" — random sampling is intentionally NOT a
+    field; if you need a subset, pass `ids` explicitly (the meta-agent
+    builds the list in Python based on whatever logic it wants).
+    Execution: `n_parallel`, `verbose`, `trace_mode`.
+    Post-batch synthesis is always on; `synthesis_model` and `journal_dir`
+    are tunable. To truly skip synthesis, programmatic callers can override
+    `judge_experiment` directly — the CLI does not expose a skip flag.
 
     `arbitrary_types_allowed=True` is required because `driver` and
     `selector` are Protocols, not Pydantic models. The recipe holds a
@@ -91,31 +90,25 @@ class JudgeBatchConfig(TypedBaseModel):
     audit: bool = False
     n_seeds: int = 1
 
-    # Episode selection
+    # Selection — explicit only. No sampling / no seed; the meta-agent
+    # builds `ids` lists programmatically when it needs a subset.
     ids: list[str] | None = None
-    sample: float | None = None
-    n: int | None = None
     failures_only: bool = False
     overwrite: bool = False
-    seed: int | None = None
 
     # Execution
     n_parallel: int = 1
     verbose: bool = False
     trace_mode: TraceMode = "actions"
 
-    # Post-batch synthesis
-    synthesize: bool = True
-    """Run the meta-analysis sub-agent after the batch completes."""
-
+    # Post-batch synthesis (always on; `synthesis_model=""` skips, but the
+    # CLI does not expose that — it is a programmatic-only escape hatch).
     synthesis_model: str = "claude-opus-4-7"
-    """Model for the meta-analysis sub-agent. Opus by default — synthesis is
-    abstract reasoning over many judgments."""
 
-    journal_dir: Path | None = None
-    """When set, mirror `meta_analysis.{json,md}` into
-    `<journal_dir>/<experiment_basename>/`. The meta-agent's outer loop reads
-    this directory to accumulate cross-iteration narrative."""
+    # Journal mirror — `meta_analysis.{json,md}` is copied into
+    # `<journal_dir>/<experiment_basename>/`. Default is the conventional
+    # machine-local journal dir; override or point at a tempdir to redirect.
+    journal_dir: Path = Field(default_factory=lambda: Path("~/cube_meta_agent_journal").expanduser())
 
 
 def _load_trajectory_meta(path: Path) -> Trajectory | None:
@@ -441,11 +434,8 @@ def judge_experiment(
     selected = select_episodes(
         refs,
         ids=cfg.ids,
-        sample=cfg.sample,
-        n=cfg.n,
         failures_only=cfg.failures_only,
         overwrite=cfg.overwrite,
-        seed=cfg.seed,
     )
 
     if not selected:
@@ -510,7 +500,11 @@ def judge_experiment(
         audit_costs=audit_costs,
     )
 
-    if cfg.synthesize and results:
+    # Synthesis always runs unless explicitly disabled by passing an empty
+    # `synthesis_model` (programmatic-only escape hatch — the CLI does not
+    # expose it). Failures are logged but do not block primary results: every
+    # per-episode judgment and the flat aggregates are already on disk.
+    if results and cfg.synthesis_model:
         try:
             analysis = asyncio.run(
                 run_meta_analysis(
@@ -525,12 +519,8 @@ def judge_experiment(
             )
             json_path, md_path = write_meta_analysis(experiment_dir, analysis)
             logger.info("Wrote meta-analysis to %s and %s", json_path.name, md_path.name)
-            if cfg.journal_dir is not None:
-                copy_to_journal(cfg.journal_dir, experiment_dir.name, json_path, md_path)
+            copy_to_journal(cfg.journal_dir, experiment_dir.name, json_path, md_path)
         except Exception as e:
-            # The synthesis is a value-add, not a blocker. Surface the error
-            # but keep the primary results — the user still has every
-            # per-episode judgment and the flat aggregates.
             logger.exception("Meta-analysis failed for %s: %s", experiment_dir.name, e)
 
     return results

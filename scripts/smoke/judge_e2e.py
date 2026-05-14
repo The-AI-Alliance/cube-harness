@@ -300,6 +300,10 @@ def main(
     synthesis_model: Annotated[
         str, typer.Option("--synthesis-model", help="Model for the synthesis pass.")
     ] = "claude-sonnet-4-6",
+    journal_dir: Annotated[
+        Path,
+        typer.Option("--journal-dir", help="Where to mirror the synthesis. Defaults to a per-run tempdir."),
+    ] = Path(tempfile.gettempdir()) / "judge_e2e_smoke_journal",
     keep_temp: Annotated[bool, typer.Option(help="Leave the fixture experiment dir for inspection.")] = False,
 ) -> None:
     """End-to-end judge smoke against a self-contained fixture experiment."""
@@ -332,14 +336,16 @@ def main(
         recipe = DEFAULT_RECIPE if model is None else DEFAULT_RECIPE.model_copy(update={"model": model})
 
         typer.echo(f"Calling judge_experiment(...) with recipe={recipe.name} synthesize={synthesize} ...")
+        # `synthesis_model=""` is the programmatic skip-synthesis hatch; the
+        # smoke uses a per-run tempdir for journaling so it never pollutes
+        # the user's real `~/cube_meta_agent_journal/`.
         config = JudgeBatchConfig(
             recipe=recipe,
             driver=chosen,
             ids=[TRAJECTORY_ID],
             verbose=False,
-            synthesize=synthesize,
-            synthesis_model=synthesis_model,
-            journal_dir=None,  # smoke fixture lives in a tempdir; don't pollute the journal
+            synthesis_model=synthesis_model if synthesize else "",
+            journal_dir=journal_dir,
         )
         results = judge_experiment(exp_dir, config)
     except Exception as e:
