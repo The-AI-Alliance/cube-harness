@@ -37,9 +37,8 @@ src/cube_harness/
 │   ├── react.py                # ReAct agent (primary)
 │   ├── genny.py                # Genny agent (context-aware, rolling summaries)
 │   └── legacy_generic_agent.py # Deprecated XML-tag agent — see DEPRECATED.md
-├── tools/
+├── tools/                      # Harness-only integrations (BrowserGym, MCP client). Generalist tool ABCs and concrete impls live in cube-standard.
 │   ├── browsergym.py           # BrowserGym integration
-│   ├── computer.py             # Docker-based computer-use
 │   └── mcp.py                  # MCP client tool (consume external MCP servers)
 ├── action_spaces/              # Protocol definitions for action sets
 ├── benchmarks/                 # Legacy in-tree benchmarks (miniwob, workarena) — most now live in cubes/

@@ -8,15 +8,6 @@ exists so we can pick up simplification work when timing allows.
 
 ## Dead / broken code
 
-### `tools/computer.py` — empty stub superseded by osworld-cube
-[src/cube_harness/tools/computer.py](src/cube_harness/tools/computer.py)
-
-51 lines of `pass` / `raise NotImplementedError` stubs for mouse/keyboard actions.
-The real implementation lives in `cubes/osworld-cube/src/osworld_cube/computer.py`
-(wrapping `cube_computer_tool`). Never imported inside cube-harness.
-
-**Action:** delete the file; remove any `__init__.py` exports.
-
 ### Legacy XML-tag agent and its tests
 - [src/cube_harness/agents/legacy_generic_agent.py](src/cube_harness/agents/legacy_generic_agent.py) (~1260 lines)
 - [tests/test_legacy_generic_agent.py](tests/test_legacy_generic_agent.py) (~910 lines)
