@@ -1,14 +1,18 @@
 """Symlink each `use_cases/<name>/SKILL.md` into `.claude/skills/judge-<name>`.
 
-Run from the repo root. Idempotent: stale symlinks pointing inside `use_cases/`
-are removed before being re-created.
+Run from the repo root. Idempotent: existing symlinks pointing inside
+`use_cases/` are refreshed; correct ones are skipped.
 
-This lets the meta-agent's skill picker enumerate judge recipes the same way it
-enumerates any other skill, without duplicating the markdown.
+Uses *relative* symlink targets so the `.claude/skills/judge-*` entries
+travel through git unchanged and resolve in any checkout (worktrees included).
+
+This lets the meta-agent's skill picker enumerate judge recipes the same way
+it enumerates any other skill, without duplicating the markdown.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -35,14 +39,16 @@ def _sync(*, repo_root: Path, dry_run: bool) -> list[Path]:
         if not skill_md.exists():
             continue
         link_path = skills_dir / f"judge-{sub.name}"
-        target = skill_md.resolve()
+        # Relative target so the symlink survives different checkouts / worktrees:
+        # `.claude/skills/judge-<name>` → `../../src/cube_harness/.../SKILL.md`.
+        relative_target = Path(os.path.relpath(skill_md.resolve(), start=link_path.parent.resolve()))
         if link_path.is_symlink() or link_path.exists():
-            if link_path.is_symlink() and link_path.readlink() == target:
+            if link_path.is_symlink() and link_path.readlink() == relative_target:
                 continue  # already correct
             if not dry_run:
                 link_path.unlink()
         if not dry_run:
-            link_path.symlink_to(target)
+            link_path.symlink_to(relative_target)
         created_or_updated.append(link_path)
     return created_or_updated
 
