@@ -1,6 +1,10 @@
 import logging
 import time
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from webarena_verified.types.tracing import NetworkTrace
 
 import numpy as np
 from browsergym.core.action.base import execute_python_code
@@ -143,11 +147,34 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
         self._last_terminated = False
 
     def close(self) -> None:
-        self._close_runtime()
+        if self._session is not None and not getattr(self._session, "_closed", False):
+            self._session.stop()
         self._last_obs = None
         self._last_info = None
         self._last_reward = 0.0
         self._last_terminated = False
+
+    def network_trace(self) -> "NetworkTrace":
+        """Return network trace from the Playwright session's trace ZIP.
+
+        Requires close() to have been called first (Playwright flushes the
+        trace on context close). Satisfies the WAVBrowserTool protocol so
+        BrowsergymTool can be used with WebArena-Verified evaluation.
+        """
+        from webarena_verified.types.tracing import NetworkTrace
+
+        if self._session is None:
+            raise RuntimeError("No session — call close() before network_trace()")
+
+        trace_path_fn = getattr(self._session, "trace_path", None)
+        if callable(trace_path_fn):
+            trace_path = Path(trace_path_fn())
+            if trace_path.exists():
+                return NetworkTrace.from_content(trace_path)
+
+        raise FileNotFoundError(
+            "No session trace artifact available. Expected a closed PlaywrightSession with an existing trace path."
+        )
 
     def _create_runtime(self) -> None:
         self._session = self.config.browser.make()
