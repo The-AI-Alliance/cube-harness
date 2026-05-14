@@ -53,17 +53,20 @@ Source code (use Glob/Grep — do NOT pre-read all of it):
 
 # Output schema
 
-Produce a single JSON object with these fields, in this order:
+Produce a single JSON object with these fields, in this order. The order is
+deliberate — emit your reasoning and evidence first, then commit to the
+structured fields, then score them. Models reason better when they think
+before they classify.
 
 ```json
 {{
   "analysis": "<multi-paragraph scratchpad — reason through what happened before filling fields below>",
-  "outcome": "<success|success_lucky|almost|failure|should_have_been_rewarded>",
+  "evidence": [{{"step": 0, "quote": "exact excerpt"}}],
   "summary": "<1-3 sentences>",
+  "outcome": "<success|success_lucky|almost|failure|should_have_been_rewarded>",
   "primary_blame": "<task_unclear|model_capability|tool_failure|env_failure|agent_scaffolding|action_space_limited|insufficient_observation|eval_brittle|submission_format|none>",
   "primary_blame_confidence": 0,
   "other_blames": [],
-  "evidence": [{{"step": 0, "quote": "exact excerpt"}}],
   "hypothesis": "<1-2 sentences: what change would most likely fix this class of failure>",
   "hypothesis_confidence": 0
 }}

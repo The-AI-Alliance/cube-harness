@@ -339,15 +339,31 @@ class BaseJudgeOutput(TypedBaseModel):
     aggregate views (CSV report, cross-experiment joins) can flatten any recipe's
     output to a common schema.
 
-    Field order follows the judge's reasoning process: free-form `analysis` first as a
-    scratchpad, then structured conclusions grounded in evidence.
+    Field order is CoT-deliberate. Models token-emit in declared order, so:
+
+      1. `analysis` — free-form scratchpad, full reasoning before commitment.
+      2. `evidence` — cite specific transcript quotes that ground what comes next.
+      3. `summary` — narrative of what happened, before categorizing.
+      4. `outcome` — categorical commitment.
+      5. `primary_blame` — attribute the dominant cause.
+      6. `primary_blame_confidence` — score the attribution (after making it).
+      7. `other_blames` — secondary causes (knowing the primary).
+      8. `hypothesis` — propose the fix.
+      9. `hypothesis_confidence` — score the fix (after proposing it).
+
+    Pydantic accepts JSON keys in any order on parse, so this reorder does not
+    break existing on-disk records.
     """
 
     analysis: str = Field(
         description="Multi-paragraph reasoning scratchpad. Filled first; grounds all structured fields below."
     )
-    outcome: Outcome = Field(description="What happened in the episode beyond the binary reward.")
+    evidence: list[EvidenceItem] = Field(
+        default_factory=list,
+        description="Step-indexed quotes from the transcript. Required when primary_blame != 'none'.",
+    )
     summary: str = Field(description="1-3 sentence description of what happened.")
+    outcome: Outcome = Field(description="What happened in the episode beyond the binary reward.")
     primary_blame: BlameCategory = Field(description="Dominant failure cause; `none` for clean successes.")
     primary_blame_confidence: int = Field(
         ge=0, le=5, description="Confidence in primary_blame (0=no basis, 5=certain)."
@@ -355,10 +371,6 @@ class BaseJudgeOutput(TypedBaseModel):
     other_blames: list[BlameCategory] = Field(
         default_factory=list,
         description="Secondary contributing causes. Must not repeat primary_blame.",
-    )
-    evidence: list[EvidenceItem] = Field(
-        default_factory=list,
-        description="Step-indexed quotes from the transcript. Required when primary_blame != 'none'.",
     )
     hypothesis: str = Field(description="1-2 sentences: what change would most likely fix this class of failure.")
     hypothesis_confidence: int = Field(
