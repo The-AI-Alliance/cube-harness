@@ -70,14 +70,11 @@ from cube_harness.analyze.judge.selection import (
 from cube_harness.analyze.judge.transcript import extract_transcript
 from cube_harness.analyze.judge.use_cases import RECIPE_CATALOG
 
-
-def DEFAULT_RECIPE():  # noqa: N802 — kept callable for lazy resolution
-    """Backwards-compat accessor — equivalent to `get_default_recipe()`.
-
-    Defined as a function so importing the module does not eagerly instantiate
-    the use-case package (avoids circular imports at module-load time).
-    """
-    return get_default_recipe()
+# Eager default. By the time this module-level statement runs, every submodule
+# (audit, benchmark_context_agent, core, driver, recipe, selection, use_cases)
+# has loaded, so resolving the catalog here is cycle-free. Prior versions used
+# a lazy callable to defer the use_cases import; that's no longer necessary.
+DEFAULT_RECIPE: JudgeRecipe = get_default_recipe()
 
 
 __all__ = [

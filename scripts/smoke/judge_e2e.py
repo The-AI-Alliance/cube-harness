@@ -54,9 +54,9 @@ import typer
 import zstandard
 
 from cube_harness.analyze.judge import (
+    DEFAULT_RECIPE,
     EXPERIMENT_JUDGE_REPORT_FILENAME,
     EXPERIMENT_JUDGE_SUMMARY_FILENAME,
-    get_default_recipe,
     judge_experiment,
 )
 from cube_harness.analyze.judge.core import EXPERIMENT_JUDGE_REPORT_JSON_FILENAME
@@ -262,8 +262,7 @@ def main(
     keep_temp: Annotated[bool, typer.Option(help="Leave the fixture experiment dir for inspection.")] = False,
 ) -> None:
     """End-to-end judge smoke against a self-contained fixture experiment."""
-    base_recipe = get_default_recipe()
-    typer.echo(f"judge_e2e — driver={driver} model={model or base_recipe.model}")
+    typer.echo(f"judge_e2e — driver={driver} model={model or DEFAULT_RECIPE.model}")
 
     # Driver selection mirrors the smoke contract: skip cleanly when the
     # selected driver's deps are missing.
@@ -289,7 +288,7 @@ def main(
         typer.echo(f"Built fixture experiment at {exp_dir}")
 
         # Build the recipe with the optional model override applied.
-        recipe = base_recipe if model is None else base_recipe.model_copy(update={"model": model})
+        recipe = DEFAULT_RECIPE if model is None else DEFAULT_RECIPE.model_copy(update={"model": model})
 
         typer.echo(f"Calling judge_experiment(...) with recipe={recipe.name} ...")
         results = judge_experiment(

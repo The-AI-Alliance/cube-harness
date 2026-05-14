@@ -33,6 +33,7 @@ from cube_harness.analyze.judge import (
     JudgeRecipe,
     SameAgentPreviousIteration,
     SameTaskDifferentAgent,
+    ToolAction,
     TopKBySimilarityStub,
     _extract_json_block,
     _persist_judgment,
@@ -663,7 +664,7 @@ def test_persist_judgment_writes_sidecar_when_no_record(tmp_path: Path) -> None:
     judge_out = _valid_judge_output()
     judge_meta = JudgeMetadata(model="claude-sonnet-4-6", timestamp=1_000_000.0)
 
-    _persist_judgment(ref, judge_out, judge_meta, actions=[{"tool": "Read", "input": "transcript.txt"}])
+    _persist_judgment(ref, judge_out, judge_meta, actions=[ToolAction(tool="Read", input_summary="transcript.txt")])
 
     # No episode_record.json created — only the sidecar
     assert not record_path.exists()

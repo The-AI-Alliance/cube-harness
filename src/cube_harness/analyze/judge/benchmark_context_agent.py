@@ -23,7 +23,7 @@ from cube_harness.analyze.judge.context import (
     _load_experiment_view,
     collect_source_paths,
 )
-from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver
+from cube_harness.analyze.judge.driver import AgentDriver
 
 logger = logging.getLogger(__name__)
 
@@ -150,11 +150,6 @@ async def generate_context_file(
     out.write_text(markdown)
     logger.info("benchmark-context-agent wrote %s", out)
     return out
-
-
-def _default_driver_factory() -> AgentDriver:
-    """The CLI uses this when no driver is passed explicitly."""
-    return ClaudeCodeSDKDriver()
 
 
 __all__ = [

@@ -153,18 +153,6 @@ async def _ensure_context_file(experiment_dir: Path, driver: AgentDriver) -> Pat
     return path
 
 
-def _serialise_actions(actions: list[ToolAction]) -> list[dict[str, Any]]:
-    """Lossy convert `list[ToolAction]` to the legacy dict shape used by
-    `_persist_judgment` / `judge_trace.json`. Keeps existing readers happy."""
-    out: list[dict[str, Any]] = []
-    for a in actions:
-        entry: dict[str, Any] = {"tool": a.tool, "input": a.input_summary}
-        if a.raw_input is not None:
-            entry["raw_input"] = a.raw_input
-        out.append(entry)
-    return out
-
-
 async def _judge_episode_impl(
     episode_dir: Path,
     experiment_dir: Path,
@@ -329,7 +317,7 @@ def _persist_judgment(
     ref: EpisodeRef,
     judge_output: BaseJudgeOutput,
     judge_metadata: JudgeMetadata,
-    actions: list[dict[str, Any]] | None = None,
+    actions: list[ToolAction] | None = None,
     trace_mode: TraceMode = "actions",
 ) -> None:
     """Write `judge_output` and `judge_metadata` into the episode_record.json.
@@ -356,7 +344,10 @@ def _persist_judgment(
         )
     if actions:
         (ref.episode_dir / "judge_trace.json").write_text(
-            json.dumps({"trace_mode": trace_mode, "actions": actions}, indent=2)
+            json.dumps(
+                {"trace_mode": trace_mode, "actions": [a.model_dump(mode="json") for a in actions]},
+                indent=2,
+            )
         )
 
 
@@ -515,7 +506,7 @@ async def _judge_experiment_async(
             # primary record with a later seed.
             if seed_index == 0:
                 ref.record = _load_episode_record(ref.record_path)
-                _persist_judgment(ref, judge_output, judge_metadata, _serialise_actions(actions), trace_mode)
+                _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
                 primary_results[ref.trajectory_id] = (judge_output, judge_metadata)
             audit_costs_out[ref.trajectory_id] = audit_costs_out.get(ref.trajectory_id, 0.0) + audit_cost
             seeded_runs_out.setdefault((ref.trajectory_id, recipe.name), []).append((judge_output, judge_metadata))
