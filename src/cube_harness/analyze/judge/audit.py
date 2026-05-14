@@ -34,6 +34,20 @@ logger = logging.getLogger(__name__)
 AUDIT_FILENAME = "audit.json"
 AUDIT_SCHEMA_VERSION = 1
 
+AUDIT_SYSTEM_PROMPT = """You are an auditor for a post-hoc trajectory judge.
+
+A prior judgment about an agent episode has already been written. Your job
+is not to redo that judgment — it is to critique it. Read the prior
+judgment, re-examine the transcript and source it had access to, and flag
+where the reasoning is weak, where evidence is thin, where a different
+blame attribution would be defensible, and what tooling gaps the original
+judge ran into.
+
+You have the same read-only tools the judge had (Read, Glob, Grep, Bash).
+Do not produce a new judgment. Reply with a single JSON object matching
+the AuditOutput schema specified in the user prompt — nothing else."""
+
+
 AUDIT_PROMPT = """You just produced a JSON judgment for an episode. Now audit your own work.
 
 Re-examine the transcript and source you read. Look for:
@@ -148,8 +162,11 @@ async def run_audit_pass(
             raise RuntimeError(
                 "Audit fallback needs cwd and additional_dirs (driver does not support continue_session)."
             ) from e
+        # Important: use AUDIT_SYSTEM_PROMPT here, not recipe.system_prompt.
+        # The recipe's system prompt frames the model as "the judge"; the
+        # audit pass needs it framed as "the auditor of a prior judgment".
         result = await driver.run(
-            system_prompt=recipe.system_prompt,
+            system_prompt=AUDIT_SYSTEM_PROMPT,
             user_prompt=_build_fallback_run_prompt(judge_output_json),
             cwd=cwd,
             additional_dirs=additional_dirs,
@@ -160,8 +177,10 @@ async def run_audit_pass(
         )
 
     raw = extract_json_block(result.output_text)
-    raw.setdefault("recipe", recipe.name)
-    raw.setdefault("driver", driver.name)
+    # Provenance is ours, not the model's — override whatever (if anything)
+    # the model emitted in these fields. Keeps the on-disk record honest.
+    raw["recipe"] = recipe.name
+    raw["driver"] = driver.name
     try:
         audit = AuditOutput.model_validate(raw)
     except ValidationError as e:
@@ -181,6 +200,7 @@ __all__ = [
     "BlameAlternative",
     "AUDIT_FILENAME",
     "AUDIT_PROMPT",
+    "AUDIT_SYSTEM_PROMPT",
     "AUDIT_SCHEMA_VERSION",
     "run_audit_pass",
     "write_audit",
