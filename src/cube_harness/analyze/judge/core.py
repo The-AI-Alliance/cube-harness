@@ -25,13 +25,13 @@ from cube_harness.analyze.judge.context import (
     validate_context_file,
 )
 from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, DriverResult, ToolAction, TraceMode
+from cube_harness.analyze.judge.parse import extract_json_block
 from cube_harness.analyze.judge.recipe import JudgeRecipe, get_default_recipe
-from cube_harness.analyze.judge.sdk import _extract_json_block
 from cube_harness.analyze.judge.selection import (
     EpisodeRef,
     Selector,
-    _load_episode_record,
     discover_episodes,
+    load_episode_record,
     select_episodes,
 )
 from cube_harness.analyze.judge.transcript import extract_transcript
@@ -239,7 +239,7 @@ async def _judge_episode_impl(
         trace_mode=trace_mode,
     )
 
-    obj = _extract_json_block(result.output_text)
+    obj = extract_json_block(result.output_text)
     judge_output = recipe.output_model.model_validate(obj)
     _validate_invariants(judge_output)
 
@@ -313,7 +313,7 @@ def judge_episode(
     return judge_output, judge_metadata
 
 
-def _persist_judgment(
+def persist_judgment(
     ref: EpisodeRef,
     judge_output: BaseJudgeOutput,
     judge_metadata: JudgeMetadata,
@@ -453,7 +453,7 @@ def judge_experiment(
     if n_seeds > 1 and seeded_runs:
         write_cross_judge_agreement(experiment_dir, judgments=seeded_runs)
 
-    _write_summary(
+    write_summary(
         experiment_dir,
         selected,
         results,
@@ -505,8 +505,8 @@ async def _judge_experiment_async(
             # seeds feed the cross-judge agreement table; we don't overwrite the
             # primary record with a later seed.
             if seed_index == 0:
-                ref.record = _load_episode_record(ref.record_path)
-                _persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
+                ref.record = load_episode_record(ref.record_path)
+                persist_judgment(ref, judge_output, judge_metadata, actions, trace_mode)
                 primary_results[ref.trajectory_id] = (judge_output, judge_metadata)
             audit_costs_out[ref.trajectory_id] = audit_costs_out.get(ref.trajectory_id, 0.0) + audit_cost
             seeded_runs_out.setdefault((ref.trajectory_id, recipe.name), []).append((judge_output, judge_metadata))
@@ -516,7 +516,7 @@ async def _judge_experiment_async(
     return primary_results
 
 
-def _write_summary(
+def write_summary(
     experiment_dir: Path,
     selected: list[EpisodeRef],
     results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]],
@@ -575,11 +575,11 @@ def _write_summary(
         summary["total_audit_cost_usd"] = round(total_audit_cost, 4)
         summary["audit_report"] = AUDIT_FILENAME
     (experiment_dir / EXPERIMENT_JUDGE_SUMMARY_FILENAME).write_text(json.dumps(summary, indent=2))
-    _write_csv_report(experiment_dir, selected, results)
-    _write_json_report(experiment_dir, selected, results, recipe=recipe, driver=driver)
+    write_csv_report(experiment_dir, selected, results)
+    write_json_report(experiment_dir, selected, results, recipe=recipe, driver=driver)
 
 
-def _write_csv_report(
+def write_csv_report(
     experiment_dir: Path,
     selected: list[EpisodeRef],
     results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]],
@@ -637,7 +637,7 @@ def _write_csv_report(
             )
 
 
-def _write_json_report(
+def write_json_report(
     experiment_dir: Path,
     selected: list[EpisodeRef],
     results: dict[str, tuple[BaseJudgeOutput, JudgeMetadata]],

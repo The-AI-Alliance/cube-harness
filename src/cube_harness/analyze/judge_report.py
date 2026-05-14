@@ -19,9 +19,9 @@ from cube_harness.analyze.judge import (
     EXPERIMENT_JUDGE_REPORT_FILENAME,
     EXPERIMENT_JUDGE_SUMMARY_FILENAME,
     EpisodeRef,
-    _load_episode_record,
-    _write_summary,
     discover_episodes,
+    load_episode_record,
+    write_summary,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def regenerate_report(experiment_dir: Path) -> int:
     results: dict[str, tuple[object, object]] = {}
     for ref in refs:
         if ref.record is None:
-            ref.record = _load_episode_record(ref.record_path)
+            ref.record = load_episode_record(ref.record_path)
         if ref.record is None or ref.record.judge_output is None:
             continue
         selected.append(ref)
@@ -57,7 +57,7 @@ def regenerate_report(experiment_dir: Path) -> int:
     )
     model_name = getattr(model, "model", "unknown") if model is not None else "unknown"
 
-    _write_summary(experiment_dir, selected, results, model=model_name)
+    write_summary(experiment_dir, selected, results, model=model_name)
     return len(results)
 
 

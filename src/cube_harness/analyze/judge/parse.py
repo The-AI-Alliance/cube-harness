@@ -1,16 +1,15 @@
-"""Helpers shared between the judge and its drivers.
+"""Parsing and shape helpers shared between the judge and its drivers.
 
-The Claude SDK invocation moved to `driver.ClaudeCodeSDKDriver`. This module
-keeps the shape constants (`TraceMode`, `JUDGE_ALLOWED_TOOLS`) — drivers depend
-on them but `__init__.py` re-exports them for backwards compatibility — and
-two small helpers used by both drivers and tests:
+This module holds:
+- `TraceMode` and `JUDGE_ALLOWED_TOOLS` — protocol-level constants shared by
+  drivers, the audit pass, and core.
+- `extract_json_block` — pulls the judge's final JSON object out of free text.
+- `_summarise_tool_input` — one-line tool-call rendering for traces (private;
+  only used by drivers internally).
 
-- `_extract_json_block` — pulls the judge's final JSON object out of free text.
-- `_summarise_tool_input` — one-line tool-call rendering for traces.
-
-A deprecated `_SDKResult` dataclass alias is also kept — the integration test in
-`tests/test_judge.py` patches `_run_claude_code` and expects this shape; the new
-flow uses `DriverResult` instead.
+Renamed from `sdk.py`: the original module was a thin shell around
+`claude-agent-sdk`, but the SDK call has since moved to
+`driver.ClaudeCodeSDKDriver`. Nothing here is SDK-shaped any more.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
@@ -32,7 +30,7 @@ TraceMode = Literal["actions", "full", "off"]
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
-def _extract_json_block(text: str) -> dict[str, Any]:
+def extract_json_block(text: str) -> dict[str, Any]:
     """Extract a JSON object from the judge's final assistant message."""
     m = _JSON_FENCE_RE.search(text)
     candidate = m.group(1) if m else None
@@ -80,24 +78,9 @@ def _summarise_tool_input(name: str, raw_input: dict[str, Any]) -> str:
     return s if len(s) <= 100 else s[:97] + "..."
 
 
-@dataclass
-class _SDKResult:
-    """Deprecated — kept for one release window so existing tests that mock
-    `_run_claude_code` continue to work. New code should use
-    `cube_harness.analyze.judge.driver.DriverResult`."""
-
-    output_text: str
-    prompt_tokens: int
-    completion_tokens: int
-    cost_usd: float
-    duration_s: float
-    actions: list[dict[str, Any]] = field(default_factory=list)
-
-
 __all__ = [
-    "_extract_json_block",
+    "extract_json_block",
     "_summarise_tool_input",
-    "_SDKResult",
     "TraceMode",
     "JUDGE_ALLOWED_TOOLS",
 ]

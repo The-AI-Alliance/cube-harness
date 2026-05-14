@@ -35,14 +35,14 @@ from cube_harness.analyze.judge import (
     SameTaskDifferentAgent,
     ToolAction,
     TopKBySimilarityStub,
-    _extract_json_block,
-    _persist_judgment,
-    _write_csv_report,
     discover_episodes,
+    extract_json_block,
     extract_transcript,
     judge_experiment,
+    persist_judgment,
     select_episodes,
     validate_context_file,
+    write_csv_report,
 )
 from cube_harness.analyze.judge.context import JUDGE_CONTEXT_FILENAME
 from cube_harness.analyze.judge.recipe import _deserialize_output_model
@@ -134,22 +134,22 @@ def test_episode_record_with_judge_metadata_roundtrip(tmp_path: Path) -> None:
 
 def test_extract_json_block_fenced() -> None:
     text = 'Some preamble.\n```json\n{"outcome": "failure", "x": 1}\n```\nTrailing chatter.'
-    assert _extract_json_block(text) == {"outcome": "failure", "x": 1}
+    assert extract_json_block(text) == {"outcome": "failure", "x": 1}
 
 
 def test_extract_json_block_unfenced() -> None:
     text = 'final answer: {"outcome": "success", "primary_blame": "none"}'
-    assert _extract_json_block(text) == {"outcome": "success", "primary_blame": "none"}
+    assert extract_json_block(text) == {"outcome": "success", "primary_blame": "none"}
 
 
 def test_extract_json_block_with_nested_braces() -> None:
     text = '```json\n{"evidence": [{"step": 1, "quote": "}"}]}\n```'
-    assert _extract_json_block(text) == {"evidence": [{"step": 1, "quote": "}"}]}
+    assert extract_json_block(text) == {"evidence": [{"step": 1, "quote": "}"}]}
 
 
 def test_extract_json_block_raises_when_absent() -> None:
     with pytest.raises(ValueError):
-        _extract_json_block("no json here")
+        extract_json_block("no json here")
 
 
 # ---------------------------------------------------------------------------
@@ -596,7 +596,7 @@ def test_joint_csv_writer_empty_sweep_writes_header(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _write_csv_report — unchanged columns, used by old and new paths.
+# write_csv_report — unchanged columns, used by old and new paths.
 # ---------------------------------------------------------------------------
 
 
@@ -609,7 +609,7 @@ def test_write_csv_report_columns_and_values(tmp_path: Path) -> None:
     judge_meta = JudgeMetadata(model="claude-sonnet-4-6", timestamp=1_000_000.0, cost_usd=0.05, duration_s=12.3)
     results: dict[str, tuple[JudgeOutput, JudgeMetadata]] = {ref.trajectory_id: (judge_out, judge_meta)}
 
-    _write_csv_report(exp, refs, results)
+    write_csv_report(exp, refs, results)
 
     csv_path = exp / EXPERIMENT_JUDGE_REPORT_FILENAME
     assert csv_path.exists()
@@ -627,7 +627,7 @@ def test_write_csv_report_columns_and_values(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _persist_judgment
+# persist_judgment
 # ---------------------------------------------------------------------------
 
 
@@ -639,7 +639,7 @@ def test_persist_judgment_updates_episode_record(tmp_path: Path) -> None:
     judge_out = _valid_judge_output()
     judge_meta = JudgeMetadata(model="claude-sonnet-4-6", timestamp=1_000_000.0)
 
-    _persist_judgment(ref, judge_out, judge_meta)
+    persist_judgment(ref, judge_out, judge_meta)
 
     restored = EpisodeRecord.model_validate_json(ref.record_path.read_text())
     assert restored.judge_output is not None
@@ -664,7 +664,7 @@ def test_persist_judgment_writes_sidecar_when_no_record(tmp_path: Path) -> None:
     judge_out = _valid_judge_output()
     judge_meta = JudgeMetadata(model="claude-sonnet-4-6", timestamp=1_000_000.0)
 
-    _persist_judgment(ref, judge_out, judge_meta, actions=[ToolAction(tool="Read", input_summary="transcript.txt")])
+    persist_judgment(ref, judge_out, judge_meta, actions=[ToolAction(tool="Read", input_summary="transcript.txt")])
 
     # No episode_record.json created — only the sidecar
     assert not record_path.exists()
@@ -785,7 +785,7 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
 
     Exercises: transcript extraction → context file validation → prompt
     building → driver (fake) → JSON parsing → invariant validation →
-    _persist_judgment → _write_summary → _write_csv_report → _write_json_report.
+    persist_judgment → write_summary → write_csv_report → write_json_report.
     """
     exp, ep = _make_episode_dir(tmp_path, "task1_ep0")
     driver = _FakeDriver(output_text=f"Here is my analysis:\n```json\n{_VALID_JUDGE_JSON}\n```")
@@ -812,14 +812,14 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
     assert judge_meta.cost_usd == pytest.approx(0.042)
     assert judge_meta.model == "claude-sonnet-4-6"
 
-    # -- episode_record.json updated in-place by _persist_judgment --
+    # -- episode_record.json updated in-place by persist_judgment --
     restored = EpisodeRecord.model_validate_json((ep / EPISODE_RECORD_FILENAME).read_text())
     assert restored.judge_output is not None
     assert restored.judge_output.outcome == Outcome.failure
     assert restored.judge_metadata is not None
     assert restored.judge_metadata.cost_usd == pytest.approx(0.042)
 
-    # -- experiment_judge_summary.json written by _write_summary --
+    # -- experiment_judge_summary.json written by write_summary --
     summary = json.loads((exp / EXPERIMENT_JUDGE_SUMMARY_FILENAME).read_text())
     assert summary["n_judged"] == 1
     assert summary["outcomes"] == {"failure": 1}
@@ -828,7 +828,7 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
     assert summary["recipe"] == "general_blame"
     assert summary["driver"] == "fake-driver"
 
-    # -- experiment_judge_report.csv written by _write_csv_report --
+    # -- experiment_judge_report.csv written by write_csv_report --
     csv_path = exp / EXPERIMENT_JUDGE_REPORT_FILENAME
     assert csv_path.exists()
     rows = list(csv.DictReader(csv_path.open()))
@@ -836,7 +836,7 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
     assert rows[0]["outcome"] == "failure"
     assert rows[0]["primary_blame"] == "model_capability"
 
-    # -- experiment_judge_report.json written by _write_json_report --
+    # -- experiment_judge_report.json written by write_json_report --
     json_path = exp / EXPERIMENT_JUDGE_REPORT_JSON_FILENAME
     assert json_path.exists()
     payload = json.loads(json_path.read_text())

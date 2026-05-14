@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Literal
 from cube.core import TypedBaseModel
 from pydantic import Field, ValidationError
 
-from cube_harness.analyze.judge.sdk import _extract_json_block
+from cube_harness.analyze.judge.parse import extract_json_block
 
 if TYPE_CHECKING:
     from cube_harness.analyze.judge.driver import AgentDriver
@@ -159,7 +159,7 @@ async def run_audit_pass(
             verbose=verbose,
         )
 
-    raw = _extract_json_block(result.output_text)
+    raw = extract_json_block(result.output_text)
     raw.setdefault("recipe", recipe.name)
     raw.setdefault("driver", driver.name)
     try:

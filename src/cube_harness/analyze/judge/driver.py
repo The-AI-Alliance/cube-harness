@@ -33,7 +33,7 @@ from typing import Any, Literal, Protocol
 from cube.core import TypedBaseModel
 from pydantic import Field
 
-from cube_harness.analyze.judge.sdk import JUDGE_ALLOWED_TOOLS, TraceMode, _summarise_tool_input
+from cube_harness.analyze.judge.parse import JUDGE_ALLOWED_TOOLS, TraceMode, _summarise_tool_input
 
 logger = logging.getLogger(__name__)
 

@@ -38,7 +38,7 @@ class EpisodeRef:
     record: EpisodeRecord | None  # None if record file missing
 
 
-def _load_episode_record(record_path: Path) -> EpisodeRecord | None:
+def load_episode_record(record_path: Path) -> EpisodeRecord | None:
     if not record_path.exists():
         return None
     try:
@@ -59,7 +59,7 @@ def discover_episodes(experiment_dir: Path) -> list[EpisodeRef]:
                     trajectory_id=experiment_dir.name,
                     episode_dir=experiment_dir,
                     record_path=experiment_dir / EPISODE_RECORD_FILENAME,
-                    record=_load_episode_record(experiment_dir / EPISODE_RECORD_FILENAME),
+                    record=load_episode_record(experiment_dir / EPISODE_RECORD_FILENAME),
                 )
             ]
         raise FileNotFoundError(f"No 'episodes/' under {experiment_dir} and no 'steps/' inside it")
@@ -74,7 +74,7 @@ def discover_episodes(experiment_dir: Path) -> list[EpisodeRef]:
                 trajectory_id=ep_dir.name,
                 episode_dir=ep_dir,
                 record_path=record_path,
-                record=_load_episode_record(record_path),
+                record=load_episode_record(record_path),
             )
         )
     return refs
@@ -256,7 +256,7 @@ __all__ = [
     "EpisodeRef",
     "discover_episodes",
     "select_episodes",
-    "_load_episode_record",
+    "load_episode_record",
     "Selector",
     "SameTaskDifferentAgent",
     "SameAgentPreviousIteration",

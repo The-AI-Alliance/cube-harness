@@ -40,11 +40,11 @@ from cube_harness.analyze.judge.core import (
     EXPERIMENT_JUDGE_REPORT_FILENAME,
     EXPERIMENT_JUDGE_REPORT_JSON_FILENAME,
     EXPERIMENT_JUDGE_SUMMARY_FILENAME,
-    _persist_judgment,
-    _write_csv_report,
-    _write_summary,
     judge_episode,
     judge_experiment,
+    persist_judgment,
+    write_csv_report,
+    write_summary,
 )
 from cube_harness.analyze.judge.driver import (
     JUDGE_ALLOWED_TOOLS,
@@ -55,16 +55,16 @@ from cube_harness.analyze.judge.driver import (
     ToolAction,
     TraceMode,
 )
+from cube_harness.analyze.judge.parse import extract_json_block
 from cube_harness.analyze.judge.recipe import BaseJudgeOutput, JudgeRecipe, get_default_recipe
-from cube_harness.analyze.judge.sdk import _extract_json_block
 from cube_harness.analyze.judge.selection import (
     EpisodeRef,
     SameAgentPreviousIteration,
     SameTaskDifferentAgent,
     Selector,
     TopKBySimilarityStub,
-    _load_episode_record,
     discover_episodes,
+    load_episode_record,
     select_episodes,
 )
 from cube_harness.analyze.judge.transcript import extract_transcript
@@ -122,11 +122,11 @@ __all__ = [
     "EXPERIMENT_JUDGE_REPORT_FILENAME",
     "EXPERIMENT_JUDGE_REPORT_JSON_FILENAME",
     # Semi-private helpers accessed by judge_report.py and tests
-    "_load_episode_record",
-    "_write_summary",
-    "_write_csv_report",
-    "_persist_judgment",
-    "_extract_json_block",
+    "load_episode_record",
+    "write_summary",
+    "write_csv_report",
+    "persist_judgment",
+    "extract_json_block",
     # CLI entry point
     "main",
 ]
