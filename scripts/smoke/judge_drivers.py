@@ -26,6 +26,42 @@ Usage:
     uv run scripts/smoke/judge_drivers.py --levels 1,2,4,8,16
     uv run scripts/smoke/judge_drivers.py --skip-terminal
     uv run scripts/smoke/judge_drivers.py --model claude-haiku-4-5
+
+Reference baselines (Apple M-series macOS, claude-haiku-4-5, ~50/20 token
+sizes, recorded 2026-05-13). Treat as orientation, not regression bars —
+results vary with API health, network, and concurrent local processes.
+
+  ClaudeCodeSDKDriver (advisory max_parallelism=8):
+    level=1    1/1   ok    3.0s wall    3.0s avg
+    level=2    2/2   ok    3.3s wall    3.2s avg
+    level=3    3/3   ok    4.2s wall    4.0s avg
+    level=4    4/4   ok    3.4s wall    2.9s avg
+    level=8    8/8   ok    4.6s wall    3.8s avg
+    level=16  16/16  ok    8.2s wall    5.7s avg
+    level=24  24/24  ok   10.0s wall    8.3s avg
+    level=32  32/32  ok   10.8s wall    9.2s avg
+    -> Clean through 32. Latency ~3x as parallelism scales 1 -> 32.
+
+  TerminalClaudeDriver (advisory max_parallelism=2):
+    level=1    1/1   ok    6.0s wall    6.0s avg
+    level=2    2/2   ok    5.4s wall    4.1s avg
+    level=3    3/3   ok    3.8s wall    3.5s avg
+    level=4    3/4   FAIL  11.6s wall   5.8s avg  (1 stochastic prose-instead-of-JSON)
+    level=8    8/8   ok    6.0s wall    4.7s avg
+    level=16  16/16  ok    8.9s wall    5.6s avg
+    level=24  24/24  ok   10.5s wall    6.9s avg
+    level=32  31/32  FAIL  18.8s wall   8.0s avg  (1 `claude -p` exit code 1)
+    -> Clean through 24. Real CLI crashes appear around 32.
+
+Takeaways:
+  - Both drivers handle far more parallelism on a quiet host than their
+    advisory `max_parallelism` defaults suggest. Defaults reflect the
+    threshold at which `judge_experiment` starts clamping with a log line,
+    not the hard breaking point.
+  - The terminal driver's failure mode at high parallelism is a CLI exit
+    crash (session-store contention), not a model-output issue.
+  - Stochastic content failures on small prompts can bias single-trial
+    runs at any level. Use the levels for a curve, not a hard threshold.
 """
 
 from __future__ import annotations
@@ -116,10 +152,17 @@ async def _one_call(driver: AgentDriver, model: str, cwd: Path) -> CallOutcome:
     duration = time.time() - start
     text = (result.output_text or "").strip()
     if "hello" not in text or "world" not in text:
+        # Log the full text — content-mismatch failures are diagnostic gold.
+        # Empty responses, prose refusals, and partial JSON each look very
+        # different and the smoke is the place where you actually want them.
+        if not text:
+            detail = "<empty output>"
+        else:
+            detail = repr(text)
         return CallOutcome(
             success=False,
             duration_s=duration,
-            error=f"output missing expected substrings: {text[:120]!r}",
+            error=f"output missing expected substrings: {detail}",
         )
     return CallOutcome(success=True, duration_s=duration)
 
@@ -167,15 +210,19 @@ def _format_report(report: DriverReport) -> str:
     lines.append("  ------+-------------------------------------------")
     for lr in report.level_results:
         avg = statistics.mean(lr.success_latencies) if lr.success_latencies else float("nan")
-        notes = ""
-        if lr.n_fail:
-            # Show the most common error category, briefly.
-            errs = [o.error or "?" for o in lr.outcomes if not o.success]
-            head = errs[0][:60]
-            notes = f" first-err: {head}"
-        lines.append(
-            f"  {lr.level:>5} | {lr.n_success:>3}/{lr.level:<3} {lr.wall_time_s:>6.1f}    {avg:>6.1f}{notes}"
-        )
+        notes = f" {lr.n_fail} FAIL" if lr.n_fail else ""
+        lines.append(f"  {lr.level:>5} | {lr.n_success:>3}/{lr.level:<3} {lr.wall_time_s:>6.1f}    {avg:>6.1f}{notes}")
+    # Print every failure in full beneath the table — content-mismatch text
+    # and CLI exit messages are the diagnostic payload of this smoke.
+    failure_lines: list[str] = []
+    for lr in report.level_results:
+        for i, outcome in enumerate(lr.outcomes):
+            if not outcome.success:
+                failure_lines.append(f"  level={lr.level} call#{i}: {outcome.error}")
+    if failure_lines:
+        lines.append("")
+        lines.append("  Failures:")
+        lines.extend(failure_lines)
     return "\n".join(lines)
 
 
