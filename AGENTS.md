@@ -37,9 +37,8 @@ src/cube_harness/
 │   ├── react.py                # ReAct agent (primary)
 │   ├── genny.py                # Genny agent (context-aware, rolling summaries)
 │   └── legacy_generic_agent.py # Deprecated XML-tag agent — see DEPRECATED.md
-├── tools/
+├── tools/                      # Harness-only integrations (BrowserGym, MCP client). Generalist tool ABCs and concrete impls live in cube-standard.
 │   ├── browsergym.py           # BrowserGym integration
-│   ├── computer.py             # Docker-based computer-use
 │   └── mcp.py                  # MCP client tool (consume external MCP servers)
 ├── action_spaces/              # Protocol definitions for action sets
 ├── benchmarks/                 # Legacy in-tree benchmarks (miniwob, workarena) — most now live in cubes/
@@ -88,6 +87,8 @@ is governed by cube-standard's specs. Don't subclass those here — consume them
 - **Think long-term.** Every change should age well. Ask whether today's shortcut becomes tomorrow's debt — and whether the design could evolve cleanly if requirements change.
 
 ## Code review
+
+**Default branch is `dev`** — base all PRs off it, not `main`.
 
 **Sign your commits.** Every commit needs a `Signed-off-by` line (`git commit -s`). DCO is enforced by CI — unsigned commits will be blocked.
 
