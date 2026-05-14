@@ -1,10 +1,10 @@
 """Unified SWE-style agent recipe — swebench-verified, swebench-live, terminalbench.
 
 Usage:
-    .venv/bin/python recipes/swe_agent_recipe.py                              # swebench-verified, gpt-5.4-mini, debug
-    .venv/bin/python recipes/swe_agent_recipe.py swebench-verified gpt-5.4   # full run
-    .venv/bin/python recipes/swe_agent_recipe.py swebench-live gpt-5.4       # swe-bench live
-    .venv/bin/python recipes/swe_agent_recipe.py terminalbench gpt-5.4       # terminal-bench
+    uv run --project recipes/swe --extra swebench-verified recipes/swe/swe_agent_recipe.py --debug
+    uv run --project recipes/swe --extra swebench-verified recipes/swe/swe_agent_recipe.py swebench-verified gpt-5.4
+    uv run --project recipes/swe --extra swebench-live recipes/swe/swe_agent_recipe.py swebench-live gpt-5.4
+    uv run --project recipes/swe --extra terminalbench recipes/swe/swe_agent_recipe.py terminalbench gpt-5.4
 
 Options:
     --debug              Cube's canonical debug tasks, sequential
@@ -13,11 +13,6 @@ Options:
     --subset NAME        Named subset: lite/verified/full (swebench-live), easy (terminalbench)
     --n-parallel N       Ray workers (default: 5)
     --retry DIR          Resume / retry from an existing output directory
-
-Each cube must be installed in the active venv:
-    uv pip install -e cubes/swebench-verified-cube
-    uv pip install -e cubes/swebench-live-cube
-    uv pip install -e cubes/terminalbench-cube
 """
 
 import logging
@@ -27,9 +22,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # meta_agent/ is not a Python package — add it to sys.path so we can import hints.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "meta_agent"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "meta_agent"))
 
-_project_env = Path(__file__).resolve().parents[1] / ".env"
+_project_env = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
 from hints import load_hints  # noqa: E402

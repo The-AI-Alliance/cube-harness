@@ -1,0 +1,21 @@
+[project]
+name = "recipe-env-swe"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "cube-harness",
+]
+
+[project.optional-dependencies]
+swebench-verified = ["swebench-verified-cube"]
+swebench-live = ["swebench-live-cube"]
+terminalbench = ["terminalbench-cube"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+cube-harness = { path = "../..", editable = true }
+swebench-verified-cube = { path = "../../cubes/swebench-verified-cube", editable = true }
+swebench-live-cube = { path = "../../cubes/swebench-live-cube", editable = true }
+terminalbench-cube = { path = "../../cubes/terminalbench-cube", editable = true }

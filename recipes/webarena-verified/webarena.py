@@ -1,22 +1,20 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "cube-harness",
-#     "webarena-verified-cube",
-# ]
-#
-# [tool.uv.sources]
-# cube-harness = { path = "..", editable = true }
-# webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
-# ///
-
 """Run WebArena-Verified benchmark with cube-harness.
 
 Usage:
-    .venv/bin/python recipes/webarena.py --subset shopping_admin
-    .venv/bin/python recipes/webarena.py --subset shopping --debug
-    .venv/bin/python recipes/webarena.py --subset all --browser browsergym
-    .venv/bin/python recipes/webarena.py --subset shopping_admin --model anthropic/claude-sonnet-4-6
+    # Single site subset
+    uv run --project recipes/webarena-verified recipes/webarena-verified/webarena.py --subset shopping_admin
+
+    # All sites
+    uv run --project recipes/webarena-verified recipes/webarena-verified/webarena.py --subset all
+
+    # BrowserGym tool backend
+    uv run --project recipes/webarena-verified recipes/webarena-verified/webarena.py --subset shopping --browser browsergym
+
+    # Debug mode
+    uv run --project recipes/webarena-verified recipes/webarena-verified/webarena.py --subset shopping --debug
+
+    # Custom model
+    uv run --project recipes/webarena-verified recipes/webarena-verified/webarena.py --subset shopping_admin --model anthropic/claude-sonnet-4-6
 """
 
 import argparse
