@@ -22,7 +22,7 @@
       "simulation"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "bn-fit-modify",
@@ -45,7 +45,7 @@
       "stats"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "break-filter-js-from-html",
@@ -67,7 +67,7 @@
       "security"
     ],
     "max_agent_timeout_sec": 1200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "build-cython-ext",
@@ -91,7 +91,7 @@
       "compilation"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "build-pmars",
@@ -118,7 +118,7 @@
       "corewars"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "build-pov-ray",
@@ -145,7 +145,7 @@
       "research"
     ],
     "max_agent_timeout_sec": 12000,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "caffe-cifar-10",
@@ -168,7 +168,7 @@
       "caffe"
     ],
     "max_agent_timeout_sec": 1200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "cancel-async-tasks",
@@ -192,7 +192,7 @@
       "python"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "chess-best-move",
@@ -212,7 +212,7 @@
     "category": "games",
     "tags": [],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "circuit-fibsqrt",
@@ -234,7 +234,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "cobol-modernization",
@@ -256,7 +256,7 @@
       "coding"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "code-from-image",
@@ -278,7 +278,7 @@
       "ocr"
     ],
     "max_agent_timeout_sec": 1200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "compile-compcert",
@@ -301,7 +301,7 @@
       "compilers"
     ],
     "max_agent_timeout_sec": 2400,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "configure-git-webserver",
@@ -325,7 +325,7 @@
       "web"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "constraints-scheduling",
@@ -351,7 +351,7 @@
       "temporal-reasoning"
     ],
     "max_agent_timeout_sec": 1200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "count-dataset-tokens",
@@ -377,7 +377,7 @@
       "huggingface"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "crack-7z-hash",
@@ -401,7 +401,7 @@
       "file-operations"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "custom-memory-heap-crash",
@@ -425,7 +425,7 @@
       "debugging"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "db-wal-recovery",
@@ -449,7 +449,7 @@
       "recovery"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "distribution-search",
@@ -473,7 +473,7 @@
       "machine-learning"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "dna-assembly",
@@ -496,7 +496,7 @@
       "cloning"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "dna-insert",
@@ -519,7 +519,7 @@
       "cloning"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "extract-elf",
@@ -539,7 +539,7 @@
     "category": "file-operations",
     "tags": [],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "extract-moves-from-video",
@@ -563,7 +563,7 @@
       "video-processing"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "feal-differential-cryptanalysis",
@@ -585,7 +585,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "feal-linear-cryptanalysis",
@@ -607,7 +607,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "filter-js-from-html",
@@ -629,7 +629,7 @@
       "security"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "financial-document-processor",
@@ -654,7 +654,7 @@
       "file-operations"
     ],
     "max_agent_timeout_sec": 1200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "fix-code-vulnerability",
@@ -678,7 +678,7 @@
       "common-weakness-enumeration"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "fix-git",
@@ -701,7 +701,7 @@
       "version-control"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "fix-ocaml-gc",
@@ -723,7 +723,7 @@
       "troubleshooting"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "gcode-to-text",
@@ -745,7 +745,7 @@
       "file-operations"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "git-leak-recovery",
@@ -768,7 +768,7 @@
       "security"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "git-multibranch",
@@ -792,7 +792,7 @@
       "web"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "gpt2-codegolf",
@@ -812,7 +812,7 @@
     "category": "software-engineering",
     "tags": [],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "headless-terminal",
@@ -835,7 +835,7 @@
       "terminal"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "hf-model-inference",
@@ -860,7 +860,7 @@
       "data-science"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "install-windows-3.11",
@@ -887,7 +887,7 @@
       "retro-computing"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "kv-store-grpc",
@@ -911,7 +911,7 @@
       "system"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "large-scale-text-editing",
@@ -936,7 +936,7 @@
       "vim-macros"
     ],
     "max_agent_timeout_sec": 1200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "largest-eigenval",
@@ -961,7 +961,7 @@
       "numerical-approximation"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "llm-inference-batching-scheduler",
@@ -986,7 +986,7 @@
       "scheduling"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "log-summary-date-ranges",
@@ -1010,7 +1010,7 @@
       "data-processing"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "mailman",
@@ -1033,7 +1033,7 @@
       "mailing-list"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "make-doom-for-mips",
@@ -1055,7 +1055,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "make-mips-interpreter",
@@ -1077,7 +1077,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "mcmc-sampling-stan",
@@ -1102,7 +1102,7 @@
       "mcmc"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "merge-diff-arc-agi-task",
@@ -1125,7 +1125,7 @@
       "coding"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "model-extraction-relu-logits",
@@ -1147,7 +1147,7 @@
       "security"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "modernize-scientific-stack",
@@ -1173,7 +1173,7 @@
       "data-processing"
     ],
     "max_agent_timeout_sec": 600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "mteb-leaderboard",
@@ -1196,7 +1196,7 @@
       "mteb"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "mteb-retrieve",
@@ -1220,7 +1220,7 @@
       "mteb"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "multi-source-data-merger",
@@ -1247,7 +1247,7 @@
       "parquet"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "nginx-request-logging",
@@ -1269,7 +1269,7 @@
       "web-server"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "openssl-selfsigned-cert",
@@ -1294,7 +1294,7 @@
       "system"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "overfull-hbox",
@@ -1318,7 +1318,7 @@
       "combinatorial-optimization"
     ],
     "max_agent_timeout_sec": 750,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "password-recovery",
@@ -1342,7 +1342,7 @@
       "troubleshooting"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "path-tracing",
@@ -1364,7 +1364,7 @@
       "images"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "path-tracing-reverse",
@@ -1386,7 +1386,7 @@
       "images"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "polyglot-c-py",
@@ -1408,7 +1408,7 @@
       "coding"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "polyglot-rust-c",
@@ -1431,7 +1431,7 @@
       "no-verified-solution"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "portfolio-optimization",
@@ -1455,7 +1455,7 @@
       "optimization"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "protein-assembly",
@@ -1479,7 +1479,7 @@
       "proteins"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "prove-plus-comm",
@@ -1501,7 +1501,7 @@
       "coding"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "pypi-server",
@@ -1524,7 +1524,7 @@
       "system"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "pytorch-model-cli",
@@ -1548,7 +1548,7 @@
       "pytorch"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "pytorch-model-recovery",
@@ -1572,7 +1572,7 @@
       "machine-learning"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "qemu-alpine-ssh",
@@ -1594,7 +1594,7 @@
       "sys-admin"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "qemu-startup",
@@ -1616,7 +1616,7 @@
       "sys-admin"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "query-optimize",
@@ -1639,7 +1639,7 @@
       "sql-query"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "raman-fitting",
@@ -1664,7 +1664,7 @@
       "physics"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "regex-chess",
@@ -1686,7 +1686,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "regex-log",
@@ -1710,7 +1710,7 @@
       "log-analysis"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "reshard-c4-data",
@@ -1734,7 +1734,7 @@
       "file-operations"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "rstan-to-pystan",
@@ -1758,7 +1758,7 @@
       "gaussian-process"
     ],
     "max_agent_timeout_sec": 1800,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "sam-cell-seg",
@@ -1782,7 +1782,7 @@
       "histopathology"
     ],
     "max_agent_timeout_sec": 7200,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "sanitize-git-repo",
@@ -1806,7 +1806,7 @@
       "version-control"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "schemelike-metacircular-eval",
@@ -1828,7 +1828,7 @@
       "software-engineering"
     ],
     "max_agent_timeout_sec": 2400,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "sparql-university",
@@ -1852,7 +1852,7 @@
       "information-retrieval"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "sqlite-db-truncate",
@@ -1874,7 +1874,7 @@
       "file-operations"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "sqlite-with-gcov",
@@ -1897,7 +1897,7 @@
       "system"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "torch-pipeline-parallelism",
@@ -1919,7 +1919,7 @@
       "system"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "torch-tensor-parallelism",
@@ -1941,7 +1941,7 @@
       "system"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "train-fasttext",
@@ -1964,7 +1964,7 @@
       "data-science"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "tune-mjcf",
@@ -1989,7 +1989,7 @@
       "numerical-optimization"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "video-processing",
@@ -2011,7 +2011,7 @@
       "video-processing"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "vulnerable-secret",
@@ -2034,7 +2034,7 @@
       "file-operations"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "winning-avg-corewars",
@@ -2058,7 +2058,7 @@
       "gaming"
     ],
     "max_agent_timeout_sec": 3600,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   },
   {
     "id": "write-compressor",
@@ -2080,6 +2080,6 @@
       "coding"
     ],
     "max_agent_timeout_sec": 900,
-    "_type": "terminalbench_cube.task.TerminalBenchTaskMetadata"
+    "_type": "terminalbench2_cube.task.TerminalBench2TaskMetadata"
   }
 ]

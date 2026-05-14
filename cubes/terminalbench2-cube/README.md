@@ -1,4 +1,4 @@
-# terminalbench-cube
+# terminalbench2-cube
 
 [Terminal-Bench 2](https://github.com/harbor-framework/terminal-bench-2) (Laude Institute / Harbor Framework) ported to the [CUBE](../../) protocol — **89** real-world terminal tasks (compile, debug, deploy, query, modernize) with pytest-based validation.
 
@@ -6,7 +6,7 @@
 
 Each task hands the agent a Linux shell pre-loaded with a project, asks for a concrete deliverable (a fixed bug, a passing test, a compiled binary, an inferred answer), and verifies the result by running an upstream `pytest` test suite the agent never sees. Tasks span 16 categories — data-processing, debugging, file-operations, scientific-computing, security, software-engineering, system-administration, and more — with `difficulty` ∈ {`easy`, `medium`, `hard`}.
 
-`TerminalBenchTask` uses [`TerminalTool`](https://github.com/The-AI-Alliance/cube-standard/tree/main/src/cube/tools/terminal) from cube-standard for `bash` / `read_file` / `write_file` access into the per-task Docker container — no cube-specific tool subclass.
+`TerminalBench2Task` uses [`TerminalTool`](https://github.com/The-AI-Alliance/cube-standard/tree/main/src/cube/tools/terminal) from cube-standard for `bash` / `read_file` / `write_file` access into the per-task Docker container — no cube-specific tool subclass.
 
 ## Prerequisites
 
@@ -17,8 +17,8 @@ Each task hands the agent a Linux shell pre-loaded with a project, asks for a co
 ## Installation
 
 ```bash
-uv pip install terminalbench-cube
-cube install terminalbench-cube      # one-time: clone terminal-bench-2 and populate execution cache
+uv pip install terminalbench2-cube
+cube install terminalbench2-cube      # one-time: clone terminal-bench-2 and populate execution cache
 ```
 
 `install()` is idempotent. The shipped `task_metadata.json` carries only lightweight public fields (id, difficulty, category, tags); task instructions and archives are downloaded to a per-task execution cache the first time.
@@ -48,9 +48,9 @@ mounted at `/opt/cube/` on first launch).
 
 ```python
 from cube.tools.terminal import TerminalToolConfig
-from terminalbench_cube import TerminalBenchBenchmarkConfig
+from terminalbench2_cube import TerminalBench2BenchmarkConfig
 
-cfg = TerminalBenchBenchmarkConfig(
+cfg = TerminalBench2BenchmarkConfig(
     tool_config=TerminalToolConfig(working_dir="/app", max_timeout=900, enable_file_actions=True),
     oracle_mode=False,      # if True, the gold solution is uploaded to /tmp/solution in reset()
 )
@@ -68,7 +68,7 @@ bench.close()
 
 ## Subsets
 
-`TerminalBenchBenchmarkConfig` ships named subsets keyed by `difficulty` and `category`. Filter via `subset_from_glob` (single key) or compose multiple subsets via `subset_from_list` with explicit task IDs. The iter recipe ships a fixed 40-task medium subset chosen proportionally across all 14 categories for reproducible iteration.
+`TerminalBench2BenchmarkConfig` ships named subsets keyed by `difficulty` and `category`. Filter via `subset_from_glob` (single key) or compose multiple subsets via `subset_from_list` with explicit task IDs. The iter recipe ships a fixed 40-task medium subset chosen proportionally across all 14 categories for reproducible iteration.
 
 ## Task-level features
 
@@ -78,13 +78,13 @@ bench.close()
 
 ## Evaluation
 
-`TerminalBenchTask.evaluate()` uploads the upstream pytest test harness into the container, runs `test.sh` (which writes a `reward.txt`), and returns the upstream-defined reward (`1.0` = all tests passed; `0.0` otherwise). Output is parsed via [`PytestParser`](src/terminalbench_cube/pytest_parser.py) with regex fall-back for non-standard pytest envelopes.
+`TerminalBench2Task.evaluate()` uploads the upstream pytest test harness into the container, runs `test.sh` (which writes a `reward.txt`), and returns the upstream-defined reward (`1.0` = all tests passed; `0.0` otherwise). Output is parsed via [`PytestParser`](src/terminalbench2_cube/pytest_parser.py) with regex fall-back for non-standard pytest envelopes.
 
 `evaluate()` deliberately mutates container state (uploads test files, installs `uv`) — this is acceptable here because `validate_per_step=False` makes it a single terminal call.
 
 ## Debug suite
 
-Two oracle tasks exercise the pipeline end-to-end via `cube test terminalbench-cube`:
+Two oracle tasks exercise the pipeline end-to-end via `cube test terminalbench2-cube`:
 
 - `fix-git`
 - `overfull-hbox`

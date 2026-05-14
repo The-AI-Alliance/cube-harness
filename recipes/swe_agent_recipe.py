@@ -246,15 +246,15 @@ def _make_tbench_benchmark(
     max_output_bytes: int,
 ) -> object:
     from cube.tools.terminal import TerminalToolConfig
-    from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
+    from terminalbench2_cube.benchmark import TerminalBench2BenchmarkConfig
 
     if debug:
-        from terminalbench_cube.debug import get_debug_benchmark
+        from terminalbench2_cube.debug import get_debug_benchmark
 
         return get_debug_benchmark()
 
-    TerminalBenchBenchmarkConfig.install()
-    cfg = TerminalBenchBenchmarkConfig(
+    TerminalBench2BenchmarkConfig.install()
+    cfg = TerminalBench2BenchmarkConfig(
         tool_config=TerminalToolConfig(
             working_dir="/app",
             max_timeout=900,

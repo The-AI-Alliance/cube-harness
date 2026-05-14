@@ -1,4 +1,4 @@
-"""Task and TaskConfig for terminalbench-cube."""
+"""Task and TaskConfig for terminalbench2-cube."""
 
 import base64
 import io
@@ -16,17 +16,17 @@ from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
 from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 from cube.tools.terminal import TerminalTool, TerminalToolConfig
-from terminalbench_cube.pytest_parser import PytestParser
+from terminalbench2_cube.pytest_parser import PytestParser
 
 logger = logging.getLogger(__name__)
 
 
-class TerminalBenchTaskMetadata(TaskMetadata):
+class TerminalBench2TaskMetadata(TaskMetadata):
     """TaskMetadata subclass for Terminal-Bench tasks.
 
     Public fields shipped in task_metadata.json (available at import time).
     Heavy execution data (instruction, archive) lives in the per-task execution
-    cache and is loaded lazily by TerminalBenchTaskConfig.make().
+    cache and is loaded lazily by TerminalBench2TaskConfig.make().
     """
 
     difficulty: str
@@ -42,7 +42,7 @@ class TerminalBenchTaskMetadata(TaskMetadata):
     """Maximum wall-clock seconds the agent is allowed to run (from task.toml)."""
 
 
-class TerminalBenchExecutionInfo(TaskExecutionInfo):
+class TerminalBench2ExecutionInfo(TaskExecutionInfo):
     """Heavy per-task execution data for TerminalBench — populated on the worker."""
 
     instruction: str
@@ -50,10 +50,10 @@ class TerminalBenchExecutionInfo(TaskExecutionInfo):
     max_test_timeout_sec: int = 900
 
 
-class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
+class TerminalBench2Task(Task[TerminalBench2TaskMetadata]):
     """A single Terminal-Bench task with pytest-based validation."""
 
-    metadata: TerminalBenchTaskMetadata  # type: ignore[assignment]
+    metadata: TerminalBench2TaskMetadata  # type: ignore[assignment]
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
@@ -67,13 +67,13 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
     _logs_verifier_dir: str = PrivateAttr(default="/tmp/logs/verifier")
 
     @property
-    def _exec(self) -> TerminalBenchExecutionInfo:
+    def _exec(self) -> TerminalBench2ExecutionInfo:
         """Typed view on execution_info — fails fast if it was not populated."""
-        if not isinstance(self.execution_info, TerminalBenchExecutionInfo):
+        if not isinstance(self.execution_info, TerminalBench2ExecutionInfo):
             raise RuntimeError(
-                f"TerminalBenchTask {self.metadata.id!r}: execution_info is "
-                f"{type(self.execution_info).__name__}, expected TerminalBenchExecutionInfo. "
-                f"Construct via TerminalBenchTaskConfig.make() so it is populated."
+                f"TerminalBench2Task {self.metadata.id!r}: execution_info is "
+                f"{type(self.execution_info).__name__}, expected TerminalBench2ExecutionInfo. "
+                f"Construct via TerminalBench2TaskConfig.make() so it is populated."
             )
         return self.execution_info
 
@@ -81,7 +81,7 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
     def tool(self) -> TerminalTool:  # type: ignore[override]
         """Narrow `Task.tool` (typed `AbstractTool`) to the concrete TerminalTool.
 
-        TerminalBenchTask only constructs TerminalTool in ``_build_tool``; the
+        TerminalBench2Task only constructs TerminalTool in ``_build_tool``; the
         single assert here replaces the four scattered call-site asserts. If
         cube-standard later splits TerminalTool into Protocol + concrete (see
         cube-standard#151), drop the isinstance check entirely.
@@ -436,8 +436,8 @@ class TerminalBenchTask(Task[TerminalBenchTaskMetadata]):
         return results
 
 
-class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
-    """Serializable factory that produces a TerminalBenchTask.
+class TerminalBench2TaskConfig(TaskConfig[TerminalBench2TaskMetadata]):
+    """Serializable factory that produces a TerminalBench2Task.
 
     Loads heavy execution data (instruction, archive) from the per-task execution
     cache in make(), so it works correctly in Ray workers.
@@ -452,27 +452,27 @@ class TerminalBenchTaskConfig(TaskConfig[TerminalBenchTaskMetadata]):
         if not cache_dir.exists() or not any(cache_dir.iterdir()):
             raise RuntimeError(
                 f"TerminalBench per-task execution cache is empty at {cache_dir}. "
-                f"Run `cube install terminalbench-cube` (or "
-                f"`TerminalBenchBenchmarkConfig.install()`) on this worker first."
+                f"Run `cube install terminalbench2-cube` (or "
+                f"`TerminalBench2BenchmarkConfig.install()`) on this worker first."
             )
 
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
         container_backend: ContainerBackend | None = None,
-    ) -> TerminalBenchTask:
+    ) -> TerminalBench2Task:
         has_infra = runtime_context is not None and "infra" in runtime_context
         if not has_infra and container_backend is None:
             raise ValueError(
-                "TerminalBenchTaskConfig.make() requires runtime_context['infra'] "
+                "TerminalBench2TaskConfig.make() requires runtime_context['infra'] "
                 "(preferred) or a legacy container_backend."
             )
 
         self.verify_installed()
         raw = self.load_task_execution_info()
-        execution_info = TerminalBenchExecutionInfo.model_validate(raw)
+        execution_info = TerminalBench2ExecutionInfo.model_validate(raw)
 
-        return TerminalBenchTask(
+        return TerminalBench2Task(
             metadata=self.metadata,
             execution_info=execution_info,
             tool_config=self.tool_config

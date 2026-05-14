@@ -1,5 +1,5 @@
 [project]
-name = "terminalbench-cube"
+name = "terminalbench2-cube"
 version = "0.1.0"
 description = "Terminal-Bench 2 — real-world terminal tasks with pytest-based validation"
 requires-python = ">=3.12"
@@ -10,14 +10,14 @@ dependencies = [
 ]
 
 [project.entry-points."cube.benchmarks"]
-terminalbench-cube = "terminalbench_cube.benchmark:TerminalBenchBenchmarkConfig"
+terminalbench2-cube = "terminalbench2_cube.benchmark:TerminalBench2BenchmarkConfig"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.9"]
 build-backend = "uv_build"
 
 [tool.uv-build]
-include = ["src/terminalbench_cube/task_metadata.json"]
+include = ["src/terminalbench2_cube/task_metadata.json"]
 
 [dependency-groups]
 dev = [

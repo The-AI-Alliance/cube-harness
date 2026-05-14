@@ -1,8 +1,8 @@
-"""Deterministic debug agent for testing terminalbench-cube end-to-end without an LLM.
+"""Deterministic debug agent for testing terminalbench2-cube end-to-end without an LLM.
 
 Public API
 ----------
-get_debug_benchmark()         → TerminalBenchBenchmarkConfig
+get_debug_benchmark()         → TerminalBench2BenchmarkConfig
 make_debug_agent(task_id)     → DebugAgent
 """
 
@@ -13,7 +13,7 @@ from typing import Annotated
 
 import typer
 from cube.core import Action, ActionSchema, Observation
-from terminalbench_cube.benchmark import TerminalBenchBenchmarkConfig
+from terminalbench2_cube.benchmark import TerminalBench2BenchmarkConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ _FINAL = Action(name="final_step", arguments={})
 _TASK_ACTIONS: dict[str, list[Action]] = {
     # Relative `personal-site` works whether working_dir is /app (default) or
     # /tmp/app (after _maybe_relocate_app on non-root backends).
-    # /tmp/solution is where TerminalBenchTask.reset() uploads the solution
+    # /tmp/solution is where TerminalBench2Task.reset() uploads the solution
     # for any backend — /tmp is universally writable.
     "fix-git": [
         Action(
@@ -76,13 +76,13 @@ class DebugAgent:
         return self.get_action(obs)
 
 
-def get_debug_benchmark() -> TerminalBenchBenchmarkConfig:
-    """Return a ``TerminalBenchBenchmarkConfig`` scoped to the debug tasks.
+def get_debug_benchmark() -> TerminalBench2BenchmarkConfig:
+    """Return a ``TerminalBench2BenchmarkConfig`` scoped to the debug tasks.
 
     Pure factory — the harness owns ``config.install()`` and ``config.make(infra)``.
     Debug tasks run in ``oracle_mode`` so reset() uploads the gold solution.
     """
-    return TerminalBenchBenchmarkConfig(oracle_mode=True).subset_from_list(list(_TASK_ACTIONS))
+    return TerminalBench2BenchmarkConfig(oracle_mode=True).subset_from_list(list(_TASK_ACTIONS))
 
 
 def make_debug_agent(task_id: str) -> DebugAgent:
@@ -95,8 +95,8 @@ def _cli(
     eai_path: Annotated[str, typer.Option(help="Path to eai CLI")] = "eai",
     preemptable: Annotated[bool, typer.Option(help="Request preemptable resources")] = False,
 ) -> None:
-    """Run the terminalbench-cube oracle debug suite."""
-    import terminalbench_cube.debug as _this_module
+    """Run the terminalbench2-cube oracle debug suite."""
+    import terminalbench2_cube.debug as _this_module
     from cube.testing import run_debug_suite
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
@@ -114,7 +114,7 @@ def _cli(
             launch_timeout_seconds=3000,
         )
 
-    results = run_debug_suite("terminalbench-cube", _this_module, workers=1, infra=infra)
+    results = run_debug_suite("terminalbench2-cube", _this_module, workers=1, infra=infra)
     failed = [r for r in results if r["error"] or not r["done"] or r["reward"] < 1.0]
     raise typer.Exit(1 if failed else 0)
 
