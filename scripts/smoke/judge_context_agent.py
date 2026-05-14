@@ -46,12 +46,12 @@ from typing import Annotated
 
 import typer
 
+from cube_harness.analyze.judge.agent_driver import ClaudeCodeSDKDriver
 from cube_harness.analyze.judge.benchmark_context_agent import (
     DEFAULT_CONTEXT_MODEL,
     generate_context_file,
 )
 from cube_harness.analyze.judge.context import validate_context_file
-from cube_harness.analyze.judge.driver import ClaudeCodeSDKDriver
 
 
 def _build_fixture(root: Path) -> Path:

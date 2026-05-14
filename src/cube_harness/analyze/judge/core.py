@@ -18,6 +18,13 @@ from pydantic import ConfigDict, Field, ValidationError
 from cube_harness.analyze.cross_experiment.cross_judge_agreement import (
     write_cross_judge_agreement,
 )
+from cube_harness.analyze.judge.agent_driver import (
+    AgentDriver,
+    ClaudeCodeSDKDriver,
+    DriverResult,
+    ToolAction,
+    TraceMode,
+)
 from cube_harness.analyze.judge.audit import AUDIT_FILENAME, run_audit_pass, write_audit
 from cube_harness.analyze.judge.benchmark_context_agent import generate_context_file
 from cube_harness.analyze.judge.context import (
@@ -25,7 +32,12 @@ from cube_harness.analyze.judge.context import (
     find_default_context_file,
     validate_context_file,
 )
-from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, DriverResult, ToolAction, TraceMode
+from cube_harness.analyze.judge.episode_discovery import (
+    EpisodeRef,
+    discover_episodes,
+    load_episode_record,
+    select_episodes,
+)
 from cube_harness.analyze.judge.meta_analysis import (
     copy_to_journal,
     run_meta_analysis,
@@ -33,13 +45,7 @@ from cube_harness.analyze.judge.meta_analysis import (
 )
 from cube_harness.analyze.judge.parse import extract_json_block
 from cube_harness.analyze.judge.recipe import JudgeRecipe, get_default_recipe
-from cube_harness.analyze.judge.selection import (
-    EpisodeRef,
-    Selector,
-    discover_episodes,
-    load_episode_record,
-    select_episodes,
-)
+from cube_harness.analyze.judge.selectors import Selector
 from cube_harness.analyze.judge.transcript import extract_transcript
 from cube_harness.core import Trajectory
 from cube_harness.eval_log import (

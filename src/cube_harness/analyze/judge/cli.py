@@ -21,13 +21,13 @@ from typing import Annotated
 
 import typer
 
+from cube_harness.analyze.judge.agent_driver import AgentDriver, ClaudeCodeSDKDriver, TerminalClaudeDriver
 from cube_harness.analyze.judge.benchmark_context_agent import generate_context_file
 from cube_harness.analyze.judge.core import (
     DEFAULT_SAMPLE_FRACTION,
     JudgeBatchConfig,
     judge_experiment,
 )
-from cube_harness.analyze.judge.driver import AgentDriver, ClaudeCodeSDKDriver, TerminalClaudeDriver
 from cube_harness.analyze.judge.recipe import JudgeRecipe
 from cube_harness.analyze.judge.use_cases import RECIPE_CATALOG
 from cube_harness.eval_log import BaseJudgeOutput, JudgeMetadata

@@ -19,8 +19,8 @@ import logging
 import re
 from pathlib import Path
 
+from cube_harness.analyze.judge.agent_driver import AgentDriver
 from cube_harness.analyze.judge.context import _PATHS_FENCE_RE, JUDGE_CONTEXT_FILENAME
-from cube_harness.analyze.judge.driver import AgentDriver
 
 logger = logging.getLogger(__name__)
 

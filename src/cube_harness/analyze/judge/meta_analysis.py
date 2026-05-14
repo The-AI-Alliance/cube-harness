@@ -35,7 +35,7 @@ from cube_harness.analyze.judge.parse import extract_json_block
 from cube_harness.analyze.judge.schema_prompt import model_to_json_example
 
 if TYPE_CHECKING:
-    from cube_harness.analyze.judge.driver import AgentDriver
+    from cube_harness.analyze.judge.agent_driver import AgentDriver
     from cube_harness.eval_log import BaseJudgeOutput, JudgeMetadata
 
 logger = logging.getLogger(__name__)

@@ -47,8 +47,8 @@ from cube_harness.analyze.judge import (
     write_csv_report,
 )
 from cube_harness.analyze.judge.context import JUDGE_CONTEXT_FILENAME
+from cube_harness.analyze.judge.episode_discovery import EpisodeRef
 from cube_harness.analyze.judge.recipe import _deserialize_output_model
-from cube_harness.analyze.judge.selection import EpisodeRef
 from cube_harness.analyze.judge.use_cases import RECIPE_CATALOG
 from cube_harness.analyze.judge.use_cases.general_blame import GeneralBlameOutput
 from cube_harness.eval_log import (
@@ -864,7 +864,7 @@ def test_judge_episode_pipeline(tmp_path: Path) -> None:
 
 def test_terminal_driver_builds_expected_argv(tmp_path: Path) -> None:
     """Verify the command-line construction without spawning a real subprocess."""
-    from cube_harness.analyze.judge.driver import TerminalClaudeDriver
+    from cube_harness.analyze.judge.agent_driver import TerminalClaudeDriver
 
     drv = TerminalClaudeDriver(executable="claude")
     args = drv._build_args(
@@ -888,7 +888,7 @@ def test_terminal_driver_builds_expected_argv(tmp_path: Path) -> None:
 
 def test_terminal_driver_parses_envelope() -> None:
     """JSON envelope from `claude -p` is parsed into a DriverResult."""
-    from cube_harness.analyze.judge.driver import TerminalClaudeDriver
+    from cube_harness.analyze.judge.agent_driver import TerminalClaudeDriver
 
     drv = TerminalClaudeDriver()
     envelope = json.dumps(
@@ -961,7 +961,7 @@ def test_terminal_driver_real_subprocess() -> None:  # pragma: no cover — env-
     """End-to-end check against the real terminal CLI. Slow + gated."""
     import asyncio
 
-    from cube_harness.analyze.judge.driver import TerminalClaudeDriver
+    from cube_harness.analyze.judge.agent_driver import TerminalClaudeDriver
 
     drv = TerminalClaudeDriver()
     result = asyncio.run(
@@ -1166,7 +1166,7 @@ def test_model_to_json_example_renders_field_order() -> None:
 
 def test_run_meta_analysis_retries_on_validation_error(tmp_path: Path) -> None:
     """First reply has a renamed field (`label` instead of `name`); retry must fix it."""
-    from cube_harness.analyze.judge.driver import DriverResult
+    from cube_harness.analyze.judge.agent_driver import DriverResult
     from cube_harness.analyze.judge.meta_analysis import run_meta_analysis
 
     invalid_first_reply = json.dumps(

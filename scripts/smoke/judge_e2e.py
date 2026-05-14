@@ -63,8 +63,8 @@ from cube_harness.analyze.judge import (
     MetaAnalysis,
     judge_experiment,
 )
+from cube_harness.analyze.judge.agent_driver import ClaudeCodeSDKDriver, TerminalClaudeDriver
 from cube_harness.analyze.judge.core import EXPERIMENT_JUDGE_REPORT_JSON_FILENAME
-from cube_harness.analyze.judge.driver import ClaudeCodeSDKDriver, TerminalClaudeDriver
 from cube_harness.eval_log import EPISODE_RECORD_FILENAME, EpisodeRecord, UsageSummary
 
 # A short, plausible failure trajectory. Three step files: initial obs (task

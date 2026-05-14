@@ -26,7 +26,7 @@ from pydantic import Field, ValidationError
 from cube_harness.analyze.judge.parse import extract_json_block
 
 if TYPE_CHECKING:
-    from cube_harness.analyze.judge.driver import AgentDriver
+    from cube_harness.analyze.judge.agent_driver import AgentDriver
     from cube_harness.analyze.judge.recipe import JudgeRecipe
 
 logger = logging.getLogger(__name__)

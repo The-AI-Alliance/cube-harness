@@ -78,7 +78,7 @@ from typing import Annotated
 
 import typer
 
-from cube_harness.analyze.judge.driver import (
+from cube_harness.analyze.judge.agent_driver import (
     AgentDriver,
     ClaudeCodeSDKDriver,
     DriverResult,
