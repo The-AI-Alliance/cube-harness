@@ -12,7 +12,7 @@ from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import ActionSchema, Observation
 from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
-from cube.tools.terminal import TerminalTool, TerminalToolConfig
+from cube.tools.terminal import ContainerTerminalTool, TerminalToolConfig
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ class SWEBenchVerifiedExecutionInfo(TaskExecutionInfo):
     """Wall-clock seconds allowed for the evaluation test commands."""
 
 
-class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
+class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata, ContainerTerminalTool]):
     """A single SWE-bench Verified task with test-based validation."""
 
     validate_per_step: bool = False
@@ -155,7 +155,6 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
         # Oracle mode: write gold patch for debug/baseline use
         if self.oracle_mode and self._exec.patch:
-            assert isinstance(self.tool, TerminalTool)
             b64 = base64.b64encode(self._exec.patch.encode()).decode()
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
@@ -172,7 +171,6 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         }
 
     def evaluate(self, obs: Observation | None = None) -> tuple[float, dict[str, Any]]:
-        assert isinstance(self.tool, TerminalTool)
 
         # Apply test patch
         self._apply_patch(self._exec.test_patch)
@@ -210,7 +208,6 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
 
     def _apply_patch(self, patch: str) -> str:
         """Apply a unified diff patch to /testbed using git apply with fallbacks."""
-        assert isinstance(self.tool, TerminalTool)
         b64 = base64.b64encode(patch.encode()).decode()
         self.tool.bash_unlimited(f"echo '{b64}' | base64 -d > /tmp/patch.diff")
 
@@ -255,7 +252,6 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata]):
         - non-zero exit but zero failures: old sympy containers emit import-level
           deprecation errors that inflate the exit code even when all tests passed.
         """
-        assert isinstance(self.tool, TerminalTool)
         if not test_directives:
             return True, ""
 

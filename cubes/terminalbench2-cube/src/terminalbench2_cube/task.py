@@ -15,7 +15,7 @@ from pydantic import PrivateAttr
 from cube.container import ContainerBackend, relocate_if_readonly
 from cube.core import Observation
 from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
-from cube.tools.terminal import TerminalTool, TerminalToolConfig
+from cube.tools.terminal import ContainerTerminalTool, TerminalToolConfig
 from terminalbench2_cube.pytest_parser import PytestParser
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class TerminalBench2ExecutionInfo(TaskExecutionInfo):
     max_test_timeout_sec: int = 900
 
 
-class TerminalBench2Task(Task[TerminalBench2TaskMetadata]):
+class TerminalBench2Task(Task[TerminalBench2TaskMetadata, ContainerTerminalTool]):
     """A single Terminal-Bench task with pytest-based validation."""
 
     metadata: TerminalBench2TaskMetadata  # type: ignore[assignment]
@@ -76,18 +76,6 @@ class TerminalBench2Task(Task[TerminalBench2TaskMetadata]):
                 f"Construct via TerminalBench2TaskConfig.make() so it is populated."
             )
         return self.execution_info
-
-    @property
-    def tool(self) -> TerminalTool:  # type: ignore[override]
-        """Narrow `Task.tool` (typed `AbstractTool`) to the concrete TerminalTool.
-
-        TerminalBench2Task only constructs TerminalTool in ``_build_tool``; the
-        single assert here replaces the four scattered call-site asserts. If
-        cube-standard later splits TerminalTool into Protocol + concrete (see
-        cube-standard#151), drop the isinstance check entirely.
-        """
-        assert isinstance(self._tool, TerminalTool), f"expected TerminalTool, got {type(self._tool).__name__}"
-        return self._tool
 
     def _build_tool(self) -> None:
         new_wd = relocate_if_readonly(
