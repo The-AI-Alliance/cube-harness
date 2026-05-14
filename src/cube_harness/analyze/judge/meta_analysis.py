@@ -239,6 +239,17 @@ Primary blame distribution: {dict(primary_blame_distribution)}
 Per-episode digest:
 {digest}
 
+Files in the experiment directory you can drill into for richer signal
+(read with Glob/Read; do not assume they all exist):
+  - `episodes/<id>/judge_output.json` — the structured per-episode judgment
+  - `episodes/<id>/judge_trace.json` — the judge's tool-call log
+  - `episodes/<id>/audit.json` — the judge's self-critique (when audit was on)
+  - `cross_judge_agreement.csv` — modal blame + agreement fraction across
+    seeds, when n_seeds > 1. Low agreement = the judge disagreed with itself.
+  - `judge_context.md` — the source-paths the judge had access to. If your
+    patterns suggest the judge missed evidence that lived in a missing path,
+    flag the gap as a `tooling_gaps` entry on `audit.json`-derived findings.
+
 Produce a single JSON object matching the `MetaAnalysis` schema. Wrap in
 a ```json fence. Include a non-empty `markdown_summary`. Reference only
 trajectory_ids that appear in the digest above."""
