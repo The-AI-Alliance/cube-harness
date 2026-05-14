@@ -1138,3 +1138,114 @@ def test_run_meta_analysis_with_fake_driver(tmp_path: Path) -> None:
     assert analysis.n_episodes_judged == 1
     assert analysis.patterns[0].name == "inspects-but-never-edits"
     assert "inspects" in analysis.markdown_summary
+
+
+# ---------------------------------------------------------------------------
+# schema_prompt: derive a JSON example from a Pydantic model
+# ---------------------------------------------------------------------------
+
+
+def test_model_to_json_example_skips_provenance_fields() -> None:
+    from cube_harness.analyze.judge import MetaAnalysis
+    from cube_harness.analyze.judge.schema_prompt import model_to_json_example
+
+    example = model_to_json_example(
+        MetaAnalysis,
+        skip=frozenset({"schema_version", "experiment_id", "timestamp", "cost_usd"}),
+    )
+    parsed = json.loads(example)
+    # Skipped fields are gone.
+    assert "schema_version" not in parsed
+    assert "experiment_id" not in parsed
+    assert "timestamp" not in parsed
+    assert "cost_usd" not in parsed
+    # Real LLM-emitted fields are present.
+    assert "patterns" in parsed
+    assert "root_cause_hypotheses" in parsed
+    assert "markdown_summary" in parsed
+
+
+def test_model_to_json_example_renders_field_order() -> None:
+    """CoT-deliberate field order in the source class must survive into the example."""
+    from cube_harness.analyze.judge.meta_analysis import FailurePattern
+    from cube_harness.analyze.judge.schema_prompt import model_to_json_example
+
+    parsed = json.loads(model_to_json_example(FailurePattern))
+    # Field order is preserved in the example — name comes LAST so the model
+    # token-emits the description / cited trajectories / blame BEFORE naming.
+    assert list(parsed.keys()) == ["description", "affected_trajectories", "dominant_blame", "name"]
+
+
+def test_run_meta_analysis_retries_on_validation_error(tmp_path: Path) -> None:
+    """First reply has a renamed field (`label` instead of `name`); retry must fix it."""
+    from cube_harness.analyze.judge.driver import DriverResult
+    from cube_harness.analyze.judge.meta_analysis import run_meta_analysis
+
+    invalid_first_reply = json.dumps(
+        {
+            "patterns": [
+                {
+                    "description": "agent reads but never writes",
+                    "affected_trajectories": ["taskA_ep0"],
+                    "dominant_blame": "model_capability",
+                    "label": "inspect-without-edit",  # WRONG field name — Pydantic rejects
+                }
+            ],
+            "root_cause_hypotheses": [],
+            "suggested_interventions": [],
+            "markdown_summary": "First attempt.",
+        }
+    )
+    valid_second_reply = json.dumps(
+        {
+            "patterns": [
+                {
+                    "description": "agent reads but never writes",
+                    "affected_trajectories": ["taskA_ep0"],
+                    "dominant_blame": "model_capability",
+                    "name": "inspect-without-edit",
+                }
+            ],
+            "root_cause_hypotheses": [],
+            "suggested_interventions": [],
+            "markdown_summary": "Second attempt (fixed).",
+        }
+    )
+
+    class _SequencedDriver:
+        name = "fake-sequenced"
+        max_parallelism = 1
+
+        def __init__(self) -> None:
+            self.replies = [invalid_first_reply, valid_second_reply]
+            self.calls = 0
+
+        async def run(self, **_: Any) -> DriverResult:
+            text = f"```json\n{self.replies[self.calls]}\n```"
+            self.calls += 1
+            return DriverResult(output_text=text, prompt_tokens=10, completion_tokens=5, cost_usd=0.001, duration_s=0.1)
+
+        async def continue_session(self, **_: Any) -> DriverResult:
+            raise NotImplementedError()
+
+    driver = _SequencedDriver()
+    results = {
+        "taskA_ep0": (_valid_judge_output(), JudgeMetadata(model="claude-sonnet-4-6", timestamp=1.0)),
+    }
+    analysis = asyncio.run(
+        run_meta_analysis(
+            experiment_dir=tmp_path,
+            experiment_id="exp-1",
+            recipe_name="general_blame",
+            driver=driver,
+            results=results,
+            model="claude-opus-4-7",
+            max_retries=1,
+        )
+    )
+    # The retry path produced a valid analysis.
+    assert driver.calls == 2  # initial + 1 retry
+    assert analysis.patterns[0].name == "inspect-without-edit"
+    assert "Second attempt" in analysis.markdown_summary
+    # Cost accumulates across attempts.
+    assert analysis.cost_usd == pytest.approx(0.002)

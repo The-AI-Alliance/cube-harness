@@ -32,6 +32,7 @@ from cube.core import TypedBaseModel
 from pydantic import Field, ValidationError
 
 from cube_harness.analyze.judge.parse import extract_json_block
+from cube_harness.analyze.judge.schema_prompt import model_to_json_example
 
 if TYPE_CHECKING:
     from cube_harness.analyze.judge.driver import AgentDriver
@@ -46,16 +47,26 @@ DEFAULT_META_ANALYSIS_MODEL = "claude-opus-4-7"
 
 
 class FailurePattern(TypedBaseModel):
-    """A cluster of trajectories exhibiting the same failure mode."""
+    """A cluster of trajectories exhibiting the same failure mode.
 
-    name: str = Field(description="Short kebab-case label (e.g. 'inspects-but-never-edits').")
+    Field order is CoT-deliberate: describe what you see → cite the
+    trajectories that show it → name the dominant blame → only then assign
+    a short label. Models token-emit in this order, so naming-last forces
+    the cluster to be understood before it is summarised.
+    """
+
     description: str = Field(description="One or two sentences naming the pattern.")
     affected_trajectories: list[str] = Field(description="trajectory_ids the judge attributed to this pattern.")
     dominant_blame: str = Field(description="BlameCategory value most often cited for these trajectories.")
+    name: str = Field(description="Short kebab-case label (e.g. 'inspects-but-never-edits').")
 
 
 class RootCauseHypothesis(TypedBaseModel):
-    """A guess at *why* one or more patterns are happening."""
+    """A guess at *why* one or more patterns are happening.
+
+    Field order is CoT-deliberate: reason first, link to patterns second,
+    score confidence last (after the reasoning has played out).
+    """
 
     description: str = Field(description="One to three sentences. Cite patterns and per-episode evidence.")
     pattern_names: list[str] = Field(description="`FailurePattern.name` values this hypothesis covers.")
@@ -63,13 +74,18 @@ class RootCauseHypothesis(TypedBaseModel):
 
 
 class Intervention(TypedBaseModel):
-    """A concrete, tryable change."""
+    """A concrete, tryable change.
+
+    Field order is CoT-deliberate: identify the target → justify what
+    change should be made and why → then state the concrete change →
+    finally score how confident we are it will help.
+    """
 
     target: str = Field(
         description="What to change. e.g. 'agent system prompt', 'scaffold loop', 'evaluation criterion'.",
     )
-    change: str = Field(description="Specific edit, prompt addition, or scaffold tweak.")
     rationale: str = Field(description="Why this addresses one or more root causes.")
+    change: str = Field(description="Specific edit, prompt addition, or scaffold tweak.")
     confidence: int = Field(ge=0, le=5, description="0=long shot, 5=highly likely to help.")
 
 
@@ -106,7 +122,35 @@ class MetaAnalysis(TypedBaseModel):
     duration_s: float = 0.0
 
 
-META_ANALYSIS_SYSTEM_PROMPT = """You are a meta-analyst for a trajectory-judge sweep.
+# Fields the runtime supplies post-parse; the model must not emit these.
+_RUNTIME_PROVENANCE_FIELDS = frozenset(
+    {
+        "schema_version",
+        "experiment_id",
+        "recipe",
+        "driver",
+        "model",
+        "timestamp",
+        "n_episodes_judged",
+        "outcome_distribution",
+        "primary_blame_distribution",
+        "success_rate",
+        "cost_usd",
+        "duration_s",
+    }
+)
+
+
+def _render_system_prompt() -> str:
+    """Build the system prompt by deriving the JSON example from `MetaAnalysis`.
+
+    The Pydantic class is the single spec; the prompt section is generated
+    from `model_fields`, so renaming or reordering a field updates the prompt
+    automatically. The runtime-provenance fields are stripped because the
+    runtime fills them in after parsing.
+    """
+    example = model_to_json_example(MetaAnalysis, skip=_RUNTIME_PROVENANCE_FIELDS)
+    return f"""You are a meta-analyst for a trajectory-judge sweep.
 
 The trajectory judge has just produced one structured judgment per episode
 in a single experiment. Your job is to read those judgments, synthesise
@@ -123,55 +167,24 @@ specific `judge_output.json` files when the summaries are too thin. Do not
 modify any files. Your only output is the assistant message containing the
 final JSON object.
 
-Output rules (strict — Pydantic validates these exact field names):
-
-Wrap the JSON in ```json … ``` fences. Match this shape exactly — do not
-rename, omit, or add top-level fields:
+The Pydantic-validated output must match this shape EXACTLY — do not rename,
+omit, or add top-level fields. Each leaf is annotated `<type — description>`:
 
 ```json
-{
-  "patterns": [
-    {
-      "name": "kebab-case-short-label",
-      "description": "1-2 sentences naming the pattern.",
-      "affected_trajectories": ["trajectory_id_a", "trajectory_id_b"],
-      "dominant_blame": "one of the BlameCategory values, e.g. model_capability"
-    }
-  ],
-  "root_cause_hypotheses": [
-    {
-      "description": "1-3 sentences explaining the hypothesised cause.",
-      "pattern_names": ["kebab-case-short-label"],
-      "confidence": 4
-    }
-  ],
-  "suggested_interventions": [
-    {
-      "target": "agent system prompt | scaffold loop | task definition | tool surface | evaluation criterion",
-      "change": "Concrete edit, prompt addition, or scaffold tweak.",
-      "rationale": "Why this addresses one or more root causes.",
-      "confidence": 3
-    }
-  ],
-  "markdown_summary": "## Patterns\\n\\n... full human-readable body with Patterns / Root causes / Suggested interventions sections ...",
-  "notes": null
-}
+{example}
 ```
 
-Field requirements:
-- `patterns[*].name` is required (kebab-case, short). NOT `label`, NOT `pattern_id`.
-- `root_cause_hypotheses` (NOT `root_causes`). Each item has `description`,
-  `pattern_names` (referencing `patterns[*].name`), `confidence` (0-5).
-- `suggested_interventions` (NOT `interventions`). Each item has `target`,
-  `change`, `rationale`, `confidence` (0-5).
-- `markdown_summary` is the human-readable body. It must be non-empty and
-  cover the same information as the structured fields.
-- `notes` may be null.
+Field order in your emitted JSON should follow the example above; the order
+is deliberate (describe before naming, justify before changing, score after
+reasoning).
 
-The runtime fills in provenance fields (experiment_id, recipe, driver,
-model, timestamp, n_episodes_judged, outcome_distribution,
-primary_blame_distribution, success_rate, cost_usd, duration_s,
-schema_version) — do not emit them yourself."""
+The runtime fills in provenance and aggregate fields after parsing — you do
+not need to emit `schema_version`, `experiment_id`, `recipe`, `driver`,
+`model`, `timestamp`, `n_episodes_judged`, `outcome_distribution`,
+`primary_blame_distribution`, `success_rate`, `cost_usd`, or `duration_s`."""
+
+
+META_ANALYSIS_SYSTEM_PROMPT = _render_system_prompt()
 
 
 def _digest_judgments(
@@ -231,6 +244,27 @@ a ```json fence. Include a non-empty `markdown_summary`. Reference only
 trajectory_ids that appear in the digest above."""
 
 
+def _build_retry_prompt(prior_raw_output: str, validation_error: str) -> str:
+    """Compose a follow-up prompt that asks the agent to fix invalid JSON.
+
+    Used after a `ValidationError` on the first attempt. The retry is cheap
+    relative to the initial pass: no transcript digest, no tool use — just
+    the prior output and the validator's complaint.
+    """
+    return f"""Your prior reply failed Pydantic validation. Re-emit the JSON
+object with the schema corrections noted below — do NOT redo the analysis,
+just fix the structural mismatch. Reply with a single ```json fence and
+nothing else.
+
+Prior reply:
+{prior_raw_output}
+
+Validation error from Pydantic:
+{validation_error}
+
+Re-emit a valid JSON object matching the schema in the system prompt."""
+
+
 async def run_meta_analysis(
     *,
     experiment_dir: Path,
@@ -240,8 +274,16 @@ async def run_meta_analysis(
     results: dict[str, tuple["BaseJudgeOutput", "JudgeMetadata"]],
     model: str = DEFAULT_META_ANALYSIS_MODEL,
     verbose: bool = False,
+    max_retries: int = 1,
 ) -> MetaAnalysis:
     """Run the synthesis sub-agent and return a populated `MetaAnalysis`.
+
+    On `ValidationError`, retries up to `max_retries` times with a cheap
+    follow-up call that ships only the prior raw output + the validator's
+    error message — no transcript digest, no tool use — and asks the model
+    to fix the structural mismatch. Bounds retry cost while still self-
+    correcting on the most common failure mode (field renames, missing
+    fields, extra fields).
 
     Aggregates are computed here from `results` rather than re-reading the
     summary file — keeps the function pure(-ish) and lets tests pass a fake
@@ -255,7 +297,7 @@ async def run_meta_analysis(
     n_success = outcomes.get("success", 0) + outcomes.get("success_lucky", 0)
     success_rate = n_success / n_judged if n_judged else 0.0
 
-    user_prompt = _build_user_prompt(
+    initial_prompt = _build_user_prompt(
         experiment_dir=experiment_dir,
         experiment_id=experiment_id,
         n_judged=n_judged,
@@ -265,33 +307,59 @@ async def run_meta_analysis(
         digest=_digest_judgments(results),
     )
 
-    result = await driver.run(
-        system_prompt=META_ANALYSIS_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
-        cwd=experiment_dir,
-        additional_dirs=[],
-        model=model,
-        verbose=verbose,
-    )
+    total_cost = 0.0
+    total_duration = 0.0
+    prior_raw_output: str | None = None
+    last_validation_error: str | None = None
 
-    raw = extract_json_block(result.output_text)
-    # Provenance fields are ours, not the model's.
-    raw["experiment_id"] = experiment_id
-    raw["recipe"] = recipe_name
-    raw["driver"] = driver.name
-    raw["model"] = model
-    raw["timestamp"] = time.time()
-    raw["n_episodes_judged"] = n_judged
-    raw["outcome_distribution"] = dict(outcomes)
-    raw["primary_blame_distribution"] = dict(blames)
-    raw["success_rate"] = success_rate
-    raw["cost_usd"] = result.cost_usd
-    raw["duration_s"] = result.duration_s
-    raw.setdefault("schema_version", META_ANALYSIS_SCHEMA_VERSION)
-    try:
-        return MetaAnalysis.model_validate(raw)
-    except ValidationError as e:
-        raise RuntimeError(f"Meta-analysis output failed schema validation: {e}\nRaw: {raw}") from e
+    for attempt in range(max_retries + 1):
+        user_prompt = (
+            initial_prompt if attempt == 0 else _build_retry_prompt(prior_raw_output or "", last_validation_error or "")
+        )
+        result = await driver.run(
+            system_prompt=META_ANALYSIS_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            cwd=experiment_dir,
+            additional_dirs=[],
+            model=model,
+            verbose=verbose,
+        )
+        total_cost += result.cost_usd
+        total_duration += result.duration_s
+        prior_raw_output = result.output_text
+
+        try:
+            raw = extract_json_block(result.output_text)
+        except ValueError as e:
+            last_validation_error = f"could not find a JSON block: {e}"
+            logger.warning("Meta-analysis attempt %d failed to extract JSON: %s", attempt + 1, e)
+            continue
+
+        # Provenance is ours, not the model's. Override (don't setdefault) so
+        # any model-emitted values are corrected.
+        raw["experiment_id"] = experiment_id
+        raw["recipe"] = recipe_name
+        raw["driver"] = driver.name
+        raw["model"] = model
+        raw["timestamp"] = time.time()
+        raw["n_episodes_judged"] = n_judged
+        raw["outcome_distribution"] = dict(outcomes)
+        raw["primary_blame_distribution"] = dict(blames)
+        raw["success_rate"] = success_rate
+        raw["cost_usd"] = total_cost
+        raw["duration_s"] = total_duration
+        raw["schema_version"] = META_ANALYSIS_SCHEMA_VERSION
+
+        try:
+            return MetaAnalysis.model_validate(raw)
+        except ValidationError as e:
+            last_validation_error = str(e)
+            logger.warning("Meta-analysis attempt %d failed validation: %s", attempt + 1, e)
+
+    raise RuntimeError(
+        f"Meta-analysis output failed schema validation after {max_retries + 1} attempt(s).\n"
+        f"Last validation error: {last_validation_error}"
+    )
 
 
 def write_meta_analysis(experiment_dir: Path, analysis: MetaAnalysis) -> tuple[Path, Path]:
