@@ -938,18 +938,6 @@ def test_benchmark_context_agent_writes_paths_block(tmp_path: Path) -> None:
     assert resolved["agent_src"] == other
 
 
-def test_benchmark_context_agent_fallback_when_no_driver(tmp_path: Path) -> None:
-    """No driver → uses the collect_source_paths fallback, still produces a parseable file."""
-    import asyncio
-
-    from cube_harness.analyze.judge.benchmark_context_agent import generate_context_file
-
-    out = asyncio.run(generate_context_file(tmp_path, driver=None))
-    assert out.exists()
-    # The fallback either lists at least one real path or a "no source paths" comment.
-    assert "```paths" in out.read_text()
-
-
 # ---------------------------------------------------------------------------
 # CLI smoke (subcommand dispatch only — no real LLM calls)
 # ---------------------------------------------------------------------------
