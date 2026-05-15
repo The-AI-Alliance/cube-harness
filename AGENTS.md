@@ -23,7 +23,6 @@ in the wrong repo; go to cube-standard and start with an openspec change proposa
 src/cube_harness/
 ├── core.py                     # AgentOutput, Trajectory, TrajectoryStep, ActionSpace
 ├── agent.py                    # AgentConfig, Agent (abstract)
-├── tool.py                     # ToolWithTelemetry, AsyncToolWithTelemetry (OTel wrappers)
 ├── llm.py                      # LLM, LLMConfig, Prompt, LLMCall, Usage (LiteLLM wrapper)
 ├── episode.py                  # Episode, EpisodeConfig, MAX_STEPS
 ├── experiment.py               # Experiment, ExpResult
@@ -37,9 +36,8 @@ src/cube_harness/
 │   ├── react.py                # ReAct agent (primary)
 │   ├── genny.py                # Genny agent (context-aware, rolling summaries)
 │   └── legacy_generic_agent.py # Deprecated XML-tag agent — see DEPRECATED.md
-├── tools/                      # Harness-only integrations (BrowserGym, MCP client). Generalist tool ABCs and concrete impls live in cube-standard.
-│   ├── browsergym.py           # BrowserGym integration
-│   └── mcp.py                  # MCP client tool (consume external MCP servers)
+├── tools/                      # Harness-only integrations. Generalist tool ABCs and concrete impls live in cube-standard.
+│   └── browsergym.py           # BrowserGym integration (slated to move to cube-tools/cube-browsergym-tool/ — see cube-standard #159)
 ├── action_spaces/              # Protocol definitions for action sets
 ├── benchmarks/                 # Legacy in-tree benchmarks (miniwob, workarena) — most now live in cubes/
 ├── metrics/tracer.py           # OpenTelemetry tracer, Ray env-var propagation
@@ -65,7 +63,6 @@ Each spec is the authoritative contract for its layer.
 |-------|--------|------|
 | Core types (Trajectory, AgentOutput) | `cube_harness.core` | [core/spec.md](openspec/specs/core/spec.md) |
 | Agent | `cube_harness.agent` | [agent/spec.md](openspec/specs/agent/spec.md) |
-| Tool (telemetry wrapper) | `cube_harness.tool` | [tool/spec.md](openspec/specs/tool/spec.md) |
 | LLM wrapper | `cube_harness.llm` | [llm/spec.md](openspec/specs/llm/spec.md) |
 | Episode | `cube_harness.episode` | [episode/spec.md](openspec/specs/episode/spec.md) |
 | Experiment + runners | `cube_harness.experiment`, `cube_harness.exp_runner` | [experiment/spec.md](openspec/specs/experiment/spec.md) |
