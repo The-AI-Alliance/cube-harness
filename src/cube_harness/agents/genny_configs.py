@@ -92,4 +92,3 @@ GENNY_CONFIGS: ConfigRegistry[GennyConfig] = ConfigRegistry(
         "swe": make_agent_config("gpt-5.4-mini", template="workflow"),
     }
 )
-

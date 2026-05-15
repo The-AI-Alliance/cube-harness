@@ -9,13 +9,11 @@
 # cube-harness = { path = "..", editable = true }
 # swebench-verified-cube = { path = "../cubes/swebench-verified", editable = true }
 # ///
-"""Reference recipe: Genny on SWE-bench Verified.
+"""Reference recipe: more than one Experiment in a single file.
 
-This file IS the config — copy it and edit the values. It is not a CLI.
-- Agent: a canonical config by name; tweak attributes after binding.
-- Benchmark: a canonical config by name. For a non-canonical subset, clone
-  this file and chain `.subset_from_glob(...)` / `.subset_from_list(...)`.
-- Infra: named, from ~/.cube/infra.py; "local" works with zero setup.
+Name them `exp_<something>` and hand them all to `run`. Each canonical
+config lookup returns an independent deep copy, so tweaking one experiment's
+agent never affects the other.
 """
 
 from swebench_verified_cube import SWEBENCH_CONFIGS
@@ -25,16 +23,23 @@ from cube_harness.experiment import Experiment
 from cube_harness.infra import INFRA_CONFIGS
 from cube_harness.recipe import run
 
-agent = GENNY_CONFIGS["swe"]
-agent.budget.cost_limit = 2.0
+_default = GENNY_CONFIGS["default"]
+_swe = GENNY_CONFIGS["swe"]
+_swe.budget.cost_limit = 4.0
 
-exp = Experiment(
-    name="genny-swebench-verified",
-    agent_config=agent,
+exp_default = Experiment(
+    name="genny-default",
+    agent_config=_default,
     benchmark_config=SWEBENCH_CONFIGS["default"],
     infra=INFRA_CONFIGS["local"],
-    max_steps=agent.budget.max_actions or 150,
+)
+
+exp_swe = Experiment(
+    name="genny-swe",
+    agent_config=_swe,
+    benchmark_config=SWEBENCH_CONFIGS["default"],
+    infra=INFRA_CONFIGS["local"],
 )
 
 if __name__ == "__main__":
-    run(exp)
+    run(exp_default, exp_swe)
