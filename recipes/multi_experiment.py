@@ -23,12 +23,15 @@ from swebench_verified_cube import SWEBENCH_CONFIGS
 from cube_harness.agents.genny_configs import GENNY_CONFIGS
 from cube_harness.experiment import Experiment
 from cube_harness.infra import INFRA_CONFIGS
+from cube_harness.llm import LLMConfig
 from cube_harness.recipe import run
 
 default_agent = GENNY_CONFIGS["default"]
+default_agent.llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
 default_agent.budget.cost_limit = 1.0
 
 swe_agent = GENNY_CONFIGS["swe"]
+swe_agent.llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
 swe_agent.budget.cost_limit = 1.0
 
 experiments = {
