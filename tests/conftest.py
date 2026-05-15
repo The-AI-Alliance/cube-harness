@@ -255,8 +255,8 @@ class MockCubeTask(CubeTask):
 class MockCubeTaskConfig(CubeTaskConfig):
     """Cube TaskConfig that instantiates a MockCubeTask."""
 
-    def make(self, runtime_context=None, container_backend=None) -> MockCubeTask:
-        _ = runtime_context, container_backend
+    def make(self, runtime_context=None) -> MockCubeTask:
+        _ = runtime_context
         return MockCubeTask(
             metadata=TaskMetadata(id=self.task_id),
             tool_config=self.tool_config or MockToolConfig(),
@@ -309,7 +309,6 @@ def mock_episode(tmp_dir, mock_agent_config, mock_cube_task_config) -> Episode:
         output_dir=tmp_dir,
         agent_config=mock_agent_config,
         task_config=mock_cube_task_config,
-        container_backend=None,
         exp_name="mock-episode",
         max_steps=5,
         runtime_context=None,

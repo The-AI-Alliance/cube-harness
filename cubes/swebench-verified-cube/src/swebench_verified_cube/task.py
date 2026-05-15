@@ -8,7 +8,7 @@ import re
 import shlex
 from typing import Any
 
-from cube.container import ContainerBackend, relocate_if_readonly
+from cube.container import relocate_if_readonly
 from cube.core import ActionSchema, Observation
 from cube.task import STOP_ACTION, RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 
@@ -356,14 +356,9 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
     ) -> SWEBenchVerifiedTask:
         if runtime_context is None or "infra" not in runtime_context:
-            if container_backend is None:
-                raise ValueError(
-                    "SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'] "
-                    "(preferred) or a legacy container_backend."
-                )
+            raise ValueError("SWEBenchVerifiedTaskConfig.make() requires runtime_context['infra'].")
 
         self.verify_installed()
         raw = self.load_task_execution_info()
@@ -374,7 +369,6 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
             execution_info=execution_info,
             tool_config=self.tool_config or TerminalToolConfig(working_dir="/testbed", enable_file_actions=True),
             runtime_context=runtime_context,
-            container_backend=container_backend,
             include_hints=self.include_hints,
             oracle_mode=self.oracle_mode,
             append_submission_instructions=self.append_submission_instructions,

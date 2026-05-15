@@ -73,8 +73,15 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install chromium
 
+      # Cross-repo dep override: this PR depends on a cube-standard change that
+      # is on dev but not yet in a published rc. Mirrors integration-local.yml.
+      # TODO: remove once cube-standard ships an rc that includes it.
+      - name: Override cube-standard with dev branch (cross-repo dep)
+        run: uv pip install --force-reinstall --no-deps 'cube-standard @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
+
       - name: Run MiniWob debug suite
-        run: uv run cube test miniwob-cube --no-reset-check
+        # --no-sync: keep the cube-standard@dev override from the previous step.
+        run: uv run --no-sync cube test miniwob-cube --no-reset-check
 
   workarena:
     name: WorkArena debug suite
@@ -106,7 +113,14 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install chromium
 
+      # Cross-repo dep override: this PR depends on a cube-standard change that
+      # is on dev but not yet in a published rc. Mirrors integration-local.yml.
+      # TODO: remove once cube-standard ships an rc that includes it.
+      - name: Override cube-standard with dev branch (cross-repo dep)
+        run: uv pip install --force-reinstall --no-deps 'cube-standard @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
+
       - name: Run WorkArena debug suite
-        run: uv run cube test workarena-cube --no-reset-check
+        # --no-sync: keep the cube-standard@dev override from the previous step.
+        run: uv run --no-sync cube test workarena-cube --no-reset-check
         env:
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}

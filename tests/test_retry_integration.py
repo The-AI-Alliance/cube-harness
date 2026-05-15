@@ -68,7 +68,7 @@ class DebugCubeTask(CubeTask):
 
 
 class DebugCubeTaskConfig(CubeTaskConfig):
-    def make(self, runtime_context=None, container_backend=None) -> DebugCubeTask:
+    def make(self, runtime_context=None) -> DebugCubeTask:
         return DebugCubeTask(
             metadata=self.metadata,
             tool_config=self.tool_config or MockToolConfig(),

@@ -3,7 +3,6 @@ import logging
 import os
 import re
 import time
-import warnings
 from pathlib import Path
 from typing import Self
 from uuid import uuid4
@@ -104,8 +103,7 @@ class Experiment(TypedBaseModel):
         ``benchmark`` is the live ``Benchmark`` returned by
         ``self.benchmark_config.make(self.infra)``; the runner is responsible
         for the make/close lifecycle and passes the live instance in so
-        episodes can pick up its ``_runtime_context`` and
-        ``config.container_backend``.
+        episodes can pick up its ``_runtime_context``.
 
         Decisions are driven by `status.json` per episode (no trajectory deserialisation).
 
@@ -170,12 +168,6 @@ class Experiment(TypedBaseModel):
         """Create all episodes from scratch and save their configs to disk."""
         task_configs = list(self.benchmark_config.get_task_configs())
         runtime_context = benchmark._runtime_context
-        # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
-        # reading it raises a DeprecationWarning. We have to forward it for
-        # backwards compatibility until cube-standard removes it.
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            container_backend = benchmark.config.container_backend
         episodes = [
             Episode(
                 id=i,
@@ -185,7 +177,6 @@ class Experiment(TypedBaseModel):
                 exp_name=self.name,
                 max_steps=self.max_steps,
                 runtime_context=runtime_context,
-                container_backend=container_backend,
                 storage=None,
             )
             for i, tc in enumerate(task_configs)
