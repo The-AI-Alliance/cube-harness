@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import cube
 from cube.benchmark import BenchmarkConfig
 from cube.core import TypedBaseModel
 from pydantic import Field
@@ -221,6 +222,18 @@ class AgentInfo(TypedBaseModel):
             "from git_commit alone. None when git info is unavailable."
         ),
     )
+    cube_standard_git_commit: str | None = Field(
+        default=None,
+        description=(
+            "Git SHA-1 of the installed cube-standard (`cube`) package's repo HEAD. Populated only "
+            "when cube-standard is an editable/source checkout (the common case while it tracks an "
+            "unreleased branch); None for a released wheel — use dependency_versions['cube'] then."
+        ),
+    )
+    cube_standard_git_is_dirty: bool | None = Field(
+        default=None,
+        description="True when the cube-standard checkout had uncommitted changes. None when unavailable.",
+    )
     description: str | None = Field(
         default=None,
         description="Free-form prose description of the agent for Atlas LLM embedding warm-start.",
@@ -244,6 +257,12 @@ class AgentInfo(TypedBaseModel):
         config_type = config_dict.get("_type", type(agent_config).__name__)
         llm_model = _extract_llm_model(config_dict)
         git_commit, git_remote_url, git_is_dirty = _get_git_info(cwd=git_cwd)
+        # cube-standard is a separate repo; capturing its hash matters because it is
+        # frequently run from an unreleased branch (dependency_versions only has the
+        # PyPI version string). Probe the installed `cube` package's source dir —
+        # yields a commit only for an editable/source checkout, None for a wheel.
+        cube_standard_dir = str(Path(cube.__file__).resolve().parent)
+        cube_standard_git_commit, _, cube_standard_git_is_dirty = _get_git_info(cwd=cube_standard_dir)
 
         return cls(
             agent_id=agent_id,
@@ -255,6 +274,8 @@ class AgentInfo(TypedBaseModel):
             git_commit=git_commit,
             git_remote_url=git_remote_url,
             git_is_dirty=git_is_dirty,
+            cube_standard_git_commit=cube_standard_git_commit,
+            cube_standard_git_is_dirty=cube_standard_git_is_dirty,
         )
 
 
