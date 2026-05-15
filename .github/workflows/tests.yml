@@ -59,4 +59,10 @@ jobs:
         run: uv run --no-sync playwright install chromium
 
       - name: Run integration tests
-        run: uv run --no-sync pytest tests/ -m "integration and not slow and not live_api" -v
+        # cube-harness owns no integration tests — browser/tool integration
+        # tests live in cube-standard (cube-browser-tool). pytest exits 5 on
+        # "no tests collected"; treat that as success, fail on anything else.
+        run: |
+          uv run --no-sync pytest tests/ -m "integration and not slow and not live_api" -v || rc=$?
+          [ "${rc:-0}" -eq 5 ] && exit 0
+          exit "${rc:-0}"

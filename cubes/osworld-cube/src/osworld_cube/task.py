@@ -113,7 +113,7 @@ class OSWorldTask(Task[OSWorldTaskMetadata]):
 
     def model_post_init(self, __context: Any) -> None:
         """Create the Computer tool without a VM — VM is deferred to reset()."""
-        self._tool = self.tool_config.make(container=None, vm=None)
+        self._tool = self.tool_config.make(container=None)
 
     @property
     def _computer(self) -> "ComputerBase":
