@@ -375,7 +375,7 @@ def test_episode_record_with_task_config(mock_tool_config) -> None:
     from cube.task import TaskConfig
 
     class MockTaskConfig(TaskConfig):
-        def make(self, runtime_context=None, container_backend=None):  # type: ignore[override]
+        def make(self, runtime_context=None):  # type: ignore[override]
             raise NotImplementedError
 
     traj = _trajectory(task_id="t1")

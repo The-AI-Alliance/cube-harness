@@ -27,18 +27,6 @@ grep -r "legacy_generic_agent\|GenericAgent\|GenericPromptFlags" recipes/ cubes/
 
 ## Legacy parameters / migration debt
 
-### `container_backend` passthrough
-- [src/cube_harness/episode.py:48](src/cube_harness/episode.py#L48) (parameter)
-- [src/cube_harness/episode.py:113](src/cube_harness/episode.py#L113) (forward to `task_config.make`)
-- [src/cube_harness/experiment.py:87](src/cube_harness/experiment.py#L87) (populate from benchmark)
-
-Flagged as legacy upstream (cube-standard [DEPRECATED.md](../cube-standard/DEPRECATED.md)).
-Only used as a passthrough from `Benchmark` to `Task`; adds parameter clutter.
-
-**Action:** remove from `Episode`, `EpisodeConfig`, and `Experiment` in lockstep
-with the upstream removal. ~8 usages across 3 files — minimal refactor once
-upstream lands.
-
 ### V1 storage format read paths
 [src/cube_harness/storage.py](src/cube_harness/storage.py) — all `_v1_*` methods (~150 LOC)
 
@@ -105,8 +93,7 @@ complete, delete the background loader.
 [src/cube_harness/episode.py:64-104](src/cube_harness/episode.py#L64-L104)
 
 `load_episode_from_config` accepts an optional `benchmark`, then checks
-`if benchmark is not None` twice to decide whether to forward `runtime_context`
-and `container_backend`.
+`if benchmark is not None` to decide whether to forward `runtime_context`.
 
 **Action:** split into two classmethods — `load_from_config(path)` (bare) and
 `load_from_config_with_benchmark(path, benchmark)` (full). Clearer contract, no

@@ -1,11 +1,9 @@
 import logging
 import time
-import warnings
 from pathlib import Path
 from typing import Callable, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
-from cube.container import ContainerBackend
 from cube.core import EnvironmentOutput, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from opentelemetry.trace import StatusCode
@@ -49,7 +47,6 @@ class Episode:
         max_steps: int,
         storage: Storage | None,
         runtime_context: RuntimeContext | None,
-        container_backend: ContainerBackend | None,
     ) -> None:
         self.config = EpisodeConfig(
             id=id,
@@ -60,7 +57,6 @@ class Episode:
             task_config=task_config,
         )
         self._runtime_context = runtime_context
-        self._container_backend = container_backend
         self.storage = storage or FileStorage(output_dir)
         self.allow_overwrite = False
 
@@ -71,11 +67,11 @@ class Episode:
 
         The full TaskConfig is stored in EpisodeConfig and is self-contained
         (call task_config.make()). `benchmark` is optional — if provided, its
-        runtime_context and container_backend are forwarded to the episode.
+        runtime_context is forwarded to the episode.
 
         Args:
             config_path: Path to the episode config JSON file
-            benchmark: Benchmark instance (optional; used for runtime_context/container_backend)
+            benchmark: Benchmark instance (optional; used for runtime_context)
 
         Returns:
             Episode instance ready to run
@@ -94,14 +90,6 @@ class Episode:
         if benchmark is not None and not isinstance(benchmark, Benchmark):
             raise ValueError(f"benchmark must be a cube.benchmark.Benchmark instance or None, got {type(benchmark)}")
         runtime_context = benchmark._runtime_context if benchmark is not None else None
-        # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
-        # reading it raises a DeprecationWarning. Forward it for backwards
-        # compatibility until cube-standard removes it.
-        container_backend = None
-        if benchmark is not None:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                container_backend = benchmark.config.container_backend
         return cls(
             id=episode_config.id,
             output_dir=episode_config.output_dir,
@@ -111,7 +99,6 @@ class Episode:
             max_steps=episode_config.max_steps,
             storage=storage,
             runtime_context=runtime_context,
-            container_backend=container_backend,
         )
 
     def run(self) -> Trajectory:
@@ -120,9 +107,7 @@ class Episode:
         Returns:
             Trajectory containing the full history of the run.
         """
-        task = self.config.task_config.make(
-            runtime_context=self._runtime_context, container_backend=self._container_backend
-        )
+        task = self.config.task_config.make(runtime_context=self._runtime_context)
         action_set = task.action_set
         step_fn = task.step
         close_fn = task.close

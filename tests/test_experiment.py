@@ -35,7 +35,7 @@ def _make_failing_benchmark() -> CubeBenchmarkConfig:
             raise RuntimeError("injected step failure")
 
     class _FailingTaskConfig(MockCubeTaskConfig):
-        def make(self, runtime_context=None, container_backend=None) -> _FailingTask:
+        def make(self, runtime_context=None) -> _FailingTask:
             return _FailingTask(
                 metadata=self.metadata,
                 tool_config=self.tool_config or MockToolConfig(),
@@ -58,7 +58,7 @@ def _make_neverending_benchmark(max_steps: int) -> CubeBenchmarkConfig:
             return EnvironmentOutput(obs=Observation.from_text("still going"), reward=0.0, done=False)
 
     class _NeverDoneTaskConfig(MockCubeTaskConfig):
-        def make(self, runtime_context=None, container_backend=None) -> _NeverDoneTask:
+        def make(self, runtime_context=None) -> _NeverDoneTask:
             return _NeverDoneTask(
                 metadata=self.metadata,
                 tool_config=self.tool_config or MockToolConfig(),

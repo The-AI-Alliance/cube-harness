@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import PrivateAttr
 
-from cube.container import ContainerBackend, relocate_if_readonly
+from cube.container import relocate_if_readonly
 from cube.core import Observation
 from cube.task import RuntimeContext, Task, TaskConfig, TaskExecutionInfo, TaskMetadata
 from cube.tools.terminal import ContainerTerminalTool, TerminalToolConfig
@@ -447,14 +447,9 @@ class TerminalBench2TaskConfig(TaskConfig[TerminalBench2TaskMetadata]):
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
     ) -> TerminalBench2Task:
-        has_infra = runtime_context is not None and "infra" in runtime_context
-        if not has_infra and container_backend is None:
-            raise ValueError(
-                "TerminalBench2TaskConfig.make() requires runtime_context['infra'] "
-                "(preferred) or a legacy container_backend."
-            )
+        if runtime_context is None or "infra" not in runtime_context:
+            raise ValueError("TerminalBench2TaskConfig.make() requires runtime_context['infra'].")
 
         self.verify_installed()
         raw = self.load_task_execution_info()
@@ -470,6 +465,5 @@ class TerminalBench2TaskConfig(TaskConfig[TerminalBench2TaskMetadata]):
                 enable_file_actions=True,
             ),
             runtime_context=runtime_context,
-            container_backend=container_backend,
             oracle_mode=self.oracle_mode,
         )
