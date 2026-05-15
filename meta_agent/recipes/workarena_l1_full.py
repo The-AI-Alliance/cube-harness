@@ -9,7 +9,7 @@ Usage:
     uv run meta_agent/recipes/workarena_l1_full.py retry /path/to/exp     # retry crashed episodes
 
 Toolbox (always active):
-    - BrowsergymTool: AXTree + screenshot, no HTML
+    - BgymTool: AXTree + screenshot, no HTML
     - ChatTool: send_message for goal/chat tasks
     - WorkArenaInfeasibleTool: report_infeasible for all tasks
 
@@ -37,6 +37,7 @@ from cube.tool import ToolboxConfig  # noqa: E402
 from cube_browser_playwright.playwright_session import (  # noqa: E402
     PlaywrightSessionConfig,
 )
+from cube_browser_tool.bgym_tool import BgymToolConfig, ExtendedBrowserConfig  # noqa: E402
 from cube_chat_tool.chat_tool import ChatToolConfig  # noqa: E402
 from workarena_cube.benchmark import WorkArenaBenchmark  # noqa: E402
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig  # noqa: E402
@@ -47,8 +48,6 @@ from cube_harness.agents.genny import BudgetConfig, GennyConfig  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 from cube_harness.llm import LLMConfig  # noqa: E402
-from cube_harness.tools.browsergym import BrowsergymConfig  # noqa: E402
-from cube_harness.tools.web_actions import ExtendedBrowserConfig  # noqa: E402
 
 MODEL_CONFIGS: dict[str, LLMConfig] = {
     "gpt-5.4-mini": LLMConfig(model_name="azure/gpt-5.4-mini", temperature=1.0),
@@ -67,7 +66,7 @@ def run_for_model(
     tool_config = ToolboxConfig(
         tool_configs=[
             ExtendedBrowserConfig(
-                browser=BrowsergymConfig(
+                browser=BgymToolConfig(
                     browser=PlaywrightSessionConfig(headless=headless, timeout=60000),
                     use_screenshot=True,
                     use_axtree=True,

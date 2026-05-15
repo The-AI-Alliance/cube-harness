@@ -7,7 +7,7 @@ dependencies = [
     "cube-standard>=0.1.0rc8",
     "browsergym-workarena",
     "termcolor",
-    "cube-browser-tool>=0.2.0",
+    "cube-browser-tool[bgym]>=0.3.0",
     "cube-browser-playwright>=0.2.0",
     "cube-chat-tool>=0.1.0",
     "playwright==1.44",
