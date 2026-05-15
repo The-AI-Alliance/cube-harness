@@ -357,7 +357,7 @@ def agent_name_from_config(agent_cfg: dict) -> str:
     except Exception as exc:
         logger.debug("Could not instantiate AgentConfig (%s); synthesizing fallback name", exc)
         cls_name = (agent_cfg.get("_type") or "").rsplit(".", 1)[-1]
-        # Drop the trailing "Config" so e.g. Genny2Config -> Genny2, matching the
+        # Drop the trailing "Config" so e.g. GennyConfig -> Genny, matching the
         # display convention of agent classes whose .agent_name we couldn't reach.
         if cls_name.endswith("Config"):
             cls_name = cls_name[: -len("Config")]

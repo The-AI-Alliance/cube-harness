@@ -1,6 +1,6 @@
-"""Shared Genny2 agent configuration for SWE-bench and TerminalBench recipes."""
+"""Shared Genny agent configuration for SWE-bench and TerminalBench recipes."""
 
-from cube_harness.agents.genny2 import BudgetConfig, Genny2Config
+from cube_harness.agents.genny import BudgetConfig, GennyConfig
 from cube_harness.llm import LLMConfig
 
 SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
@@ -64,8 +64,8 @@ def make_agent_config(
     template: str = DEFAULT_TEMPLATE,
     max_actions: int = 150,
     cost_limit: float = 1.0,
-) -> Genny2Config:
-    return Genny2Config(
+) -> GennyConfig:
+    return GennyConfig(
         llm_config=MODEL_CONFIGS[model_key],
         system_prompt=SYSTEM_PROMPT,
         goal_template=INSTANCE_TEMPLATES[template],

@@ -46,7 +46,7 @@ from workarena_cube.benchmark import WorkArenaBenchmarkConfig
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig
 
 from cube_harness import make_experiment_output_dir
-from cube_harness.agents.genny import GennyConfig
+from cube_harness.agents.genny import BudgetConfig, GennyConfig
 from cube_harness.agents.react import ReactAgentConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
@@ -58,11 +58,8 @@ _LLM = LLMConfig(model_name="gpt-5-mini", temperature=1.0)
 AGENTS = {
     "genny": GennyConfig(
         llm_config=_LLM,
-        max_actions=20,
-        render_last_n_obs=1,
-        tools_as_text=False,
+        budget=BudgetConfig(max_actions=20),
         enable_summarize=False,
-        summarize_cot_only=True,
     ),
     "react": ReactAgentConfig(
         llm_config=_LLM,

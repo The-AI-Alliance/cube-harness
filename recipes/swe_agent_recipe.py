@@ -1,7 +1,7 @@
-"""Genny2 SWE recipe — swebench-verified, swebench-live, and terminalbench.
+"""Genny SWE recipe — swebench-verified, swebench-live, and terminalbench.
 
-Single entry point for Genny2 against any of the SWE-like cube benchmarks. Agent
-construction is delegated to ``cube_harness.agents.genny2_swe_config``. Infra
+Single entry point for Genny against any of the SWE-like cube benchmarks. Agent
+construction is delegated to ``cube_harness.agents.genny_swe_config``. Infra
 choice is delegated to ``cube_harness.infra_profile.load_infra`` — declare named
 profiles in ``~/.cube/infra.json`` and pick one via ``--infra <name>``.
 
@@ -36,7 +36,7 @@ from dotenv import load_dotenv
 _project_env = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_project_env if _project_env.exists() else Path.home() / ".env", override=True)
 
-from cube_harness.agents.genny2_swe_config import (  # noqa: E402
+from cube_harness.agents.genny_swe_config import (  # noqa: E402
     DEFAULT_TEMPLATE,
     INSTANCE_TEMPLATES,
     MODEL_CONFIGS,
@@ -327,7 +327,7 @@ def main(
     cost_limit: Annotated[float, typer.Option(help="Cost limit per episode (USD)")] = 1.0,
     max_output_bytes: Annotated[int, typer.Option(help="Max bash output bytes per step (tbench)")] = 8_000,
 ) -> None:
-    """Run Genny2 against an SWE-like cube benchmark."""
+    """Run Genny against an SWE-like cube benchmark."""
     if model not in MODEL_CONFIGS:
         raise typer.BadParameter(f"unknown model {model!r}; pick from {sorted(MODEL_CONFIGS)}")
     if template not in INSTANCE_TEMPLATES:
@@ -361,7 +361,7 @@ def main(
         )
 
     exp = Experiment(
-        name=f"genny2-swe-{benchmark}-{model}-{resolved_infra}",
+        name=f"genny-swe-{benchmark}-{model}-{resolved_infra}",
         output_dir=retry,
         agent_config=agent_config,
         benchmark_config=benchmark_config,
@@ -371,7 +371,7 @@ def main(
     )
 
     print(
-        f"\n=== genny2 | swe-{benchmark} | {model} | {template} | infra={resolved_infra} | subset={subset or 'all'} ==="
+        f"\n=== genny | swe-{benchmark} | {model} | {template} | infra={resolved_infra} | subset={subset or 'all'} ==="
     )
 
     if debug:
