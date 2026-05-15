@@ -60,7 +60,7 @@ class WorkArenaTask(Task):
             tool = self.tool
         if not isinstance(tool, WorkArenaBrowserTool):
             raise RuntimeError(
-                f"The browser tool must satisfy the WorkArenaBrowserTool protocol (e.g., BrowsergymTool or SyncPlaywrightTool), got {type(tool).__name__}"
+                f"The browser tool must satisfy the WorkArenaBrowserTool protocol (e.g., BgymTool or SyncPlaywrightTool), got {type(tool).__name__}"
             )
         return tool
 

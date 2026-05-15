@@ -36,8 +36,6 @@ src/cube_harness/
 │   ├── react.py                # ReAct agent (primary)
 │   ├── genny.py                # Genny agent (context-aware, rolling summaries)
 │   └── legacy_generic_agent.py # Deprecated XML-tag agent — see DEPRECATED.md
-├── tools/                      # Harness-only integrations. Generalist tool ABCs and concrete impls live in cube-standard.
-│   └── browsergym.py           # BrowserGym integration (slated to move to cube-tools/cube-browsergym-tool/ — see cube-standard #159)
 ├── action_spaces/              # Protocol definitions for action sets
 ├── benchmarks/                 # Legacy in-tree benchmarks (miniwob, workarena) — most now live in cubes/
 ├── metrics/tracer.py           # OpenTelemetry tracer, Ray env-var propagation

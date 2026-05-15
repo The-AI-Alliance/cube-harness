@@ -9,19 +9,15 @@ difficulty splits; l2/l3 add the infeasible-task tool, matching how the
 benchmark is run in practice.
 """
 
-# TEMPORARY (tools-architecture Phase 1): BrowsergymConfig still lives in
-# cube-harness. This cube -> cube-harness import is a known, accepted
-# exception until it moves to cube-tools/cube-browsergym-tool. Functionally
-# safe (no import cycle); do not copy this pattern to new cubes.
 from cube.core import ConfigRegistry
 from cube.tool import ToolboxConfig
-from cube_harness.tools.browsergym import BrowsergymConfig
+from cube_browser_tool.bgym_tool import BgymToolConfig
 from workarena_cube.benchmark import WorkArenaBenchmarkConfig
 from workarena_cube.tools import WorkArenaInfeasibleToolConfig
 
 
-def _browser() -> BrowsergymConfig:
-    return BrowsergymConfig(use_html=False, use_axtree=True, use_screenshot=True)
+def _browser() -> BgymToolConfig:
+    return BgymToolConfig(use_html=False, use_axtree=True, use_screenshot=True)
 
 
 def _browser_with_infeasible() -> ToolboxConfig:
