@@ -63,9 +63,6 @@ class SWEBenchVerifiedExecutionInfo(TaskExecutionInfo):
     problem_statement: str
     """The agent-facing GitHub issue text."""
 
-    hints_text: str = ""
-    """Optional hint text (only surfaced when ``SWEBenchVerifiedTaskConfig.include_hints`` is True)."""
-
     patch: str
     """Gold patch — written to /tmp/gold_patch.diff in oracle_mode."""
 
@@ -87,9 +84,6 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata, ContainerTerminalT
 
     validate_per_step: bool = False
     accept_agent_stop: bool = True
-
-    include_hints: bool = False
-    """If True, append hints_text to the problem statement in reset()."""
 
     oracle_mode: bool = False
     """If True, write the gold patch to /tmp/gold_patch.diff in reset()."""
@@ -159,8 +153,6 @@ class SWEBenchVerifiedTask(Task[SWEBenchVerifiedTaskMetadata, ContainerTerminalT
             self.tool.bash(f"echo '{b64}' | base64 -d > /tmp/gold_patch.diff")
 
         instruction = self._exec.problem_statement
-        if self.include_hints and self._exec.hints_text:
-            instruction += f"\n\n## Hints\n{self._exec.hints_text}"
         if self.append_submission_instructions:
             instruction += f"\n\n{_TASK_INSTRUCTIONS}"
 
@@ -339,7 +331,6 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
     the per-task execution cache populated by ``SWEBenchVerifiedBenchmarkConfig.install()``.
     """
 
-    include_hints: bool = False
     oracle_mode: bool = False
     append_submission_instructions: bool = True
 
@@ -369,7 +360,6 @@ class SWEBenchVerifiedTaskConfig(TaskConfig[SWEBenchVerifiedTaskMetadata]):
             execution_info=execution_info,
             tool_config=self.tool_config or TerminalToolConfig(working_dir="/testbed", enable_file_actions=True),
             runtime_context=runtime_context,
-            include_hints=self.include_hints,
             oracle_mode=self.oracle_mode,
             append_submission_instructions=self.append_submission_instructions,
         )
