@@ -51,7 +51,6 @@ src/cube_harness/
 
 cubes/                          # External benchmark packages (arithmetic, osworld, swebench-*, terminalbench, webarena-verified, workarena, miniwob)
 recipes/                        # Example experiment scripts
-meta_agent/                     # Iterative eval-analyze-fix loop
 tests/                          # pytest suite
 ```
 
@@ -182,9 +181,22 @@ installs all workspace packages with `uv pip install -e cube-standard --all-pack
 - **cubes/\*** — individual benchmark packages. Each has its own `debug.py` that
   `cube test <name>` runs. Changes to a cube are usually local to its directory.
 
-## Meta-agent
+## Judge use cases
 
-`meta_agent/` holds an iterative eval-analyze-fix loop used for improving agents.
-The skill `/meta-agent` drives it (see `.claude/commands/meta-agent.md`). Journal
-entries are kept machine-local at `~/cube_meta_agent_journal/` — not committed,
-not shared across machines.
+`src/cube_harness/analyze/judge/use_cases/<name>/` is the judge recipe
+catalog. Each subdirectory is one use case:
+
+- **`general_blame`** — default. Closed-world blame attribution per episode.
+- **`profiling`** — narrower taxonomy aimed at scaffold-level inefficiency.
+- **`agent_scaffolding`** — deep loop-pathology diagnosis.
+- **`hint_harvest`** — extract `task_hints[task_id]` candidates from failed
+  episodes (replaces the old `meta_agent/` slash-command flow).
+
+Each use_case has a `recipe.py` (Pydantic `JudgeRecipe`) and a `SKILL.md`
+(meta-agent skill description). `scripts/sync_judge_skills.py` symlinks
+SKILL.md files into `.claude/skills/judge-<name>` so Claude Code picks
+them up.
+
+Per-batch synthesis (`meta_analysis.json` + `.md`) is mirrored into
+`~/cube_meta_agent_journal/<experiment>/` for cross-iteration narrative —
+the only artefact the judge writes outside the experiment dir.
