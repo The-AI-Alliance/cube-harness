@@ -1,4 +1,4 @@
-"""Prompt-structure tests for Genny2.
+"""Prompt-structure tests for Genny.
 
 Uses CapturingLLM — a drop-in for LLM that records every Prompt it receives —
 to assert on the exact message sequence sent to the model at each step.
@@ -15,7 +15,7 @@ from cube.core import ActionSchema, Observation
 from litellm import Message as LitellmMessage
 from litellm.types.utils import ChatCompletionMessageToolCall, Function
 
-from cube_harness.agents.genny2 import Genny2, Genny2Config
+from cube_harness.agents.genny import Genny, GennyConfig
 from cube_harness.llm import LLMConfig, LLMResponse, Prompt, Usage
 
 # ---------------------------------------------------------------------------
@@ -88,8 +88,8 @@ def _make_agent(
     system_prompt: str = _SYSTEM,
     model: str = "test-model",
     **kwargs: object,
-) -> Genny2:
-    config = Genny2Config(
+) -> Genny:
+    config = GennyConfig(
         llm_config=_llm_cfg(model),
         flat_history=flat_history,
         enable_summarize=enable_summarize,
@@ -100,7 +100,7 @@ def _make_agent(
         summarize_prompt=_SUM_COT,
         **kwargs,
     )
-    return Genny2(config=config, action_schemas=[_schema()])
+    return Genny(config=config, action_schemas=[_schema()])
 
 
 # ---------------------------------------------------------------------------

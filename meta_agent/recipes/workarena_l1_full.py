@@ -43,7 +43,7 @@ from workarena_cube.tools import WorkArenaInfeasibleToolConfig  # noqa: E402
 from workarena_hints import WORKARENA_TASK_HINTS, WORKARENA_TASK_PRECISION  # noqa: E402
 
 from cube_harness import make_experiment_output_dir  # noqa: E402
-from cube_harness.agents.genny import GennyConfig  # noqa: E402
+from cube_harness.agents.genny import BudgetConfig, GennyConfig  # noqa: E402
 from cube_harness.exp_runner import run_sequentially, run_with_ray  # noqa: E402
 from cube_harness.experiment import Experiment  # noqa: E402
 from cube_harness.llm import LLMConfig  # noqa: E402
@@ -90,8 +90,7 @@ def run_for_model(
     suffix = "hints" if use_hints else "nohints"
     agent_config = GennyConfig(
         llm_config=llm_config,
-        max_actions=40,
-        render_last_n_obs=1,
+        budget=BudgetConfig(max_actions=40),
         task_hints=WORKARENA_TASK_HINTS if use_hints else {},
         task_clarification=WORKARENA_TASK_PRECISION if use_hints else {},
     )

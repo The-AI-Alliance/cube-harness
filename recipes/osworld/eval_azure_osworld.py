@@ -40,7 +40,7 @@ from osworld_cube.benchmark import OSWorldBenchmarkConfig
 from osworld_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
-from cube_harness.agents.genny import GennyConfig
+from cube_harness.agents.genny import BudgetConfig, GennyConfig
 from cube_harness.exp_runner import run_sequentially, run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
@@ -172,7 +172,6 @@ def _infer_resume_params(output_dir: Path) -> tuple[str, str, str]:
 
     # tool is encoded in the action_space field of benchmark_config.tool_config
     action_space = cfg["benchmark_config"]["tool_config"]["action_space"]
-    # action_space values match OSWORLD_TOOL keys directly ("pyautogui", "computer_13")
     tool = action_space
 
     # subset is stored as the named_subset field on benchmark_config
@@ -201,19 +200,17 @@ def main(debug: bool, resume_dir: str | None = None) -> None:
 
     tool_slug = _TOOL_SLUGS.get(tool, tool)
     model_slug = _MODEL_SLUGS.get(model, model.split("/")[-1].replace(".", ""))
-    exp_name = f"osworld_{tool_slug}_{model_slug}"
+    exp_name = f"osworld_genny_{tool_slug}_{model_slug}"
 
     if not resuming:
         output_dir: Path = make_experiment_output_dir(exp_name, "osworld-cube")
 
-    llm_config = LLMConfig(model_name=model, temperature=1.0)
+    llm_config = LLMConfig(model_name=model, temperature=1.0, set_cache_control="auto")
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=_TOOL_SYSTEM_PROMPTS[tool],
-        max_actions=100,
-        render_last_n_obs=3,
+        budget=BudgetConfig(max_actions=100),
         enable_summarize=False,
-        tools_as_text=False,
     )
 
     tool_config = ComputerConfig(
@@ -289,7 +286,7 @@ def main(debug: bool, resume_dir: str | None = None) -> None:
             run_sequentially(exp)
         else:
             print("\n" + "=" * 60)
-            print("EVAL MODE: Running OSWorld on Azure")
+            print("EVAL MODE: Running OSWorld on Azure with Genny")
             print("=" * 60)
             print(f"Output directory: {output_dir}")
             print(f"Model: {model}  Tool: {tool}")

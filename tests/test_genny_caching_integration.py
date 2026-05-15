@@ -1,4 +1,4 @@
-"""Integration tests: Genny2 prompt caching with the real Anthropic API.
+"""Integration tests: Genny prompt caching with the real Anthropic API.
 
 These tests make live API calls and are NOT part of the standard CI suite.
 
@@ -15,7 +15,7 @@ import os
 import pytest
 from cube.core import ActionSchema, Observation
 
-from cube_harness.agents.genny2 import Genny2, Genny2Config
+from cube_harness.agents.genny import Genny, GennyConfig
 from cube_harness.llm import LLMConfig
 
 # claude-haiku-4-5-20251001 does NOT support prompt caching on the Anthropic API
@@ -197,8 +197,8 @@ class TestModeACaching:
 
     def test_cache_read_tokens_nonzero_by_step2(self) -> None:
         _skip_if_no_key()
-        config = Genny2Config(llm_config=_llm_cfg())
-        agent = Genny2(config=config, action_schemas=_action_schemas())
+        config = GennyConfig(llm_config=_llm_cfg())
+        agent = Genny(config=config, action_schemas=_action_schemas())
 
         # Step 0 — long obs becomes the goal; writes the system+goal prefix to cache.
         out0 = agent.step(Observation.from_text(_LONG_OBS))
@@ -225,8 +225,8 @@ class TestModeACaching:
     def test_cached_tokens_grow_with_history(self) -> None:
         """Each step caches more tokens than the previous step."""
         _skip_if_no_key()
-        config = Genny2Config(llm_config=_llm_cfg())
-        agent = Genny2(config=config, action_schemas=_action_schemas())
+        config = GennyConfig(llm_config=_llm_cfg())
+        agent = Genny(config=config, action_schemas=_action_schemas())
 
         cached = []
         agent.step(Observation.from_text(_LONG_OBS))
@@ -251,12 +251,12 @@ class TestModeBCaching:
 
     def test_cache_read_tokens_nonzero_by_step2(self) -> None:
         _skip_if_no_key()
-        config = Genny2Config(
+        config = GennyConfig(
             llm_config=_llm_cfg(),
             enable_summarize=True,
             summarize_llm_config=_llm_cfg(),
         )
-        agent = Genny2(config=config, action_schemas=_action_schemas())
+        agent = Genny(config=config, action_schemas=_action_schemas())
 
         out0 = agent.step(Observation.from_text(_LONG_OBS))
         act0 = next(c for c in out0.llm_calls if c.tag == "act")
@@ -285,8 +285,8 @@ class TestFlatModeCaching:
 
     def test_cache_read_tokens_nonzero_by_step2(self) -> None:
         _skip_if_no_key()
-        config = Genny2Config(llm_config=_llm_cfg(), flat_history=True)
-        agent = Genny2(config=config, action_schemas=_action_schemas())
+        config = GennyConfig(llm_config=_llm_cfg(), flat_history=True)
+        agent = Genny(config=config, action_schemas=_action_schemas())
 
         agent.step(Observation.from_text(_LONG_OBS))
         out1 = agent.step(Observation.from_text(_SHORT_OBS))

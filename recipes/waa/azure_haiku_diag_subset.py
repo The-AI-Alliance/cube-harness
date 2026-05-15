@@ -22,7 +22,7 @@ from waa_cube.benchmark import WAABenchmark
 from waa_cube.computer import ComputerConfig
 
 from cube_harness import make_experiment_output_dir
-from cube_harness.agents.genny import GennyConfig
+from cube_harness.agents.genny import BudgetConfig, GennyConfig
 from cube_harness.exp_runner import run_with_ray
 from cube_harness.experiment import Experiment
 from cube_harness.llm import LLMConfig
@@ -74,10 +74,8 @@ def main() -> None:
     agent_config = GennyConfig(
         llm_config=llm_config,
         system_prompt=system_prompt,
-        max_actions=100,
-        render_last_n_obs=3,
+        budget=BudgetConfig(max_actions=100),
         enable_summarize=False,
-        tools_as_text=False,
     )
 
     tool_config = ComputerConfig(
