@@ -34,7 +34,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import cast
 
-from cube.core import Action, ActionSchema, Observation, TypedBaseModel
+from cube.core import Action, ActionSchema, Observation, ValidatedConfig
 from cube.task import STOP_ACTION
 from litellm import Message
 from pydantic import Field
@@ -144,7 +144,7 @@ def _truncate_message(msg: dict, max_chars: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class BudgetConfig(TypedBaseModel):
+class BudgetConfig(ValidatedConfig):
     """Episode budget limits and periodic status display.
 
     Single entry point: check(cost, tokens, step) -> (status_msg | None, busted).

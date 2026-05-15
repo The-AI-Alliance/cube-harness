@@ -9,7 +9,10 @@ from terminalbench2_cube.task import (
     TerminalBench2TaskMetadata,
 )
 
+from terminalbench2_cube.configs import TERMINALBENCH2_CONFIGS
+
 __all__ = [
+    "TERMINALBENCH2_CONFIGS",
     "TerminalBench2Benchmark",
     "TerminalBench2BenchmarkConfig",
     "TerminalBench2ExecutionInfo",

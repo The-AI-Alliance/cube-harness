@@ -117,6 +117,27 @@ Both runners:
 Per-episode stdout/stderr is redirected to `<output_dir>/episodes/<traj_id>/logs/`
 via `redirect_output_to_log` from `episode_logs.py`.
 
+### Recipes (declarative config files)
+
+A recipe imports canonical configs by name, tweaks attributes, builds one or
+more `Experiment` objects, and ends with `run(...)`. No per-recipe argparse.
+
+- `ConfigRegistry` (`cube_harness.config_registry`) — a `Mapping`; every
+  `reg[name]` returns a `model_copy(deep=True)`, so a recipe cannot mutate the
+  shared canonical instance. Unknown name → `KeyError` listing valid names.
+- Canonical registries: `GENNY_CONFIGS`, `REACT_CONFIGS`
+  (`cube_harness.agents.*_configs`); per-cube `*_CONFIGS` (e.g.
+  `swebench_verified_cube.SWEBENCH_CONFIGS`).
+- `cube_harness.infra.INFRA_CONFIGS` — built-in `"local"` plus entries from
+  `~/.cube/infra.py` (a `dict[str, InfraConfig]`, machine-local, never
+  committed; credentials resolved from env, never fields).
+- `cube_harness.recipe.run(*exps)` — the only CLI, fixed for every recipe:
+  `--limit N` (first N tasks via `run_sequentially`), `--ray N`
+  (`run_with_ray` worker count), `--set dotted.path=value` (repeatable;
+  JSON-parsed, then assigned — `ValidatedConfig` validates the type).
+- Config attribute assignment validates at the assignment site because the
+  config ABCs subclass `cube.core.ValidatedConfig`.
+
 ## Invariants
 
 1. `Experiment` is itself a `TypedBaseModel` — JSON-serializable. It holds a

@@ -1,23 +1,27 @@
-"""Static-analysis guard: every `from <local pkg> import Y` in any recipe resolves.
+"""Recipe guards: imports resolve, and each recipe builds a valid Experiment.
 
-Catches the class of bug that broke #381's consolidated branch — one PR deleted
-`terminalbench2_cube.tool`, another's recipe still imported it from inside a
-function. The regression only surfaced at runtime on a non-debug code path.
+1. `test_recipe_local_imports_resolve` — static AST walk: every
+   `from <local pkg> import Y` in a recipe resolves. Catches the class of bug
+   that broke #381 (a recipe importing a symbol another PR deleted).
+2. `test_recipe_defines_experiment` — executes the recipe module and asserts
+   it builds an `Experiment` (or a `dict[str, Experiment]`). Catches
+   config-schema drift: a renamed config field fails here, not at next run.
 
-Pure AST walk + lazy `importlib.import_module` — no Docker, no network, no LLM
-calls. The walk skips recipes/cube-specific paths whose top-level package isn't
-installed in this env (tests.yml CI runs `uv sync` without the workspace cubes);
-the cube CI workflow and any local dev env that has the cube installed picks up
-the assertion.
+No Docker, no network, no LLM (recipes do their run() under `__main__`).
+Recipes whose cube/tool deps aren't installed in this env are skipped, not
+failed — cube CI / local dev with the cube installed picks up the assertion.
 """
 
 from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 from pathlib import Path
 
 import pytest
+
+from cube_harness.experiment import Experiment
 
 # Package prefixes owned by this repo. Imports of these MUST resolve.  Imports
 # from external packages (cube_infra_*, anthropic, etc.) are best-effort and
@@ -77,3 +81,31 @@ def test_recipe_local_imports_resolve(recipe: Path) -> None:
             # install workspace cubes) — no regression to assert here.
             pytest.skip(f"{module} not installed in this env ({e})")
         assert hasattr(mod, name), f"{recipe.relative_to(REPO_ROOT)}: `from {module} import {name}` — name not found"
+
+
+def _runnable_recipes() -> list[Path]:
+    # *_template.py (e.g. infra_template.py → ~/.cube/infra.py) are copy-me
+    # templates, not runnable recipes — they define no Experiment by design.
+    return [p for p in _recipes() if not p.name.endswith("_template.py")]
+
+
+@pytest.mark.parametrize("recipe", _runnable_recipes(), ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+def test_recipe_defines_experiment(recipe: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Executing the recipe builds at least one Experiment (var or dict value)."""
+    monkeypatch.setattr("cube_harness.experiment.make_experiment_output_dir", lambda *a, **k: tmp_path)
+    spec = importlib.util.spec_from_file_location(recipe.stem, recipe)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except ModuleNotFoundError as e:
+        # Recipe's cube/tool dep not installed here — the AST guard above
+        # already covers import-name resolution when it is installed.
+        pytest.skip(f"recipe dependency not installed: {e.name}")
+    exps: list[Experiment] = []
+    for v in vars(module).values():
+        if isinstance(v, Experiment):
+            exps.append(v)
+        elif isinstance(v, dict):
+            exps.extend(x for x in v.values() if isinstance(x, Experiment))
+    assert exps, f"{recipe.relative_to(REPO_ROOT)} defines no Experiment (a var or a dict[str, Experiment])"

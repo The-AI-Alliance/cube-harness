@@ -23,7 +23,7 @@ hello:
 debug:
 	@echo "🤖 Running hello_miniwob recipe in debug mode"
 	uv pip install -e "cubes/miniwob[debug]"
-	uv run recipes/hello_miniwob.py debug
+	uv run recipes/hello_miniwob.py --limit 2
 
 xray:
 	uv run ch-xray --debug

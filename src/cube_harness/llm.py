@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import litellm
 import tenacity
-from cube.core import TypedBaseModel
+from cube.core import TypedBaseModel, ValidatedConfig
 from litellm import BadRequestError, Message, get_llm_provider
 from litellm.exceptions import (
     APIConnectionError,
@@ -56,7 +56,7 @@ class Prompt(TypedBaseModel):
         return f"Tools:\n{tools}\nMessages[{len(self.messages)}]:\n{messages}"
 
 
-class LLMConfig(TypedBaseModel):
+class LLMConfig(ValidatedConfig):
     """Thin LLM wrapper around LiteLLM completion API."""
 
     model_name: str
