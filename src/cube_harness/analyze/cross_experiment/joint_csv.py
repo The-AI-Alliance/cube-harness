@@ -1,10 +1,10 @@
 """Joint CSV across a sweep directory.
 
 Walks experiment subdirectories of `sweep_dir`, reads each
-`experiment_judge_report.csv` (the per-experiment artefact produced by
-`judge_experiment`), joins with `cross_judge_agreement.csv` if present, and
+`experiment_investigation_report.csv` (the per-experiment artefact produced by
+`investigate_experiment`), joins with `cross_investigation_agreement.csv` if present, and
 writes one row per `(experiment, episode)` to
-`<sweep_dir>/joint_judge_report.csv`.
+`<sweep_dir>/joint_investigation_report.csv`.
 
 The output is intentionally flat — meant for grep, awk, pandas, and the
 meta-agent's slash-command output buffer. The original per-experiment files
@@ -19,14 +19,14 @@ import logging
 from pathlib import Path
 from typing import Any, Sequence
 
-from cube_harness.analyze.cross_experiment.cross_judge_agreement import (
+from cube_harness.analyze.cross_experiment.cross_investigation_agreement import (
     AGREEMENT_COLUMNS,
     AGREEMENT_REPORT_FILENAME,
 )
 
 logger = logging.getLogger(__name__)
 
-JOINT_REPORT_FILENAME = "joint_judge_report.csv"
+JOINT_REPORT_FILENAME = "joint_investigation_report.csv"
 
 # Per-experiment context columns — prepended to each row.
 _PREFIX_COLUMNS: tuple[str, ...] = (
@@ -39,7 +39,7 @@ _PREFIX_COLUMNS: tuple[str, ...] = (
     "litellm_proxy_url",
 )
 
-# Columns lifted from each `experiment_judge_report.csv` (mirrors
+# Columns lifted from each `experiment_investigation_report.csv` (mirrors
 # core._write_csv_report). Joint rows keep all of them.
 _PER_EPISODE_COLUMNS: tuple[str, ...] = (
     "trajectory_id",
@@ -59,7 +59,7 @@ _PER_EPISODE_COLUMNS: tuple[str, ...] = (
     "duration_s",
 )
 
-# Cross-judge agreement columns we join in (primary_key = (trajectory_id, recipe)).
+# Cross-investigator agreement columns we join in (primary_key = (trajectory_id, recipe)).
 # `trajectory_id` and `recipe` are already in _PREFIX/_PER_EPISODE — skip them
 # from the join projection to avoid duplicates.
 _JOIN_COLUMNS: tuple[str, ...] = tuple(c for c in AGREEMENT_COLUMNS if c not in ("trajectory_id", "recipe"))
@@ -68,9 +68,9 @@ JOINT_REPORT_COLUMNS: tuple[str, ...] = _PREFIX_COLUMNS + _PER_EPISODE_COLUMNS +
 
 
 def _load_summary(experiment_dir: Path) -> dict[str, Any]:
-    """Read `experiment_judge_summary.json` if present — a few prefix columns
+    """Read `experiment_investigation_summary.json` if present — a few prefix columns
     come from here."""
-    path = experiment_dir / "experiment_judge_summary.json"
+    path = experiment_dir / "experiment_investigation_summary.json"
     if not path.exists():
         return {}
     try:
@@ -122,7 +122,7 @@ def _resolve_prefix(experiment_dir: Path) -> dict[str, str]:
 
 
 def _load_agreement_rows(experiment_dir: Path) -> dict[tuple[str, str], dict[str, str]]:
-    """Read `cross_judge_agreement.csv` keyed by (trajectory_id, recipe)."""
+    """Read `cross_investigation_agreement.csv` keyed by (trajectory_id, recipe)."""
     path = experiment_dir / AGREEMENT_REPORT_FILENAME
     if not path.exists():
         return {}
@@ -135,12 +135,12 @@ def _load_agreement_rows(experiment_dir: Path) -> dict[tuple[str, str], dict[str
 
 
 def _discover_experiments(sweep_dir: Path) -> list[Path]:
-    """Direct children of `sweep_dir` that contain an `experiment_judge_report.csv`."""
+    """Direct children of `sweep_dir` that contain an `experiment_investigation_report.csv`."""
     out: list[Path] = []
     for child in sorted(sweep_dir.iterdir()):
         if not child.is_dir():
             continue
-        if (child / "experiment_judge_report.csv").exists():
+        if (child / "experiment_investigation_report.csv").exists():
             out.append(child)
     return out
 
@@ -150,7 +150,7 @@ def write_joint_csv(
     *,
     experiment_dirs: Sequence[Path] | None = None,
 ) -> Path:
-    """Walk `sweep_dir`, read per-experiment CSVs, write `joint_judge_report.csv`.
+    """Walk `sweep_dir`, read per-experiment CSVs, write `joint_investigation_report.csv`.
 
     `experiment_dirs` overrides the auto-walk — useful for sweeps where the
     layout isn't a flat list of children.
@@ -177,7 +177,7 @@ def write_joint_csv(
         for exp_dir in dirs:
             prefix = _resolve_prefix(exp_dir)
             agreement = _load_agreement_rows(exp_dir)
-            csv_path = exp_dir / "experiment_judge_report.csv"
+            csv_path = exp_dir / "experiment_investigation_report.csv"
             with csv_path.open() as cf:
                 for episode_row in csv.DictReader(cf):
                     joint_row: dict[str, str] = {col: "" for col in JOINT_REPORT_COLUMNS}

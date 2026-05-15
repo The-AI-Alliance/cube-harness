@@ -19,12 +19,12 @@ Be specific enough that the result can confirm or refute it.>
 
 - **Outcomes**: <X/Y solved; reward distribution>
 - **Experiment dir**: <path>
-- **Judge recipe**: <use_case> → `meta_analysis.md` says: <key patterns>
+- **Investigator recipe**: <use_case> → `meta_analysis.md` says: <key patterns>
 
 ## Findings
 
 <Root causes — confirmed or refuted. Cite specific episodes / evidence.
-Distinguish "the agent failed because X" from "the judge mis-attributed Y".>
+Distinguish "the agent failed because X" from "the investigator mis-attributed Y".>
 
 ## Conclusion & next
 

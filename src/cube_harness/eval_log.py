@@ -11,13 +11,13 @@ Classes:
     UsageSummary      — aggregated LLM token/cost stats across an episode
     AgentInfo         — agent descriptor: config, dependency versions, git provenance
     BenchmarkSubset   — benchmark subset descriptor for MNAR propensity correction
-    JudgeConfig       — configuration of the judge LLM (optional)
+    InvestigatorLLMConfig       — configuration of the investigator LLM (optional)
     BlameCategory     — closed-world taxonomy of failure causes
-    Outcome           — outcome of the episode as judged
+    Outcome           — outcome of the episode as investigated
     EvidenceItem      — step-indexed transcript quote backing a blame attribution
-    BaseJudgeOutput   — per-episode judge assessment, base shape (recipes extend it)
-    JudgeOutput       — deprecated alias for BaseJudgeOutput
-    JudgeMetadata     — billing/provenance for a single judge invocation (optional)
+    BaseFindings   — per-episode investigator assessment, base shape (recipes extend it)
+    Findings       — deprecated alias for BaseFindings
+    InvestigationMetadata     — billing/provenance for a single investigator invocation (optional)
     Verifier          — task verifier reference (optional)
     ExperimentRecord  — experiment-level record written to experiment_record.json
     EpisodeRecord     — episode-level record written after each episode completes
@@ -287,19 +287,19 @@ class BenchmarkSubset(TypedBaseModel):
         return cls(name=name, n_tasks=n_tasks)
 
 
-class JudgeConfig(TypedBaseModel):
-    """Configuration of the LLM judge used for post-hoc episode assessment."""
+class InvestigatorLLMConfig(TypedBaseModel):
+    """Configuration of the LLM investigator used for post-hoc episode assessment."""
 
-    model: str = Field(description="Judge model identifier (e.g. 'claude-opus-4-7').")
-    prompt_version: str = Field(description="Version or hash of the judge prompt template.")
-    judged_at: str | None = Field(default=None, description="ISO-8601 timestamp when judging was run.")
+    model: str = Field(description="Investigator model identifier (e.g. 'claude-opus-4-7').")
+    prompt_version: str = Field(description="Version or hash of the investigator prompt template.")
+    investigated_at: str | None = Field(default=None, description="ISO-8601 timestamp when the investigation was run.")
 
 
-JUDGE_SCHEMA_VERSION = "v1"
+FINDINGS_SCHEMA_VERSION = "v1"
 
 
 class BlameCategory(str, Enum):
-    """Closed-world taxonomy of failure causes. The judge must pick from this set or `none`."""
+    """Closed-world taxonomy of failure causes. The investigator must pick from this set or `none`."""
 
     task_unclear = "task_unclear"
     model_capability = "model_capability"
@@ -330,10 +330,10 @@ class EvidenceItem(TypedBaseModel):
     quote: str = Field(description="Verbatim excerpt from the agent or environment output.")
 
 
-class BaseJudgeOutput(TypedBaseModel):
-    """Base per-episode assessment from a post-hoc LLM judge.
+class BaseFindings(TypedBaseModel):
+    """Base per-episode assessment from a post-hoc LLM investigator.
 
-    Each judge recipe (general_blame, profiling, agent_scaffolding, ...) extends this
+    Each investigator recipe (general_blame, profiling, agent_scaffolding, ...) extends this
     base with use-case-specific fields. The cross-recipe core fields (analysis,
     outcome, summary, primary_blame, primary_blame_confidence) live here so that
     aggregate views (CSV report, cross-experiment joins) can flatten any recipe's
@@ -378,25 +378,25 @@ class BaseJudgeOutput(TypedBaseModel):
     )
 
 
-# Deprecated alias — `JudgeOutput` was renamed to `BaseJudgeOutput` to make the
+# Deprecated alias — `Findings` was renamed to `BaseFindings` to make the
 # extension contract explicit. The `general_blame` recipe's `OutputModel` is the
 # direct successor (identical on-disk shape). Kept for one release window so
-# existing callers (judge_report.py, downstream consumers) keep working.
-JudgeOutput = BaseJudgeOutput
+# existing callers (investigation_report.py, downstream consumers) keep working.
+Findings = BaseFindings
 
 
-class JudgeMetadata(TypedBaseModel):
-    """Billing and provenance for a single judge invocation. Sibling to `judge_output`."""
+class InvestigationMetadata(TypedBaseModel):
+    """Billing and provenance for a single investigator invocation. Sibling to `findings`."""
 
-    model: str = Field(description="Judge model identifier (e.g. 'claude-opus-4-7').")
-    prompt_tokens: int = Field(default=0, description="Input tokens consumed by the judge call.")
-    completion_tokens: int = Field(default=0, description="Output tokens produced by the judge call.")
-    cost_usd: float = Field(default=0.0, description="Total USD cost of the judge call.")
-    duration_s: float = Field(default=0.0, description="Wall-clock duration of the judge call in seconds.")
-    timestamp: float = Field(description="Wall-clock time the judge ran (Unix seconds).")
-    judge_schema_version: str = Field(
-        default=JUDGE_SCHEMA_VERSION,
-        description="Schema version of the JudgeOutput record produced — for forward compatibility.",
+    model: str = Field(description="Investigator model identifier (e.g. 'claude-opus-4-7').")
+    prompt_tokens: int = Field(default=0, description="Input tokens consumed by the investigator call.")
+    completion_tokens: int = Field(default=0, description="Output tokens produced by the investigator call.")
+    cost_usd: float = Field(default=0.0, description="Total USD cost of the investigator call.")
+    duration_s: float = Field(default=0.0, description="Wall-clock duration of the investigator call in seconds.")
+    timestamp: float = Field(description="Wall-clock time the investigator ran (Unix seconds).")
+    findings_schema_version: str = Field(
+        default=FINDINGS_SCHEMA_VERSION,
+        description="Schema version of the Findings record produced — for forward compatibility.",
     )
 
 
@@ -430,9 +430,9 @@ class ExperimentRecord(TypedBaseModel):
     benchmark_name: str = Field(description="Benchmark name from benchmark_metadata.name.")
     benchmark_version: str | None = Field(default=None, description="Benchmark version string.")
     benchmark_subset: BenchmarkSubset = Field(description="Subset descriptor for MNAR propensity correction.")
-    judge_config: JudgeConfig | None = Field(
+    investigator_llm_config: InvestigatorLLMConfig | None = Field(
         default=None,
-        description="Judge configuration if a post-hoc LLM judge was run on these episodes.",
+        description="Investigator configuration if a post-hoc LLM investigator was run on these episodes.",
     )
 
     @classmethod
@@ -475,7 +475,7 @@ class EpisodeRecord(TypedBaseModel):
     """Episode-level record. Written to episodes/<trajectory_id>/episode_record.json after each episode.
 
     Links to ExperimentRecord via evaluation_id. Contains all episode-specific fields:
-    task identity, per-episode tool list, outcome, usage, and optional judge output.
+    task identity, per-episode tool list, outcome, usage, and optional investigator output.
     """
 
     evaluation_id: str = Field(description="FK → ExperimentRecord.evaluation_id.")
@@ -517,16 +517,16 @@ class EpisodeRecord(TypedBaseModel):
         default=None,
         description="Task verifier reference for reproducibility and post-hoc inspection.",
     )
-    judge_output: BaseJudgeOutput | None = Field(
+    findings: BaseFindings | None = Field(
         default=None,
         description=(
-            "Per-episode LLM judge assessment (outcome, blame, evidence, hypothesis). "
+            "Per-episode LLM investigator assessment (outcome, blame, evidence, hypothesis). "
             "Concrete shape depends on the recipe used; the base fields are always present."
         ),
     )
-    judge_metadata: JudgeMetadata | None = Field(
+    investigation_metadata: InvestigationMetadata | None = Field(
         default=None,
-        description="Billing/provenance for the judge invocation. None until a judge has run.",
+        description="Billing/provenance for the investigator invocation. None until a investigator has run.",
     )
 
     @classmethod

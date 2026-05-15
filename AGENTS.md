@@ -181,9 +181,9 @@ installs all workspace packages with `uv pip install -e cube-standard --all-pack
 - **cubes/\*** — individual benchmark packages. Each has its own `debug.py` that
   `cube test <name>` runs. Changes to a cube are usually local to its directory.
 
-## Judge use cases
+## Investigator use cases
 
-`src/cube_harness/analyze/judge/use_cases/<name>/` is the judge recipe
+`src/cube_harness/analyze/investigator/use_cases/<name>/` is the investigator recipe
 catalog. Each subdirectory is one use case:
 
 - **`general_blame`** — default. Closed-world blame attribution per episode.
@@ -192,11 +192,11 @@ catalog. Each subdirectory is one use case:
 - **`hinter`** — extract `task_hints[task_id]` candidates from failed
   episodes (replaces the old `meta_agent/` slash-command flow).
 
-Each use_case has a `recipe.py` (Pydantic `JudgeRecipe`) and a `SKILL.md`
-(meta-agent skill description). `scripts/sync_judge_skills.py` symlinks
-SKILL.md files into `.claude/skills/judge-<name>` so Claude Code picks
+Each use_case has a `recipe.py` (Pydantic `InvestigatorRecipe`) and a `SKILL.md`
+(meta-agent skill description). `scripts/sync_investigator_skills.py` symlinks
+SKILL.md files into `.claude/skills/investigator-<name>` so Claude Code picks
 them up.
 
 Per-batch synthesis (`meta_analysis.json` + `.md`) is mirrored into
 `~/cube_meta_agent_journal/<experiment>/` for cross-iteration narrative —
-the only artefact the judge writes outside the experiment dir.
+the only artefact the investigator writes outside the experiment dir.

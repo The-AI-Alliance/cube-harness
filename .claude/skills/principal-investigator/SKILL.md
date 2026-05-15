@@ -2,11 +2,11 @@
 
 The **PrincipalInvestigator (PI)** is the outer loop: it runs an iterative
 experiment program to understand and fix failures in the agent/cube stack.
-It owns the methodology; the per-use-case judge recipes
-(`analyze/judge/use_cases/*` — `general_blame`, `profiling`,
+It owns the methodology; the per-use-case investigator recipes
+(`analyze/investigator/use_cases/*` — `general_blame`, `profiling`,
 `agent_scaffolding`, `hinter`, …) are the *investigate* step it dispatches.
 
-Inner loop = one episode's root-cause analysis (a judge/investigator recipe).
+Inner loop = one episode's root-cause analysis (an investigator recipe).
 Outer loop = sessions of rounds: hypothesis → experiment → investigate →
 synthesize → conclude → next hypothesis.
 
@@ -25,9 +25,9 @@ synthesize → conclude → next hypothesis.
      tests. **After**: results, what the investigation found, conclusion,
      and the code delta since the previous round (commit hash + one line).
 
-3. **Run** the experiment, then the judge on its output dir
-   (`ch-judge <exp_dir> --recipe <use_case>`). Read `meta_analysis.md`
-   plus the per-episode `judge_output.json` / `audit.json`.
+3. **Run** the experiment, then the investigator on its output dir
+   (`ch-investigate <exp_dir> --recipe <use_case>`). Read `meta_analysis.md`
+   plus the per-episode `findings.json` / `audit.json`.
 
 4. **Conclude & iterate.** Write the round's conclusion. If a root cause is
    confirmed, decide the fix. Start round `N+1` with the next hypothesis.
