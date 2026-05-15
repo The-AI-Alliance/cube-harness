@@ -3,23 +3,29 @@
     from workarena_cube import WORKARENA_CONFIGS
     benchmark = WORKARENA_CONFIGS["l1"]
 
-"default" is all levels with the real browser tool. "l1"/"l2"/"l3" are the
-canonical WorkArena difficulty splits; l2/l3 add the infeasible-task tool,
-matching how the benchmark is run in practice.
+Runs on BrowserGym with axtree + screenshot (the canonical web observation).
+"default" is all levels; "l1"/"l2"/"l3" are the canonical WorkArena
+difficulty splits; l2/l3 add the infeasible-task tool, matching how the
+benchmark is run in practice.
 """
 
+# TEMPORARY (tools-architecture Phase 1): BrowsergymConfig still lives in
+# cube-harness. This cube -> cube-harness import is a known, accepted
+# exception until it moves to cube-tools/cube-browsergym-tool. Functionally
+# safe (no import cycle); do not copy this pattern to new cubes.
 from cube.core import ConfigRegistry
 from cube.tool import ToolboxConfig
+from cube_harness.tools.browsergym import BrowsergymConfig
 from workarena_cube.benchmark import WorkArenaBenchmarkConfig
-from workarena_cube.tools import WorkArenaInfeasibleToolConfig, WorkarenaBrowserToolConfig
+from workarena_cube.tools import WorkArenaInfeasibleToolConfig
 
 
-def _browser() -> WorkarenaBrowserToolConfig:
-    return WorkarenaBrowserToolConfig()
+def _browser() -> BrowsergymConfig:
+    return BrowsergymConfig(use_html=False, use_axtree=True, use_screenshot=True)
 
 
 def _browser_with_infeasible() -> ToolboxConfig:
-    return ToolboxConfig(tool_configs=[WorkarenaBrowserToolConfig(), WorkArenaInfeasibleToolConfig()])
+    return ToolboxConfig(tool_configs=[_browser(), WorkArenaInfeasibleToolConfig()])
 
 
 WORKARENA_CONFIGS: ConfigRegistry[WorkArenaBenchmarkConfig] = ConfigRegistry(
