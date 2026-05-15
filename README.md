@@ -82,9 +82,14 @@ if __name__ == "__main__":
 `run()` is the only CLI, identical for every recipe and not extensible:
 `--limit N` (first N tasks, in-process), `--ray N` (worker count),
 `--set dotted.path=value` (ad-hoc override). For anything structural, clone
-the file. Infra is machine-local in `~/.cube/infra.py` (a `dict[str,
-InfraConfig]`, never committed; credentials come from env). Config objects
-are typed Pydantic models, serialized with every experiment for reproducibility.
+the file. Config objects are typed Pydantic models, serialized with every
+experiment for reproducibility.
+
+**Infra** is machine-local in `~/.cube/infra.py` (a `dict[str, InfraConfig]`,
+never committed; credentials come from env). `"local"` works with zero setup.
+To use a cluster/cloud, copy [`recipes/infra_template.py`](recipes/infra_template.py)
+to `~/.cube/infra.py` and edit it — it documents the process and shows
+LocalInfraConfig plus commented Toolkit/Azure examples.
 
 See **[docs/configuration.md](docs/configuration.md)** for the full philosophy, a comparison with Hydra/YAML/CLI approaches, and how to run sweeps.
 

@@ -14,7 +14,9 @@ import pytest
 
 from cube_harness.experiment import Experiment
 
-RECIPES = sorted((Path(__file__).parent.parent / "recipes").glob("*.py"))
+# *_template.py are copy-me templates (e.g. infra_template.py → ~/.cube/infra.py),
+# not runnable recipes — they define no Experiment by design.
+RECIPES = sorted(p for p in (Path(__file__).parent.parent / "recipes").glob("*.py") if not p.name.endswith("_template.py"))
 _CUBE_DEPS = {"miniwob_cube", "webarena_verified_cube", "swebench_verified_cube", "cube_browser_tool"}
 
 

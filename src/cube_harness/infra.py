@@ -18,6 +18,10 @@ on the config. A recipe just names one:
 ``"local"`` (a bare ``LocalInfraConfig``) is always available without any
 config file, so a fresh machine runs the canonical recipes with zero setup.
 A user-defined ``"local"`` overrides the built-in.
+
+Starting point: copy ``recipes/infra_template.py`` to ``~/.cube/infra.py``
+— it walks through the process with worked LocalInfraConfig / Toolkit /
+Azure examples.
 """
 
 import importlib.util
