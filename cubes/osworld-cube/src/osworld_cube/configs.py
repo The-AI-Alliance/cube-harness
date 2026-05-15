@@ -7,8 +7,11 @@ Zero-arg OSWorldBenchmarkConfig defaults to ComputerConfig() and the
 OSWORLD_UBUNTU resource.
 """
 
+from cube.core import ConfigRegistry
 from osworld_cube.benchmark import OSWorldBenchmarkConfig
 
-OSWORLD_CONFIGS: dict[str, OSWorldBenchmarkConfig] = {
-    "default": OSWorldBenchmarkConfig(),
-}
+OSWORLD_CONFIGS: ConfigRegistry[OSWorldBenchmarkConfig] = ConfigRegistry(
+    {
+        "default": OSWorldBenchmarkConfig(),
+    }
+)

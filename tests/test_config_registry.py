@@ -1,11 +1,11 @@
 """ConfigRegistry copy-on-access + canonical registry validity."""
 
 import pytest
+from cube.core import ConfigRegistry
 from pydantic import ValidationError
 
 from cube_harness.agents.genny_configs import GENNY_CONFIGS
 from cube_harness.agents.react_configs import REACT_CONFIGS
-from cube_harness.config_registry import ConfigRegistry
 from cube_harness.infra import INFRA_CONFIGS
 from cube_harness.llm import LLMConfig
 

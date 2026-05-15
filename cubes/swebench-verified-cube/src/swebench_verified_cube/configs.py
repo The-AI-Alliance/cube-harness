@@ -8,8 +8,11 @@ For a non-canonical task subset, clone the recipe and chain the existing
 ``named_subset``) on ``SWEBENCH_CONFIGS["default"]``.
 """
 
+from cube.core import ConfigRegistry
 from swebench_verified_cube.benchmark import SWEBenchVerifiedBenchmarkConfig
 
-SWEBENCH_CONFIGS: dict[str, SWEBenchVerifiedBenchmarkConfig] = {
-    "default": SWEBenchVerifiedBenchmarkConfig(),
-}
+SWEBENCH_CONFIGS: ConfigRegistry[SWEBenchVerifiedBenchmarkConfig] = ConfigRegistry(
+    {
+        "default": SWEBenchVerifiedBenchmarkConfig(),
+    }
+)

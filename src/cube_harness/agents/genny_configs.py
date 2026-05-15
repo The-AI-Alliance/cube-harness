@@ -13,8 +13,9 @@ recipes that need a non-canonical combination. There is no model registry —
 a recipe constructs the `LLMConfig` it wants and assigns it.
 """
 
+from cube.core import ConfigRegistry
+
 from cube_harness.agents.genny import BudgetConfig, GennyConfig
-from cube_harness.config_registry import ConfigRegistry
 from cube_harness.llm import LLMConfig
 
 SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."

@@ -7,8 +7,9 @@
 Every lookup returns a fresh deep copy (see `ConfigRegistry`).
 """
 
+from cube.core import ConfigRegistry
+
 from cube_harness.agents.react import ReactAgentConfig
-from cube_harness.config_registry import ConfigRegistry
 from cube_harness.llm import LLMConfig
 
 _DEFAULT = ReactAgentConfig(llm_config=LLMConfig(model_name="gpt-5-mini", temperature=1.0))

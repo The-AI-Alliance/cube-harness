@@ -23,10 +23,9 @@ A user-defined ``"local"`` overrides the built-in.
 import importlib.util
 from pathlib import Path
 
+from cube.core import ConfigRegistry
 from cube.infra_local import LocalInfraConfig
 from cube.resource import InfraConfig
-
-from cube_harness.config_registry import ConfigRegistry
 
 USER_INFRA_PATH = Path.home() / ".cube" / "infra.py"
 
