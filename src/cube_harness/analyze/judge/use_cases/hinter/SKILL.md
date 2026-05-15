@@ -30,7 +30,7 @@ cause is one of these, fix it in the right layer instead:
 | Capability ceiling | A different model |
 
 If you suspect any of those, run `general_blame` or `agent_scaffolding`
-first. `hint_harvest` is the last resort, used when the failure is
+first. `hinter` is the last resort, used when the failure is
 "the model didn't know what we expected."
 
 **Output**

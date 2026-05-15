@@ -189,7 +189,7 @@ catalog. Each subdirectory is one use case:
 - **`general_blame`** — default. Closed-world blame attribution per episode.
 - **`profiling`** — narrower taxonomy aimed at scaffold-level inefficiency.
 - **`agent_scaffolding`** — deep loop-pathology diagnosis.
-- **`hint_harvest`** — extract `task_hints[task_id]` candidates from failed
+- **`hinter`** — extract `task_hints[task_id]` candidates from failed
   episodes (replaces the old `meta_agent/` slash-command flow).
 
 Each use_case has a `recipe.py` (Pydantic `JudgeRecipe`) and a `SKILL.md`

@@ -142,11 +142,11 @@ Per sweep (when meta-agent dispatches one):
 
 ## Scope
 
-**In (this PR):** `AgentDriver` Protocol + `claude-code-sdk` and `claude-terminal` drivers; three use-case directories; benchmark-context-agent; required + auto-generated context file; merged audit pass; cross-judge runner; joint-CSV runner; selector Protocol with three built-in selectors; `experiment_judge_report.json` aggregate; CLI flags (`--recipe`, `--driver`, `--audit`, `--n-seeds`).
+**In (this PR):** `AgentDriver` Protocol + `claude-code-sdk` and `claude-terminal` drivers; four use-case directories (`general_blame`, `profiling`, `agent_scaffolding`, `hinter`); benchmark-context-agent; required + auto-generated context file; merged audit pass; cross-judge runner; joint-CSV runner; selector Protocol with three built-in selectors; `experiment_judge_report.json` aggregate; post-batch meta-analysis synthesis with auto-derived JSON template + retry-on-validation-error; CLI flags (`--recipe`, `--driver`, `--audit`, `--n-seeds`, `--judge-model`, `--synthesis-model`, `--journal-dir`).
 
-**Out (signposted follow-ups):** Codex driver; real similarity selector; additional use-case directories (`hint_harvest`, `auto_verified`); typed meta-agent loop replacing the slash command.
+**Out (signposted follow-ups):** Codex driver; real similarity selector (`TopKBySimilarityStub` ships as a placeholder); additional use-case directories (`auto_verified`); typed meta-agent loop replacing the slash command; dedicated meta-meta judge-quality synthesis (human-triggered for now via the artefacts that `hinter` and audit produce).
 
-**Not touched:** cube-standard, episode loop, trajectory format, storage Protocol, `Episode`, `Experiment`, `exp_runner`, `LLM` wrapper, `meta_agent/recipes/`.
+**Not touched:** cube-standard, episode loop, trajectory format, storage Protocol, `Episode`, `Experiment`, `exp_runner`, `LLM` wrapper. The previous `meta_agent/` directory was removed entirely; the slash-command workflow was repurposed as the `hinter` use_case under `analyze/judge/use_cases/`.
 
 ---
 

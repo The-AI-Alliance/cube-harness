@@ -385,7 +385,7 @@ def test_deserialize_output_model_rejects_non_typed_base_model() -> None:
 
 def test_recipe_catalog_assembly() -> None:
     """RECIPE_CATALOG contains the four shipped recipes."""
-    assert set(RECIPE_CATALOG.keys()) == {"general_blame", "profiling", "agent_scaffolding", "hint_harvest"}
+    assert set(RECIPE_CATALOG.keys()) == {"general_blame", "profiling", "agent_scaffolding", "hinter"}
     for name, recipe in RECIPE_CATALOG.items():
         assert recipe.name == name
         assert recipe.system_prompt.strip()

@@ -1,7 +1,7 @@
-"""`hint_harvest` — extract task-specific hints from a failed episode.
+"""`hinter` — extract task-specific hints from a failed episode.
 
 The default judge (`general_blame`) attributes blame and proposes a one-line
-hypothesis. `hint_harvest` is narrower and more actionable: given a failed
+hypothesis. `hinter` is narrower and more actionable: given a failed
 episode, produce concrete hint candidates the user can drop into
 `GennyConfig.task_hints[task_id]` to make the agent succeed on the next run.
 
@@ -54,7 +54,7 @@ class TaskHint(TypedBaseModel):
     )
 
 
-class HintHarvestOutput(BaseJudgeOutput):
+class HinterOutput(BaseJudgeOutput):
     """Judge output extended with harvested hint candidates.
 
     Inherits the closed-world blame taxonomy from `BaseJudgeOutput` so
@@ -71,7 +71,7 @@ class HintHarvestOutput(BaseJudgeOutput):
     )
 
 
-HINT_HARVEST_SYSTEM_PROMPT = """You are a hint-harvesting judge for failed agent episodes.
+HINTER_SYSTEM_PROMPT = """You are a hint-harvesting judge for failed agent episodes.
 
 Your job: read a failed trajectory and extract concrete, narrow hints that would
 plausibly let the agent solve THIS task on a re-run. Hints are short prompt
@@ -107,10 +107,10 @@ Reply with a single JSON object inside ```json ... ``` fences, matching the
 schema in the user prompt."""
 
 
-_HINT_HARVEST_OUTPUT_JSON = model_to_json_example(HintHarvestOutput).replace("{", "{{").replace("}", "}}")
+_HINTER_OUTPUT_JSON = model_to_json_example(HinterOutput).replace("{", "{{").replace("}", "}}")
 
 
-HINT_HARVEST_USER_PROMPT_TEMPLATE = f"""Harvest hints from this failed episode.
+HINTER_USER_PROMPT_TEMPLATE = f"""Harvest hints from this failed episode.
 
 # Episode
 
@@ -141,12 +141,12 @@ Task description:
 
 # Output schema
 
-Produce a single JSON object matching `HintHarvestOutput`. Wrap in a ```json
+Produce a single JSON object matching `HinterOutput`. Wrap in a ```json
 fence. Field order is deliberate — describe and cite first, then commit and
 score. Each leaf is annotated `<type — description>`:
 
 ```json
-{_HINT_HARVEST_OUTPUT_JSON}
+{_HINTER_OUTPUT_JSON}
 ```
 
 Reminders:
@@ -159,9 +159,9 @@ Reminders:
 
 
 RECIPE = JudgeRecipe(
-    name="hint_harvest",
-    system_prompt=HINT_HARVEST_SYSTEM_PROMPT,
-    user_prompt_template=HINT_HARVEST_USER_PROMPT_TEMPLATE,
-    output_model=HintHarvestOutput,
+    name="hinter",
+    system_prompt=HINTER_SYSTEM_PROMPT,
+    user_prompt_template=HINTER_USER_PROMPT_TEMPLATE,
+    output_model=HinterOutput,
     model="claude-sonnet-4-6",
 )
