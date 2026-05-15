@@ -9,11 +9,13 @@
 # cube-harness = { path = "..", editable = true }
 # swebench-verified-cube = { path = "../cubes/swebench-verified", editable = true }
 # ///
-"""Reference recipe: more than one Experiment in a single file.
+"""Reference recipe: a named dict of experiments.
 
-Name them `exp_<something>` and hand them all to `run`. Each canonical
-config lookup returns an independent deep copy, so tweaking one experiment's
-agent never affects the other.
+Clone this file and modify at will — it is committed only as a worked
+example. `run(experiments)` exposes `--experiment <name>` (default
+"default") to pick one; e.g. `python recipes/multi_experiment.py -e swe`.
+Every config lookup is an independent deep copy, so tweaking one agent
+never affects the other.
 """
 
 from swebench_verified_cube import SWEBENCH_CONFIGS
@@ -23,23 +25,26 @@ from cube_harness.experiment import Experiment
 from cube_harness.infra import INFRA_CONFIGS
 from cube_harness.recipe import run
 
-_default = GENNY_CONFIGS["default"]
-_swe = GENNY_CONFIGS["swe"]
-_swe.budget.cost_limit = 4.0
+default_agent = GENNY_CONFIGS["default"]
+default_agent.budget.cost_limit = 1.0
 
-exp_default = Experiment(
-    name="genny-default",
-    agent_config=_default,
-    benchmark_config=SWEBENCH_CONFIGS["default"],
-    infra=INFRA_CONFIGS["local"],
-)
+swe_agent = GENNY_CONFIGS["swe"]
+swe_agent.budget.cost_limit = 1.0
 
-exp_swe = Experiment(
-    name="genny-swe",
-    agent_config=_swe,
-    benchmark_config=SWEBENCH_CONFIGS["default"],
-    infra=INFRA_CONFIGS["local"],
-)
+experiments = {
+    "default": Experiment(
+        name="genny-default",
+        agent_config=default_agent,
+        benchmark_config=SWEBENCH_CONFIGS["default"],
+        infra=INFRA_CONFIGS["local"],
+    ),
+    "swe": Experiment(
+        name="genny-swe",
+        agent_config=swe_agent,
+        benchmark_config=SWEBENCH_CONFIGS["default"],
+        infra=INFRA_CONFIGS["local"],
+    ),
+}
 
 if __name__ == "__main__":
-    run(exp_default, exp_swe)
+    run(experiments)

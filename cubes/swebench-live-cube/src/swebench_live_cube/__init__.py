@@ -9,7 +9,10 @@ from swebench_live_cube.task import (
     SWEBenchLiveTaskMetadata,
 )
 
+from swebench_live_cube.configs import SWEBENCH_LIVE_CONFIGS
+
 __all__ = [
+    "SWEBENCH_LIVE_CONFIGS",
     "SWEBenchLiveBenchmark",
     "SWEBenchLiveBenchmarkConfig",
     "SWEBenchLiveExecutionInfo",

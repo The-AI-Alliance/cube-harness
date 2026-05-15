@@ -9,25 +9,26 @@
 # cube-harness = { path = "..", editable = true }
 # miniwob-cube = { path = "../cubes/miniwob", editable = true }
 # ///
-"""Reference recipe: ReAct on MiniWoB. The simplest end-to-end example.
+"""Reference recipe: Genny on MiniWoB. The simplest end-to-end example.
 
 This file IS the config — copy it and edit the values. It is not a CLI;
 `run()` provides a fixed generic CLI (see `cube_harness.recipe`).
 """
 
-from cube_browser_tool import PlaywrightConfig
-from miniwob_cube.benchmark import MiniWobBenchmarkConfig
+from miniwob_cube import MINIWOB_CONFIGS
 
-from cube_harness.agents.react_configs import REACT_CONFIGS
+from cube_harness.agents.genny_configs import GENNY_CONFIGS
 from cube_harness.experiment import Experiment
+from cube_harness.llm import LLMConfig
 from cube_harness.recipe import run
 
-agent = REACT_CONFIGS["default"]
+agent = GENNY_CONFIGS["default"]
+agent.llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
 
 exp = Experiment(
     name="miniwob",
     agent_config=agent,
-    benchmark_config=MiniWobBenchmarkConfig(tool_config=PlaywrightConfig(use_screenshot=True, headless=True)),
+    benchmark_config=MINIWOB_CONFIGS["default"],
     max_steps=10,
 )
 

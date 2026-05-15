@@ -30,5 +30,10 @@ def test_recipe_imports_and_defines_experiment(recipe: Path, tmp_path: Path, mon
         if (e.name or "").split(".")[0] in _CUBE_DEPS:
             pytest.skip(f"recipe cube dependency not installed: {e.name}")
         raise
-    exps = [v for v in vars(module).values() if isinstance(v, Experiment)]
-    assert exps, f"{recipe.name} defines no Experiment (expected `exp` or `exp_<name>`)"
+    exps: list[Experiment] = []
+    for v in vars(module).values():
+        if isinstance(v, Experiment):
+            exps.append(v)
+        elif isinstance(v, dict):
+            exps.extend(x for x in v.values() if isinstance(x, Experiment))
+    assert exps, f"{recipe.name} defines no Experiment (a var or a dict[str, Experiment])"

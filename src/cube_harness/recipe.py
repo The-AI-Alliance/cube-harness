@@ -1,14 +1,16 @@
 """The one line every recipe ends with.
 
-A recipe is a declarative config file — it builds one or more `Experiment`
-objects and hands them to `run`:
+A recipe is a declarative config file — it builds `Experiment`(s) and hands
+them to `run`:
 
     from cube_harness.recipe import run
 
     exp = Experiment(name="...", agent_config=..., benchmark_config=...)
 
     if __name__ == "__main__":
-        run(exp)                 # or run(exp_small, exp_large)
+        run(exp)                              # one experiment
+        run(exp_a, exp_b)                     # several, run all
+        run({"default": exp_a, "swe": exp_b}) # named; --experiment picks one
 
 `run` ships a fixed, generic CLI — identical for every recipe, not
 extensible per-recipe (clone the file for anything structural):
@@ -16,7 +18,8 @@ extensible per-recipe (clone the file for anything structural):
     python recipes/foo.py                       # Ray, full benchmark
     python recipes/foo.py --limit 3             # in-process, first 3 tasks
     python recipes/foo.py --ray 32              # override Ray worker count
-    python recipes/foo.py --set agent_config.max_actions=200 --set name=tweaked
+    python recipes/foo.py --set agent_config.max_actions=200
+    python recipes/foo.py --experiment swe      # pick from a named dict
 """
 
 import json
@@ -45,10 +48,22 @@ def _apply_override(exp: Experiment, dotted: str) -> None:
     setattr(target, leaf, value)
 
 
-def run(*exps: Experiment) -> None:
-    """Run one or more experiments through the generic recipe CLI."""
-    if not exps:
-        raise ValueError("run() needs at least one Experiment")
+def run(*args: Experiment | dict[str, Experiment]) -> None:
+    """Run experiment(s) through the generic recipe CLI.
+
+    Pass one/more `Experiment`s (all run), or a single `dict[str, Experiment]`
+    (the `--experiment` flag picks one; defaults to `"default"`).
+    """
+    if len(args) == 1 and isinstance(args[0], dict):
+        named: dict[str, Experiment] = args[0]
+        if not named:
+            raise ValueError("run() got an empty experiment dict")
+        exps: tuple[Experiment, ...] = ()
+    elif args and all(isinstance(a, Experiment) for a in args):
+        named = {}
+        exps = args  # type: ignore[assignment]
+    else:
+        raise ValueError("run() takes Experiment(s) or a single dict[str, Experiment]")
 
     def _main(
         limit: Annotated[int | None, typer.Option(help="Run first N tasks in-process (no Ray) — debug.")] = None,
@@ -56,8 +71,17 @@ def run(*exps: Experiment) -> None:
         set_: Annotated[
             list[str] | None, typer.Option("--set", help="Override: dotted.path=value (repeatable).")
         ] = None,
+        experiment: Annotated[
+            str, typer.Option("--experiment", "-e", help="Named-dict recipes: which experiment to run.")
+        ] = "default",
     ) -> None:
-        for exp in exps:
+        if named:
+            if experiment not in named:
+                raise typer.BadParameter(f"--experiment {experiment!r} not in {sorted(named)}")
+            selected: tuple[Experiment, ...] = (named[experiment],)
+        else:
+            selected = exps
+        for exp in selected:
             for override in set_ or []:
                 _apply_override(exp, override)
             if limit is not None:

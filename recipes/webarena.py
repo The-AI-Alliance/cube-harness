@@ -9,40 +9,29 @@
 # cube-harness = { path = "..", editable = true }
 # webarena-verified-cube = { path = "../cubes/webarena-verified", editable = true }
 # ///
-"""Reference recipe: ReAct on WebArena-Verified, infra auto-provisioned.
+"""Reference recipe: Genny on WebArena-Verified, infra auto-provisioned.
 
 This file IS the config — copy it and edit the values. It is not a CLI.
 Infra is named, not constructed: pick another entry from ~/.cube/infra.py
-(see `cube_harness.infra`); "local" works with zero setup.
+(see `cube_harness.infra`); "local" works with zero setup. To run a single
+site, clone this file and chain `.subset_from_glob("sites", "*shopping*")`.
 """
 
-from cube.tool import ToolboxConfig
-from cube_browser_playwright import PlaywrightSessionConfig
-from webarena_verified_cube.benchmark import WebArenaVerifiedBenchmarkConfig
-from webarena_verified_cube.resources import WEBARENA_ALL
-from webarena_verified_cube.tool import HarPlaywrightConfig, SubmitResponseConfig
+from webarena_verified_cube import WEBARENA_CONFIGS
 
-from cube_harness.agents.react_configs import REACT_CONFIGS
+from cube_harness.agents.genny_configs import GENNY_CONFIGS
 from cube_harness.experiment import Experiment
 from cube_harness.infra import INFRA_CONFIGS
+from cube_harness.llm import LLMConfig
 from cube_harness.recipe import run
 
-agent = REACT_CONFIGS["default"]
-
-benchmark = WebArenaVerifiedBenchmarkConfig(
-    tool_config=ToolboxConfig(
-        tool_configs=[
-            HarPlaywrightConfig(browser=PlaywrightSessionConfig(headless=True)),
-            SubmitResponseConfig(),
-        ]
-    ),
-    resources=[WEBARENA_ALL],
-).subset_from_glob("sites", "*shopping_admin*")
+agent = GENNY_CONFIGS["default"]
+agent.llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
 
 exp = Experiment(
     name="webarena-verified",
     agent_config=agent,
-    benchmark_config=benchmark,
+    benchmark_config=WEBARENA_CONFIGS["default"],
     infra=INFRA_CONFIGS["local"],
     max_steps=30,
 )

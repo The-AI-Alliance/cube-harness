@@ -1,12 +1,16 @@
 """Canonical Genny configs.
 
     from cube_harness.agents.genny_configs import GENNY_CONFIGS
+    from cube_harness.llm import LLMConfig
+
     agent = GENNY_CONFIGS["swe"]
+    agent.llm_config = LLMConfig(model_name="gpt-5.4-mini", temperature=1.0)
     agent.budget.cost_limit = 2.0
 
 Every lookup returns a fresh deep copy (see `ConfigRegistry`). The building
-blocks below (`MODEL_CONFIGS`, `INSTANCE_TEMPLATES`, `make_agent_config`) stay
-public for recipes that need a non-canonical combination.
+blocks below (`INSTANCE_TEMPLATES`, `make_agent_config`) stay public for
+recipes that need a non-canonical combination. There is no model registry —
+a recipe constructs the `LLMConfig` it wants and assigns it.
 """
 
 from cube_harness.agents.genny import BudgetConfig, GennyConfig
@@ -39,44 +43,19 @@ INSTANCE_TEMPLATES: dict[str, str] = {
 # Production default: generic 3-step workflow, works across SWE-bench, TerminalBench, and similar.
 DEFAULT_TEMPLATE = "workflow-generic"
 
-MODEL_CONFIGS: dict[str, LLMConfig] = {
-    "gpt-5.4-mini": LLMConfig(
-        model_name="azure/gpt-5.4-mini",
-        temperature=1.0,
-        tool_choice="required",
-        parallel_tool_calls=True,
-    ),
-    "gpt-5.4": LLMConfig(
-        model_name="azure/gpt-5.4",
-        temperature=1.0,
-        tool_choice="required",
-        parallel_tool_calls=True,
-    ),
-    "haiku": LLMConfig(
-        model_name="anthropic/claude-haiku-4-5",
-        temperature=0.0,
-        tool_choice="required",
-        parallel_tool_calls=False,
-        set_cache_control="auto",
-    ),
-    "sonnet": LLMConfig(
-        model_name="anthropic/claude-sonnet-4-6",
-        temperature=0.0,
-        tool_choice="required",
-        parallel_tool_calls=True,
-        set_cache_control="auto",
-    ),
-}
+# Default model: gpt-5.4-mini via OpenAI. A recipe overrides `agent.llm_config`
+# with whatever it needs — there is intentionally no model lookup table.
+DEFAULT_MODEL = "gpt-5.4-mini"
 
 
 def make_agent_config(
-    model_key: str,
+    llm_config: LLMConfig | None = None,
     template: str = DEFAULT_TEMPLATE,
     max_actions: int = 150,
     cost_limit: float = 1.0,
 ) -> GennyConfig:
     return GennyConfig(
-        llm_config=MODEL_CONFIGS[model_key],
+        llm_config=llm_config or LLMConfig(model_name=DEFAULT_MODEL),
         system_prompt=SYSTEM_PROMPT,
         goal_template=INSTANCE_TEMPLATES[template],
         flat_history=True,
@@ -88,7 +67,7 @@ def make_agent_config(
 
 GENNY_CONFIGS: ConfigRegistry[GennyConfig] = ConfigRegistry(
     {
-        "default": make_agent_config("gpt-5.4-mini"),
-        "swe": make_agent_config("gpt-5.4-mini", template="workflow"),
+        "default": make_agent_config(),
+        "swe": make_agent_config(template="workflow"),
     }
 )
