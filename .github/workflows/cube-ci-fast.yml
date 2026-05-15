@@ -67,20 +67,26 @@ jobs:
       - name: Install cube-harness
         run: make ci-install
 
+      # Cross-repo deps: the web cubes pin cube-browser-tool[bgym]>=0.3.0,
+      # which lives on cube-standard's dev branch (cube-tools/ subdirectory)
+      # but is not yet in a published release. Install cube-standard@dev and
+      # cube-browser-tool[bgym]@dev BEFORE the cube install so the pin
+      # resolves from the already-installed git version. Mirrors
+      # integration-local.yml. TODO: drop once cube-standard ships a release
+      # with cube-browser-tool 0.3.0.
+      - name: Cross-repo deps from cube-standard@dev
+        run: |
+          uv pip install --force-reinstall --no-deps 'cube-standard @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
+          uv pip install 'cube-browser-tool[bgym] @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev#subdirectory=cube-tools/cube-browser-tool'
+
       - name: Install miniwob-cube
         run: uv pip install -e "cubes/miniwob"
 
       - name: Install Playwright browsers
         run: uv run playwright install chromium
 
-      # Cross-repo dep override: this PR depends on a cube-standard change that
-      # is on dev but not yet in a published rc. Mirrors integration-local.yml.
-      # TODO: remove once cube-standard ships an rc that includes it.
-      - name: Override cube-standard with dev branch (cross-repo dep)
-        run: uv pip install --force-reinstall --no-deps 'cube-standard @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
-
       - name: Run MiniWob debug suite
-        # --no-sync: keep the cube-standard@dev override from the previous step.
+        # --no-sync: keep the cube-standard@dev / cube-browser-tool@dev installs.
         run: uv run --no-sync cube test miniwob-cube --no-reset-check
 
   workarena:
@@ -107,20 +113,20 @@ jobs:
       - name: Install cube-harness
         run: make ci-install
 
+      # Cross-repo deps: see the MiniWob job above for rationale.
+      - name: Cross-repo deps from cube-standard@dev
+        run: |
+          uv pip install --force-reinstall --no-deps 'cube-standard @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
+          uv pip install 'cube-browser-tool[bgym] @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev#subdirectory=cube-tools/cube-browser-tool'
+
       - name: Install workarena-cube
         run: uv pip install -e "cubes/workarena"
 
       - name: Install Playwright browsers
         run: uv run playwright install chromium
 
-      # Cross-repo dep override: this PR depends on a cube-standard change that
-      # is on dev but not yet in a published rc. Mirrors integration-local.yml.
-      # TODO: remove once cube-standard ships an rc that includes it.
-      - name: Override cube-standard with dev branch (cross-repo dep)
-        run: uv pip install --force-reinstall --no-deps 'cube-standard @ git+https://github.com/The-AI-Alliance/cube-standard.git@dev'
-
       - name: Run WorkArena debug suite
-        # --no-sync: keep the cube-standard@dev override from the previous step.
+        # --no-sync: keep the cube-standard@dev / cube-browser-tool@dev installs.
         run: uv run --no-sync cube test workarena-cube --no-reset-check
         env:
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HUGGING_FACE_HUB_TOKEN }}
