@@ -36,7 +36,7 @@ def test_canonical_registries_are_constructible() -> None:
 
 def test_validated_assignment_on_canonical_config() -> None:
     agent = GENNY_CONFIGS["swe"]
-    agent.max_actions = 50
-    assert agent.max_actions == 50
+    agent.budget.cost_limit = 2.0  # nested ValidatedConfig
+    assert agent.budget.cost_limit == 2.0
     with pytest.raises(ValidationError):
-        agent.max_actions = "lots"  # type: ignore[assignment]
+        agent.budget.cost_limit = "free"  # type: ignore[assignment]

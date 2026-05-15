@@ -1,54 +1,95 @@
 """Canonical Genny configs.
 
-Recipes pick one by name and tweak attributes:
-
     from cube_harness.agents.genny_configs import GENNY_CONFIGS
     agent = GENNY_CONFIGS["swe"]
-    agent.max_actions = 50
+    agent.budget.cost_limit = 2.0
 
-Every lookup returns a fresh deep copy (see `ConfigRegistry`). Only the
-registry is exported — the bare configs are module-private so a direct
-import can't hand out the shared instance.
+Every lookup returns a fresh deep copy (see `ConfigRegistry`). The building
+blocks below (`MODEL_CONFIGS`, `INSTANCE_TEMPLATES`, `make_agent_config`) stay
+public for recipes that need a non-canonical combination.
 """
 
-from cube_harness.agents.genny import GennyConfig
+from cube_harness.agents.genny import BudgetConfig, GennyConfig
 from cube_harness.config_registry import ConfigRegistry
 from cube_harness.llm import LLMConfig
 
-_SWE_SYSTEM_PROMPT = """\
-You are an autonomous coding agent. You have access to a Linux sandbox with the repository \
-already cloned at /testbed.
-Your task is to resolve the GitHub issue described below. Use the provided tools to explore \
-the codebase, understand the problem, and implement a fix.
-Start by exploring the repository structure and reading relevant files before making changes.
+SYSTEM_PROMPT = "You are a helpful assistant that can interact with a computer shell to solve programming tasks. If an action seems to have no apparent effect, avoid retrying it."
 
-IMPORTANT — the issue requires you to ADD or CHANGE behavior in the source code. \
-The existing test suite will pass before your fix — that is expected. \
-Do NOT call final_step just because existing tests pass. \
-Only call final_step after you have actually modified the source code to resolve the issue.
+_WORKFLOW_BLOCK = """\
+Suggested approach:
+1. Reproduce: confirm the current behavior — run the relevant test or command to observe the issue.
+2. Explore: read the relevant source files directly with `cat`, `grep`, or `find` to locate the root cause.
+3. Fix: apply the minimal change needed to resolve the issue.
+4. Verify: run the relevant test or command to confirm the fix works and nothing else broke. If it does not, make a focused adjustment and try again.\
+"""
 
-Before calling final_step, verify your fix by running the relevant tests.
-IMPORTANT: All test dependencies are in the conda 'testbed' environment — always prefix with
-`conda run -n testbed` or activate first: `. /opt/miniconda3/etc/profile.d/conda.sh && conda activate testbed`
-- Django projects: cd /testbed && conda run -n testbed python -m pytest tests/<module> -x -q
-  (older Django: ./tests/runtests.py --verbosity 2 <test_module>). Do NOT use "python -m unittest" directly.
-- SymPy projects: cd /testbed && conda run -n testbed bin/test <path/to/test_file.py>
-- Other Python projects: cd /testbed && conda run -n testbed python -m pytest <test_path> -x -q
-Never use bare `python -m pytest` — the base Python lacks test dependencies.
+_WORKFLOW_BLOCK_GENERIC = """\
+Suggested approach:
+1. Explore: inspect the environment — read relevant files, run diagnostic commands, or reproduce the issue before making changes.
+2. Act: execute the minimal steps needed to complete the task.
+3. Verify: confirm the result meets the requirement. If it does not, make a focused adjustment and try again.\
+"""
 
-IMPORTANT: Do NOT modify test files (files under tests/ or with test_ prefix). \
-The evaluation framework applies its own test patch during evaluation. \
-Only modify source code files to fix the bug.
+INSTANCE_TEMPLATES: dict[str, str] = {
+    "minimal": "{{task}}",
+    "workflow": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK}",
+    "workflow-generic": f"{{{{task}}}}\n\n{_WORKFLOW_BLOCK_GENERIC}",
+}
 
-IMPORTANT: Every response must include a tool call — use `final_step` when done."""
+# Production default: generic 3-step workflow, works across SWE-bench, TerminalBench, and similar.
+DEFAULT_TEMPLATE = "workflow-generic"
 
-_DEFAULT = GennyConfig(llm_config=LLMConfig(model_name="azure/gpt-5.4-mini"))
+MODEL_CONFIGS: dict[str, LLMConfig] = {
+    "gpt-5.4-mini": LLMConfig(
+        model_name="azure/gpt-5.4-mini",
+        temperature=1.0,
+        tool_choice="required",
+        parallel_tool_calls=True,
+    ),
+    "gpt-5.4": LLMConfig(
+        model_name="azure/gpt-5.4",
+        temperature=1.0,
+        tool_choice="required",
+        parallel_tool_calls=True,
+    ),
+    "haiku": LLMConfig(
+        model_name="anthropic/claude-haiku-4-5",
+        temperature=0.0,
+        tool_choice="required",
+        parallel_tool_calls=False,
+        set_cache_control="auto",
+    ),
+    "sonnet": LLMConfig(
+        model_name="anthropic/claude-sonnet-4-6",
+        temperature=0.0,
+        tool_choice="required",
+        parallel_tool_calls=True,
+        set_cache_control="auto",
+    ),
+}
 
-_SWE = GennyConfig(
-    llm_config=LLMConfig(model_name="azure/gpt-5.4-mini"),
-    system_prompt=_SWE_SYSTEM_PROMPT,
-    max_actions=30,
-    render_last_n_obs=2,
+
+def make_agent_config(
+    model_key: str,
+    template: str = DEFAULT_TEMPLATE,
+    max_actions: int = 150,
+    cost_limit: float = 1.0,
+) -> GennyConfig:
+    return GennyConfig(
+        llm_config=MODEL_CONFIGS[model_key],
+        system_prompt=SYSTEM_PROMPT,
+        goal_template=INSTANCE_TEMPLATES[template],
+        flat_history=True,
+        step_prompt="",
+        max_format_errors=3,
+        budget=BudgetConfig(max_actions=max_actions, cost_limit=cost_limit),
+    )
+
+
+GENNY_CONFIGS: ConfigRegistry[GennyConfig] = ConfigRegistry(
+    {
+        "default": make_agent_config("gpt-5.4-mini"),
+        "swe": make_agent_config("gpt-5.4-mini", template="workflow"),
+    }
 )
 
-GENNY_CONFIGS: ConfigRegistry[GennyConfig] = ConfigRegistry({"default": _DEFAULT, "swe": _SWE})
