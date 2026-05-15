@@ -16,7 +16,7 @@ from cube.core import Action, ActionSchema, Content, EnvironmentOutput, Observat
 from cube.task import Task as CubeTask
 from cube.task import TaskConfig as CubeTaskConfig
 from cube.task import TaskMetadata
-from cube.tool import ToolConfig, tool_action
+from cube.tool import Tool, ToolConfig, tool_action
 from PIL import Image
 
 from cube_harness.agent import Agent, AgentConfig
@@ -27,7 +27,6 @@ from cube_harness.core import (
 )
 from cube_harness.episode import Episode
 from cube_harness.llm import LLMConfig, Prompt
-from cube_harness.tool import ToolWithTelemetry
 
 # --- Core fixtures ---
 
@@ -132,7 +131,7 @@ def sample_prompt() -> Prompt:
 # --- Tool fixtures ---
 
 
-class MockTool(ToolWithTelemetry):
+class MockTool(Tool):
     """Mock tool implementation for testing."""
 
     def __init__(self):

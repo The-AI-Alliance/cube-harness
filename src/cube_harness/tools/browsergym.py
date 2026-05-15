@@ -28,8 +28,6 @@ from PIL import Image
 from playwright.sync_api import Error, Page
 from pydantic import Field
 
-from cube_harness.tool import ToolWithTelemetry
-
 logger = logging.getLogger(__name__)
 
 
@@ -60,7 +58,7 @@ class BrowsergymConfig(ToolConfig):
         return BrowsergymTool(self)
 
 
-class BrowsergymTool(ToolWithTelemetry, BrowserTool):
+class BrowsergymTool(BrowserTool):
     """Browser tool using BrowserGym's action set on a Playwright Page.
 
     Exposes bgym's native actions (click, fill, scroll, ...) as tool actions.
@@ -88,7 +86,7 @@ class BrowsergymTool(ToolWithTelemetry, BrowserTool):
 
     # === Action execution: serialise Action -> bgym string -> execute ===
 
-    def _execute_action(self, action: Action) -> Observation | StepError:
+    def execute_action(self, action: Action) -> Observation | StepError:
         """Serialise an Action to a bgym action string, execute it, and return the observation."""
         action_str = _action_to_bgym_string(action)
         result = self._execute_bgym_step(action_str)
