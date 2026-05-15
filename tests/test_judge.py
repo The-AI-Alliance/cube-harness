@@ -239,6 +239,22 @@ def test_discover_episodes_finds_each_subdir(tmp_path: Path) -> None:
     assert all(r.record is not None for r in refs)
 
 
+def test_discover_episodes_skips_archived_retry_dirs(tmp_path: Path) -> None:
+    """Retry machinery archives failed attempts as `<id>.archived_<ts>/`.
+
+    Those have no `steps/` and must not become phantom EpisodeRefs (regression
+    for the FileNotFoundError seen judging a crashed terminalbench2 episode).
+    """
+    exp = _make_experiment(tmp_path, [("c_ep0", False, False)])
+    archived = exp / "episodes" / "c_ep0.archived_1778874588.214346"
+    archived.mkdir()
+    (archived / "status.json").write_text("{}")  # a non-steps file, like the real ones
+
+    refs = discover_episodes(exp)
+    assert {r.trajectory_id for r in refs} == {"c_ep0"}
+    assert not any(".archived_" in r.trajectory_id for r in refs)
+
+
 def test_select_episodes_failures_only_skips_judged(tmp_path: Path) -> None:
     exp = _make_experiment(
         tmp_path,

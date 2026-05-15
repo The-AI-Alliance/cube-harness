@@ -65,6 +65,13 @@ def discover_episodes(experiment_dir: Path) -> list[EpisodeRef]:
     for ep_dir in sorted(episodes_dir.iterdir()):
         if not ep_dir.is_dir():
             continue
+        # The retry machinery archives a failed attempt as
+        # `<trajectory_id>.archived_<timestamp>/`. Those are not judgeable
+        # episodes — they have no `steps/` — and enumerating them yields
+        # phantom EpisodeRefs that crash transcript extraction. The live
+        # attempt keeps the un-suffixed name; skip the archives.
+        if ".archived_" in ep_dir.name:
+            continue
         record_path = ep_dir / EPISODE_RECORD_FILENAME
         refs.append(
             EpisodeRef(
