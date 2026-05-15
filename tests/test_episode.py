@@ -1,6 +1,7 @@
 """Tests for cube_harness.episode module."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -10,7 +11,7 @@ from cube.task import TaskConfig, TaskMetadata
 from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode import Episode
-from cube_harness.storage import _read_step_file
+from cube_harness.storage import FileStorage, _read_step_file
 from tests.conftest import MockAgent, MockAgentConfig, MockCubeTask, MockCubeTaskConfig, MockToolConfig
 
 
@@ -415,3 +416,57 @@ class TestEpisode:
         assert len(archived) == 1
         current_dirs = [d for d in episodes_dir.iterdir() if d.is_dir() and ".archived_" not in d.name]
         assert len(current_dirs) == 1
+
+
+class _SeededTaskConfig(MockCubeTaskConfig):
+    """MockCubeTaskConfig that carries a seed (most TaskConfigs do not)."""
+
+    seed: int = 7
+
+
+class TestEpisodeConfigReproducibility:
+    """EpisodeConfig captures git + seed provenance (constitution PS-001 / issue #266)."""
+
+    def test_captures_git_provenance(
+        self, tmp_dir: Path, mock_agent_config: AgentConfig, mock_cube_task_config: MockCubeTaskConfig
+    ) -> None:
+        episode = _make_test_episode(0, tmp_dir, mock_agent_config, mock_cube_task_config)
+        # The test suite runs inside the cube-harness git repo/worktree.
+        assert episode.config.git_hash is not None
+        assert re.fullmatch(r"[0-9a-f]{40}", episode.config.git_hash), episode.config.git_hash
+        assert isinstance(episode.config.git_is_dirty, bool)
+
+    def test_seed_pulled_from_task_config_when_present(self, tmp_dir: Path, mock_agent_config: AgentConfig) -> None:
+        task_config = _SeededTaskConfig(metadata=TaskMetadata(id="seeded_task"))
+        episode = _make_test_episode(0, tmp_dir, mock_agent_config, task_config)
+        assert episode.config.seed == 7
+
+    def test_seed_none_when_task_config_has_no_seed(
+        self, tmp_dir: Path, mock_agent_config: AgentConfig, mock_cube_task_config: MockCubeTaskConfig
+    ) -> None:
+        episode = _make_test_episode(0, tmp_dir, mock_agent_config, mock_cube_task_config)
+        assert episode.config.seed is None
+
+    def test_backward_compat_and_roundtrip(
+        self, tmp_dir: Path, mock_agent_config: AgentConfig, mock_cube_task_config: MockCubeTaskConfig
+    ) -> None:
+        # Exercise the real persistence path (save_episode_config / load_episode_config).
+        storage = FileStorage(tmp_dir)
+        episode = _make_test_episode(0, tmp_dir, mock_agent_config, mock_cube_task_config)
+        storage.save_episode_config(episode.config)
+        cfg_path = next((tmp_dir / "episodes").glob("*/episode_config.json"))
+
+        loaded = storage.load_episode_config(cfg_path)
+        assert loaded.git_hash == episode.config.git_hash
+        assert loaded.git_is_dirty == episode.config.git_is_dirty
+        assert loaded.seed == episode.config.seed
+
+        # A V1 / pre-existing config written before these fields existed still loads.
+        data = json.loads(cfg_path.read_text())
+        for key in ("seed", "git_hash", "git_is_dirty"):
+            data.pop(key, None)
+        cfg_path.write_text(json.dumps(data))
+        legacy = storage.load_episode_config(cfg_path)
+        assert legacy.seed is None
+        assert legacy.git_hash is None
+        assert legacy.git_is_dirty is None

@@ -82,7 +82,7 @@ def _to_github_url(remote_url: str, commit: str) -> str | None:
     return None
 
 
-def _get_git_info(cwd: str | None = None) -> tuple[str | None, str | None, bool | None]:
+def git_info(cwd: str | None = None) -> tuple[str | None, str | None, bool | None]:
     """Return (commit_sha, github_permalink, is_dirty) for the repo at cwd.
 
     All three values are None when git is unavailable or cwd is not inside a repo.
@@ -243,7 +243,7 @@ class AgentInfo(TypedBaseModel):
         agent_id = hashlib.sha256(json.dumps(config_dict, sort_keys=True).encode()).hexdigest()
         config_type = config_dict.get("_type", type(agent_config).__name__)
         llm_model = _extract_llm_model(config_dict)
-        git_commit, git_remote_url, git_is_dirty = _get_git_info(cwd=git_cwd)
+        git_commit, git_remote_url, git_is_dirty = git_info(cwd=git_cwd)
 
         return cls(
             agent_id=agent_id,

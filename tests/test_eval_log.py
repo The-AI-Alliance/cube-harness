@@ -1,6 +1,7 @@
 """Tests for cube_harness.eval_log — Atlas EvalLog system."""
 
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from cube_harness.eval_log import (
     _extract_llm_model,
     _extract_tool_names,
     _to_github_url,
+    git_info,
 )
 
 # ---------------------------------------------------------------------------
@@ -557,3 +559,21 @@ def test_export_eval_log_integration(tmp_dir, mock_agent_config, mock_cube_bench
     eval_log.to_jsonl(jsonl_path)
     lines = jsonl_path.read_text().strip().splitlines()
     assert len(lines) == 2
+
+
+# ---------------------------------------------------------------------------
+# git_info
+# ---------------------------------------------------------------------------
+
+
+def test_git_info_in_repo_returns_sha_and_dirty_flag() -> None:
+    # The test runs from inside the cube-harness git repo/worktree.
+    commit, _github_url, is_dirty = git_info(cwd=str(Path(__file__).parent))
+    assert commit is not None
+    assert re.fullmatch(r"[0-9a-f]{40}", commit), commit
+    assert isinstance(is_dirty, bool)
+
+
+def test_git_info_outside_repo_returns_all_none(tmp_path: Path) -> None:
+    commit, github_url, is_dirty = git_info(cwd=str(tmp_path))
+    assert (commit, github_url, is_dirty) == (None, None, None)

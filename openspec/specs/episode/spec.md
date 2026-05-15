@@ -24,10 +24,15 @@ class EpisodeConfig(TypedBaseModel):
     output_dir: Path
     max_steps: int
     task_config: TaskConfig          # cube.task.TaskConfig
+    seed: int | None = None          # task_config.seed, captured for reproducibility
+    git_hash: str | None = None      # cube-harness HEAD sha at episode-creation time
+    git_is_dirty: bool | None = None # True if the worktree had uncommitted changes
 ```
 
 Saved to disk at `{output_dir}/episodes/{trajectory_id}/episode_config.json` before
-the episode runs, so experiments can resume after crashes.
+the episode runs, so experiments can resume after crashes. The `seed` / `git_hash` /
+`git_is_dirty` fields capture hermetic-reproducibility provenance (constitution
+PS-001); all default `None` so older V1 configs still deserialize.
 
 ### `Episode`
 ```python

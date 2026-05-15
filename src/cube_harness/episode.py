@@ -13,7 +13,7 @@ from cube_harness.agent import AgentConfig
 from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
-from cube_harness.eval_log import EpisodeRecord
+from cube_harness.eval_log import EpisodeRecord, git_info
 from cube_harness.metrics.tracer import get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -32,6 +32,11 @@ class EpisodeConfig(TypedBaseModel):
     output_dir: Path
     max_steps: int
     task_config: TaskConfig
+    # Hermetic-reproducibility capture (constitution PS-001). All optional and
+    # default None so V1 / pre-existing episode_config.json files still load.
+    seed: int | None = None
+    git_hash: str | None = None
+    git_is_dirty: bool | None = None
 
 
 class Episode:
@@ -48,6 +53,7 @@ class Episode:
         storage: Storage | None,
         runtime_context: RuntimeContext | None,
     ) -> None:
+        git_hash, _, git_is_dirty = git_info(cwd=str(Path(__file__).parent))
         self.config = EpisodeConfig(
             id=id,
             agent_config=agent_config,
@@ -55,6 +61,9 @@ class Episode:
             output_dir=output_dir,
             max_steps=max_steps,
             task_config=task_config,
+            seed=getattr(task_config, "seed", None),
+            git_hash=git_hash,
+            git_is_dirty=git_is_dirty,
         )
         self._runtime_context = runtime_context
         self.storage = storage or FileStorage(output_dir)
@@ -179,7 +188,7 @@ class Episode:
                     metadata={
                         "task_id": task_id,
                         "agent_name": agent_name,
-                        "seed": getattr(self.config.task_config, "seed", None),
+                        "seed": self.config.seed,
                         **env_output.info,
                         **(extra_metadata or {}),
                     },
