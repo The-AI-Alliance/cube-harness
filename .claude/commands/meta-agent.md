@@ -168,12 +168,13 @@ Use `make xray` for visual step-by-step inspection.
 [user]    goal — step-0 observation            ← static (cached)
 [user]    ## Task Hint\n{task_hint or hint}    ← if set (cached)
 [asst]    "Understood..."
-[asst]    summary_1, summary_2, ...            ← rolling summaries (enable_summarize=True)
-[user]    latest observation                   ← current step's obs
+[asst]    ## Summary of past interactions      ← rolling COT / summarise pass
+[user]    ## N most recent observations
+...       windowed obs + asst groups            ← last render_last_n_obs steps
 [user]    react_prompt / act_prompt            ← static
 ```
 
-Key `GennyConfig` levers: `enable_summarize`, `flat_history`, `summarize_prompt`, `compact_threshold_chars`, `max_obs_chars`, `react_prompt`, `system_prompt`, `step_prompt`, `goal_template`, `budget` (max_actions/cost_limit/token_limit), `max_format_errors`.
+Key `GennyConfig` levers: `render_last_n_obs`, `max_obs_chars`, `enable_summarize`, `summarize_cot_only`, `summarize_verbose_prompt`, `react_prompt`, `system_prompt`.
 
 ---
 
