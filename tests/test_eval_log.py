@@ -1,6 +1,7 @@
 """Tests for cube_harness.eval_log — Atlas EvalLog system."""
 
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -241,6 +242,19 @@ def test_agent_info_from_agent_config_basic(mock_agent_config) -> None:
     assert isinstance(info.config, dict)
     assert isinstance(info.dependency_versions, dict)
     assert isinstance(info.framework_version, str)
+
+
+def test_agent_info_captures_cube_standard_git(mock_agent_config) -> None:
+    info = AgentInfo.from_agent_config(mock_agent_config)
+    # Populated only for an editable/source cube-standard checkout; None for a
+    # released wheel. Either way the field exists and the (commit, dirty) pair
+    # is internally consistent with the _get_git_info contract.
+    assert hasattr(info, "cube_standard_git_commit")
+    if info.cube_standard_git_commit is None:
+        assert info.cube_standard_git_is_dirty is None
+    else:
+        assert re.fullmatch(r"[0-9a-f]{40}", info.cube_standard_git_commit)
+        assert isinstance(info.cube_standard_git_is_dirty, bool)
 
 
 def test_agent_info_agent_id_is_stable(mock_agent_config) -> None:

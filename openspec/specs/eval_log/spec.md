@@ -69,6 +69,8 @@ class AgentInfo(TypedBaseModel):
     git_commit: str | None
     git_remote_url: str | None           # permanent GitHub permalink
     git_is_dirty: bool | None
+    cube_standard_git_commit: str | None   # cube-standard repo HEAD (editable/source checkout only)
+    cube_standard_git_is_dirty: bool | None
 
     # LLM warm-start embedding (ATLAS cold-start)
     description: str | None
