@@ -40,8 +40,8 @@ analyze = [
     "gradio~=5.49",
     "pandas~=2.0",
 ]
-# Trajectory judge — post-hoc LLM analysis via Claude Code
-judge = [
+# Trajectory investigator — post-hoc LLM analysis via Claude Code
+investigator = [
     "claude-agent-sdk>=0.1.6",
 ]
 
@@ -67,15 +67,13 @@ line-ending = "auto"
 [tool.ruff.lint]
 extend-select = ["I"] # sort imports
 
-[tool.ruff.lint.per-file-ignores]
-"meta_agent/recipes/*.py" = ["E402"]
-
 [project.scripts]
 ch-mcp-server = "cube_harness.mcp.server:main"
 ch-xray = "cube_harness.analyze.xray:main"
 ch-trace = "cube_harness.analyze.trace:main"
-ch-judge = "cube_harness.analyze.judge:main"
-ch-judge-report = "cube_harness.analyze.judge_report:main"
+ch-investigate = "cube_harness.analyze.investigator:main"
+ch-investigation-report = "cube_harness.analyze.investigation_report:main"
+ch-reset-episodes = "cube_harness.analyze.reset_episodes:main"
 
 [dependency-groups]
 dev = [

@@ -1,17 +1,17 @@
 ---
-trigger: /judge-traces
-description: Post-hoc LLM judge for cube-harness episode trajectories. Reads trajectory steps from an experiment or episode directory, produces structured JudgeOutput (blame attribution, hypothesis, evidence). Based on RFC #358.
+trigger: /investigator-traces
+description: Post-hoc LLM investigator for cube-harness episode trajectories. Reads trajectory steps from an experiment or episode directory, produces structured Findings (blame attribution, hypothesis, evidence). Based on RFC #358.
 ---
 
-# Trajectory Judge
+# Trajectory Investigator
 
-You are a post-hoc judge for agent episodes. Your job is to read a trajectory, understand what the agent did, and produce a structured failure analysis.
+You are a post-hoc investigator for agent episodes. Your job is to read a trajectory, understand what the agent did, and produce a structured failure analysis.
 
 ## Input
 
 The user will give you one of:
-- **An experiment directory** — judge all COMPLETED episodes (or failures only if `--failures-only` is specified)
-- **One or more episode directories** — judge those specific episodes
+- **An experiment directory** — investigator all COMPLETED episodes (or failures only if `--failures-only` is specified)
+- **One or more episode directories** — investigator those specific episodes
 - **A `--n N` flag** — limit to N episodes (default: all)
 
 Episode directories are named like `<task_id>_ep<N>/` and live under `<experiment_dir>/episodes/`.
@@ -73,7 +73,7 @@ def extract_transcript(episode_dir: Path) -> str:
 
 Run with the project venv python (e.g. `.venv/bin/python3`). The `zstandard` and `msgpack` packages are installed as part of `cube-harness`.
 
-> **For batch / non-interactive judging**, prefer the Python module: `pip install 'cube-harness[judge]'` then `ch-judge <experiment_dir> [--sample 0.1 | --ids ...] [--summary]`. It calls Claude Code via the `claude-agent-sdk`, persists `JudgeOutput` into `episode_record.json`, and writes an aggregate `experiment_judge_summary.json`. This slash command is for interactive ad-hoc deep-dives.
+> **For batch / non-interactive investigating**, prefer the Python module: `pip install 'cube-harness[investigator]'` then `ch-investigate <experiment_dir> [--sample 0.1 | --ids ...] [--summary]`. It calls Claude Code via the `claude-agent-sdk`, persists `Findings` into `episode_record.json`, and writes an aggregate `experiment_investigation_summary.json`. This slash command is for interactive ad-hoc deep-dives.
 
 ## Step 2 — Read episode metadata
 
@@ -88,9 +88,9 @@ print('cost_usd:', m.get('cost_usd'))
 "
 ```
 
-## Step 3 — Judge each episode
+## Step 3 — Investigator each episode
 
-For each episode, read the transcript and produce a `JudgeOutput`. Think through the evidence carefully before committing to structured fields.
+For each episode, read the transcript and produce a `Findings`. Think through the evidence carefully before committing to structured fields.
 
 ### Output schema
 
@@ -157,7 +157,7 @@ For each episode, read the transcript and produce a `JudgeOutput`. Think through
 
 ## Step 4 — Output
 
-Write results to stdout as a JSON array (one object per episode). Also write each individual result to `<episode_dir>/judge_output.json` for persistence.
+Write results to stdout as a JSON array (one object per episode). Also write each individual result to `<episode_dir>/findings.json` for persistence.
 
 Print a summary table at the end:
 
