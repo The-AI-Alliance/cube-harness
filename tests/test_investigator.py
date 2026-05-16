@@ -406,6 +406,12 @@ def test_recipe_catalog_assembly() -> None:
         assert recipe.name == name
         assert recipe.system_prompt.strip()
         assert recipe.user_prompt_template.strip()
+        # Regression guard: a blanket judge→investigator rename twice mangled
+        # the opening imperative verb into the noun "Investigator " (e.g.
+        # "Investigator this episode."). The prompt must open with a verb.
+        assert not recipe.user_prompt_template.lstrip().startswith("Investigator "), (
+            f"{name} user prompt opens with the noun 'Investigator ' — rename artifact"
+        )
 
 
 # ---------------------------------------------------------------------------
