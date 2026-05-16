@@ -1,6 +1,6 @@
 # Fix Dossier — auto-fix(<N>)
 
-> This is the fix PR body. Spec: `docs/auto-fix.md`. Fill every field;
+> This is the fix PR body. Spec: `openspec/specs/auto-fix/spec.md`. Fill every field;
 > the fix-audit will try to break the claims below.
 
 **Class**: <L0 | L1 | L2 | L3>

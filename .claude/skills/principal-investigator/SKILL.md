@@ -42,7 +42,8 @@ print statements, a throwaway side experiment, a blunt hint that masks a
 bug just to confirm the hypothesis. Speed of understanding wins here.
 
 Once the **root cause is confirmed**, the committed fix follows the
-**auto-fix methodology** — full spec: [`docs/auto-fix.md`](../../../docs/auto-fix.md).
+**auto-fix methodology** — full spec:
+[`openspec/specs/auto-fix/spec.md`](../../../openspec/specs/auto-fix/spec.md).
 In brief:
 
 - **Classify** L0–L3 (local-correct → layer → symptom-of-design → PI/eval

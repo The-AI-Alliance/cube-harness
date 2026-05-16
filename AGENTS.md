@@ -92,7 +92,7 @@ PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropic
 markers + a context-stamped footnote at module bottom (`N` = GitHub issue). When a
 diff touches an `auto-fix` region or its footnote, treat it as a possibly-rotten
 marker (review rule AF-001). Methodology (Dossier, L0–L3 tiers, rot lint):
-[`docs/auto-fix.md`](docs/auto-fix.md).
+[`openspec/specs/auto-fix/spec.md`](openspec/specs/auto-fix/spec.md).
 
 ## Workflow for code changes
 

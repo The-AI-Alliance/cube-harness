@@ -275,7 +275,7 @@ Prefer a smaller, simpler codebase. If a feature adds significant complexity but
 **Severity**: WARNING
 
 PI-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)` markers and a
-context-stamped footnote at module bottom. Spec: `docs/auto-fix.md`.
+context-stamped footnote at module bottom. Spec: `openspec/specs/auto-fix/spec.md`.
 
 **Check** (Tier-2 semantic review; Tier-1 structural checks are in
 `scripts/auto_fix_lint.py`): when a diff touches code inside an
