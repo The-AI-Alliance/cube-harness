@@ -95,7 +95,7 @@ def run_cmd(
         str, typer.Option("--synthesis-model", help="Model for the post-batch meta-analysis. Opus by default.")
     ] = "claude-opus-4-7",
     audit: Annotated[bool, typer.Option(help="Run the audit pass after each finding (writes audit.json).")] = False,
-    n_seeds: Annotated[int, typer.Option("--n-seeds", help="Investigator each episode this many times.")] = 1,
+    n_seeds: Annotated[int, typer.Option("--n-seeds", help="Investigate each episode this many times.")] = 1,
     ids: Annotated[
         str | None,
         typer.Option(help="Comma-separated trajectory IDs (or task IDs). Default: all eligible episodes."),
@@ -104,7 +104,7 @@ def run_cmd(
         bool, typer.Option("--failures-only", help="Restrict to episodes where is_correct=False.")
     ] = False,
     overwrite: Annotated[
-        bool, typer.Option("--overwrite", help="Re-investigator episodes that already have findings.")
+        bool, typer.Option("--overwrite", help="Re-investigate episodes that already have findings.")
     ] = False,
     n_parallel: Annotated[int, typer.Option("--n-parallel", help="Concurrent investigator sub-processes.")] = 1,
     trace_mode: Annotated[
