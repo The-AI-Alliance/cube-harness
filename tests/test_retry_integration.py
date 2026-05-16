@@ -496,11 +496,12 @@ def test_max_retries_zero_disables_auto_retry(tmp_dir: Path) -> None:
 def test_bad_model_does_not_waste_retries(tmp_dir: Path) -> None:
     """A permanent LLM provider error (e.g. typo'd model name) must not be retried.
 
-    Today every exception raised inside the episode loop becomes status=FAILED, which
-    is in RETRIABLE_STATUSES. So a permanent error like `litellm.NotFoundError`
-    ("model does not exist") gets retried max_retries times — wasting compute, money,
-    and wall-clock with zero chance of success. This test pins the desired behaviour:
-    permanent provider errors should terminate the episode with retry_count=0.
+    A permanent error like `litellm.NotFoundError` ("model does not exist") would
+    fail identically on every retry. `episode.py` classifies it via
+    `is_permanent_llm_error` and tags the episode with the terminal, non-retriable
+    `INVALID_CONFIG` status instead of `FAILED`, so the runner stops immediately
+    (retry_count=0) instead of burning `max_retries` worker slots with zero chance
+    of success.
     """
     scenarios = {"task_bad_model": ["bad_model"]}
     benchmark = make_debug_benchmark(scenarios)
@@ -523,7 +524,7 @@ def test_bad_model_does_not_waste_retries(tmp_dir: Path) -> None:
     statuses = storage.list_episode_statuses()
     traj_id, final = next(iter(statuses.items()))
 
-    assert final.status == "FAILED"
+    assert final.status == "INVALID_CONFIG"
     assert final.error_type == "NotFoundError"
     assert final.retry_count == 0, (
         f"permanent provider error was retried {final.retry_count} times; "

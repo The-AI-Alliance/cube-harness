@@ -31,7 +31,7 @@ DEFAULT_RESULTS_DIR = Path.home() / "cube_harness_results"
 
 # Status display order — terminal-valid first, in-flight, then terminal-error.
 _DONE_STATUSES = ("COMPLETED", "MAX_STEPS_REACHED")
-_ERROR_STATUSES = ("FAILED", "STALE", "CANCELLED")
+_ERROR_STATUSES = ("FAILED", "STALE", "CANCELLED", "INVALID_CONFIG")
 
 
 def _load_json(path: Path) -> dict:

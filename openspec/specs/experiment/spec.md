@@ -58,8 +58,12 @@ may omit `benchmark`; the resulting episodes carry no `runtime_context` and no
 | `False`  | All episodes from scratch                                                                                                                 |
 | `True`   | Episodes with no `status.json` (never started), plus retriable statuses (`FAILED`, `CANCELLED`, `STALE`) with `retry_count < max_retries` |
 
-`RUNNING` / `QUEUED` (in-flight) are never returned. `COMPLETED` and
-`MAX_STEPS_REACHED` (terminal, non-retriable) are always skipped.
+`RUNNING` / `QUEUED` (in-flight) are never returned. `COMPLETED`,
+`MAX_STEPS_REACHED`, and `INVALID_CONFIG` (terminal, non-retriable) are always
+skipped. `INVALID_CONFIG` is set when the episode died from a permanent provider
+error (typo'd model name, bad key, malformed/oversized/policy-violating request —
+classified by `is_permanent_llm_error` in `llm.py`); retrying it would fail
+identically, so it terminates with `retry_count=0`.
 
 When `resume=True`, `sweep_stale_statuses` runs first so orphaned `RUNNING`/`QUEUED`
 entries become `STALE` and are eligible for retry. The runner threads its own

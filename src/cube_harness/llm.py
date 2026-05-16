@@ -12,7 +12,10 @@ from cube.core import TypedBaseModel, ValidatedConfig
 from litellm import BadRequestError, Message, get_llm_provider
 from litellm.exceptions import (
     APIConnectionError,
+    AuthenticationError,
     InternalServerError,
+    NotFoundError,
+    PermissionDeniedError,
     RateLimitError,
     ServiceUnavailableError,
     Timeout,
@@ -24,6 +27,34 @@ from pydantic import Field, field_validator, model_validator
 # When no TracerProvider is configured, litellm falls back to ConsoleSpanExporter
 # which dumps huge JSON span dicts to stdout. Instead, enable the callback only
 # after a proper TracerProvider has been set up (see metrics/tracer.py).
+
+# Provider errors that will fail identically on retry — a typo'd model name, a bad
+# API key, an unauthorized/oversized/policy-violating request. They are the
+# complement of the transient set retried in `LLM._completion_with_retry`
+# (5xx / 429 / timeouts / connection). `episode.py` maps these to the terminal,
+# non-retriable INVALID_CONFIG status so the runner stops instead of burning the
+# whole retry budget on a request that cannot succeed.
+_PERMANENT_LLM_ERRORS: tuple[type[BaseException], ...] = (
+    AuthenticationError,  # 401 — bad / missing key
+    PermissionDeniedError,  # 403 — key lacks access to the model
+    NotFoundError,  # 404 — model / endpoint does not exist (typo)
+    BadRequestError,  # 400/422 — incl. ContextWindowExceeded, ContentPolicyViolation
+)
+_PERMANENT_HTTP_STATUS = frozenset({400, 401, 403, 404, 422})
+
+
+def is_permanent_llm_error(exc: BaseException) -> bool:
+    """True iff `exc` is an LLM provider error that will fail identically on retry.
+
+    Classifies on the HTTP ``status_code`` first — provider-agnostic and set by the
+    OpenAI-SDK base class that every litellm exception subclasses — then falls back
+    to the exception type when no status is attached (e.g. connection errors, which
+    are transient and correctly return False).
+    """
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status in _PERMANENT_HTTP_STATUS
+    return isinstance(exc, _PERMANENT_LLM_ERRORS)
 
 
 class Prompt(TypedBaseModel):
