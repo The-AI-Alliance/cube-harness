@@ -5,14 +5,18 @@
 
 **Class**: <L0 | L1 | L2 | L3>
 **Issue**: #<N>  ·  **Design-debt issue / openspec** (L2/L3 only): <link>
-**Context fingerprint**: <infra>/<arch>/<model>/<cube@commit>
+**Context fingerprint** (machine-matchable minimum): <infra>/<arch>/<model>/<cube@commit>
 
 ## Invariant violated
 <One sentence: the rule the code must uphold. NOT "task X failed".>
 
 ## Root cause vs symptom
 <Why this is the cause, not the stack trace. For L2/L3: name the design
-defect and why a band-aid is shipping anyway.>
+defect and why a band-aid is shipping anyway. Also state the **triggering
+context in prose** — the task/benchmark that surfaced it + the env
+specifics (OS, infra, model, input shape, …) you judge relevant to *this*
+bug (contextual, not exhaustive). This is the cross-context signal a
+future run reasons from.>
 
 ## Blast radius
 <Every call site / consumer. Paste the grep, run on the PR's TARGET

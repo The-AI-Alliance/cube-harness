@@ -66,7 +66,7 @@ holds the long-form context out of the code.
 ```python
 # === auto-fix notes ===
 # auto-fix-note(345) {class=L1 issue=345 hash=ab12cd34 ctx=colima/arm64/gpt-5.4-mini/cube@285e0cc}
-#   symptoms:  <what was observed>
+#   symptoms:  <what was observed + the triggering context (see note)>
 #   invariant: <the rule that was being violated>
 #   why:       <why this fix, why this layer>
 #   tested:    <the regression test / how verified>
@@ -74,9 +74,15 @@ holds the long-form context out of the code.
 
 Two sections per stanza: a **machine line** in `{...}` (lint may rewrite
 `hash`; never hand-edit) and **prose** (PI/human authored; never
-auto-touched). `ctx=` is the context fingerprint —
-infra/arch/model/cube-commit — so a different-context run knows whether
-the fix applies as-is or needs adjustment.
+auto-touched). `ctx=` is the deterministic machine-matchable minimum
+(infra/arch/model/cube-commit). `symptoms` additionally records the
+**triggering context in prose** — the task/benchmark that surfaced the
+bug plus the env specifics (OS, infra backend, model, input shape, …)
+the agent **judges relevant to *this* bug**. Selection is contextual,
+not a fixed checklist: a docker-socket bug names the backend/OS; a
+parsing bug names the task and input shape; a model-behaviour bug names
+the model and task. Enough for a different-context run to reason about
+whether the fix generalises — not an exhaustive environment dump.
 
 ## 5. Lifecycle (GitHub issue as the ID source)
 
