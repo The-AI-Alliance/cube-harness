@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Self
 from uuid import uuid4
 
-from cube.benchmark import Benchmark, BenchmarkConfig
+from cube.benchmark import AbstractBenchmarkConfig, Benchmark
 from cube.core import TypedBaseModel
 from cube.resource import InfraConfig
 from pydantic import Field, SerializeAsAny, model_validator
@@ -62,7 +62,7 @@ class Experiment(TypedBaseModel):
     name: str
     output_dir: Path | None = None
     agent_config: AgentConfig
-    benchmark_config: SerializeAsAny[BenchmarkConfig]
+    benchmark_config: SerializeAsAny[AbstractBenchmarkConfig]
     infra: SerializeAsAny[InfraConfig] | None = None
     resume: bool = False
     max_steps: int = MAX_STEPS
