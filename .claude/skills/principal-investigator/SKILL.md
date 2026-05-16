@@ -41,22 +41,30 @@ While **finding the root cause**, anything goes: hacky one-line patches,
 print statements, a throwaway side experiment, a blunt hint that masks a
 bug just to confirm the hypothesis. Speed of understanding wins here.
 
-Once the **root cause is confirmed**, the committed fix is held to a higher
-bar:
+Once the **root cause is confirmed**, the committed fix follows the
+**auto-fix methodology** — full spec: [`docs/auto-fix.md`](../../../docs/auto-fix.md).
+In brief:
 
-- It addresses the root cause in the correct layer (tool / cube / scaffold /
-  eval), not a workaround scoped to one call site.
-- It follows the engineering principles in `CLAUDE.md` and passes the
-  `/cube-review` rules (lean diff, no vibe coding, type hints, tests).
+- **Classify** L0–L3 (local-correct → layer → symptom-of-design → PI/eval
+  defect). Nothing blocks the loop: L2/L3 still ship a temp PR **and** open
+  a kept-open `design-debt` issue + openspec stub.
+- **Fix Dossier** is the PR body (`templates/fix_dossier.md`): invariant in
+  one sentence, blast-radius grep on the *target* branch, the adversarial
+  "opposite user", registry lookup, class, regression test that asserts the
+  *invariant* not the reproduction.
+- **fix-audit** independently tries to break the Dossier's generalization
+  claims; the reviewer reads its verdict, not the diff.
+- **Provenance**: GitHub issue mints the id; `# auto-fix(N)↓ … # /auto-fix(N)`
+  markers + a context-stamped footnote at module bottom. Accretion is exact
+  (`grep -c`); ≥3 in an area ⇒ refactor proposal, not patch N+1.
 - The diagnostic hack is reverted; only the principled fix is committed.
-- A regression test is added when practical.
 
 A hack that confirmed a hypothesis is a successful experiment, not a
-deliverable. The deliverable is the right fix + the journal entry that
-explains *why*.
+deliverable. The deliverable is the right fix, its Dossier, and the journal
+entry that explains *why*.
 
 ## Templates
 
-`templates/session.md`, `templates/notes.md`, `templates/exp_config.py`.
-Copy, fill, evolve. Refine these templates as the methodology matures —
-this skill is expected to change.
+`templates/session.md`, `templates/notes.md`, `templates/exp_config.py`,
+`templates/fix_dossier.md`. Copy, fill, evolve. Refine these templates as
+the methodology matures — this skill is expected to change.
