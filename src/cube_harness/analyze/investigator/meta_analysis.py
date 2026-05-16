@@ -25,12 +25,14 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cube.core import TypedBaseModel
 from pydantic import Field, ValidationError
 
+from cube_harness.analyze.investigator.audit import AUDIT_FILENAME
 from cube_harness.analyze.investigator.parse import extract_json_block
 from cube_harness.analyze.investigator.schema_prompt import model_to_json_example
 
@@ -111,6 +113,12 @@ class MetaAnalysis(TypedBaseModel):
     primary_blame_distribution: dict[str, int] = Field(default_factory=dict)
     success_rate: float = 0.0
 
+    # Audit signal (present only when `--audit` was on): verdict counts plus
+    # every non-`sound` episode with the alternative blames the auditor named.
+    # Surfaces the self-critique at synthesis instead of leaving it write-only
+    # in per-episode `audit.json` files. `None` when no episode was audited.
+    audit_summary: dict | None = None
+
     # The LLM-authored synthesis.
     patterns: list[FailurePattern] = Field(default_factory=list)
     root_cause_hypotheses: list[RootCauseHypothesis] = Field(default_factory=list)
@@ -135,10 +143,73 @@ _RUNTIME_PROVENANCE_FIELDS = frozenset(
         "outcome_distribution",
         "primary_blame_distribution",
         "success_rate",
+        "audit_summary",
         "cost_usd",
         "duration_s",
     }
 )
+
+
+def _collect_audit_summary(experiment_dir: Path, trajectory_ids: list[str]) -> dict | None:
+    """Aggregate per-episode `audit.json` into a synthesis-visible signal.
+
+    Returns `None` when no episode has an audit (so `--no-audit` runs are
+    unaffected). Otherwise: the verdict distribution plus, for every
+    non-`sound` episode, the verdict and the alternative blames the auditor
+    named — the part a synthesiser needs to discount a thin primary
+    attribution instead of trusting it blindly.
+    """
+    verdicts: Counter[str] = Counter()
+    flagged: list[dict] = []
+    for tid in sorted(trajectory_ids):
+        path = experiment_dir / "episodes" / tid / AUDIT_FILENAME
+        if not path.exists():
+            continue
+        try:
+            audit = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Could not read audit %s: %s", path, e)
+            continue
+        verdict = audit.get("verdict", "unknown")
+        verdicts[verdict] += 1
+        if verdict != "sound":
+            flagged.append(
+                {
+                    "trajectory_id": tid,
+                    "verdict": verdict,
+                    "alternative_blames": [b.get("blame") for b in audit.get("alternative_blames", [])],
+                }
+            )
+    if not verdicts:
+        return None
+    return {"verdict_distribution": dict(verdicts), "flagged": flagged}
+
+
+def _render_audit_block(audit_summary: dict | None) -> str:
+    """Compact prompt text so the synthesiser weighs the auditor's dissent.
+
+    Empty string when no audits ran — the prompt is unchanged for
+    `--no-audit`, keeping that path byte-for-byte identical.
+    """
+    if not audit_summary:
+        return ""
+    lines = [
+        "",
+        "Auditor self-critique (independent re-read of each finding):",
+        f"  verdict distribution: {audit_summary['verdict_distribution']}",
+    ]
+    flagged = audit_summary.get("flagged") or []
+    if flagged:
+        lines.append("  flagged (non-`sound`) episodes — treat their primary blame as a weak prior:")
+        for f in flagged:
+            alts = ", ".join(a for a in f["alternative_blames"] if a) or "(none named)"
+            lines.append(f"    - {f['trajectory_id']}: {f['verdict']}; auditor's alternatives: {alts}")
+    lines.append(
+        "Weigh this: do not report a pattern's blame with high confidence when "
+        "the auditor flagged the underlying episodes `questionable`/`wrong` "
+        "unless you independently re-confirm it from the transcript."
+    )
+    return "\n".join(lines)
 
 
 def _render_system_prompt() -> str:
@@ -226,6 +297,7 @@ def _build_user_prompt(
     primary_blame_distribution: dict[str, int],
     success_rate: float,
     digest: str,
+    audit_summary: dict | None = None,
 ) -> str:
     return f"""Experiment: {experiment_id}
 Experiment directory (drill-in via Read/Glob if needed): {experiment_dir}
@@ -235,6 +307,7 @@ Success rate: {success_rate:.2%}
 
 Outcome distribution: {dict(outcome_distribution)}
 Primary blame distribution: {dict(primary_blame_distribution)}
+{_render_audit_block(audit_summary)}
 
 Per-episode digest:
 {digest}
@@ -300,13 +373,12 @@ async def run_meta_analysis(
     summary file — keeps the function pure(-ish) and lets tests pass a fake
     driver without on-disk dependencies.
     """
-    from collections import Counter
-
     outcomes = Counter(o.outcome.value for o, _ in results.values())
     blames = Counter(o.primary_blame.value for o, _ in results.values())
     n_investigated = len(results)
     n_success = outcomes.get("success", 0) + outcomes.get("success_lucky", 0)
     success_rate = n_success / n_investigated if n_investigated else 0.0
+    audit_summary = _collect_audit_summary(experiment_dir, list(results))
 
     initial_prompt = _build_user_prompt(
         experiment_dir=experiment_dir,
@@ -316,6 +388,7 @@ async def run_meta_analysis(
         primary_blame_distribution=dict(blames),
         success_rate=success_rate,
         digest=_digest_investigations(results),
+        audit_summary=audit_summary,
     )
 
     total_cost = 0.0
@@ -357,6 +430,7 @@ async def run_meta_analysis(
         raw["outcome_distribution"] = dict(outcomes)
         raw["primary_blame_distribution"] = dict(blames)
         raw["success_rate"] = success_rate
+        raw["audit_summary"] = audit_summary
         raw["cost_usd"] = total_cost
         raw["duration_s"] = total_duration
         raw["schema_version"] = META_ANALYSIS_SCHEMA_VERSION
@@ -373,12 +447,34 @@ async def run_meta_analysis(
     )
 
 
+def _render_audit_md(audit_summary: dict | None) -> str:
+    """Deterministic `## Audit signal` block prepended to the human-facing
+    `.md` so the self-critique is visible even if the LLM prose omits it.
+    Empty string when no audits ran."""
+    if not audit_summary:
+        return ""
+    out = ["## Audit signal", "", f"Verdict distribution: `{audit_summary['verdict_distribution']}`", ""]
+    flagged = audit_summary.get("flagged") or []
+    if flagged:
+        out.append("Episodes the auditor did **not** rate `sound` (treat their primary blame as a weak prior):")
+        out.append("")
+        for f in flagged:
+            alts = ", ".join(a for a in f["alternative_blames"] if a) or "_(none named)_"
+            out.append(f"- `{f['trajectory_id']}` — **{f['verdict']}**; auditor's alternatives: {alts}")
+    else:
+        out.append("All audited episodes rated `sound`.")
+    out.append("")
+    out.append("---")
+    out.append("")
+    return "\n".join(out)
+
+
 def write_meta_analysis(experiment_dir: Path, analysis: MetaAnalysis) -> tuple[Path, Path]:
     """Write `meta_analysis.json` and `meta_analysis.md`. Returns the two paths."""
     json_path = experiment_dir / META_ANALYSIS_FILENAME
     md_path = experiment_dir / META_ANALYSIS_MARKDOWN_FILENAME
     json_path.write_text(json.dumps(analysis.model_dump(mode="json"), indent=2))
-    md_path.write_text(analysis.markdown_summary.rstrip() + "\n")
+    md_path.write_text(_render_audit_md(analysis.audit_summary) + analysis.markdown_summary.rstrip() + "\n")
     return json_path, md_path
 
 
