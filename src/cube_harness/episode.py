@@ -14,6 +14,7 @@ from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.eval_log import EpisodeRecord
+from cube_harness.llm import is_permanent_llm_error
 from cube_harness.metrics.tracer import get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -303,7 +304,10 @@ class Episode:
             ep_status.status = "MAX_STEPS_REACHED" if max_steps_reached else "COMPLETED"
         except Exception as e:
             logger.exception(f"Error during agent run: {e}")
-            ep_status.status = "FAILED"
+            # Permanent provider errors (bad model name, bad key, malformed request)
+            # will fail identically on retry — mark them terminal & non-retriable so
+            # the runner stops instead of burning the whole retry budget.
+            ep_status.status = "INVALID_CONFIG" if is_permanent_llm_error(e) else "FAILED"
             ep_status.error_type = type(e).__name__
             ep_status.error_message = str(e)[:500]
             raise e
