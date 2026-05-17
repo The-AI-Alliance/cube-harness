@@ -70,8 +70,10 @@ def discover_episodes(experiment_dir: Path) -> list[EpisodeRef]:
         # episodes — they have no `steps/` — and enumerating them yields
         # phantom EpisodeRefs that crash transcript extraction. The live
         # attempt keeps the un-suffixed name; skip the archives.
+        # auto-fix(406)↓
         if ".archived_" in ep_dir.name:
             continue
+        # /auto-fix(406)
         record_path = ep_dir / EPISODE_RECORD_FILENAME
         refs.append(
             EpisodeRef(
@@ -114,3 +116,20 @@ def select_episodes(
 
 
 __all__ = ["EpisodeRef", "discover_episodes", "select_episodes", "load_episode_record"]
+
+
+# === auto-fix notes ===  (spec: openspec/specs/auto-fix/spec.md)
+# auto-fix-note(406) {class=L1 issue=406 hash=PENDING ctx=logic/cube-harness@79efdb22}
+#   symptoms:  Surfaced in the terminalbench2 PI shakeout. The retry machinery
+#              archives a failed attempt as `<tid>.archived_<ts>/` (no `steps/`);
+#              discover_episodes enumerated them, yielding phantom EpisodeRefs
+#              that crashed transcript extraction downstream. Trigger is the
+#              retry-archive naming convention — benchmark-/OS-/infra-agnostic
+#              (pure directory-name logic; no env fingerprint is load-bearing).
+#   invariant: discover_episodes returns only investigable episodes (a real
+#              attempt dir with steps/), never retry-archive dirs.
+#   why:       Fixed in discovery, the layer that owns "what is an episode" —
+#              not a downstream guard at the extraction call site.
+#   tested:    tests/test_investigator.py::test_discover_episodes_skips_archived_retry_dirs
+#              (asserts the invariant: archive dirs excluded; not a reproduction).
+#   hash=PENDING: stamped by scripts/auto_fix_lint.py (Tier-1) on first run.
