@@ -88,6 +88,12 @@ is governed by cube-standard's specs. Don't subclass those here — consume them
 
 PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md)), which audits changes against these guidelines. Write PRs as if a reviewer will check each principle above against the diff.
 
+**Auto-fix provenance.** PI-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)`
+markers + a context-stamped footnote at module bottom (`N` = GitHub issue). When a
+diff touches an `auto-fix` region or its footnote, treat it as a possibly-rotten
+marker (review rule AF-001). Methodology (Dossier, L0–L3 tiers, rot lint):
+[`openspec/specs/auto-fix/spec.md`](openspec/specs/auto-fix/spec.md).
+
 ## Workflow for code changes
 
 1. **Find the relevant spec** — which layer? Start there.
