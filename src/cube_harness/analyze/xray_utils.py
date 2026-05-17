@@ -90,6 +90,7 @@ _RAW_STATUS_MAP: dict[str, str] = {
     "FAILED": "failed",
     "STALE": "stale",
     "CANCELLED": "cancelled",
+    "INVALID_CONFIG": "failed",  # permanent provider error — render as a failure
 }
 
 

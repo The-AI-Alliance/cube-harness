@@ -48,7 +48,7 @@ No other text after the closing fence."""
 _FINDINGS_JSON = model_to_json_example(BaseFindings).replace("{", "{{").replace("}", "}}")
 
 
-INVESTIGATOR_USER_PROMPT_TEMPLATE = f"""Investigator this episode.
+INVESTIGATOR_USER_PROMPT_TEMPLATE = f"""Investigate this episode.
 
 # Episode
 
