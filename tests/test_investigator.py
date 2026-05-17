@@ -1086,6 +1086,66 @@ def test_meta_analysis_writer_produces_json_and_md(tmp_path: Path) -> None:
     json_path, md_path = write_meta_analysis(tmp_path, obj)
     assert json_path.read_text().startswith("{")
     assert "Body" in md_path.read_text()
+    # No audit → md is exactly the prose (no injected section).
+    assert md_path.read_text() == "# Body\n\nSome prose.\n"
+
+
+def test_collect_audit_summary_none_when_no_audits(tmp_path: Path) -> None:
+    from cube_harness.analyze.investigator.meta_analysis import _collect_audit_summary
+
+    (tmp_path / "episodes" / "t1").mkdir(parents=True)
+    assert _collect_audit_summary(tmp_path, ["t1"]) is None
+
+
+def test_collect_audit_summary_aggregates_and_flags(tmp_path: Path) -> None:
+    import json as _json
+
+    from cube_harness.analyze.investigator.meta_analysis import _collect_audit_summary
+
+    for tid, verdict, alts in [
+        ("t1", "sound", []),
+        ("t2", "questionable", [{"blame": "agent_scaffolding", "rationale": "x"}]),
+        ("t3", "wrong", [{"blame": "task_design", "rationale": "y"}]),
+    ]:
+        d = tmp_path / "episodes" / tid
+        d.mkdir(parents=True)
+        (d / "audit.json").write_text(_json.dumps({"verdict": verdict, "alternative_blames": alts}))
+
+    summary = _collect_audit_summary(tmp_path, ["t1", "t2", "t3"])
+    assert summary is not None
+    assert summary["verdict_distribution"] == {"sound": 1, "questionable": 1, "wrong": 1}
+    flagged_ids = {f["trajectory_id"] for f in summary["flagged"]}
+    assert flagged_ids == {"t2", "t3"}  # `sound` t1 not flagged
+    t2 = next(f for f in summary["flagged"] if f["trajectory_id"] == "t2")
+    assert t2["alternative_blames"] == ["agent_scaffolding"]
+
+
+def test_write_meta_analysis_prepends_audit_section(tmp_path: Path) -> None:
+    from cube_harness.analyze.investigator import MetaAnalysis, write_meta_analysis
+
+    obj = MetaAnalysis(
+        experiment_id="exp-1",
+        recipe="general_blame",
+        driver="claude-code-sdk",
+        model="claude-opus-4-7",
+        timestamp=1.0,
+        n_episodes_investigated=2,
+        outcome_distribution={"failure": 2},
+        primary_blame_distribution={"model_capability": 2},
+        success_rate=0.0,
+        audit_summary={
+            "verdict_distribution": {"questionable": 2},
+            "flagged": [
+                {"trajectory_id": "t2", "verdict": "questionable", "alternative_blames": ["agent_scaffolding"]}
+            ],
+        },
+        markdown_summary="# Body\n\nProse.\n",
+    )
+    _, md_path = write_meta_analysis(tmp_path, obj)
+    md = md_path.read_text()
+    assert md.startswith("## Audit signal")
+    assert "questionable" in md and "agent_scaffolding" in md and "`t2`" in md
+    assert "# Body" in md  # prose still present, after the injected section
 
 
 def test_meta_analysis_journal_copy(tmp_path: Path) -> None:
