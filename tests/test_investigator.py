@@ -1129,7 +1129,9 @@ def test_write_meta_analysis_prepends_audit_section(tmp_path: Path) -> None:
         success_rate=0.0,
         audit_summary={
             "verdict_distribution": {"questionable": 2},
-            "flagged": [{"trajectory_id": "t2", "verdict": "questionable", "alternative_blames": ["agent_scaffolding"]}],
+            "flagged": [
+                {"trajectory_id": "t2", "verdict": "questionable", "alternative_blames": ["agent_scaffolding"]}
+            ],
         },
         markdown_summary="# Body\n\nProse.\n",
     )
