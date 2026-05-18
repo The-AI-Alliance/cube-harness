@@ -2,8 +2,13 @@
 
 import logging
 import os
+import socket
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import ray
@@ -13,6 +18,7 @@ from cube_harness.episode import Episode
 from cube_harness.episode_logs import LOG_FORMAT, get_log_path, redirect_output_to_log, trajectory_log_id
 from cube_harness.episode_status import RETRIABLE_STATUSES, TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.experiment import Experiment, ExpResult, sweep_stale_statuses
+from cube_harness.experiment_status import EXPERIMENT_STATUS_FILENAME, ExperimentStatus
 from cube_harness.metrics.tracer import get_trace_env_vars, get_tracer
 from cube_harness.storage import FileStorage, Storage
 
@@ -20,8 +26,12 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 # Default timeouts shared with xray_utils for ghost-episode detection.
-DEFAULT_STEP_TIMEOUT_S: float = 1800.0
+DEFAULT_STEP_TIMEOUT_S: float = 9000.0
+DEFAULT_SETUP_TIMEOUT_S: float = 4 * DEFAULT_STEP_TIMEOUT_S  # container scheduling can queue
 DEFAULT_CANCEL_GRACE_S: float = 120.0
+
+# How often the driver updates experiment_status.json in Ray mode.
+_EXP_HEARTBEAT_INTERVAL_S: float = 30.0
 
 
 def _warn_if_ephemeral_venv() -> None:
@@ -58,6 +68,44 @@ def _trajectory_id(episode: Episode) -> str:
     return trajectory_log_id(episode.config.task_config.task_id, episode.config.id)
 
 
+@contextmanager
+def _experiment_lifecycle(exp_dir: Path, mode: Literal["ray", "sequential"]) -> Iterator[tuple[ExperimentStatus, Path]]:
+    """Manage `experiment_status.json` from RUNNING through terminal write.
+
+    Writes RUNNING on entry. On normal exit, writes COMPLETED; on exception,
+    writes INTERRUPTED. Both initial and terminal writes log a warning on
+    failure rather than swallowing silently — these bracket the run, so a
+    failure here is something an operator should see.
+    """
+    now = time.time()
+    exp_status = ExperimentStatus(
+        status="RUNNING",
+        mode=mode,
+        pid=os.getpid(),
+        host=socket.gethostname(),
+        started_at=now,
+        last_heartbeat_at=now,
+        total_episodes=0,
+    )
+    exp_status_path = exp_dir / EXPERIMENT_STATUS_FILENAME
+    try:
+        exp_status.write(exp_status_path)
+    except Exception:
+        logger.warning("Failed to write initial experiment status", exc_info=True)
+    completed = False
+    try:
+        yield exp_status, exp_status_path
+        completed = True
+    finally:
+        exp_status.status = "COMPLETED" if completed else "INTERRUPTED"
+        exp_status.ended_at = time.time()
+        exp_status.last_heartbeat_at = exp_status.ended_at
+        try:
+            exp_status.write(exp_status_path)
+        except Exception:
+            logger.warning("Failed to write terminal experiment status", exc_info=True)
+
+
 def _pre_claim(storage: Storage, episode: Episode) -> None:
     """Write `QUEUED` for an episode before submitting it to Ray.
 
@@ -92,6 +140,7 @@ def run_with_ray(
     n_cpus: int = 4,
     ray_poll_timeout: float = 2.0,
     step_timeout_s: float = DEFAULT_STEP_TIMEOUT_S,
+    setup_timeout_s: float = DEFAULT_SETUP_TIMEOUT_S,
     cancel_grace_s: float = DEFAULT_CANCEL_GRACE_S,
     orphan_threshold_s: float = 3600.0,
     max_retry_rounds: int = 3,
@@ -107,17 +156,22 @@ def run_with_ray(
         model=model,
         agent_name=agent_name,
     )
-
     try:
-        with tracer.benchmark(exp.name):
+        with (
+            tracer.benchmark(exp.name),
+            _experiment_lifecycle(exp.output_dir, mode="ray") as (exp_status, exp_status_path),
+        ):
             return _run_with_retries(
                 exp,
                 n_cpus=n_cpus,
                 ray_poll_timeout=ray_poll_timeout,
                 step_timeout_s=step_timeout_s,
+                setup_timeout_s=setup_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
                 max_retry_rounds=max_retry_rounds,
+                exp_status=exp_status,
+                exp_status_path=exp_status_path,
             )
     finally:
         tracer.shutdown()
@@ -135,9 +189,12 @@ def _run_with_retries(
     n_cpus: int,
     ray_poll_timeout: float,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
     max_retry_rounds: int,
+    exp_status: ExperimentStatus,
+    exp_status_path: Path,
 ) -> ExpResult:
     """Run the experiment, then keep re-running retriable failures until none remain.
 
@@ -155,8 +212,11 @@ def _run_with_retries(
                 n_cpus=n_cpus,
                 ray_poll_timeout=ray_poll_timeout,
                 step_timeout_s=step_timeout_s,
+                setup_timeout_s=setup_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
+                exp_status=exp_status,
+                exp_status_path=exp_status_path,
             )
             aggregated.tasks_num = max(aggregated.tasks_num, round_result.tasks_num)
             aggregated.trajectories.update(round_result.trajectories)
@@ -188,10 +248,14 @@ def _run_with_ray_impl(
     n_cpus: int,
     ray_poll_timeout: float,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
+    exp_status: ExperimentStatus,
+    exp_status_path: Path,
 ) -> ExpResult:
     """Run a single Ray round: pre-claim, submit, poll with step-timeout, sweep stale on shutdown."""
+    process_start_s = time.time()
     exp.save_config()
     output_dir = exp.output_dir
     storage = FileStorage(output_dir)
@@ -221,6 +285,7 @@ def _run_with_ray_impl(
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
+                process_start_s=process_start_s,
             )
 
             # Pre-claim every episode before any Ray submission so a concurrent runner
@@ -232,6 +297,8 @@ def _run_with_ray_impl(
             for episode in episodes:
                 ref = run_episode.remote(episode)
                 ref_to_traj_id[ref] = _trajectory_id(episode)
+            exp_status.total_episodes = len(storage.list_episode_configs())
+            exp_status.heartbeat(exp_status_path)
             logger.info(f"Start {len(episodes)} episodes in parallel using Ray with {n_cpus} workers")
             results = _poll_ray(
                 exp,
@@ -239,7 +306,10 @@ def _run_with_ray_impl(
                 storage,
                 ray_poll_timeout=ray_poll_timeout,
                 step_timeout_s=step_timeout_s,
+                setup_timeout_s=setup_timeout_s,
                 cancel_grace_s=cancel_grace_s,
+                exp_status=exp_status,
+                exp_status_path=exp_status_path,
             )
             exp.print_stats(results)
             return results
@@ -252,6 +322,7 @@ def _run_with_ray_impl(
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
+                process_start_s=process_start_s,
             )
 
 
@@ -262,12 +333,16 @@ def _poll_ray(
     *,
     ray_poll_timeout: float,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
+    exp_status: ExperimentStatus,
+    exp_status_path: Path,
 ) -> ExpResult:
     """Wait on Ray refs, collecting trajectories/failures and force-killing workers with stale heartbeats."""
     results = ExpResult(tasks_num=len(ref_to_traj_id), config=exp.config, exp_id=f"{exp.name}_{uuid4().hex}")
     completed = 0
     episodes_in_progress = list(ref_to_traj_id.keys())
+    last_exp_hb = time.time()
     while len(episodes_in_progress) > 0:
         done, episodes_in_progress = ray.wait(
             episodes_in_progress,
@@ -280,7 +355,7 @@ def _poll_ray(
         for task_ref in done:
             traj_id = ref_to_traj_id[task_ref]
             try:
-                traj: Trajectory = ray.get(task_ref)
+                traj: Trajectory = ray.get(task_ref, timeout=step_timeout_s + cancel_grace_s)
                 logger.info(
                     "Completed trajectory %s with %d steps (%d agent steps, %d environment steps)",
                     traj_id,
@@ -300,8 +375,28 @@ def _poll_ray(
             storage,
             results,
             step_timeout_s=step_timeout_s,
+            setup_timeout_s=setup_timeout_s,
             cancel_grace_s=cancel_grace_s,
         )
+
+        # Heartbeat experiment_status.json so XRay knows this driver is alive.
+        now = time.time()
+        if now - last_exp_hb >= _EXP_HEARTBEAT_INTERVAL_S:
+            exp_status.heartbeat(
+                exp_status_path,
+                completed=len(results.trajectories),
+                failed=len(results.failures),
+            )
+            last_exp_hb = now
+
+    # Final heartbeat flushes counters before the lifecycle writes the terminal
+    # status. Without this, the last batch of completions (or any work shorter
+    # than `_EXP_HEARTBEAT_INTERVAL_S`) would be lost from the on-disk record.
+    exp_status.heartbeat(
+        exp_status_path,
+        completed=len(results.trajectories),
+        failed=len(results.failures),
+    )
     return results
 
 
@@ -312,13 +407,15 @@ def _kill_stale_workers(
     results: ExpResult,
     *,
     step_timeout_s: float,
+    setup_timeout_s: float,
     cancel_grace_s: float,
 ) -> None:
     """Read each active episode's status.json; force-kill workers with stale heartbeats.
 
-    A worker that has not advanced its heartbeat in `step_timeout_s + cancel_grace_s`
-    is presumed stuck. The driver force-cancels it, writes a `CANCELLED` status with
-    `error_type="StepTimeout"`, and removes the ref from the in-progress list.
+    Uses a phase-aware budget: episodes still in setup (current_step == 0) are given
+    `setup_timeout_s`; episodes that have entered the agent loop get the full `step_timeout_s`.
+    This lets setup hangs (container boot, env reset) be detected quickly without
+    shortening the budget for legitimate long-running agent steps.
     """
     now = time.time()
     to_remove: list[ray.ObjectRef] = []
@@ -330,11 +427,12 @@ def _kill_stale_workers(
         if status is None or status.status != "RUNNING" or status.last_heartbeat_at is None:
             continue
         age = now - status.last_heartbeat_at
-        if age <= step_timeout_s + cancel_grace_s:
+        budget = setup_timeout_s if status.current_step == 0 else step_timeout_s
+        if age <= budget + cancel_grace_s:
             continue
+        phase = "setup" if status.current_step == 0 else f"step {status.current_step}"
         logger.error(
-            f"Episode {traj_id} step {status.current_step} stalled for {age:.0f}s "
-            f"(>{step_timeout_s + cancel_grace_s:.0f}s) — force killing"
+            f"Episode {traj_id} {phase} stalled for {age:.0f}s (>{budget + cancel_grace_s:.0f}s) — force killing"
         )
         try:
             ray.cancel(ref, force=True)
@@ -351,8 +449,8 @@ def _kill_stale_workers(
             continue
         status.status = "CANCELLED"
         status.ended_at = now
-        status.error_type = "StepTimeout"
-        status.error_message = f"Step {status.current_step} exceeded {step_timeout_s:.0f}s"
+        status.error_type = "SetupTimeout" if status.current_step == 0 else "StepTimeout"
+        status.error_message = f"{phase} exceeded {budget:.0f}s"
         storage.write_episode_status(traj_id, status)
         results.failures[traj_id] = status.error_message
         to_remove.append(ref)
@@ -380,9 +478,11 @@ def run_sequentially(
         model=model,
         agent_name=agent_name,
     )
-
     try:
-        with tracer.benchmark(exp.name):
+        with (
+            tracer.benchmark(exp.name),
+            _experiment_lifecycle(exp.output_dir, mode="sequential") as (exp_status, exp_status_path),
+        ):
             return _run_sequentially_with_retries(
                 exp,
                 debug_limit=debug_limit,
@@ -390,6 +490,8 @@ def run_sequentially(
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
                 max_retry_rounds=max_retry_rounds,
+                exp_status=exp_status,
+                exp_status_path=exp_status_path,
             )
     finally:
         tracer.shutdown()
@@ -403,6 +505,8 @@ def _run_sequentially_with_retries(
     cancel_grace_s: float,
     orphan_threshold_s: float,
     max_retry_rounds: int,
+    exp_status: ExperimentStatus,
+    exp_status_path: Path,
 ) -> ExpResult:
     """Run sequential rounds back-to-back until no retriable failures remain.
 
@@ -419,6 +523,8 @@ def _run_sequentially_with_retries(
                 step_timeout_s=step_timeout_s,
                 cancel_grace_s=cancel_grace_s,
                 orphan_threshold_s=orphan_threshold_s,
+                exp_status=exp_status,
+                exp_status_path=exp_status_path,
             )
             aggregated.tasks_num = max(aggregated.tasks_num, round_result.tasks_num)
             aggregated.trajectories.update(round_result.trajectories)
@@ -451,8 +557,11 @@ def _run_sequentially_impl(
     step_timeout_s: float,
     cancel_grace_s: float,
     orphan_threshold_s: float,
+    exp_status: ExperimentStatus,
+    exp_status_path: Path,
 ) -> ExpResult:
     """Run a single sequential round in-process, returning trajectories and failures for this round."""
+    process_start_s = time.time()
     exp.save_config()
     storage = FileStorage(exp.output_dir)
     with exp.benchmark_config.make(exp.infra) as benchmark:
@@ -461,12 +570,16 @@ def _run_sequentially_impl(
             step_timeout_s=step_timeout_s,
             cancel_grace_s=cancel_grace_s,
             orphan_threshold_s=orphan_threshold_s,
+            process_start_s=process_start_s,
         )
         if debug_limit is not None:
             logger.info(f"Running only first {debug_limit} episodes for debugging")
         episodes = all_episodes[:debug_limit] if debug_limit is not None else all_episodes
         for episode in episodes:
             _pre_claim(storage, episode)
+
+        exp_status.total_episodes = len(storage.list_episode_configs())
+        exp_status.heartbeat(exp_status_path)
 
         results = ExpResult(
             tasks_num=len(episodes),
@@ -476,6 +589,12 @@ def _run_sequentially_impl(
         for episode in episodes:
             traj_id = _trajectory_id(episode)
             log_file = get_log_path(exp.output_dir, traj_id)
+            # Heartbeat before each episode.run() so XRay can detect a dead driver.
+            exp_status.heartbeat(
+                exp_status_path,
+                completed=len(results.trajectories),
+                failed=len(results.failures),
+            )
             with redirect_output_to_log(log_file, append=False, tee=True, log_format=LOG_FORMAT):
                 try:
                     trajectory = episode.run()
@@ -483,5 +602,13 @@ def _run_sequentially_impl(
                 except Exception as e:
                     logger.exception(f"Episode {traj_id} failed")
                     results.failures[traj_id] = str(e)
+        # Flush final counters before the lifecycle's terminal write — the
+        # in-loop heartbeat fires *before* each episode, so the last episode's
+        # outcome is otherwise missing from the on-disk record.
+        exp_status.heartbeat(
+            exp_status_path,
+            completed=len(results.trajectories),
+            failed=len(results.failures),
+        )
         exp.print_stats(results)
         return results
