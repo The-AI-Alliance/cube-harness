@@ -34,7 +34,6 @@ from typing import ClassVar, cast
 from dotenv import load_dotenv
 
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
-from cube.container import ContainerBackend
 from cube.infra_local import LocalInfraConfig
 from cube.resource import InfraConfig, ResourceConfig
 from cube.task import RuntimeContext, TaskConfig, TaskMetadata
@@ -207,7 +206,6 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
     def make(
         self,
         runtime_context: RuntimeContext | None = None,
-        container_backend: ContainerBackend | None = None,
     ) -> OSWorldTask:
         """Instantiate OSWorldTask from this config.
 
@@ -223,7 +221,6 @@ class OSWorldTaskConfig(TaskConfig[OSWorldTaskMetadata]):
             execution_info=execution_info,
             tool_config=self.tool_config or ComputerConfig(),
             runtime_context=runtime_context,
-            container_backend=container_backend,
             use_som=self.use_som,
         )
 

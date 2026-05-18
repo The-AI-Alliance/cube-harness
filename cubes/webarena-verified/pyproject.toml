@@ -5,7 +5,7 @@ description = "WebArena-Verified benchmark cube — 812 verified web automation 
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc8",
-    "cube-browser-tool>=0.2.0",
+    "cube-browser-tool[bgym]>=0.3.0",
     "webarena-verified",
     "Pillow",
 ]
