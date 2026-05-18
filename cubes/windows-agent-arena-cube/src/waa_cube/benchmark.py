@@ -43,7 +43,6 @@ from typing import ClassVar
 
 from cube import LocalInfraConfig
 from cube.benchmark import Benchmark, BenchmarkConfig, BenchmarkMetadata
-from cube.container import ContainerBackend
 from cube.resource import InfraConfig, ResourceConfig
 from cube.task import TaskConfig, TaskMetadata
 from pydantic import Field, SerializeAsAny
@@ -78,14 +77,13 @@ class WAATaskConfig(TaskConfig):
     def make(
         self,
         runtime_context: dict | None = None,
-        container_backend: ContainerBackend | None = None,
     ) -> WAATask:
         if self.tool_config is None:
             raise ValueError(
                 f"WAATaskConfig for task '{self.task_id}' has no tool_config. "
                 "Pass tool_config=ComputerConfig(...) to WAABenchmark."
             )
-        exec_info_raw = WAATaskConfig.load_task_execution_info(self.task_id)
+        exec_info_raw = self.load_task_execution_info()
         execution_info = WAATaskExecutionInfo.model_validate(exec_info_raw)
         return WAATask(
             metadata=self.metadata,
@@ -94,7 +92,6 @@ class WAATaskConfig(TaskConfig):
             infra=self.infra,
             use_som=self.use_som,
             runtime_context=runtime_context,
-            container_backend=container_backend,
         )
 
 
