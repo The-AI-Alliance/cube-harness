@@ -173,6 +173,12 @@ class LLMResponse(TypedBaseModel):
         return get_reasoning(self.message)
 
 
+# auto-fix(412): Anthropic beta that lets Claude emit a thinking block
+# after every tool result, not only on the first assistant turn. Required
+# for per-step thinking in a multi-step tool-use agent (Genny swe mode).
+_INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14"
+
+
 def _is_anthropic_model(model_name: str) -> bool:
     """Does this model route to Anthropic's API (direct, Bedrock, or Vertex)?
 
@@ -272,6 +278,19 @@ class LLM:
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
+            # auto-fix(412)↓ Without the interleaved-thinking beta, Anthropic
+            # emits a thinking block only on the FIRST assistant turn; in a
+            # multi-step tool-use loop (Genny swe/flat_history) every later
+            # step gets 0 reasoning tokens — thinking is effectively off after
+            # step 0. The beta lets Claude think after each tool result.
+            if _is_anthropic_model(self.config.model_name):
+                hdrs = dict(kwargs.get("extra_headers") or {})
+                betas = [b for b in hdrs.get("anthropic-beta", "").split(",") if b.strip()]
+                if _INTERLEAVED_THINKING_BETA not in betas:
+                    betas.append(_INTERLEAVED_THINKING_BETA)
+                hdrs["anthropic-beta"] = ",".join(betas)
+                kwargs["extra_headers"] = hdrs
+            # /auto-fix(412)
         if self.config.set_cache_control == "auto" and _is_anthropic_model(self.config.model_name):
             injection_points = _build_cache_injection_points(prompt.messages)
             if injection_points:
@@ -378,3 +397,20 @@ class LLMCall(TypedBaseModel):
     prompt: Prompt
     output: Message
     usage: Usage = Field(default_factory=Usage)
+
+
+# === auto-fix notes ===
+# auto-fix-note(412) {class=L1 issue=412 hash=PENDING ctx=anthropic/claude-haiku-4-5/genny-swe/cube-harness@5ca4e565}
+#   symptoms:  Genny swe/flat_history + claude-haiku-4-5 + reasoning_effort
+#              on terminalbench2: extended thinking fired ONLY on step 0
+#              (step0=145 reasoning tokens, steps 1-14 = exactly 0,
+#              thinking_blocks=0). 15-step probe: 1/15 steps thought.
+#   invariant: a reasoning-enabled multi-step tool-use agent must be able
+#              to think on every step, not only the first assistant turn.
+#   why:       Anthropic only emits thinking after a tool result when the
+#              interleaved-thinking beta is set; llm.py passed
+#              reasoning_effort but not the beta. Right layer = the LLM
+#              wrapper that owns provider params. No contract change -> L1.
+#   tested:    tests/test_llm.py::TestInterleavedThinkingBeta (beta present
+#              for anthropic+reasoning_effort, absent otherwise) + live
+#              probe re-run: 15/15 steps think, 255 -> 846 reasoning tokens.

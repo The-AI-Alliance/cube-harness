@@ -740,3 +740,37 @@ class TestUsageReasoningTokens:
         llm = LLM(config=sample_llm_config)
         resp = llm(sample_prompt)
         assert resp.usage.reasoning_tokens == 0
+
+
+class TestInterleavedThinkingBeta:
+    """auto-fix(412): Anthropic per-step thinking needs the interleaved beta."""
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_anthropic_reasoning_sets_interleaved_beta(self, mock_completion, sample_prompt) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        cfg = LLMConfig(model_name="claude-haiku-4-5", temperature=1.0, reasoning_effort="low")
+        LLM(config=cfg)(sample_prompt)
+        hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
+        assert "interleaved-thinking-2025-05-14" in hdrs.get("anthropic-beta", "")
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_non_anthropic_reasoning_no_beta(self, mock_completion, sample_prompt) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        cfg = LLMConfig(model_name="gpt-5-nano", reasoning_effort="low")
+        LLM(config=cfg)(sample_prompt)
+        hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
+        assert "interleaved-thinking" not in hdrs.get("anthropic-beta", "")
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_anthropic_no_reasoning_no_beta(self, mock_completion, sample_prompt) -> None:
+        mock_completion.return_value = MagicMock(
+            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+        )
+        cfg = LLMConfig(model_name="claude-haiku-4-5", temperature=1.0)  # reasoning_effort=None
+        LLM(config=cfg)(sample_prompt)
+        hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
+        assert "interleaved-thinking" not in hdrs.get("anthropic-beta", "")
