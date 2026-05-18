@@ -299,3 +299,4 @@ pac.entitlement
 cube-standard/
 # Personal/throwaway experiment recipes (use custom_* prefix)
 recipes/custom_*
+.venv-pi/
