@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc8",
     "miniwob>=1.0",
-    "cube-browser-tool"
+    "cube-browser-tool[bgym]>=0.3.0"
 ]
 
 [project.entry-points."cube.benchmarks"]

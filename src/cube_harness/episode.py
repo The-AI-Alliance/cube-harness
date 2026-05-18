@@ -1,11 +1,9 @@
 import logging
 import time
-import warnings
 from pathlib import Path
 from typing import Callable, Protocol, Self
 
 from cube.benchmark import Benchmark, RuntimeContext
-from cube.container import ContainerBackend
 from cube.core import Artifact, EnvironmentOutput, StepError, TypedBaseModel
 from cube.task import TaskConfig
 from opentelemetry.trace import Span, StatusCode
@@ -17,6 +15,7 @@ from cube_harness.core import AgentOutput, Trajectory, TrajectoryStep
 from cube_harness.episode_logs import trajectory_log_id
 from cube_harness.episode_status import TERMINAL_STATUSES, EpisodeStatus, next_retry_count
 from cube_harness.eval_log import EpisodeRecord
+from cube_harness.llm import is_permanent_llm_error
 from cube_harness.metrics.tracer import CH_ARTIFACTS, get_tracer
 from cube_harness.storage import EPISODES_DIR, FileStorage, Storage
 from cube_harness.summary import SummaryProcessor
@@ -83,7 +82,6 @@ class Episode:
         max_steps: int,
         storage: Storage | None,
         runtime_context: RuntimeContext | None,
-        container_backend: ContainerBackend | None,
         artifact_exporter: ArtifactExporter | None = None,
     ) -> None:
         self.artifact_exporter = artifact_exporter
@@ -96,7 +94,6 @@ class Episode:
             task_config=task_config,
         )
         self._runtime_context = runtime_context
-        self._container_backend = container_backend
         self.storage = storage or FileStorage(output_dir)
         self.allow_overwrite = False
 
@@ -107,11 +104,11 @@ class Episode:
 
         The full TaskConfig is stored in EpisodeConfig and is self-contained
         (call task_config.make()). `benchmark` is optional — if provided, its
-        runtime_context and container_backend are forwarded to the episode.
+        runtime_context is forwarded to the episode.
 
         Args:
             config_path: Path to the episode config JSON file
-            benchmark: Benchmark instance (optional; used for runtime_context/container_backend)
+            benchmark: Benchmark instance (optional; used for runtime_context)
 
         Returns:
             Episode instance ready to run
@@ -130,14 +127,6 @@ class Episode:
         if benchmark is not None and not isinstance(benchmark, Benchmark):
             raise ValueError(f"benchmark must be a cube.benchmark.Benchmark instance or None, got {type(benchmark)}")
         runtime_context = benchmark._runtime_context if benchmark is not None else None
-        # ``container_backend`` is a deprecated field on ``BenchmarkConfig``;
-        # reading it raises a DeprecationWarning. Forward it for backwards
-        # compatibility until cube-standard removes it.
-        container_backend = None
-        if benchmark is not None:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                container_backend = benchmark.config.container_backend
         return cls(
             id=episode_config.id,
             output_dir=episode_config.output_dir,
@@ -147,7 +136,6 @@ class Episode:
             max_steps=episode_config.max_steps,
             storage=storage,
             runtime_context=runtime_context,
-            container_backend=container_backend,
         )
 
     def run(self) -> Trajectory:
@@ -156,9 +144,7 @@ class Episode:
         Returns:
             Trajectory containing the full history of the run.
         """
-        task = self.config.task_config.make(
-            runtime_context=self._runtime_context, container_backend=self._container_backend
-        )
+        task = self.config.task_config.make(runtime_context=self._runtime_context)
         action_set = task.action_set
         step_fn = task.step
         close_fn = task.close
@@ -365,7 +351,13 @@ class Episode:
                 while not env_output.done and turns < self.config.max_steps:
                     ep_status.last_heartbeat_at = time.time()
                     ep_status.current_step = turns + 1
-                    self.storage.write_episode_status(trajectory_id, ep_status)
+                    try:
+                        self.storage.write_episode_status(trajectory_id, ep_status)
+                    except Exception:
+                        logger.warning(
+                            "Failed to write heartbeat for %s step %d", trajectory_id, turns + 1, exc_info=True
+                        )
+
                     with tracer.step(f"turn_{turns}") as span:
                         env_output, should_stop = self._run_turn(
                             turns,
@@ -391,7 +383,10 @@ class Episode:
                 )
             except Exception as e:
                 logger.exception(f"Error during agent run: {e}")
-                ep_status.status = "FAILED"
+                # Permanent provider errors (bad model name, bad key, malformed request)
+                # will fail identically on retry — mark them terminal & non-retriable so
+                # the runner stops instead of burning the whole retry budget.
+                ep_status.status = "INVALID_CONFIG" if is_permanent_llm_error(e) else "FAILED"
                 ep_status.error_type = type(e).__name__
                 ep_status.error_message = str(e)[:500]
                 raise e
