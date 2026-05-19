@@ -867,6 +867,39 @@ def test_investigate_episode_pipeline(tmp_path: Path) -> None:
     assert "_investigation_transcript" in driver.last_call["user_prompt"]
 
 
+class _HangingDriver:
+    """AgentDriver whose run() never returns in test time — simulates a hung
+    SDK subprocess (the auto-fix(409) failure mode)."""
+
+    name = "hanging-driver"
+    max_parallelism = 4
+
+    async def run(self, **kwargs: Any) -> DriverResult:
+        await asyncio.sleep(30)  # far longer than the test's episode_timeout_s
+        raise AssertionError("unreachable: should be cancelled by the timeout")
+
+    async def continue_session(self, **kwargs: Any) -> DriverResult:
+        raise NotImplementedError
+
+
+def test_investigate_experiment_bounds_a_hung_episode(tmp_path: Path) -> None:
+    """Regression for auto-fix(409): a hung driver must be time-bounded so
+    the batch completes instead of stalling forever. Asserts the invariant
+    (batch returns; hung episode absent), not a reproduction."""
+    exp, _ = _make_episode_dir(tmp_path, "task1_ep0")
+    cfg = InvestigationConfig(
+        driver=_HangingDriver(),
+        ids=["task1_ep0"],
+        synthesis_model="",
+        episode_timeout_s=0.2,
+    )
+
+    # Must return promptly (well under the driver's 30s sleep) and not raise.
+    results = investigate_experiment(exp, cfg)
+
+    assert results == {}  # the hung episode is logged + skipped, not recorded
+
+
 # ---------------------------------------------------------------------------
 # TerminalClaudeDriver — subprocess shape
 # ---------------------------------------------------------------------------

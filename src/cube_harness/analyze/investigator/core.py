@@ -89,6 +89,11 @@ class InvestigationConfig(TypedBaseModel):
     selector: Selector | None = None
     audit: bool = False
     n_seeds: int = 1
+    # Hard wall-clock cap per episode (context-agent + primary + audit). A
+    # hung driver subprocess raises nothing, so without this the serial
+    # batch blocks forever (observed: 8h+). On timeout the episode is
+    # logged + skipped and the batch continues. See auto-fix(409).
+    episode_timeout_s: float = 1800.0
 
     # Selection — explicit only. No sampling / no seed; the meta-agent
     # builds `ids` lists programmatically when it needs a subset.
@@ -482,6 +487,7 @@ def investigate_experiment(
             n_seeds=max(1, cfg.n_seeds),
             verbose=cfg.verbose,
             trace_mode=cfg.trace_mode,
+            episode_timeout_s=cfg.episode_timeout_s,
             seeded_runs_out=seeded_runs,
             audit_costs_out=audit_costs,
             all_refs=refs,
@@ -538,6 +544,7 @@ async def _investigate_experiment_async(
     n_seeds: int,
     verbose: bool,
     trace_mode: TraceMode,
+    episode_timeout_s: float,
     seeded_runs_out: dict[tuple[str, str], list[tuple[BaseFindings, InvestigationMetadata]]],
     audit_costs_out: dict[str, float],
     all_refs: list[EpisodeRef],
@@ -549,17 +556,22 @@ async def _investigate_experiment_async(
     async def _one(ref: EpisodeRef, seed_index: int) -> None:
         async with semaphore:
             try:
-                findings, investigation_metadata, actions, _, audit_cost = await _investigate_episode_impl(
-                    ref.episode_dir,
-                    experiment_dir,
-                    recipe=recipe,
-                    driver=driver,
-                    selector=selector,
-                    audit=audit,
-                    verbose=verbose,
-                    trace_mode=trace_mode,
-                    all_refs=all_refs,
+                # auto-fix(409)↓
+                findings, investigation_metadata, actions, _, audit_cost = await asyncio.wait_for(
+                    _investigate_episode_impl(
+                        ref.episode_dir,
+                        experiment_dir,
+                        recipe=recipe,
+                        driver=driver,
+                        selector=selector,
+                        audit=audit,
+                        verbose=verbose,
+                        trace_mode=trace_mode,
+                        all_refs=all_refs,
+                    ),
+                    timeout=episode_timeout_s,
                 )
+                # /auto-fix(409)
             except Exception as e:
                 logger.exception("Investigator failed on %s (seed %d): %s", ref.trajectory_id, seed_index, e)
                 return
@@ -733,3 +745,26 @@ def write_json_report(
         "rows": rows,
     }
     path.write_text(json.dumps(payload, indent=2))
+
+
+# === auto-fix notes ===  (spec: openspec/specs/auto-fix/spec.md)
+# auto-fix-note(409) {class=L1 issue=409 hash=PENDING ctx=macos-arm64/claude-sonnet-4-6/cube-harness@5ca4e565}
+#   symptoms:  Autonomous overnight Round 4 (ch-investigate run --audit,
+#              detached): the bundled claude SDK subprocess hung 8h12m on
+#              episode 1 (count-dataset-tokens_ep1) under bypassPermissions
+#              — a genuinely unbounded wait, not a perms prompt. The serial
+#              batch never advanced. Trigger non-deterministic (long model
+#              loop or SDK/network stall); the defect is the unbounded wait.
+#   invariant: one episode's investigation cannot stall the batch — a
+#              non-terminating driver/audit/context call is time-bounded
+#              and becomes a logged failure so later episodes still run.
+#   why:       agent_driver.py awaits the subprocess with no timeout;
+#              core.py:563 already logs+continues on per-episode Exception
+#              (the #2 crash-symmetry) but a hang raises nothing. Wrapping
+#              the per-episode await in asyncio.wait_for makes the hang
+#              *reach* that existing guard — minimal, right layer (the
+#              batch runner owns "one episode can't stall the batch").
+#   tested:    tests/test_investigator.py — a hanging fake driver is
+#              bounded; the batch records nothing for it and completes the
+#              rest (asserts the invariant, not a reproduction).
+#   hash=PENDING: stamped by scripts/auto_fix_lint.py (Tier-1) on first run.
