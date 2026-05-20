@@ -78,6 +78,7 @@ class TerminalBench2Task(Task[TerminalBench2TaskMetadata, ContainerTerminalTool]
         return self.execution_info
 
     def _build_tool(self) -> None:
+        # auto-fix(418)↓
         new_wd = relocate_if_readonly(
             self._container,
             self.tool_config.working_dir,
@@ -86,12 +87,21 @@ class TerminalBench2Task(Task[TerminalBench2TaskMetadata, ContainerTerminalTool]
             # '*' disables the check globally — safe in this test-runner context.
             # uid 13011 (Toolkit) has no /etc/passwd entry, so git can't
             # auto-detect committer identity without explicit config.
+            # Best-effort: tbench2 task images don't uniformly ship git (e.g.
+            # nginx-request-logging, sqlite-with-gcov, configure-git-webserver
+            # don't). `command -v git` gates the chain, `|| true` keeps the
+            # relocate-fallback's overall exit clean even when git is absent.
+            # Writable-/app paths (daytona, local) short-circuit before this
+            # runs; this only matters for non-root infras (toolkit).
             extra_setup=(
+                "( command -v git >/dev/null 2>&1 && "
                 "git config --global --add safe.directory '*' && "
                 "git config --global user.email 'cube-harness@example.com' && "
-                "git config --global user.name 'Cube Harness'"
+                "git config --global user.name 'Cube Harness' "
+                ") || true"
             ),
         )
+        # /auto-fix(418)
         self._working_dir = new_wd
         self._tool = self.tool_config.model_copy(update={"working_dir": new_wd}).make(container=self._container)
 
@@ -467,3 +477,7 @@ class TerminalBench2TaskConfig(TaskConfig[TerminalBench2TaskMetadata]):
             runtime_context=runtime_context,
             oracle_mode=self.oracle_mode,
         )
+
+
+# === auto-fix notes ===  (spec: openspec/specs/auto-fix/spec.md)
+# auto-fix-note(418) {class=L1 anchor=PR#418 hash=PENDING ctx=toolkit/eai-yul101/runtime-uid-13011/tbench2:configure-git-webserver+nginx-request-logging+sqlite-with-gcov/cube-harness@1e67efdb}
