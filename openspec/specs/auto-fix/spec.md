@@ -1,15 +1,25 @@
-# Auto-fix provenance & PI fix methodology
+# Auto-cube fix methodology & auto-fix provenance
 
-Authoritative spec for fixes produced by the **PrincipalInvestigator (PI)**
-autonomous loop. Goal: let a reviewer trust most patches *without* a deep
-contextual review, and surface design rot instead of accreting band-aids.
+Authoritative spec for fixes produced by the **auto-cube** autonomous loop
+(the orchestrator that runs cube benchmarks, analyzes trajectories via the
+**Investigator**, and ships fixes as PRs). Goal: let a reviewer trust most
+patches *without* a deep contextual review, surface design rot instead of
+accreting band-aids, and keep many in-flight PRs co-existing as the loop's
+output rate grows.
 
-The PI runs without a feedback channel to other users. So a fix cannot be
-validated by asking "does this help other cubes?" — it must instead carry
-its own generalization proof, an adversarial audit of that proof, and a
-durable, context-stamped provenance record so a future agent (or a
-different-context PI run) can see what was patched, why, and where it may
-not generalize.
+Two distinct agent roles to keep straight:
+
+- **auto-cube** — outer loop: runs experiments, invokes Investigator per
+  trajectory, proposes fixes, opens PRs. This spec governs its outputs.
+- **Investigator** — inner sub-agent: takes one trajectory and produces a
+  diagnostic report. Lives at `analyze/investigator/` (`ch-investigate`
+  CLI). Distinct from the fix-authoring step.
+
+auto-cube has no live feedback channel to other users. A fix it ships can't
+be validated by "does this help other cubes?" — so it must carry its own
+generalization proof, an adversarial audit of that proof, and a durable,
+context-stamped provenance record so a future agent (or different-context
+run) can see what was patched, why, and where it may not generalize.
 
 ## 1. Depth taxonomy (classify every fix)
 
@@ -18,47 +28,57 @@ not generalize.
 | **L0** local-correct | restores an invariant/symmetry that already exists elsewhere; no contract change | trust-by-default |
 | **L1** layer fix | correct but touches a shared layer/call site | trust if fix-audit clears blast-radius |
 | **L2** symptom-of-design | the bug is a symptom; the patch is a band-aid | ship temp PR **and** open a kept-open `design-debt` issue + openspec stub |
-| **L3** PI/eval defect | the defect is in the investigator/methodology itself, not the cube | ship + flag; do not patch the cube |
+| **L3** auto-cube / Investigator defect | the defect is in the methodology or analysis layer itself, not the cube | ship + flag; do not patch the cube |
 
 **Nothing blocks the loop.** L2/L3 still ship a temporary PR. The human's
 queue is the `design-debt` backlog, not individual patches.
 
 ### When NOT to mark (proportionality)
 
-Markers exist for code that can silently rot. **Skip in-code markers**
-(register via the issue/Dossier only, or skip entirely) when **all** hold:
-class L0; the change is pure text/comment/docs; low rot-risk (not logic a
+Markers exist for code that can silently rot. **Skip in-code markers** when
+**all** hold: class L0; pure text/comment/docs; low rot-risk (not logic a
 later edit could silently break); and already pinned by an
 invariant-asserting regression test. Marking such a fix is pollution with
 ~zero rot/accretion value — the over-application this methodology exists
 to prevent, turned on itself.
 
-## 2. The Fix Dossier (every fix PR carries its own proof)
+## 2. The Fix Report (every fix PR carries its own proof)
 
-Template: `.claude/skills/principal-investigator/templates/fix_dossier.md`.
-It is the PR body. It must state:
+Was "Fix Dossier" — renamed for plain-language reach. Template:
+`.claude/skills/auto-cube/templates/fix_report.md`. It is the PR body.
 
-- **Invariant** — the violated rule in one sentence (not "task X failed").
-- **Blast radius** — every call site / consumer, grep run **on the PR's
-  target branch** (not the local checkout — feature branches lie).
-- **Adversarial "opposite user"** — construct the downstream context this
-  fix could *hurt*; rule it out or escalate to L2.
-- **Registry lookup** — existing `auto-fix` footnotes in/near the area and
-  their context fingerprints (this is the loop's substitute for real
-  cross-user feedback).
-- **Class** (L0–L3) and, for L2/L3, the design issue / openspec link.
-- **Test** — a regression test asserting the *invariant*, not the
-  reproduction.
+**Structure: named subsections + bullets within.** A skimmer reads
+section headers + the invariant + the empirical witness in ~30 s and
+gets the gist; a careful reviewer reads root-cause + adversarial in
+~2 min. Aim for **one tight page total**.
+
+| Section | Style | Why |
+|---|---|---|
+| **Invariant violated** | 1 plain-English sentence | Anchors the whole report; reader needs no other context to grasp it |
+| **Root cause** | 1 short paragraph or 3–4 bullets explaining the **mechanism** | The one section that earns its words — explain *under the hood*, not "added X" |
+| **Why this fix / why this layer** | Bullets, 1 sentence each | Easy to skim; flags layering arguments |
+| **Blast radius** | Telegraphic — file:line list, grep run on the PR's target branch | Reference material; no prose needed |
+| **Adversarial "opposite user"** | 1 short paragraph or 2 bullets | Judgment, not facts → prose helps |
+| **Registry lookup** | Bullet list of nearby `auto-fix` footnotes + their `ctx=` fingerprints | Loop's substitute for cross-user feedback |
+| **Class** + (for L2/L3) **design-debt issue link** | Single line | Lifecycle dispatch (§5) |
+| **Test** | 1 bullet per assertion + a one-line concrete witness (e.g. `off=(0,0) once=(254,0) always=(253,18)`) | Skimmable + tangible — assertions pin the *invariant*, not the reproduction |
+
+The mandate is **structure + pedagogical depth where it earns its
+keep**, not exhaustiveness. Jargon-dense bullet lists are an
+anti-pattern: the reader can't onboard without external context. The
+root-cause and adversarial sections in particular should explain
+*mechanism* in plain language. Example + anti-example live in
+`.claude/skills/auto-cube/templates/fix_report.md`.
 
 A PR may bundle several independent fixes; the body then carries **one
-Dossier section per marker**.
+Fix Report section per marker**.
 
 ## 3. The fix-audit
 
-An independent agent gets the diff + Dossier and is instructed to **break
-the generalization claims** (find an unchecked call site, construct the
-hurt downstream user, argue the fix is shallow). The reviewer reads the
-audit verdict, not the raw diff. Recipe:
+An independent agent gets the diff + Fix Report and is instructed to
+**break the generalization claims** (find an unchecked call site,
+construct the hurt downstream user, argue the fix is shallow). The
+reviewer reads the audit verdict, not the raw diff. Recipe:
 `analyze/investigator/use_cases/fix_audit/` (mirrors the audit pass).
 
 ## 4. In-code provenance
@@ -71,8 +91,15 @@ audit verdict, not the raw diff. Recipe:
 # /auto-fix(345)
 ```
 
-`345` is a **GitHub issue number** (see §5) — unique, monotonic, durable,
-holds the long-form context out of the code.
+`345` is a **durable GitHub number** anchoring the fix:
+- **L0/L1**: the **PR number** itself (closed/merged PRs persist on
+  GitHub; that's anchor enough; no separate tracking issue needed — see §5).
+- **L2/L3**: the **design-debt issue number** (issue outlives the PR;
+  it's the standing backlog item).
+
+GitHub issues and PRs share a number namespace, so `repo#N` resolves
+uniquely in either form — Tier-1 lint can verify `N` exists without
+caring which kind.
 
 A marker delimits **one code region = one fix**, not one finding: a single
 consolidated change that resolves several findings is *one* `auto-fix(N)`.
@@ -81,7 +108,7 @@ consolidated change that resolves several findings is *one* `auto-fix(N)`.
 
 ```python
 # === auto-fix notes ===
-# auto-fix-note(345) {class=L1 issue=345 hash=ab12cd34 ctx=colima/arm64/gpt-5.4-mini/cube@285e0cc}
+# auto-fix-note(345) {class=L1 anchor=PR#345 hash=ab12cd34 ctx=colima/arm64/gpt-5.4-mini/cube@285e0cc}
 #   symptoms:  <what was observed + the triggering context (see note)>
 #   invariant: <the rule that was being violated>
 #   why:       <why this fix, why this layer>
@@ -89,50 +116,110 @@ consolidated change that resolves several findings is *one* `auto-fix(N)`.
 ```
 
 Two sections per stanza: a **machine line** in `{...}` (lint may rewrite
-`hash`; never hand-edit) and **prose** (PI/human authored; never
-auto-touched). `ctx=` is the deterministic machine-matchable minimum
-(infra/arch/model/cube-commit). `symptoms` additionally records the
-**triggering context in prose** — the task/benchmark that surfaced the
-bug plus the env specifics (OS, infra backend, model, input shape, …)
-the agent **judges relevant to *this* bug**. Selection is contextual,
-not a fixed checklist: a docker-socket bug names the backend/OS; a
-parsing bug names the task and input shape; a model-behaviour bug names
-the model and task. Enough for a different-context run to reason about
-whether the fix generalises — not an exhaustive environment dump.
+`hash`; never hand-edit) and **prose** (auto-cube/human authored; never
+auto-touched). The machine line's `anchor=` is `PR#N` (L0/L1) or
+`issue#N` (L2/L3) — explicit so readers don't have to infer.
 
-## 5. Lifecycle (GitHub issue as the ID source)
+`ctx=` is the deterministic machine-matchable minimum
+(infra/arch/model/cube-commit). `symptoms` records the **triggering
+context in prose** — the task/benchmark that surfaced the bug plus the
+env specifics (OS, infra backend, model, input shape, …) auto-cube
+**judges relevant to *this* bug**. Contextual, not a fixed checklist:
+a docker-socket bug names the backend/OS; a parsing bug names the task
+and input shape; a model-behaviour bug names the model and task. Enough
+for a different-context run to reason about whether the fix generalises
+— not an exhaustive environment dump.
 
-Issue-first resolves the ID-ordering problem (you need the ID to write the
-marker, before the PR exists):
+## 5. Lifecycle (PR-only by default; issue only for design-debt)
 
-1. Open issue → get `N`. Body = full Dossier + context fingerprint.
-   Label `auto-fix`.
-2. Write `auto-fix(N)` markers + footnote; open the fix PR referencing `N`.
-3. **L0/L1:** close issue `N` on merge — the PR body must use a
-   **per-issue** closing keyword (`Closes #174, closes #175, …`); GitHub
-   ignores a bare `Closes #174 #175 …` list after the first.
-   **L2/L3:** keep issue `N` open, add label `design-debt`, link the
-   openspec stub. This is the backlog the human reviews.
+The simplification vs v2: **L0/L1 do not file a tracking issue.** The PR
+*is* the tracking item — its number is durable, its body holds the Fix
+Report, the merged-PR record on GitHub *is* the archive.
+
+**L0/L1 (the common case):**
+1. Open PR with placeholder marker `auto-fix(PENDING)` and the Fix Report
+   as the body. Push.
+2. Read back the PR number. Amend marker → `auto-fix(N)` (where N is the
+   PR number), force-push. (One-time chicken-egg; ~10 s of automation.)
+3. On merge: nothing else to do — the PR's `Closed/Merged` state is the
+   archive. No issue to close.
+
+Degraded mode: if `gh` is unavailable when writing the marker, leave
+`auto-fix(LOCAL-<uuid>)`; a reconciliation pass upgrades it to a real
+`auto-fix(N)` when the PR is opened.
+
+**L2/L3 (band-aid + design-debt):**
+1. Open `design-debt` issue → get `N`. Body = full Fix Report + the
+   long-form *design* context (what makes this L2/L3; the openspec stub
+   link).
+2. Write `auto-fix(N)` markers (N = issue number); open PR referencing
+   `N`. PR body has the Fix Report (same shape as L0/L1).
+3. On merge: **issue stays open** (`design-debt` label). It's the backlog
+   item the human reviews. Only the PR closes.
 4. **Consolidation:** when a refactor promotes band-aids to permanent
    design, it deletes the marked regions + footnotes and the refactor
-   PR/openspec cites `supersedes auto-fix N, M, …`; the issues become the
-   audit trail of what the refactor subsumed.
+   PR/openspec cites `supersedes auto-fix N, M, …`; the design-debt
+   issues become the audit trail of what the refactor subsumed.
 
-Degraded mode: if `gh` is unavailable at fix time, use
-`auto-fix(LOCAL-<uuid>)`; a reconciliation pass upgrades it to a real `N`.
+**`Closes` keyword — per-issue line.** A bare `Closes #a #b #c` only
+auto-closes the *first* number — GitHub limitation, not auto-cube's.
+Use one closing line per issue: `Closes #174\nCloses #175\n…`. (L0/L1
+PR-only flow doesn't need closing keywords at all.)
 
-## 6. Rot detection — two tiers
+## 6. Multi-PR working substrate (integration worktree)
+
+As the open-PR queue grows, auto-cube needs a place where **all
+in-flight changes co-exist** — so a new fix is developed against the
+realistic future state of `dev`, not against a stale snapshot. The
+methodology mandates the substrate; the agent maintains it.
+
+**Rule: every PR branches from `dev` directly (no stacked PRs).** Each
+PR stays independently reviewable, shippable, and mergeable in any
+order. Stacking couples review order to dependency order and
+multiplies rebase churn on every base-branch merge — we hit this with
+small PR queues already; it does not scale.
+
+**Integration worktree** (local-only, never pushed, regenerable):
+
+```bash
+# pseudo-code: rebuild on demand and after every base-branch merge
+git fetch origin
+git checkout -B local/integration origin/dev
+for pr in $(open_prs_by_auto_cube):
+    git merge --no-ff origin/<pr_head_ref>     # if conflicts: abort,
+                                                # flag the pair, continue
+```
+
+- **New auto-cube work** happens on a fresh branch off `origin/dev`
+  (clean PR-shaped diff). `make test`, `make lint`, and smokes run in
+  **integration** to validate that the new change co-exists with the
+  rest of the in-flight bag.
+- **Conflict in integration = early warning.** If PR-A and PR-B can't
+  both apply, auto-cube either (a) auto-rebases the offender for
+  mechanical conflicts (footnote merges, import-order diffs — same
+  decision table the `pr-cleanup` skill uses today), or (b) surfaces
+  the incompatibility to the human with concrete file ranges + an
+  `Incompatible-with: #N` note added to both PRs' Fix Reports.
+- **One venv, all changes live.** The integration worktree is also where
+  the editable install lives — solves the "every removed worktree breaks
+  another venv's editable ref" loose-end class.
+- **Cross-repo** (cube-standard ↔ cube-harness): the same pattern applies
+  end-to-end via the existing `Depends-on:` declaration in PR bodies.
+
+## 7. Rot detection — two tiers
 
 **Tier 1 — deterministic lint (`scripts/auto_fix_lint.py`, CI):**
 
 - markers balanced; no nesting/boundary mismatch; close-after-open
 - every inline `N` has a footnote stanza and vice-versa (no orphans)
-- `N` unique; footnote machine-line schema valid; issue `N` exists with
-  the right open/closed + label state
+- `N` unique within the repo; footnote machine-line schema valid;
+  `repo#N` resolves on GitHub with the right kind+state (PR vs issue,
+  open vs closed) consistent with the marker's anchor
 - **content-hash drift**: hash of the code **between** the markers —
   *excluding* the `# auto-fix(N)` / `# /auto-fix(N)` lines themselves,
-  whitespace-normalized — vs the footnote's `hash=`; mismatch ⇒ protected
-  code moved. Re-indenting/formatting a marker never trips drift.
+  whitespace-normalized — vs the footnote's `hash=`; mismatch ⇒
+  protected code moved. Re-indenting/formatting a marker never trips
+  drift.
 
 **Tier 2 — semantic (fix-audit / `/cube-review`, advisory):** is the
 changed block still correct / still needed / now subsumed? Lint flags;
@@ -144,12 +231,21 @@ Hash drift is **not** a hard CI fail — that makes auto-fix blocks
 radioactive and people delete markers to go green. The failure condition
 is *unacknowledged* drift. Resolve by either: (a) editor updates the
 footnote + re-hash (acknowledges they preserved the fix), (b) route to
-fix-audit, or (c) remove the marker **with a closing note on issue `N`**.
-CI flags; a human/agent must acknowledge.
+fix-audit, or (c) remove the marker **with a closing note on the
+anchor** (PR or design-debt issue). CI flags; a human/agent must
+acknowledge.
 
-## 7. Accretion → refactor
+## 8. Accretion → refactor
 
 Density is now exact: `grep -c 'auto-fix(' <area>`. When an area crosses
-the band-aid threshold (≥3), the PI **must** emit an openspec refactor
-proposal instead of patch N+1. Patch accretion is a design signal, not a
-steady state.
+the band-aid threshold (≥3 distinct anchors), auto-cube **must** emit an
+openspec refactor proposal instead of patch N+1. Patch accretion is a
+design signal, not a steady state.
+
+## 9. Human-authorized merge (clarification)
+
+auto-cube's responsibility ends at **green PR + Fix Report**. Merging
+is a human action. The spec does not authorize auto-merge; a future
+auto-cube run must not infer authorization from a clean Fix Report
+alone. The integration worktree (§6) gives the human a fully-resolved
+local substrate before approval; that's the substrate, not the trigger.
