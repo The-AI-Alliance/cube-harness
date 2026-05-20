@@ -449,9 +449,10 @@ def test_max_steps_terminates_with_forced_eval(tmp_dir: Path) -> None:
     assert final.reward == 1.0  # from the forced evaluate call (DebugCubeTask returns 1.0)
     assert _archive_count(tmp_dir, traj_id) == 0  # no retries
 
-    # The aggregated trajectory got a real reward, not 0.0.
+    # The aggregated trajectory key is present; steps are stripped from the driver
+    # after print_stats — load from disk to verify the reward.
     assert traj_id in result.trajectories
-    assert result.trajectories[traj_id].last_env_step().reward == 1.0
+    assert storage.load_trajectory(traj_id).last_env_step().reward == 1.0
 
     # MAX_STEPS_REACHED is not retriable: a fresh resume returns nothing.
     exp.resume = True

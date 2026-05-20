@@ -312,6 +312,8 @@ def _run_with_ray_impl(
                 exp_status_path=exp_status_path,
             )
             exp.print_stats(results)
+            for traj in results.trajectories.values():
+                traj.steps.clear()
             return results
         finally:
             ray.shutdown()
@@ -611,4 +613,8 @@ def _run_sequentially_impl(
             failed=len(results.failures),
         )
         exp.print_stats(results)
+        # Match the Ray path: drop step lists from the in-memory result. Steps
+        # are already on disk; reload via storage.load_trajectory() if needed.
+        for traj in results.trajectories.values():
+            traj.steps.clear()
         return results

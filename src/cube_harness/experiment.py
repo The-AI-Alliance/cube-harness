@@ -51,6 +51,16 @@ def make_experiment_output_dir(
 
 
 class ExpResult(TypedBaseModel):
+    """Aggregate result of a runner invocation.
+
+    `trajectories[traj_id].steps` is **emptied** by the runner after the
+    experiment-level stats are printed — the full step data is on disk and
+    keeping it in driver memory caused ~20 GB of accumulation on image-heavy
+    benchmarks (OSWorld). To inspect step content from a recipe, reload via
+    `FileStorage(output_dir).load_trajectory(traj_id)`. `summary_stats`,
+    `reward_info`, `metadata`, and timing fields remain populated.
+    """
+
     exp_id: str
     tasks_num: int
     config: dict = Field(default_factory=dict)
