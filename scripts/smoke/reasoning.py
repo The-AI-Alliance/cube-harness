@@ -17,6 +17,10 @@ behaves end-to-end against live providers:
   6. Tool-use round-trip: an assistant turn's thinking_blocks (with signature)
      are preserved through Prompt._coerce_messages and accepted back by the API
      on the follow-up call.
+  7. Thinking cadence (Anthropic-only, auto-fix(412)): three modes —
+     off / once / always — distinguished by per-turn reasoning_tokens on a
+     two-turn tool-use loop. Asserts the (turn0, turn1) signature:
+     off=(0,0), once=(>0,0), always=(>0,>0).
 
 Auto-skips providers whose API keys are not set. Costs ~$0.05-$0.10 per provider.
 
@@ -514,6 +518,86 @@ def check_tool_use_roundtrip(provider: Provider) -> CheckResult:
     )
 
 
+def _cadence_two_turn(provider: Provider, *, reasoning_effort: str | None, interleaved: bool) -> tuple[int, int]:
+    """One mode of the cadence probe — return (turn0_reasoning_tokens, turn1_reasoning_tokens).
+
+    Pure tool-result continuation, mirroring how Genny actually drives a
+    multi-step tool loop: turn 1's prompt ends with the ``tool`` message,
+    with **no trailing user message**. That's the position where the
+    interleaved-thinking gate engages — a new user message after the
+    tool_result would let Anthropic reopen the turn (and emit thinking)
+    regardless of the beta, defeating the probe.
+    """
+    common = {
+        "model_name": provider.model,
+        "temperature": 1.0,
+        "max_completion_tokens": 2048,
+        "tool_choice": "auto",
+    }
+    if reasoning_effort is not None:
+        common["reasoning_effort"] = reasoning_effort
+        common["interleaved_thinking"] = interleaved
+    user_msg = (
+        "Use the `note` tool to record a brief observation, then continue with a "
+        f"one-sentence final answer to: {REASONING_QUESTION}"
+    )
+    cfg = LLMConfig(**common)
+    resp1 = cfg.make()(Prompt(messages=[{"role": "user", "content": user_msg}], tools=[NOTE_TOOL]))
+    t0 = resp1.usage.reasoning_tokens
+    if not resp1.message.tool_calls:
+        # Can't probe turn 1 without a tool_call to feed back; treat as ambiguous.
+        return (t0, 0)
+    tc = resp1.message.tool_calls[0]
+    prompt2 = Prompt(
+        messages=[
+            {"role": "user", "content": user_msg},
+            resp1.message,
+            {"role": "tool", "tool_call_id": tc.id, "content": "noted"},
+        ],
+        tools=[NOTE_TOOL],
+    )
+    resp2 = cfg.make()(prompt2)
+    return (t0, resp2.usage.reasoning_tokens)
+
+
+def check_thinking_cadence(provider: Provider) -> CheckResult:
+    """Perceive the three thinking cadences end-to-end: off / once / always.
+
+    Each mode runs the same two-turn tool-use loop; we record reasoning_tokens
+    for turn 0 and turn 1. The signature `(t0, t1)` distinguishes the modes:
+
+      off    -> (0, 0)         — reasoning_effort=None
+      once   -> (>0, 0)        — reasoning_effort set, interleaved_thinking=False (provider default)
+      always -> (>0, >0)       — reasoning_effort set, interleaved_thinking=True (auto-fix(412) beta)
+
+    Anthropic-only: OpenAI/Azure don't expose this cadence distinction
+    (gpt-5 reasoning is server-managed), so the check is N/A there.
+    """
+    if provider.name != "anthropic":
+        return CheckResult("thinking cadence (off/once/always)", True, "N/A — no cadence flag for this provider")
+
+    off = _cadence_two_turn(provider, reasoning_effort=None, interleaved=False)
+    once = _cadence_two_turn(provider, reasoning_effort="low", interleaved=False)
+    always = _cadence_two_turn(provider, reasoning_effort="low", interleaved=True)
+    summary = f"off={off} once={once} always={always}"
+
+    if off != (0, 0):
+        return CheckResult("thinking cadence (off/once/always)", False, f"off-mode emitted reasoning tokens: {summary}")
+    if once[0] <= 0 or once[1] != 0:
+        return CheckResult(
+            "thinking cadence (off/once/always)",
+            False,
+            f"once-mode should be (>0, 0) — saw {once}. {summary}",
+        )
+    if always[0] <= 0 or always[1] <= 0:
+        return CheckResult(
+            "thinking cadence (off/once/always)",
+            False,
+            f"always-mode should be (>0, >0) — interleaved beta not engaging? {summary}",
+        )
+    return CheckResult("thinking cadence (off/once/always)", True, summary)
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -549,6 +633,7 @@ def run_provider(provider: Provider) -> ProviderResults:
         check_reasoning_tokens(provider, captured),
         *([check_cache_works(provider)] if provider.supports_cache_test else []),
         check_tool_use_roundtrip(provider),
+        check_thinking_cadence(provider),
     ):
         _emit(check)
         out.results.append(check)
