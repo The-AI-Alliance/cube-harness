@@ -19,6 +19,11 @@ build-backend = "uv_build"
 [tool.uv-build]
 include = ["src/miniwob_cube/task_metadata.json"]
 
+[tool.uv.sources]
+# cube-browser-tool 0.3.0 lives on cube-standard's dev branch
+# (cube-tools/cube-browser-tool subdirectory); PyPI only has <=0.2.0.
+cube-browser-tool = { git = "https://github.com/The-AI-Alliance/cube-standard", subdirectory = "cube-tools/cube-browser-tool" }
+
 [tool.ruff]
 fix = true
 line-length = 120
