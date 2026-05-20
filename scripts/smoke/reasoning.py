@@ -521,8 +521,12 @@ def check_tool_use_roundtrip(provider: Provider) -> CheckResult:
 def _cadence_two_turn(provider: Provider, *, reasoning_effort: str | None, interleaved: bool) -> tuple[int, int]:
     """One mode of the cadence probe — return (turn0_reasoning_tokens, turn1_reasoning_tokens).
 
-    Two turns of a tool-use loop on the same prompt the round-trip check uses, so the
-    only thing varying across calls is the LLMConfig knobs.
+    Pure tool-result continuation, mirroring how Genny actually drives a
+    multi-step tool loop: turn 1's prompt ends with the ``tool`` message,
+    with **no trailing user message**. That's the position where the
+    interleaved-thinking gate engages — a new user message after the
+    tool_result would let Anthropic reopen the turn (and emit thinking)
+    regardless of the beta, defeating the probe.
     """
     common = {
         "model_name": provider.model,
@@ -534,13 +538,14 @@ def _cadence_two_turn(provider: Provider, *, reasoning_effort: str | None, inter
         common["reasoning_effort"] = reasoning_effort
         common["interleaved_thinking"] = interleaved
     user_msg = (
-        f"Use the `note` tool to record one observation, then I'll ask a follow-up. Question: {REASONING_QUESTION}"
+        "Use the `note` tool to record a brief observation, then continue with a "
+        f"one-sentence final answer to: {REASONING_QUESTION}"
     )
     cfg = LLMConfig(**common)
     resp1 = cfg.make()(Prompt(messages=[{"role": "user", "content": user_msg}], tools=[NOTE_TOOL]))
     t0 = resp1.usage.reasoning_tokens
     if not resp1.message.tool_calls:
-        # Can't probe turn 1 without a tool_call to feed back; treat as ambiguous (0, 0).
+        # Can't probe turn 1 without a tool_call to feed back; treat as ambiguous.
         return (t0, 0)
     tc = resp1.message.tool_calls[0]
     prompt2 = Prompt(
@@ -548,7 +553,6 @@ def _cadence_two_turn(provider: Provider, *, reasoning_effort: str | None, inter
             {"role": "user", "content": user_msg},
             resp1.message,
             {"role": "tool", "tool_call_id": tc.id, "content": "noted"},
-            {"role": "user", "content": "Now reflect: in one short sentence, restate what you noted."},
         ],
         tools=[NOTE_TOOL],
     )
