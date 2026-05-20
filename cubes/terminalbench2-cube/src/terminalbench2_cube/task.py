@@ -89,16 +89,17 @@ class TerminalBench2Task(Task[TerminalBench2TaskMetadata, ContainerTerminalTool]
             # auto-detect committer identity without explicit config.
             # Best-effort: tbench2 task images don't uniformly ship git (e.g.
             # nginx-request-logging, sqlite-with-gcov, configure-git-webserver
-            # don't). `command -v git` gates the chain, `|| true` keeps the
-            # relocate-fallback's overall exit clean even when git is absent.
-            # Writable-/app paths (daytona, local) short-circuit before this
-            # runs; this only matters for non-root infras (toolkit).
+            # don't). Outer subshell so `|| true` neutralises ONLY the git
+            # chain — the `&&` from relocate_if_readonly's `cp -a ... && X`
+            # composition still propagates a cp failure (auto-fix(176)'s
+            # invariant). Writable-/app paths (daytona, local) short-circuit
+            # before this runs; this only matters for non-root infras (toolkit).
             extra_setup=(
-                "( command -v git >/dev/null 2>&1 && "
+                "( ( command -v git >/dev/null 2>&1 && "
                 "git config --global --add safe.directory '*' && "
                 "git config --global user.email 'cube-harness@example.com' && "
                 "git config --global user.name 'Cube Harness' "
-                ") || true"
+                ") || true )"
             ),
         )
         # /auto-fix(418)

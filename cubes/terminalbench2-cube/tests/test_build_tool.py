@@ -66,3 +66,32 @@ def test_extra_setup_runs_clean_when_git_absent(tmp_path) -> None:  # type: igno
     assert result.returncode == 0, (
         f"extra_setup must exit 0 when git is absent. got {result.returncode}, stderr={result.stderr!r}"
     )
+
+
+def test_cp_failure_is_NOT_masked_by_extra_setup() -> None:
+    """The relocate-fallback's `cp -a … && <extra_setup>` must propagate a cp
+    failure. auto-fix(176) raises ContainerExecError on cp failure; this PR's
+    `|| true` must apply ONLY to the git chain, never to the cp step.
+
+    Pre-F8-fix regression: `cp_fail && (… || true)` → the outer `||` neutralised
+    the whole chain, so `relocate_if_readonly` returned a working_dir that
+    didn't exist. Surfaced as `prove-plus-comm` task health-check failures
+    on daytona (image with read-only /app + uncopyable file).
+    """
+    snippet = _extract_extra_setup()
+    # Simulate the full relocate command shape: `cp_failure && <extra_setup>`.
+    # `false` stands in for a failing `cp`. The whole shell expression must
+    # propagate the non-zero from `false`, not be masked by `|| true` inside
+    # extra_setup.
+    full_cmd = f"false && {snippet}"
+    result = subprocess.run(
+        ["sh", "-c", full_cmd],
+        capture_output=True,
+        text=True,
+        env={**os.environ},
+        check=False,
+    )
+    assert result.returncode != 0, (
+        "extra_setup must NOT mask a cp failure when chained via "
+        f"`cp && <extra_setup>`. got returncode={result.returncode}, stderr={result.stderr!r}"
+    )
