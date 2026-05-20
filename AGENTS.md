@@ -93,7 +93,9 @@ markers + a one-line machine-readable footnote at module bottom (`N` = PR number
 for L0/L1, design-debt issue number for L2/L3). When a diff touches an `auto-fix`
 region or its footnote, treat it as a possibly-rotten marker (review rule AF-001).
 Methodology (Fix Report, L0–L3 tiers, rot lint):
-[`openspec/specs/auto-fix/spec.md`](openspec/specs/auto-fix/spec.md).
+[`openspec/specs/auto-fix/spec.md`](openspec/specs/auto-fix/spec.md). Human
+entry point for running the loop:
+[`.claude/skills/auto-cube/README.md`](.claude/skills/auto-cube/README.md).
 
 ## Workflow for code changes
 

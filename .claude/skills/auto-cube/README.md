@@ -8,6 +8,8 @@ ships Fix Report PRs against the auto-fix methodology. The agent-facing
 description of the loop is in [SKILL.md](SKILL.md); this README is the
 human entry point.
 
+![Auto-CUBE outer loop: dispatch → per-experiment Investigator on each trajectory → analysis → interventions](diagram.png)
+
 Companion to [`/new-cube`](https://github.com/The-AI-Alliance/cube-standard/tree/main/.claude/skills/new-cube)
 (scaffold a cube from scratch) and [`/review-cube`](https://github.com/The-AI-Alliance/cube-standard/tree/main/.claude/skills/review-cube)
 (audit against invariants before submission). The workflow is
