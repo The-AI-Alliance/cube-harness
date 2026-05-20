@@ -304,16 +304,33 @@ class TerminalBench2Task(Task[TerminalBench2TaskMetadata, ContainerTerminalTool]
             timeout=15,
         )
         if "YES" in assets_probe:
-            logger.info("Using mounted /opt/cube/uv for uv install")
-            self.tool.bash(
-                "export HOME=/tmp/fakehome && "
-                "mkdir -p $HOME/.local/bin && "
-                "cp /opt/cube/uv /opt/cube/uvx $HOME/.local/bin/ && "
-                "chmod +x $HOME/.local/bin/uv $HOME/.local/bin/uvx && "
-                "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env",
-                timeout=30,
+            # auto-fix(420)↓
+            # Verify /opt/cube/uvx is new enough to handle test.sh's `uvx -w`
+            # (a.k.a. `--with`) syntax. Older cube_assets bundles (uv ≲0.4) fail
+            # the upstream test.sh with `uvx: error: unexpected argument '-w'`,
+            # silently producing reward=0 on tasks the agent solved correctly.
+            # When the probe fails we fall through to the pip-install path so a
+            # stale bundle in any user's cube_assets is self-healing.
+            version_probe = self.tool.bash(
+                "/opt/cube/uvx --help 2>&1 | grep -q -- ' --with ' && echo OK || echo OLD",
+                timeout=15,
             )
-            return
+            if "OK" in version_probe:
+                logger.info("Using mounted /opt/cube/uv for uv install (version supports --with)")
+                self.tool.bash(
+                    "export HOME=/tmp/fakehome && "
+                    "mkdir -p $HOME/.local/bin && "
+                    "cp /opt/cube/uv /opt/cube/uvx $HOME/.local/bin/ && "
+                    "chmod +x $HOME/.local/bin/uv $HOME/.local/bin/uvx && "
+                    "printf 'export PATH=\"$HOME/.local/bin:$PATH\"\\n' > $HOME/.local/bin/env",
+                    timeout=30,
+                )
+                return
+            logger.warning(
+                "/opt/cube/uv missing --with flag; falling through to pip-install path "
+                "(rebuild cube_assets via cube-infra-toolkit/scripts/publish-cube-assets.sh)"
+            )
+            # /auto-fix(420)
 
         # Some minimal images (e.g. bare LaTeX) ship without python3.
         # Try root apt-get first (works on Docker/local backends).
@@ -467,3 +484,7 @@ class TerminalBench2TaskConfig(TaskConfig[TerminalBench2TaskMetadata]):
             runtime_context=runtime_context,
             oracle_mode=self.oracle_mode,
         )
+
+
+# === auto-fix notes ===  (spec: openspec/specs/auto-fix/spec.md)
+# auto-fix-note(420) {class=L1 anchor=PR#420 hash=PENDING ctx=toolkit/eai-yul101/cube_assets:stale-uv<0.4/tbench2:fix-git+nginx-request-logging+sqlite-with-gcov/cube-harness@1e67efdb}
