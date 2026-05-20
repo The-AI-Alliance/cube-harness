@@ -209,11 +209,26 @@ for pr in $(open_prs_by_auto_cube):
   decision table the `pr-cleanup` skill uses today), or (b) surfaces
   the incompatibility to the human with concrete file ranges + an
   `Incompatible-with: #N` note added to both PRs' Fix Reports.
-- **One venv, all changes live.** The integration worktree is also where
-  the editable install lives — solves the "every removed worktree breaks
-  another venv's editable ref" loose-end class.
+- **One venv per integration worktree.** The worktree owns its own
+  `.venv` (`make install` at session start). Sharing a venv across
+  worktrees creates a race on the editable-install pointer; per-worktree
+  isolation is cheap and rules out the whole class.
 - **Cross-repo** (cube-standard ↔ cube-harness): the same pattern applies
   end-to-end via the existing `Depends-on:` declaration in PR bodies.
+
+### Parallel auto-cube sessions
+
+The integration worktree is **per session**, not machine-wide: multiple
+auto-cube sessions can run concurrently on one machine, each owning its
+worktree + `.venv` + journal subdir
+(`~/cube_auto_cube_journal/<session-slug>/`). Cross-session isolation is
+preserved by picking **orthogonal scopes** — different cubes by default
+(one session on tbench2, one on swe-bench, etc.). Sessions may still file
+fixes against shared layers (infra, tool, LLM wrapper); those PRs land in
+the same queue and conflicts are resolved **at merge time**, not
+prevented in real-time. The `Incompatible-with: #N` note on each PR is
+the cross-session signal the human (or the merge step) uses to sequence
+them.
 
 ## 7. Rot detection — two tiers
 
