@@ -33,8 +33,19 @@ synthesize → conclude → next hypothesis.
 4. **Conclude & iterate.** Write the round's conclusion. If a root cause is
    confirmed, decide the fix. Start round `N+1` with the next hypothesis.
 
-5. **Session end.** `session.md` carries the narrative: what was learned,
-   what was fixed (commits), what's still open.
+5. **Session end** (most bugs in scope found, or strong diminishing
+   returns). Write **`<session-slug>/REPORT.md`** from
+   `templates/report.md` — the single human-readable rollup someone reads
+   top-to-bottom to understand the whole session: scope, the arc across
+   rounds, findings ledger with dispositions, shipped vs open PRs, the
+   consolidated design signal, key learnings, cost. `session.md` stays
+   the live scope+tracker; `REPORT.md` is the durable, compaction-proof
+   final summary.
+
+A session = `session.md` (scope/target + round index, set at start) ·
+`round_<N>/notes.md` (one per round) · `REPORT.md` (final summary).
+(Old-era single-`.md` sessions are already their own report — no
+separate file.)
 
 ## Intervention discipline
 
@@ -73,5 +84,6 @@ journal entry that explains *why*.
 ## Templates
 
 `templates/session.md`, `templates/notes.md`, `templates/exp_config.py`,
-`templates/fix_report.md`. Copy, fill, evolve. Refine these templates as
-the methodology matures — this skill is expected to change.
+`templates/fix_report.md`, `templates/report.md`. Copy, fill, evolve.
+Refine these templates as the methodology matures — this skill is
+expected to change.
