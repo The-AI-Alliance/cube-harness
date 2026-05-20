@@ -1,7 +1,7 @@
 """Cross-experiment analysis: joint CSV across a sweep, cross-investigator agreement.
 
 These runners ship in this PR (per design feedback) — not just the schemas.
-auto-cube dispatches them after a sweep finishes to get one row per
+Auto-CUBE dispatches them after a sweep finishes to get one row per
 `(experiment, episode)` ready for grep / pandas.
 """
 

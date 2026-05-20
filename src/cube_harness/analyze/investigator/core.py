@@ -69,7 +69,7 @@ class InvestigationConfig(TypedBaseModel):
     Behaviour: `recipe`, `driver`, `selector`, `audit`, `n_seeds`.
     Selection: `ids`, `failures_only`, `overwrite`. The default is "all
     eligible (uninvestigated) episodes" — random sampling is intentionally NOT a
-    field; if you need a subset, pass `ids` explicitly (auto-cube
+    field; if you need a subset, pass `ids` explicitly (Auto-CUBE
     builds the list in Python based on whatever logic it wants).
     Execution: `n_parallel`, `verbose`, `trace_mode`.
     Post-batch synthesis is always on; `synthesis_model` and `journal_dir`
@@ -95,7 +95,7 @@ class InvestigationConfig(TypedBaseModel):
     # logged + skipped and the batch continues. See auto-fix(409).
     episode_timeout_s: float = 1800.0
 
-    # Selection — explicit only. No sampling / no seed; auto-cube
+    # Selection — explicit only. No sampling / no seed; Auto-CUBE
     # builds `ids` lists programmatically when it needs a subset.
     ids: list[str] | None = None
     failures_only: bool = False

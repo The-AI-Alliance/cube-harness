@@ -9,7 +9,7 @@ Two subcommands:
 to `run` so existing scripts keep working.
 
 Defaults are aggressive: synthesis always runs, journaling always happens.
-Programmatic callers (auto-cube, recipe scripts) can disable either by
+Programmatic callers (Auto-CUBE, recipe scripts) can disable either by
 constructing `InvestigationConfig` directly with `synthesis_model=""` or
 `journal_dir=Path(os.devnull)`. The CLI is for the common case.
 """

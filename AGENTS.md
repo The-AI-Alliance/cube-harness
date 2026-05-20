@@ -88,7 +88,7 @@ is governed by cube-standard's specs. Don't subclass those here — consume them
 
 PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md)), which audits changes against these guidelines. Write PRs as if a reviewer will check each principle above against the diff.
 
-**Auto-fix provenance.** auto-cube-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)`
+**Auto-fix provenance.** Auto-CUBE-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)`
 markers + a one-line machine-readable footnote at module bottom (`N` = PR number
 for L0/L1, design-debt issue number for L2/L3). When a diff touches an `auto-fix`
 region or its footnote, treat it as a possibly-rotten marker (review rule AF-001).
@@ -198,7 +198,7 @@ catalog. Each subdirectory is one use case:
   episodes.
 
 Each use_case has a `recipe.py` (Pydantic `InvestigatorRecipe`) and a `SKILL.md`
-(skill description for the auto-cube orchestrator that dispatches it).
+(skill description for the Auto-CUBE orchestrator that dispatches it).
 `scripts/sync_investigator_skills.py` symlinks SKILL.md files into
 `.claude/skills/investigator-<name>` so Claude Code picks them up.
 

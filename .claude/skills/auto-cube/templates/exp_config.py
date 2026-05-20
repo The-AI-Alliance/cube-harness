@@ -1,4 +1,4 @@
-"""Round <N> experiment config — auto-cube session.
+"""Round <N> experiment config — Auto-CUBE session.
 
 Copied from a canonical recipe, edited for this round. This file IS the
 config. NO `# /// script` header on purpose: run it with the repo venv,

@@ -12,7 +12,7 @@ temp/
 # Claude Code worktrees (created by Claude during development sessions)
 .claude/worktrees/
 
-# auto-cube experiment outputs (large, not for VCS)
+# Auto-CUBE experiment outputs (large, not for VCS)
 auto_cube/results/
 
 # Personal experiment recipes (shared recipes are committed without the custom_ prefix)

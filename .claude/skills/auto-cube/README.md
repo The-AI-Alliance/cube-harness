@@ -1,7 +1,7 @@
-# Using auto-cube
+# Using Auto-CUBE
 
-`auto-cube` is the **iterate-and-fix outer loop**: you start a session
-with a target (a cube + the thing to understand or fix), auto-cube runs
+**Auto-CUBE** is the iterate-and-fix outer loop: you start a session
+with a target (a cube + the thing to understand or fix), Auto-CUBE runs
 experiments under varying scaffolds and models, dispatches the
 **Investigator** sub-agent per trajectory, classifies failures, and
 ships Fix Report PRs against the auto-fix methodology. The agent-facing
@@ -10,12 +10,12 @@ human entry point.
 
 Companion to [`/new-cube`](https://github.com/The-AI-Alliance/cube-standard/tree/main/.claude/skills/new-cube)
 (scaffold a cube from scratch) and [`/review-cube`](https://github.com/The-AI-Alliance/cube-standard/tree/main/.claude/skills/review-cube)
-(audit against invariants before submission). The workflow is:
-**new → review → auto-cube**. Once a cube passes `cube test`, auto-cube
-is what finds everything that only surfaces when real LLMs touch the
-benchmark.
+(audit against invariants before submission). The workflow is
+**scaffold → audit → iterate**. Once a cube passes `cube test`,
+Auto-CUBE is what finds everything that only surfaces when real LLMs
+touch the benchmark.
 
-## When to use auto-cube
+## When to use Auto-CUBE
 
 - A cube passes `cube test` (debug suite green) but fails for real LLMs;
   you need to know whether it's the scaffold, the infra, the model, or
@@ -27,7 +27,7 @@ benchmark.
 - You want a multi-day diagnostic run with paper-trail provenance:
   `REPORT.md` + Fix Report PRs + design-debt issues.
 
-Don't use auto-cube for a single one-shot fix, a quick test of one
+Don't use Auto-CUBE for a single one-shot fix, a quick test of one
 model on one task, or anything that finishes in under an hour of focused
 human work — the methodology overhead doesn't pay off at that scale.
 
@@ -50,10 +50,10 @@ directory:
 ## Prompt template
 
 Drop this into a fresh Claude Code session (cube-harness as cwd; the
-auto-cube skill auto-loads from this directory). Fill the angle-bracket
+Auto-CUBE skill auto-loads from this directory). Fill the angle-bracket
 slots:
 
-> Use the auto-cube skill to **<objective>**: get `<cube-name>` working
+> Use the Auto-CUBE skill to **<objective>**: get `<cube-name>` working
 > end-to-end on **<infra-A>** and **<infra-B>**. Start a session in
 > `~/cube_auto_cube_journal/` with slug `<cube>-<focus>-r0`. Run small
 > rounds (3–5 tasks per round) sweeping `<model-A>` × `<model-B>`
@@ -97,7 +97,7 @@ each); cap them if you're sweeping wide.
 
 ## Parallel sessions
 
-You can run two or more auto-cube sessions on one machine. Pick
+You can run two or more Auto-CUBE sessions on one machine. Pick
 **orthogonal cubes** (one tbench2, one swe-bench, etc.) so PRs naturally
 land in different paths. Each session = its own worktree + `.venv` +
 journal subdir. Cross-session conflicts on shared layers (infra, tool,
@@ -112,7 +112,7 @@ real-time. Full pattern in
   — what fixes look like, depth taxonomy (L0–L3), provenance
 - [SKILL.md](SKILL.md) — the agent's description of the loop
 - [Investigator use cases](../../../src/cube_harness/analyze/investigator/use_cases/)
-  — the per-trajectory recipes auto-cube dispatches
+  — the per-trajectory recipes Auto-CUBE dispatches
 - [`/new-cube`](https://github.com/The-AI-Alliance/cube-standard/tree/main/.claude/skills/new-cube)
   — scaffold a new cube
 - [`/review-cube`](https://github.com/The-AI-Alliance/cube-standard/tree/main/.claude/skills/review-cube)
