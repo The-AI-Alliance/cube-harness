@@ -88,10 +88,11 @@ is governed by cube-standard's specs. Don't subclass those here — consume them
 
 PRs are reviewed with `/code-review` ([plugin docs](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md)), which audits changes against these guidelines. Write PRs as if a reviewer will check each principle above against the diff.
 
-**Auto-fix provenance.** PI-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)`
-markers + a context-stamped footnote at module bottom (`N` = GitHub issue). When a
-diff touches an `auto-fix` region or its footnote, treat it as a possibly-rotten
-marker (review rule AF-001). Methodology (Dossier, L0–L3 tiers, rot lint):
+**Auto-fix provenance.** auto-cube-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)`
+markers + a one-line machine-readable footnote at module bottom (`N` = PR number
+for L0/L1, design-debt issue number for L2/L3). When a diff touches an `auto-fix`
+region or its footnote, treat it as a possibly-rotten marker (review rule AF-001).
+Methodology (Fix Report, L0–L3 tiers, rot lint):
 [`openspec/specs/auto-fix/spec.md`](openspec/specs/auto-fix/spec.md).
 
 ## Workflow for code changes
@@ -194,13 +195,13 @@ catalog. Each subdirectory is one use case:
 - **`profiling`** — narrower taxonomy aimed at scaffold-level inefficiency.
 - **`agent_scaffolding`** — deep loop-pathology diagnosis.
 - **`hinter`** — extract `task_hints[task_id]` candidates from failed
-  episodes (replaces the old `meta_agent/` slash-command flow).
+  episodes.
 
 Each use_case has a `recipe.py` (Pydantic `InvestigatorRecipe`) and a `SKILL.md`
-(meta-agent skill description). `scripts/sync_investigator_skills.py` symlinks
-SKILL.md files into `.claude/skills/investigator-<name>` so Claude Code picks
-them up.
+(skill description for the auto-cube orchestrator that dispatches it).
+`scripts/sync_investigator_skills.py` symlinks SKILL.md files into
+`.claude/skills/investigator-<name>` so Claude Code picks them up.
 
 Per-batch synthesis (`meta_analysis.json` + `.md`) is mirrored into
-`~/cube_meta_agent_journal/<experiment>/` for cross-iteration narrative —
-the only artefact the investigator writes outside the experiment dir.
+`~/cube_auto_cube_journal/<experiment>/` for cross-iteration narrative —
+the only artefact the Investigator writes outside the experiment dir.

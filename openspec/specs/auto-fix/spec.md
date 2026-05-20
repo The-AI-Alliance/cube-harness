@@ -126,7 +126,7 @@ Fields:
   (infra/arch/model/cube-commit). Contextual to the bug: a docker-socket
   fix names backend/OS; a parsing fix names task/input-shape; a
   model-behaviour fix names model/task. Enough for a different-context
-  run to judge whether the fix generalises — not an exhaustive
+  run to assess whether the fix generalises — not an exhaustive
   environment dump.
 
 ## 5. Lifecycle (PR-only by default; issue only for design-debt)
@@ -232,7 +232,7 @@ for pr in $(open_prs_by_auto_cube):
 
 **Tier 2 — semantic (fix-audit / `/cube-review`, advisory):** is the
 changed block still correct / still needed / now subsumed? Lint flags;
-an agent judges. Lint never rules on semantics.
+an agent decides. Lint never rules on semantics.
 
 ### Acknowledgement, not prevention
 

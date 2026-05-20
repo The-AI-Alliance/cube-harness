@@ -13,7 +13,7 @@ The structured payload is written as `<experiment_dir>/meta_analysis.json`;
 the prose body is written as `<experiment_dir>/meta_analysis.md`.
 
 When `journal_dir` is supplied, both files are also mirrored into
-`<journal_dir>/<experiment_basename>/` so the meta-agent's outer loop can
+`<journal_dir>/<experiment_basename>/` so auto-cube's outer loop can
 collect a running history of what it observed across iterations.
 
 Off-by-default for cheap repeat runs; the CLI's `--synthesize/--no-synthesize`
@@ -95,8 +95,8 @@ class MetaAnalysis(TypedBaseModel):
     """Cross-episode synthesis of an experiment's investigations.
 
     `markdown_summary` carries the LLM's human-readable prose; the rest is
-    structured for programmatic aggregation across experiments by the
-    meta-agent's outer loop.
+    structured for programmatic aggregation across experiments by
+    auto-cube's outer loop.
     """
 
     schema_version: int = META_ANALYSIS_SCHEMA_VERSION
@@ -486,9 +486,9 @@ def copy_to_journal(
 ) -> tuple[Path, Path]:
     """Mirror the synthesis into `<journal_dir>/<experiment_id>/`.
 
-    The meta-agent's slash command later reads this directory to accumulate
-    a running narrative across iterations. The investigator only deposits files;
-    the meta-agent owns the narrative log.
+    auto-cube later reads this directory to accumulate a running narrative
+    across iterations. The Investigator only deposits files; auto-cube owns
+    the narrative log.
     """
     out_dir = Path(journal_dir).expanduser() / experiment_id
     out_dir.mkdir(parents=True, exist_ok=True)

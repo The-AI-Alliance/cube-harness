@@ -9,7 +9,7 @@ Two subcommands:
 to `run` so existing scripts keep working.
 
 Defaults are aggressive: synthesis always runs, journaling always happens.
-Programmatic callers (meta-agent, recipe scripts) can disable either by
+Programmatic callers (auto-cube, recipe scripts) can disable either by
 constructing `InvestigationConfig` directly with `synthesis_model=""` or
 `journal_dir=Path(os.devnull)`. The CLI is for the common case.
 """
@@ -116,13 +116,13 @@ def run_cmd(
             "--journal-dir",
             help="Mirror meta_analysis.{json,md} into <journal-dir>/<experiment>/.",
         ),
-    ] = Path("~/cube_meta_agent_journal").expanduser(),
+    ] = Path("~/cube_auto_cube_journal").expanduser(),
     verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Stream tool calls + text to stderr.")] = False,
 ) -> None:
     """Batch-investigate episodes in an experiment directory.
 
     By default investigates every eligible (uninvestigated) episode, runs the post-batch
-    meta-analysis, and mirrors the synthesis into ~/cube_meta_agent_journal/.
+    meta-analysis, and mirrors the synthesis into ~/cube_auto_cube_journal/.
     """
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,

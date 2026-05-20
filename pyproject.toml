@@ -12,7 +12,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "cube-standard>=0.1.0rc8",
-    "cube-browser-playwright>=0.2.0",  # used by meta_agent/recipes/workarena_l1_full.py (PlaywrightSessionConfig)
+    "cube-browser-playwright>=0.2.0",  # used by cubes/workarena (PlaywrightSessionConfig)
     "pydantic~=2.0",
     "litellm~=1.80.8",
     "Pillow~=11.0",
