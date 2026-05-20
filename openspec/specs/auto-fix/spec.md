@@ -104,37 +104,36 @@ caring which kind.
 A marker delimits **one code region = one fix**, not one finding: a single
 consolidated change that resolves several findings is *one* `auto-fix(N)`.
 
-### Footnote (module bottom — durable anchor)
+### Footnote (module bottom — machine substrate, one line per fix)
 
 ```python
 # === auto-fix notes ===
 # auto-fix-note(345) {class=L1 anchor=PR#345 hash=ab12cd34 ctx=colima/arm64/gpt-5.4-mini/cube@285e0cc}
-#   symptoms:  <what was observed + the triggering context (see note)>
-#   invariant: <the rule that was being violated>
-#   why:       <why this fix, why this layer>
-#   tested:    <the regression test / how verified>
 ```
 
-Two sections per stanza: a **machine line** in `{...}` (lint may rewrite
-`hash`; never hand-edit) and **prose** (auto-cube/human authored; never
-auto-touched). The machine line's `anchor=` is `PR#N` (L0/L1) or
-`issue#N` (L2/L3) — explicit so readers don't have to infer.
+The footnote is **machine-readable provenance only** — what Tier-1 lint
+needs and what a different-context run scans to find related fixes.
+Prose rationale (symptoms, invariant, why, tested) lives in the PR or
+design-debt issue body; duplicating it in code creates a second source
+of truth that silently rots.
 
-`ctx=` is the deterministic machine-matchable minimum
-(infra/arch/model/cube-commit). `symptoms` records the **triggering
-context in prose** — the task/benchmark that surfaced the bug plus the
-env specifics (OS, infra backend, model, input shape, …) auto-cube
-**judges relevant to *this* bug**. Contextual, not a fixed checklist:
-a docker-socket bug names the backend/OS; a parsing bug names the task
-and input shape; a model-behaviour bug names the model and task. Enough
-for a different-context run to reason about whether the fix generalises
-— not an exhaustive environment dump.
+Fields:
+- `anchor=PR#N` (L0/L1) or `anchor=issue#N` (L2/L3) — explicit so
+  readers don't have to infer the kind.
+- `hash=` — content hash of the marked region; rewritten by lint on
+  acknowledged drift, never hand-edited.
+- `ctx=` — deterministic context fingerprint
+  (infra/arch/model/cube-commit). Contextual to the bug: a docker-socket
+  fix names backend/OS; a parsing fix names task/input-shape; a
+  model-behaviour fix names model/task. Enough for a different-context
+  run to judge whether the fix generalises — not an exhaustive
+  environment dump.
 
 ## 5. Lifecycle (PR-only by default; issue only for design-debt)
 
-The simplification vs v2: **L0/L1 do not file a tracking issue.** The PR
-*is* the tracking item — its number is durable, its body holds the Fix
-Report, the merged-PR record on GitHub *is* the archive.
+**L0/L1 do not file a tracking issue.** The PR *is* the tracking item —
+its number is durable, its body holds the Fix Report, the merged-PR
+record on GitHub *is* the archive.
 
 **L0/L1 (the common case):**
 1. Open PR with placeholder marker `auto-fix(PENDING)` and the Fix Report
@@ -178,6 +177,16 @@ PR stays independently reviewable, shippable, and mergeable in any
 order. Stacking couples review order to dependency order and
 multiplies rebase churn on every base-branch merge — we hit this with
 small PR queues already; it does not scale.
+
+**Exception (declared): stack when B's *committed source* needs A's
+new public surface.** The integration worktree gives B's test
+environment A's code, but B's branch still won't compile against `dev`
+if it imports A's new symbols. In that case B branches from A and
+writes `Stacked-on: PR#A` in its body. On A's merge, auto-cube rebases
+B onto `dev`. On A's close-without-merge, B is orphaned: rebase onto
+`dev` (may break) or close with a note on A. The `Stacked-on:`
+declaration is friction-by-design — when in doubt, don't stack;
+duplicate the small utility into B instead.
 
 **Integration worktree** (local-only, never pushed, regenerable):
 
@@ -237,12 +246,12 @@ acknowledge.
 
 ## 8. Accretion → refactor
 
-Density is now exact: `grep -c 'auto-fix(' <area>`. When an area crosses
+Density is exact: `grep -c 'auto-fix(' <area>`. When an area crosses
 the band-aid threshold (≥3 distinct anchors), auto-cube **must** emit an
 openspec refactor proposal instead of patch N+1. Patch accretion is a
 design signal, not a steady state.
 
-## 9. Human-authorized merge (clarification)
+## 9. Human-authorized merge
 
 auto-cube's responsibility ends at **green PR + Fix Report**. Merging
 is a human action. The spec does not authorize auto-merge; a future
