@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import cube
-from cube.benchmark import BenchmarkConfig
+from cube.benchmark import AbstractBenchmarkConfig
 from cube.core import TypedBaseModel
 from pydantic import Field
 
@@ -301,8 +301,8 @@ class BenchmarkSubset(TypedBaseModel):
     )
 
     @classmethod
-    def from_benchmark_config(cls, benchmark_config: BenchmarkConfig) -> "BenchmarkSubset":
-        """Derive BenchmarkSubset from a cube BenchmarkConfig object."""
+    def from_benchmark_config(cls, benchmark_config: AbstractBenchmarkConfig) -> "BenchmarkSubset":
+        """Derive BenchmarkSubset from a cube benchmark config (leaf or composite)."""
         name = benchmark_config.benchmark_metadata.name
         n_tasks = len(benchmark_config.task_metadata)
         return cls(name=name, n_tasks=n_tasks)
@@ -462,7 +462,7 @@ class ExperimentRecord(TypedBaseModel):
         exp_name: str,
         output_dir: Path,
         agent_config: Any,
-        benchmark_config: BenchmarkConfig,
+        benchmark_config: AbstractBenchmarkConfig,
         git_cwd: str | None = None,
     ) -> "ExperimentRecord":
         """Build ExperimentRecord from experiment parameters."""
