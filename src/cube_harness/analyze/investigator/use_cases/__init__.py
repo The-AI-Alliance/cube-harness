@@ -5,7 +5,7 @@ Each use case is a self-contained directory:
     use_cases/<name>/
     ├── __init__.py
     ├── recipe.py          # exports RECIPE: InvestigatorRecipe
-    ├── SKILL.md           # skill description for the auto-cube orchestrator
+    ├── SKILL.md           # skill description for the Auto-CUBE orchestrator
     └── scripts/           # optional helpers
 
 This module walks the subdirectories on import, imports each `recipe.py`'s

@@ -1,6 +1,6 @@
-# auto-cube
+# Auto-CUBE
 
-The **auto-cube** outer loop runs an iterative experiment program to
+The **Auto-CUBE** outer loop runs an iterative experiment program to
 understand and fix failures in the agent/cube stack. It owns the
 methodology; the per-use-case **Investigator** recipes
 (`analyze/investigator/use_cases/*` — `general_blame`, `profiling`,
@@ -58,7 +58,7 @@ Once the **root cause is confirmed**, the committed fix follows the
 [`openspec/specs/auto-fix/spec.md`](../../../openspec/specs/auto-fix/spec.md).
 In brief:
 
-- **Classify** L0–L3 (local-correct → layer → symptom-of-design → auto-cube /
+- **Classify** L0–L3 (local-correct → layer → symptom-of-design → Auto-CUBE /
   Investigator defect). Nothing blocks the loop: L2/L3 still ship a temp PR
   **and** open a kept-open `design-debt` issue + openspec stub.
 - **Fix Report** is the PR body (`templates/fix_report.md`): invariant in

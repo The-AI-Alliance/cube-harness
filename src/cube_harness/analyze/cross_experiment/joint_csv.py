@@ -7,7 +7,7 @@ writes one row per `(experiment, episode)` to
 `<sweep_dir>/joint_investigation_report.csv`.
 
 The output is intentionally flat — meant for grep, awk, pandas, and
-auto-cube's per-round notes. The original per-experiment files are not
+Auto-CUBE's per-round notes. The original per-experiment files are not
 modified.
 """
 

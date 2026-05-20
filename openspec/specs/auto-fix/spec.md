@@ -1,6 +1,6 @@
-# Auto-cube fix methodology & auto-fix provenance
+# Auto-CUBE fix methodology & auto-fix provenance
 
-Authoritative spec for fixes produced by the **auto-cube** autonomous loop
+Authoritative spec for fixes produced by the **Auto-CUBE** autonomous loop
 (the orchestrator that runs cube benchmarks, analyzes trajectories via the
 **Investigator**, and ships fixes as PRs). Goal: let a reviewer trust most
 patches *without* a deep contextual review, surface design rot instead of
@@ -9,13 +9,13 @@ output rate grows.
 
 Two distinct agent roles to keep straight:
 
-- **auto-cube** — outer loop: runs experiments, invokes Investigator per
+- **Auto-CUBE** — outer loop: runs experiments, invokes Investigator per
   trajectory, proposes fixes, opens PRs. This spec governs its outputs.
 - **Investigator** — inner sub-agent: takes one trajectory and produces a
   diagnostic report. Lives at `analyze/investigator/` (`ch-investigate`
   CLI). Distinct from the fix-authoring step.
 
-auto-cube has no live feedback channel to other users. A fix it ships can't
+Auto-CUBE has no live feedback channel to other users. A fix it ships can't
 be validated by "does this help other cubes?" — so it must carry its own
 generalization proof, an adversarial audit of that proof, and a durable,
 context-stamped provenance record so a future agent (or different-context
@@ -28,7 +28,7 @@ run) can see what was patched, why, and where it may not generalize.
 | **L0** local-correct | restores an invariant/symmetry that already exists elsewhere; no contract change | trust-by-default |
 | **L1** layer fix | correct but touches a shared layer/call site | trust if fix-audit clears blast-radius |
 | **L2** symptom-of-design | the bug is a symptom; the patch is a band-aid | ship temp PR **and** open a kept-open `design-debt` issue + openspec stub |
-| **L3** auto-cube / Investigator defect | the defect is in the methodology or analysis layer itself, not the cube | ship + flag; do not patch the cube |
+| **L3** Auto-CUBE / Investigator defect | the defect is in the methodology or analysis layer itself, not the cube | ship + flag; do not patch the cube |
 
 **Nothing blocks the loop.** L2/L3 still ship a temporary PR. The human's
 queue is the `design-debt` backlog, not individual patches.
@@ -161,13 +161,13 @@ Degraded mode: if `gh` is unavailable when writing the marker, leave
    issues become the audit trail of what the refactor subsumed.
 
 **`Closes` keyword — per-issue line.** A bare `Closes #a #b #c` only
-auto-closes the *first* number — GitHub limitation, not auto-cube's.
+auto-closes the *first* number — GitHub limitation, not Auto-CUBE's.
 Use one closing line per issue: `Closes #174\nCloses #175\n…`. (L0/L1
 PR-only flow doesn't need closing keywords at all.)
 
 ## 6. Multi-PR working substrate (integration worktree)
 
-As the open-PR queue grows, auto-cube needs a place where **all
+As the open-PR queue grows, Auto-CUBE needs a place where **all
 in-flight changes co-exist** — so a new fix is developed against the
 realistic future state of `dev`, not against a stale snapshot. The
 methodology mandates the substrate; the agent maintains it.
@@ -182,7 +182,7 @@ small PR queues already; it does not scale.
 new public surface.** The integration worktree gives B's test
 environment A's code, but B's branch still won't compile against `dev`
 if it imports A's new symbols. In that case B branches from A and
-writes `Stacked-on: PR#A` in its body. On A's merge, auto-cube rebases
+writes `Stacked-on: PR#A` in its body. On A's merge, Auto-CUBE rebases
 B onto `dev`. On A's close-without-merge, B is orphaned: rebase onto
 `dev` (may break) or close with a note on A. The `Stacked-on:`
 declaration is friction-by-design — when in doubt, don't stack;
@@ -199,12 +199,12 @@ for pr in $(open_prs_by_auto_cube):
                                                 # flag the pair, continue
 ```
 
-- **New auto-cube work** happens on a fresh branch off `origin/dev`
+- **New Auto-CUBE work** happens on a fresh branch off `origin/dev`
   (clean PR-shaped diff). `make test`, `make lint`, and smokes run in
   **integration** to validate that the new change co-exists with the
   rest of the in-flight bag.
 - **Conflict in integration = early warning.** If PR-A and PR-B can't
-  both apply, auto-cube either (a) auto-rebases the offender for
+  both apply, Auto-CUBE either (a) auto-rebases the offender for
   mechanical conflicts (footnote merges, import-order diffs — same
   decision table the `pr-cleanup` skill uses today), or (b) surfaces
   the incompatibility to the human with concrete file ranges + an
@@ -216,10 +216,10 @@ for pr in $(open_prs_by_auto_cube):
 - **Cross-repo** (cube-standard ↔ cube-harness): the same pattern applies
   end-to-end via the existing `Depends-on:` declaration in PR bodies.
 
-### Parallel auto-cube sessions
+### Parallel Auto-CUBE sessions
 
 The integration worktree is **per session**, not machine-wide: multiple
-auto-cube sessions can run concurrently on one machine, each owning its
+Auto-CUBE sessions can run concurrently on one machine, each owning its
 worktree + `.venv` + journal subdir
 (`~/cube_auto_cube_journal/<session-slug>/`). Cross-session isolation is
 preserved by picking **orthogonal scopes** — different cubes by default
@@ -262,14 +262,14 @@ acknowledge.
 ## 8. Accretion → refactor
 
 Density is exact: `grep -c 'auto-fix(' <area>`. When an area crosses
-the band-aid threshold (≥3 distinct anchors), auto-cube **must** emit an
+the band-aid threshold (≥3 distinct anchors), Auto-CUBE **must** emit an
 openspec refactor proposal instead of patch N+1. Patch accretion is a
 design signal, not a steady state.
 
 ## 9. Human-authorized merge
 
-auto-cube's responsibility ends at **green PR + Fix Report**. Merging
+Auto-CUBE's responsibility ends at **green PR + Fix Report**. Merging
 is a human action. The spec does not authorize auto-merge; a future
-auto-cube run must not infer authorization from a clean Fix Report
+Auto-CUBE run must not infer authorization from a clean Fix Report
 alone. The integration worktree (§6) gives the human a fully-resolved
 local substrate before approval; that's the substrate, not the trigger.

@@ -274,7 +274,7 @@ Prefer a smaller, simpler codebase. If a feature adds significant complexity but
 
 **Severity**: WARNING
 
-auto-cube-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)` markers and a
+Auto-CUBE-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)` markers and a
 one-line machine-readable footnote at module bottom. `N` is the PR number
 (L0/L1) or design-debt issue number (L2/L3). Spec:
 `openspec/specs/auto-fix/spec.md`.

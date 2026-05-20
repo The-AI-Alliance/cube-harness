@@ -7,7 +7,7 @@ single episode (has `steps/`), it is returned as the only ref.
 `select_episodes(refs, *, ids=..., failures_only=..., overwrite=...)` filters
 the pool. Selection is intentionally explicit — random sampling was removed
 because experiments now embed their own task selection upfront;
-auto-cube passes `ids` lists when it wants a subset.
+Auto-CUBE passes `ids` lists when it wants a subset.
 
 Related-trajectory selection (Selector Protocol + the three concrete
 selectors) lives in `selectors.py`.
@@ -120,7 +120,7 @@ __all__ = ["EpisodeRef", "discover_episodes", "select_episodes", "load_episode_r
 
 # === auto-fix notes ===  (spec: openspec/specs/auto-fix/spec.md)
 # auto-fix-note(406) {class=L1 issue=406 hash=PENDING ctx=logic/cube-harness@79efdb22}
-#   symptoms:  Surfaced in the terminalbench2 auto-cube shakeout. The retry machinery
+#   symptoms:  Surfaced in the terminalbench2 Auto-CUBE shakeout. The retry machinery
 #              archives a failed attempt as `<tid>.archived_<ts>/` (no `steps/`);
 #              discover_episodes enumerated them, yielding phantom EpisodeRefs
 #              that crashed transcript extraction downstream. Trigger is the
