@@ -274,15 +274,17 @@ Prefer a smaller, simpler codebase. If a feature adds significant complexity but
 
 **Severity**: WARNING
 
-PI-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)` markers and a
-context-stamped footnote at module bottom. Spec: `openspec/specs/auto-fix/spec.md`.
+auto-cube-produced fixes carry `# auto-fix(N)↓ … # /auto-fix(N)` markers and a
+one-line machine-readable footnote at module bottom. `N` is the PR number
+(L0/L1) or design-debt issue number (L2/L3). Spec:
+`openspec/specs/auto-fix/spec.md`.
 
 **Check** (Tier-2 semantic review; Tier-1 structural checks are in
 `scripts/auto_fix_lint.py`): when a diff touches code inside an
 `auto-fix(N)` region, crosses a marker boundary, or removes/edits a
 marker or footnote, treat it as **possibly rotten**:
 
-- Pull issue `N`; verify the fix's stated invariant still holds after the change.
+- Pull the PR or design-debt issue at `N`; verify the fix's stated invariant still holds after the change.
 - If the change is unrelated churn → require the footnote `hash=` be
   re-stamped (acknowledgement, not prevention — never silently leave drift).
 - If the fix now looks **subsumed** by surrounding code (the real fix

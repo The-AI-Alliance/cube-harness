@@ -69,7 +69,7 @@ class InvestigationConfig(TypedBaseModel):
     Behaviour: `recipe`, `driver`, `selector`, `audit`, `n_seeds`.
     Selection: `ids`, `failures_only`, `overwrite`. The default is "all
     eligible (uninvestigated) episodes" — random sampling is intentionally NOT a
-    field; if you need a subset, pass `ids` explicitly (the meta-agent
+    field; if you need a subset, pass `ids` explicitly (auto-cube
     builds the list in Python based on whatever logic it wants).
     Execution: `n_parallel`, `verbose`, `trace_mode`.
     Post-batch synthesis is always on; `synthesis_model` and `journal_dir`
@@ -95,7 +95,7 @@ class InvestigationConfig(TypedBaseModel):
     # logged + skipped and the batch continues. See auto-fix(409).
     episode_timeout_s: float = 1800.0
 
-    # Selection — explicit only. No sampling / no seed; the meta-agent
+    # Selection — explicit only. No sampling / no seed; auto-cube
     # builds `ids` lists programmatically when it needs a subset.
     ids: list[str] | None = None
     failures_only: bool = False
@@ -113,7 +113,7 @@ class InvestigationConfig(TypedBaseModel):
     # Journal mirror — `meta_analysis.{json,md}` is copied into
     # `<journal_dir>/<experiment_basename>/`. Default is the conventional
     # machine-local journal dir; override or point at a tempdir to redirect.
-    journal_dir: Path = Field(default_factory=lambda: Path("~/cube_meta_agent_journal").expanduser())
+    journal_dir: Path = Field(default_factory=lambda: Path("~/cube_auto_cube_journal").expanduser())
 
 
 def _load_trajectory_meta(path: Path) -> Trajectory | None:

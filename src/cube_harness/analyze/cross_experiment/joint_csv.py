@@ -6,9 +6,9 @@ Walks experiment subdirectories of `sweep_dir`, reads each
 writes one row per `(experiment, episode)` to
 `<sweep_dir>/joint_investigation_report.csv`.
 
-The output is intentionally flat — meant for grep, awk, pandas, and the
-meta-agent's slash-command output buffer. The original per-experiment files
-are not modified.
+The output is intentionally flat — meant for grep, awk, pandas, and
+auto-cube's per-round notes. The original per-experiment files are not
+modified.
 """
 
 from __future__ import annotations

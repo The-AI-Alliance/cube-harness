@@ -18,7 +18,7 @@ Genny ([agents/genny.py](src/cube_harness/agents/genny.py)). Confirm no active
 recipe or cube imports it:
 
 ```bash
-grep -r "legacy_generic_agent\|GenericAgent\|GenericPromptFlags" recipes/ cubes/ meta_agent/
+grep -r "legacy_generic_agent\|GenericAgent\|GenericPromptFlags" recipes/ cubes/
 ```
 
 **Action:** once grep comes up clean, remove file + test + exports. ~2100 LOC gone.

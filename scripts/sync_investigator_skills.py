@@ -6,7 +6,7 @@ Run from the repo root. Idempotent: existing symlinks pointing inside
 Uses *relative* symlink targets so the `.claude/skills/investigator-*` entries
 travel through git unchanged and resolve in any checkout (worktrees included).
 
-This lets the meta-agent's skill picker enumerate investigator recipes the same way
+This lets auto-cube's skill picker enumerate Investigator recipes the same way
 it enumerates any other skill, without duplicating the markdown.
 """
 

@@ -1,12 +1,13 @@
-# principal-investigator
+# auto-cube
 
-The **PrincipalInvestigator (PI)** is the outer loop: it runs an iterative
-experiment program to understand and fix failures in the agent/cube stack.
-It owns the methodology; the per-use-case investigator recipes
+The **auto-cube** outer loop runs an iterative experiment program to
+understand and fix failures in the agent/cube stack. It owns the
+methodology; the per-use-case **Investigator** recipes
 (`analyze/investigator/use_cases/*` — `general_blame`, `profiling`,
-`agent_scaffolding`, `hinter`, …) are the *investigate* step it dispatches.
+`agent_scaffolding`, `hinter`, …) are the *investigate* step it dispatches
+on each trajectory.
 
-Inner loop = one episode's root-cause analysis (an investigator recipe).
+Inner loop = one episode's root-cause analysis (an Investigator recipe).
 Outer loop = sessions of rounds: hypothesis → experiment → investigate →
 synthesize → conclude → next hypothesis.
 
@@ -15,7 +16,7 @@ synthesize → conclude → next hypothesis.
 1. **Session start.** Pick an objective (a benchmark + a thing to understand
    or fix). Create `<journal>/<session-slug>/session.md` from the template:
    branch, base commit, objective, round index. `<journal>` is
-   `~/cube_meta_agent_journal/` (machine-local, never committed).
+   `~/cube_auto_cube_journal/` (machine-local, never committed).
 
 2. **Round.** For round `N`, create `<session-slug>/round_<N>/`:
    - `exp_config.py` — a copied recipe. Explicit task list via
@@ -25,7 +26,7 @@ synthesize → conclude → next hypothesis.
      tests. **After**: results, what the investigation found, conclusion,
      and the code delta since the previous round (commit hash + one line).
 
-3. **Run** the experiment, then the investigator on its output dir
+3. **Run** the experiment, then the Investigator on its output dir
    (`ch-investigate <exp_dir> --recipe <use_case>`). Read `meta_analysis.md`
    plus the per-episode `findings.json` / `audit.json`.
 
@@ -46,26 +47,31 @@ Once the **root cause is confirmed**, the committed fix follows the
 [`openspec/specs/auto-fix/spec.md`](../../../openspec/specs/auto-fix/spec.md).
 In brief:
 
-- **Classify** L0–L3 (local-correct → layer → symptom-of-design → PI/eval
-  defect). Nothing blocks the loop: L2/L3 still ship a temp PR **and** open
-  a kept-open `design-debt` issue + openspec stub.
-- **Fix Dossier** is the PR body (`templates/fix_dossier.md`): invariant in
-  one sentence, blast-radius grep on the *target* branch, the adversarial
-  "opposite user", registry lookup, class, regression test that asserts the
-  *invariant* not the reproduction.
-- **fix-audit** independently tries to break the Dossier's generalization
+- **Classify** L0–L3 (local-correct → layer → symptom-of-design → auto-cube /
+  Investigator defect). Nothing blocks the loop: L2/L3 still ship a temp PR
+  **and** open a kept-open `design-debt` issue + openspec stub.
+- **Fix Report** is the PR body (`templates/fix_report.md`): invariant in
+  one sentence, root-cause mechanism in plain language, blast-radius grep
+  on the *target* branch, the adversarial "opposite user", registry
+  lookup, class, regression test that asserts the *invariant* not the
+  reproduction.
+- **fix-audit** independently tries to break the Fix Report's generalization
   claims; the reviewer reads its verdict, not the diff.
-- **Provenance**: GitHub issue mints the id; `# auto-fix(N)↓ … # /auto-fix(N)`
-  markers + a context-stamped footnote at module bottom. Accretion is exact
+- **Provenance**: `# auto-fix(N)↓ … # /auto-fix(N)` markers + a one-line
+  machine-readable footnote at module bottom. `N` is the PR number for
+  L0/L1, the design-debt issue number for L2/L3. Accretion is exact
   (`grep -c`); ≥3 in an area ⇒ refactor proposal, not patch N+1.
+- **Multi-PR**: every PR branches from `dev` directly (no stacked PRs by
+  default); the integration worktree (§6 of the spec) is where all
+  in-flight changes co-exist locally for testing.
 - The diagnostic hack is reverted; only the principled fix is committed.
 
 A hack that confirmed a hypothesis is a successful experiment, not a
-deliverable. The deliverable is the right fix, its Dossier, and the journal
-entry that explains *why*.
+deliverable. The deliverable is the right fix, its Fix Report, and the
+journal entry that explains *why*.
 
 ## Templates
 
 `templates/session.md`, `templates/notes.md`, `templates/exp_config.py`,
-`templates/fix_dossier.md`. Copy, fill, evolve. Refine these templates as
+`templates/fix_report.md`. Copy, fill, evolve. Refine these templates as
 the methodology matures — this skill is expected to change.

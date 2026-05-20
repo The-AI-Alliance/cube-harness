@@ -1,4 +1,4 @@
-"""Round <N> experiment config — PrincipalInvestigator session.
+"""Round <N> experiment config — auto-cube session.
 
 Copied from a canonical recipe, edited for this round. This file IS the
 config. NO `# /// script` header on purpose: run it with the repo venv,
@@ -40,7 +40,7 @@ agent.budget.cost_limit = COST_PER_TASK
 benchmark = TERMINALBENCH2_CONFIGS["default"].subset_from_list(TASK_IDS)
 
 exp = Experiment(
-    name="pi-tbench2-r<N>",
+    name="auto-cube-tbench2-r<N>",
     agent_config=agent,
     benchmark_config=benchmark,
     infra=INFRA_CONFIGS["local"],
