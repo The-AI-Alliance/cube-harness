@@ -743,34 +743,58 @@ class TestUsageReasoningTokens:
 
 
 class TestInterleavedThinkingBeta:
-    """auto-fix(412): Anthropic per-step thinking needs the interleaved beta."""
+    """auto-fix(412): the interleaved-thinking beta is gated on the flag.
+
+    Three modes:
+      off    = reasoning_effort=None                                   -> no beta
+      once   = reasoning_effort=<level>, interleaved_thinking=False    -> no beta (default)
+      always = reasoning_effort=<level>, interleaved_thinking=True     -> beta present
+    """
+
+    @staticmethod
+    def _ok() -> MagicMock:
+        return MagicMock(choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None)
 
     @patch("cube_harness.llm.litellm.completion")
-    def test_anthropic_reasoning_sets_interleaved_beta(self, mock_completion, sample_prompt) -> None:
-        mock_completion.return_value = MagicMock(
-            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+    def test_always_mode_sets_beta(self, mock_completion, sample_prompt) -> None:
+        mock_completion.return_value = self._ok()
+        cfg = LLMConfig(
+            model_name="claude-haiku-4-5",
+            temperature=1.0,
+            reasoning_effort="low",
+            interleaved_thinking=True,
         )
-        cfg = LLMConfig(model_name="claude-haiku-4-5", temperature=1.0, reasoning_effort="low")
         LLM(config=cfg)(sample_prompt)
         hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
         assert "interleaved-thinking-2025-05-14" in hdrs.get("anthropic-beta", "")
 
     @patch("cube_harness.llm.litellm.completion")
-    def test_non_anthropic_reasoning_no_beta(self, mock_completion, sample_prompt) -> None:
-        mock_completion.return_value = MagicMock(
-            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
+    def test_once_mode_no_beta(self, mock_completion, sample_prompt) -> None:
+        """Default cadence: anthropic + reasoning_effort but interleaved_thinking=False."""
+        mock_completion.return_value = self._ok()
+        cfg = LLMConfig(
+            model_name="claude-haiku-4-5",
+            temperature=1.0,
+            reasoning_effort="low",  # interleaved_thinking defaults to False
         )
-        cfg = LLMConfig(model_name="gpt-5-nano", reasoning_effort="low")
         LLM(config=cfg)(sample_prompt)
         hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
         assert "interleaved-thinking" not in hdrs.get("anthropic-beta", "")
 
     @patch("cube_harness.llm.litellm.completion")
-    def test_anthropic_no_reasoning_no_beta(self, mock_completion, sample_prompt) -> None:
-        mock_completion.return_value = MagicMock(
-            choices=[MagicMock(message=Message(role="assistant", content="x"))], usage=None
-        )
-        cfg = LLMConfig(model_name="claude-haiku-4-5", temperature=1.0)  # reasoning_effort=None
+    def test_non_anthropic_flag_is_noop(self, mock_completion, sample_prompt) -> None:
+        """The flag has no effect on non-Anthropic models (gpt-5 reasoning is server-managed)."""
+        mock_completion.return_value = self._ok()
+        cfg = LLMConfig(model_name="gpt-5-nano", reasoning_effort="low", interleaved_thinking=True)
+        LLM(config=cfg)(sample_prompt)
+        hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
+        assert "interleaved-thinking" not in hdrs.get("anthropic-beta", "")
+
+    @patch("cube_harness.llm.litellm.completion")
+    def test_off_mode_no_beta(self, mock_completion, sample_prompt) -> None:
+        """No reasoning_effort -> no beta even if interleaved_thinking=True (degenerate)."""
+        mock_completion.return_value = self._ok()
+        cfg = LLMConfig(model_name="claude-haiku-4-5", temperature=1.0, interleaved_thinking=True)
         LLM(config=cfg)(sample_prompt)
         hdrs = mock_completion.call_args.kwargs.get("extra_headers") or {}
         assert "interleaved-thinking" not in hdrs.get("anthropic-beta", "")

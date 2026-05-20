@@ -95,6 +95,14 @@ class LLMConfig(ValidatedConfig):
     max_tokens: int = 128000
     max_completion_tokens: int = 8192
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
+    # Thinking cadence (Anthropic only — OpenAI/Azure gpt-5 reasoning is server-managed,
+    # this flag is a no-op there). Combined with ``reasoning_effort`` you get three modes:
+    #   off:    reasoning_effort=None                                   (no thinking)
+    #   once:   reasoning_effort=<level>, interleaved_thinking=False    (think once at turn start; provider default)
+    #   always: reasoning_effort=<level>, interleaved_thinking=True     (think after every tool result; needs the beta)
+    # See auto-fix(412): in a multi-step tool-use loop (e.g. Genny swe), `once` means the
+    # model thinks on step 0 and nowhere else — usually wrong for agents.
+    interleaved_thinking: bool = False
     tool_choice: Literal["auto", "none", "required"] | None = "auto"
     parallel_tool_calls: bool = False
     num_retries: int = 5
@@ -278,12 +286,13 @@ class LLM:
         }
         if self.config.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.config.reasoning_effort
-            # auto-fix(412)↓ Without the interleaved-thinking beta, Anthropic
-            # emits a thinking block only on the FIRST assistant turn; in a
-            # multi-step tool-use loop (Genny swe/flat_history) every later
-            # step gets 0 reasoning tokens — thinking is effectively off after
-            # step 0. The beta lets Claude think after each tool result.
-            if _is_anthropic_model(self.config.model_name):
+            # auto-fix(412)↓ Anthropic only emits a thinking block AFTER a
+            # tool result when the interleaved-thinking beta is set; without
+            # it, a multi-step tool-use loop (Genny swe/flat_history) gets
+            # thinking only on step 0. Gated by `interleaved_thinking` so
+            # callers can pick: once-per-turn (provider default, cheaper) vs
+            # every-step (this branch, deliberate). No-op for non-Anthropic.
+            if self.config.interleaved_thinking and _is_anthropic_model(self.config.model_name):
                 hdrs = dict(kwargs.get("extra_headers") or {})
                 betas = [b for b in hdrs.get("anthropic-beta", "").split(",") if b.strip()]
                 if _INTERLEAVED_THINKING_BETA not in betas:
@@ -409,8 +418,16 @@ class LLMCall(TypedBaseModel):
 #              to think on every step, not only the first assistant turn.
 #   why:       Anthropic only emits thinking after a tool result when the
 #              interleaved-thinking beta is set; llm.py passed
-#              reasoning_effort but not the beta. Right layer = the LLM
-#              wrapper that owns provider params. No contract change -> L1.
-#   tested:    tests/test_llm.py::TestInterleavedThinkingBeta (beta present
-#              for anthropic+reasoning_effort, absent otherwise) + live
-#              probe re-run: 15/15 steps think, 255 -> 846 reasoning tokens.
+#              reasoning_effort but not the beta. Exposed as an opt-in
+#              `LLMConfig.interleaved_thinking` flag (default False = match
+#              provider default ("once"); set True = "always"), so callers
+#              can pick a deliberate cadence instead of being silently
+#              pinned to either one. Right layer = the LLM wrapper that
+#              owns provider params. No contract change -> L1.
+#   tested:    tests/test_llm.py::TestInterleavedThinkingBeta (beta gated
+#              on the flag: present iff anthropic + reasoning_effort +
+#              interleaved_thinking; absent otherwise) + scripts/smoke/
+#              reasoning.py adds an off/once/always cadence probe (live
+#              Anthropic, asserts per-turn reasoning_token pattern) +
+#              original validation probe: 15/15 steps think with the
+#              flag on, 255 -> 846 reasoning tokens.
