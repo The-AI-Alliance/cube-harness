@@ -23,6 +23,16 @@ not generalize.
 **Nothing blocks the loop.** L2/L3 still ship a temporary PR. The human's
 queue is the `design-debt` backlog, not individual patches.
 
+### When NOT to mark (proportionality)
+
+Markers exist for code that can silently rot. **Skip in-code markers**
+(register via the issue/Dossier only, or skip entirely) when **all** hold:
+class L0; the change is pure text/comment/docs; low rot-risk (not logic a
+later edit could silently break); and already pinned by an
+invariant-asserting regression test. Marking such a fix is pollution with
+~zero rot/accretion value — the over-application this methodology exists
+to prevent, turned on itself.
+
 ## 2. The Fix Dossier (every fix PR carries its own proof)
 
 Template: `.claude/skills/principal-investigator/templates/fix_dossier.md`.
@@ -39,6 +49,9 @@ It is the PR body. It must state:
 - **Class** (L0–L3) and, for L2/L3, the design issue / openspec link.
 - **Test** — a regression test asserting the *invariant*, not the
   reproduction.
+
+A PR may bundle several independent fixes; the body then carries **one
+Dossier section per marker**.
 
 ## 3. The fix-audit
 
@@ -60,6 +73,9 @@ audit verdict, not the raw diff. Recipe:
 
 `345` is a **GitHub issue number** (see §5) — unique, monotonic, durable,
 holds the long-form context out of the code.
+
+A marker delimits **one code region = one fix**, not one finding: a single
+consolidated change that resolves several findings is *one* `auto-fix(N)`.
 
 ### Footnote (module bottom — durable anchor)
 
@@ -92,7 +108,9 @@ marker, before the PR exists):
 1. Open issue → get `N`. Body = full Dossier + context fingerprint.
    Label `auto-fix`.
 2. Write `auto-fix(N)` markers + footnote; open the fix PR referencing `N`.
-3. **L0/L1:** close issue `N` on merge (pure archive).
+3. **L0/L1:** close issue `N` on merge — the PR body must use a
+   **per-issue** closing keyword (`Closes #174, closes #175, …`); GitHub
+   ignores a bare `Closes #174 #175 …` list after the first.
    **L2/L3:** keep issue `N` open, add label `design-debt`, link the
    openspec stub. This is the backlog the human reviews.
 4. **Consolidation:** when a refactor promotes band-aids to permanent
@@ -111,8 +129,10 @@ Degraded mode: if `gh` is unavailable at fix time, use
 - every inline `N` has a footnote stanza and vice-versa (no orphans)
 - `N` unique; footnote machine-line schema valid; issue `N` exists with
   the right open/closed + label state
-- **content-hash drift**: normalized hash of the marked region vs the
-  footnote's `hash=`; mismatch ⇒ protected code moved.
+- **content-hash drift**: hash of the code **between** the markers —
+  *excluding* the `# auto-fix(N)` / `# /auto-fix(N)` lines themselves,
+  whitespace-normalized — vs the footnote's `hash=`; mismatch ⇒ protected
+  code moved. Re-indenting/formatting a marker never trips drift.
 
 **Tier 2 — semantic (fix-audit / `/cube-review`, advisory):** is the
 changed block still correct / still needed / now subsumed? Lint flags;
