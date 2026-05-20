@@ -44,8 +44,8 @@ to prevent, turned on itself.
 
 ## 2. The Fix Report (every fix PR carries its own proof)
 
-Was "Fix Dossier" — renamed for plain-language reach. Template:
-`.claude/skills/auto-cube/templates/fix_report.md`. It is the PR body.
+Template: `.claude/skills/auto-cube/templates/fix_report.md`. It is the
+PR body.
 
 **Structure: named subsections + bullets within.** A skimmer reads
 section headers + the invariant + the empirical witness in ~30 s and
