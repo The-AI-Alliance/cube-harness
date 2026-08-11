@@ -41,9 +41,7 @@ cluster.tfvars
 .terragrunt-cache
 
 # IDE and editor config files.
-# .vscode is versioned for local container setup.
 .idea/
-# .vscode/
 # IDE - Emacs
 *~
 \#*\#
@@ -154,6 +152,7 @@ ipython_config.py
 # .python-version
 
 # pipenv
+temp_auto_push.bat
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
 #   However, in case of collaboration, if having platform-specific dependencies or dependencies
 #   having no cross-platform support, pipenv may install dependencies that don't work, or not
@@ -309,3 +308,4 @@ playwright_traces/
 
 # Any file which shouldn't be copied by the ray worker into their env, but is local-enough not to belong to the shared gitignore.
 .rayignore
+branch_structure.json
